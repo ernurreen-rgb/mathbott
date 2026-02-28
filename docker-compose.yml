@@ -1,0 +1,66 @@
+services:
+  backend:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: mathbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - PORT=8000
+      - DB_PATH=/app/mathbot.db
+      - BANK_TRASH_RETENTION_DAYS=30
+      - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - ADMIN_SECRET=${ADMIN_SECRET:-change-me-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+    volumes:
+      - ./bot:/app
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    container_name: mathbot-frontend
+    env_file:
+      - ./web/.env.local
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=/api/backend
+      - NEXT_PUBLIC_WS_API_URL=http://localhost:8000
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      working-directory: ./bot
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
+    
+    - name: Run linter (flake8)
+      working-directory: ./bot
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run tests
+      working-directory: ./bot
+      run: |
+        pytest tests/ -v --tb=short
+    
+    - name: Check security (pip-audit)
+      working-directory: ./bot
+      run: |
+        pip install pip-audit
+        pip-audit --desc || true
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./web
+      run: npm ci
+    
+    - name: Run linter (ESLint)
+      working-directory: ./web
+      run: npm run lint || true
+    
+    - name: Run tests
+      working-directory: ./web
+      run: npm test -- --coverage --watchAll=false || true
+    
+    - name: Check security (npm audit)
+      working-directory: ./web
+      run: npm audit --audit-level=moderate || true
+
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Backend security audit
+      working-directory: ./bot
+      run: |
+        pip install pip-audit
+        pip-audit --desc
+    
+    - name: Frontend security audit
+      working-directory: ./web
+      run: |
+        npm audit --audit-level=high

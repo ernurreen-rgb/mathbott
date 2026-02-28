@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first for better layer caching
+COPY package*.json ./
+RUN npm ci
+
+# Copy application source
+COPY . .
+
+ENV NODE_ENV=development
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
