@@ -69,6 +69,31 @@ Behavior:
 - Public `80/443` continue to be owned by your existing nginx
 
 Use the template at `deploy/nginx/mathbot.conf.example` as a separate nginx site file with a unique `server_name`.
+
+## Production Deploy Via Docker Hub
+
+If you do not want to build images on the VPS, use the Docker Hub stack:
+
+1. Add these values to `.env.production`:
+   - `BACKEND_IMAGE=yourdockerhubuser/mathbott-backend:latest`
+   - `FRONTEND_IMAGE=yourdockerhubuser/mathbott-frontend:latest`
+2. Add GitHub repository secrets:
+   - `DOCKERHUB_USERNAME`
+   - `DOCKERHUB_TOKEN`
+3. Push to `main` (or run the `docker-hub` workflow manually) to publish images
+4. On the VPS, pull and run:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml up -d
+```
+
+Notes:
+
+- The VPS no longer needs local `docker build`
+- `frontend` still binds only to `127.0.0.1:${FRONTEND_BIND_PORT:-3001}`
+- `backend` stays private inside Docker
+- You can pin a release by replacing `latest` with a `sha-<commit>` tag
 Mathbot - СЌС‚Рѕ РїРѕР»РЅРѕС„СѓРЅРєС†РёРѕРЅР°Р»СЊРЅР°СЏ РїР»Р°С‚С„РѕСЂРјР° РґР»СЏ РёР·СѓС‡РµРЅРёСЏ РјР°С‚РµРјР°С‚РёРєРё СЃ РІРµР±-РёРЅС‚РµСЂС„РµР№СЃРѕРј.
 
 ## рџЏ—пёЏ РђСЂС…РёС‚РµРєС‚СѓСЂР°
