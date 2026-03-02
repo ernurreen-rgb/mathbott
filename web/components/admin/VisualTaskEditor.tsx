@@ -719,15 +719,17 @@ export default function VisualTaskEditor({
                             : "border-gray-200"
                         }`}
                       >
-                        <div className={`font-bold ${isCorrect ? "text-white" : "text-gray-900"}`}>
-                          {label}
-                        </div>
-                        <div className={isCorrect ? "text-white" : "text-gray-700"}>
-                          {optionText ? (
-                            <MathRender latex={optionText} inline />
-                          ) : (
-                            isEditing ? "Өңдеу үшін басыңыз" : ""
-                          )}
+                        <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isCorrect ? "text-white" : "text-gray-700"}`}>
+                          <span className={`font-bold shrink-0 ${isCorrect ? "text-white" : "text-gray-900"}`}>
+                            {label}
+                          </span>
+                          <div className="min-w-0 break-words whitespace-normal">
+                            {optionText ? (
+                              <MathRender latex={optionText} inline className={isCorrect ? "text-white" : "text-gray-700"} />
+                            ) : (
+                              isEditing ? "Өңдеу үшін басыңыз" : ""
+                            )}
+                          </div>
                         </div>
                       </button>
                     )}

@@ -11,9 +11,9 @@ const QRCode = nextDynamic(() => import("react-qr-code"), {
   ssr: false,
 });
 import DesktopNav from "@/components/DesktopNav";
-import { BlockedUser, FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, UserData } from "@/types";
+import { FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, UserData } from "@/types";
 import { API_URL } from "@/lib/constants";
-import { acceptFriendInvite, acceptFriendRequest, blockUser, cancelFriendRequest, createFriendInvite, declineFriendRequest, getFriendInviteDetails, getUserData, listBlockedUsers, listFriendInvites, listFriendRequests, listFriends, removeFriend, revokeFriendInvite, unblockUser, updateNickname } from "@/lib/api";
+import { acceptFriendInvite, acceptFriendRequest, cancelFriendRequest, createFriendInvite, declineFriendRequest, getFriendInviteDetails, getUserData, listFriendInvites, listFriendRequests, listFriends, removeFriend, revokeFriendInvite, updateNickname } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,6 @@ function ProfilePageContent() {
   const [showOwnInviteWarning, setShowOwnInviteWarning] = useState(true);
   const [invites, setInvites] = useState<FriendInvite[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
   const sessionEmail = session?.user?.email || "";
 
@@ -60,7 +59,6 @@ function ProfilePageContent() {
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [friendsMessage, setFriendsMessage] = useState<string | null>(null);
-  const [blockingUsers, setBlockingUsers] = useState<Set<number>>(new Set());
   const [removingFriends, setRemovingFriends] = useState<Set<number>>(new Set());
   const inviteToken = searchParams?.get("invite");
 
@@ -179,12 +177,11 @@ function ProfilePageContent() {
     setFriendsLoading(true);
     setFriendsMessage(null);
     try {
-      const [friendsRes, invitesRes, incomingRes, outgoingRes, blockedRes] = await Promise.all([
+      const [friendsRes, invitesRes, incomingRes, outgoingRes] = await Promise.all([
         listFriends(sessionEmail),
         listFriendInvites(sessionEmail),
         listFriendRequests(sessionEmail, "incoming"),
         listFriendRequests(sessionEmail, "outgoing"),
-        listBlockedUsers(sessionEmail),
       ]);
 
       if (!friendsRes.error && friendsRes.data) {
@@ -199,14 +196,11 @@ function ProfilePageContent() {
       if (!outgoingRes.error && outgoingRes.data) {
         setOutgoingRequests(outgoingRes.data.items || []);
       }
-      if (!blockedRes.error && blockedRes.data) {
-        setBlockedUsers(blockedRes.data.items || []);
-      }
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching friends data:", err);
       }
-      setFriendsMessage("Не удалось загрузить данные друзей");
+      setFriendsMessage("\u0414\u043e\u0441\u0442\u0430\u0440 \u0434\u0435\u0440\u0435\u043a\u0442\u0435\u0440\u0456\u043d \u0436\u04af\u043a\u0442\u0435\u0443 \u0441\u04d9\u0442\u0441\u0456\u0437 \u0430\u044f\u049b\u0442\u0430\u043b\u0434\u044b");
     } finally {
       setFriendsLoading(false);
     }
@@ -373,83 +367,6 @@ function ProfilePageContent() {
       setRemovingFriends(prev => {
         const next = new Set(prev);
         next.delete(friendId);
-        return next;
-      });
-    }
-  };
-
-  const handleBlockUser = async (blockedUserId: number) => {
-    if (!session?.user?.email || blockingUsers.has(blockedUserId)) return;
-    
-    setBlockingUsers(prev => new Set(prev).add(blockedUserId));
-    // Optimistically update UI: remove from friends and add to blocked
-    const friendToBlock = friends.find(f => f.id === blockedUserId);
-    setFriends(prev => prev.filter(f => f.id !== blockedUserId));
-    
-    if (friendToBlock) {
-      // Add to blocked users list immediately
-      const blockedUser: BlockedUser = {
-        id: friendToBlock.id,
-        nickname: friendToBlock.nickname,
-        league: friendToBlock.league,
-        total_points: friendToBlock.total_points,
-        total_solved: friendToBlock.total_solved,
-      };
-      setBlockedUsers(prev => [...prev, blockedUser]);
-    }
-    
-    try {
-      const { error } = await blockUser(sessionEmail, blockedUserId);
-      if (error) {
-        // Revert on error
-        if (friendToBlock) {
-          setFriends(prev => [...prev, friendToBlock]);
-          setBlockedUsers(prev => prev.filter(b => b.id !== blockedUserId));
-        }
-        const errorMessage = normalizeErrorMessage(error);
-        setFriendsMessage(errorMessage);
-        return;
-      }
-      // Optionally refresh to ensure sync, but UI is already updated
-      fetchFriendsData().catch(() => {
-        // Silent refresh failure - UI is already updated
-      });
-    } finally {
-      setBlockingUsers(prev => {
-        const next = new Set(prev);
-        next.delete(blockedUserId);
-        return next;
-      });
-    }
-  };
-
-  const handleUnblockUser = async (blockedUserId: number) => {
-    if (!session?.user?.email || blockingUsers.has(blockedUserId)) return;
-    
-    setBlockingUsers(prev => new Set(prev).add(blockedUserId));
-    // Optimistically remove from blocked users
-    const blockedUserToUnblock = blockedUsers.find(b => b.id === blockedUserId);
-    setBlockedUsers(prev => prev.filter(b => b.id !== blockedUserId));
-    
-    try {
-      const { error } = await unblockUser(sessionEmail, blockedUserId);
-      if (error) {
-        // Revert on error
-        if (blockedUserToUnblock) {
-          setBlockedUsers(prev => [...prev, blockedUserToUnblock]);
-        }
-        const errorMessage = normalizeErrorMessage(error);
-        setFriendsMessage(errorMessage);
-        return;
-      }
-      // Optionally refresh to ensure sync, but UI is already updated
-      fetchFriendsData().catch(() => {
-        // Silent refresh failure - UI is already updated
-      });
-    } finally {
-      setBlockingUsers(prev => {
-        const next = new Set(prev);
-        next.delete(blockedUserId);
         return next;
       });
     }
@@ -667,16 +584,16 @@ function ProfilePageContent() {
               
               return (
                 <>
-                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">Заявки в друзья</h3>
+                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">{"\u0414\u043e\u0441\u049b\u0430 \u04e9\u0442\u0456\u043d\u0456\u0448\u0442\u0435\u0440"}</h3>
                   <div className="glass rounded-3xl shadow-xl p-4 border border-white/30 bg-white/90 text-gray-900">
                     {/* Входящие заявки */}
-                    <div className="text-sm font-semibold text-gray-700 mb-2">Входящие</div>
+                    <div className="text-sm font-semibold text-gray-700 mb-2">{"\u041a\u0456\u0440\u0456\u0441"}</div>
                     <div className="space-y-2">
                       {pendingIncoming.map((req) => (
                         <div key={req.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                           <div>
                             <div className="text-sm font-semibold text-gray-900">
-                              {req.sender_nickname || "Пайдаланушы"}
+                              {req.sender_nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -684,13 +601,13 @@ function ProfilePageContent() {
                               onClick={() => handleAcceptRequest(req.id)}
                               className="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:shadow-glow transition-all text-xs"
                             >
-                              Принять
+                              {"\u049a\u0430\u0431\u044b\u043b\u0434\u0430\u0443"}
                             </button>
                             <button
                               onClick={() => handleDeclineRequest(req.id)}
                               className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
                             >
-                              Отклонить
+                              {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                             </button>
                           </div>
                         </div>
@@ -700,20 +617,20 @@ function ProfilePageContent() {
                     {/* Исходящие заявки (показывать, если есть входящие) */}
                     {pendingOutgoing.length > 0 && (
                       <>
-                        <div className="text-sm font-semibold text-gray-700 mb-2 mt-4">Исходящие</div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2 mt-4">{"\u0416\u0456\u0431\u0435\u0440\u0456\u043b\u0433\u0435\u043d"}</div>
                         <div className="space-y-2">
                           {pendingOutgoing.map((req) => (
                             <div key={req.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                               <div>
                                 <div className="text-sm font-semibold text-gray-900">
-                                  {req.receiver_nickname || "Пайдаланушы"}
+                                  {req.receiver_nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                                 </div>
                               </div>
                               <button
                                 onClick={() => handleCancelRequest(req.id)}
                                 className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
                               >
-                                Отменить
+                                {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                               </button>
                             </div>
                           ))}
@@ -978,15 +895,15 @@ function ProfilePageContent() {
             {/* Friends Section */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">Друзья</h3>
+                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">{"\u0414\u043e\u0441\u0442\u0430\u0440"}</h3>
                 <div className="flex items-center gap-3">
-                  {friendsLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
+                  {friendsLoading && <span className="text-sm text-gray-500">{"\u0416\u04af\u043a\u0442\u0435\u043b\u0443\u0434\u0435..."}</span>}
                   <button
                     onClick={handleCreateInvite}
                     disabled={inviteCreating}
                     className="px-3 py-1.5 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-semibold rounded-lg hover:shadow-glow transition-all disabled:opacity-50 text-sm"
                   >
-                    {inviteCreating ? "Создаю..." : "Создать ссылку"}
+                    {inviteCreating ? "\u0416\u0430\u0441\u0430\u043b\u0443\u0434\u0430..." : "\u0428\u0430\u049b\u044b\u0440\u0443"}
                   </button>
                 </div>
               </div>
@@ -1012,13 +929,13 @@ function ProfilePageContent() {
             <div className="glass rounded-3xl shadow-xl p-6 border border-white/30">
               {friendsMessage && (
                 <div className="text-sm text-red-600 mb-3">
-                  {friendsMessage || "Произошла ошибка"}
+                  {friendsMessage || "\u049a\u0430\u0442\u0435 \u043e\u0440\u044b\u043d \u0430\u043b\u0434\u044b"}
                 </div>
               )}
 
               <div className="space-y-4">
                   {friends.length === 0 ? (
-                    <div className="text-sm text-gray-500">Пока нет друзей.</div>
+                    <div className="text-sm text-gray-500">{"\u04d8\u0437\u0456\u0440\u0433\u0435 \u0434\u043e\u0441\u0442\u0430\u0440 \u0436\u043e\u049b."}</div>
                   ) : (
                     friends.map((friend) => (
                       <div key={friend.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-gray-100 rounded-lg p-3 bg-white/70">
@@ -1027,10 +944,10 @@ function ProfilePageContent() {
                           className="flex-1 cursor-pointer hover:opacity-80 transition-opacity"
                         >
                           <div className="text-sm font-semibold text-gray-800">
-                            {friend.nickname || "Пайдаланушы"}
+                            {friend.nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                           </div>
                           <div className="text-xs text-gray-500">
-                            Лига: {friend.league || "—"} · Очки: {friend.total_points}
+                            {"\u041b\u0438\u0433\u0430: "}{friend.league || "\u2014"} {"\u00b7 "}{"\u04b0\u043f\u0430\u0439: "}{friend.total_points}
                           </div>
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -1039,53 +956,12 @@ function ProfilePageContent() {
                             disabled={removingFriends.has(friend.id)}
                             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {removingFriends.has(friend.id) ? "..." : "Удалить"}
-                          </button>
-                          <button
-                            onClick={() => handleBlockUser(friend.id)}
-                            disabled={blockingUsers.has(friend.id)}
-                            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {blockingUsers.has(friend.id) ? "..." : "Заблокировать"}
+                            {removingFriends.has(friend.id) ? "..." : "\u04e8\u0448\u0456\u0440\u0443"}
                           </button>
                         </div>
                       </div>
                     ))
                   )}
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="text-sm font-semibold text-gray-700 mb-2">Заблокированные</div>
-                    {blockedUsers.length === 0 ? (
-                      <div className="text-sm text-gray-500">Нет заблокированных пользователей.</div>
-                    ) : (
-                      <div className="space-y-2">
-                        {blockedUsers.map((blocked) => (
-                          <div key={blocked.id} className="flex items-center justify-between border border-gray-100 rounded-lg p-3 bg-white/70">
-                            <div 
-                              onClick={() => router.push(`/profile/${blocked.id}`)}
-                              className="flex-1 cursor-pointer hover:opacity-80 transition-opacity"
-                            >
-                              <div className="text-sm font-semibold text-gray-800">
-                                {blocked.nickname || "Пайдаланушы"}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Лига: {blocked.league || "—"} · Очки: {blocked.total_points}
-                              </div>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleUnblockUser(blocked.id);
-                              }}
-                              disabled={blockingUsers.has(blocked.id)}
-                              className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {blockingUsers.has(blocked.id) ? "..." : "Разблокировать"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
             </div>
 
@@ -1103,22 +979,22 @@ function ProfilePageContent() {
               
               return (
                 <div>
-                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">Заявки в друзья</h3>
+                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">{"\u0414\u043e\u0441\u049b\u0430 \u04e9\u0442\u0456\u043d\u0456\u0448\u0442\u0435\u0440"}</h3>
                   <div className="glass rounded-3xl shadow-xl p-4 border border-white/30 bg-white/90 text-gray-900">
-                    <div className="text-sm font-semibold text-gray-700 mb-2">Исходящие</div>
+                    <div className="text-sm font-semibold text-gray-700 mb-2">{"\u0416\u0456\u0431\u0435\u0440\u0456\u043b\u0433\u0435\u043d"}</div>
                     <div className="space-y-2">
                       {pendingOutgoing.map((req) => (
                         <div key={req.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                           <div>
                             <div className="text-sm font-semibold text-gray-900">
-                              {req.receiver_nickname || "Пайдаланушы"}
+                              {req.receiver_nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                             </div>
                           </div>
                           <button
                             onClick={() => handleCancelRequest(req.id)}
                             className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
                           >
-                            Отменить
+                            {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                           </button>
                         </div>
                       ))}

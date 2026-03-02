@@ -187,9 +187,11 @@ export default function TrialTestDetailedReview({
 
             return (
               <div key={option.label} className={`border-2 rounded-lg p-3 text-left ${style}`}>
-                <div className="font-bold text-gray-900">{option.label}</div>
-                <div className="text-gray-700">
-                  <MathRender inline latex={option.text} />
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                  <span className="font-bold text-gray-900 shrink-0">{option.label}</span>
+                  <div className="min-w-0 break-words whitespace-normal">
+                    <MathRender inline latex={option.text} className="text-gray-700" />
+                  </div>
                 </div>
               </div>
             );
@@ -330,7 +332,7 @@ export default function TrialTestDetailedReview({
       >
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
-            <div className={`font-semibold text-gray-900 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
+            <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
               Тапсырма {currentTaskIndex + 1}:{" "}
               {task.text ? <MathRender inline latex={task.text} /> : "Мәтіні жоқ есеп"}
             </div>
@@ -356,3 +358,4 @@ export default function TrialTestDetailedReview({
     </div>
   );
 }
+

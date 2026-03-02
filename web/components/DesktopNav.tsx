@@ -80,7 +80,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
     },
     {
       id: "trial-test",
-      label: "Пробное тестирование",
+      label: "\u0411\u0430\u0439\u049b\u0430\u0443 \u0441\u044b\u043d\u0430\u0493\u044b",
       href: "/trial-test",
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,4 +157,6 @@ export default function DesktopNav(_props: DesktopNavProps) {
     </nav>
   );
 }
+
+
 

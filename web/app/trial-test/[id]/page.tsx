@@ -306,9 +306,11 @@ export default function TrialTestPage() {
                               : "bg-white border-gray-300 text-gray-900 hover:border-purple-300 hover:bg-purple-50"
                           }`}
                         >
-                          <div className="font-bold">{o.label}</div>
-                          <div className={isSelected ? "text-white" : "text-gray-700"}>
-                            <MathRender inline latex={o.text} />
+                          <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
+                            <span className="font-bold shrink-0">{o.label}</span>
+                            <div className="min-w-0 break-words whitespace-normal">
+                              <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+                            </div>
                           </div>
                         </button>
                       );
@@ -341,11 +343,11 @@ export default function TrialTestPage() {
                     : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
                 }`}
               >
-                <div className={`font-bold ${isSelected ? "text-white" : "text-gray-900"}`}>
-                  {o.label}
-                </div>
-                <div className={isSelected ? "text-white" : "text-gray-700"}>
-                  <MathRender inline latex={o.text} />
+                <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
+                  <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
+                  <div className="min-w-0 break-words whitespace-normal">
+                    <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+                  </div>
                 </div>
               </button>
             );
@@ -693,7 +695,7 @@ export default function TrialTestPage() {
                         className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex-1">
-                          <div className="font-semibold text-gray-900 text-base md:text-lg">
+                          <div className="font-semibold text-gray-900 min-w-0 max-w-full break-words text-base md:text-lg">
                             {friend.nickname || `Пайдаланушы #${friend.id}`}
                           </div>
                           <div className="text-sm md:text-base text-gray-500">
@@ -849,14 +851,14 @@ export default function TrialTestPage() {
                 >
                 <div className="mb-4">
                   <div
-                    className={`font-semibold text-gray-900 ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))} ${
+                    className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))} ${
                       currentTask.question_type === "factor_grid"
                         ? "w-full flex justify-center"
                         : ""
                     }`}
                   >
                     {currentTask.text ? (
-                      <MathRender key={`task-text-${currentTask.id}`} latex={currentTask.text} />
+                      <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
                     ) : (
                       "Мәтіні жоқ есеп"
                     )}
@@ -952,5 +954,7 @@ export default function TrialTestPage() {
     </div>
   );
 }
+
+
 
 

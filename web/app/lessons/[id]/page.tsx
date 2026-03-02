@@ -462,11 +462,11 @@ export default function LessonPage() {
                     : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
                 }`}
               >
-                <div className={`font-bold ${isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-900"}`}>
-                  {o.label}
-                </div>
-                <div className={isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-700"}>
-                  {o.text}
+                <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-700"}`}>
+                  <span className={`font-bold shrink-0 ${isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-900"}`}>
+                    {o.label}
+                  </span>
+                  <span className="min-w-0 break-words whitespace-normal">{o.text}</span>
                 </div>
               </button>
             );
@@ -703,7 +703,7 @@ export default function LessonPage() {
                     >
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div
-                        className={`font-semibold text-gray-900 ${getTaskTextScaleClass(normalizeTaskTextScale(activeTask.text_scale))} ${
+                        className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(activeTask.text_scale))} ${
                           activeTask.question_type === "factor_grid"
                             ? "w-full flex justify-center"
                             : ""
@@ -797,4 +797,5 @@ export default function LessonPage() {
     </div>
   );
 }
+
 
