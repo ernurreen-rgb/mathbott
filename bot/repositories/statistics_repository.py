@@ -160,10 +160,13 @@ class StatisticsRepository(BaseRepository):
                             })
                     stats["easy_tasks"] = easy_tasks
                 
-                async with db.execute("""SELECT t.question_type, COUNT(s.id) as total,
+                async with db.execute("""SELECT COALESCE(bt.question_type, 'input') as question_type, COUNT(s.id) as total,
                        SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as correct
-                       FROM solutions s JOIN tasks t ON s.task_id = t.id
-                       WHERE t.deleted_at IS NULL GROUP BY t.question_type""") as cursor:
+                       FROM solutions s
+                       JOIN tasks t ON s.task_id = t.id
+                       LEFT JOIN bank_tasks bt ON t.bank_task_id = bt.id
+                       WHERE t.deleted_at IS NULL
+                       GROUP BY COALESCE(bt.question_type, 'input')""") as cursor:
                     question_type_stats = []
                     for row in await cursor.fetchall():
                         success_rate = (row[2] / row[1] * 100) if row[1] > 0 else 0

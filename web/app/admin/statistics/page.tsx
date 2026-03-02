@@ -30,8 +30,8 @@ export default function StatisticsPage() {
     setError(null);
     try {
       const [statsResult, onboardingResult] = await Promise.all([
-        getAdminStatistics(sessionEmail),
-        getOnboardingStatistics(sessionEmail)
+        getAdminStatistics(),
+        getOnboardingStatistics()
       ]);
       
       if (statsResult.error) {

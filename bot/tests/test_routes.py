@@ -3073,6 +3073,25 @@ def test_admin_routes_contract_and_no_duplicates(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_statistics_route_returns_ok(client, test_db):
+    admin_user = await test_db.create_user_by_email("admin.statistics@example.com")
+    await test_db.set_admin_with_role(
+        email=admin_user["email"],
+        is_admin=True,
+        role="reviewer",
+    )
+
+    response = client.get(
+        "/api/admin/statistics",
+        params={"email": admin_user["email"]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "question_type_stats" in payload
+    assert isinstance(payload["question_type_stats"], list)
+
+
+@pytest.mark.asyncio
 async def test_admin_check_returns_role_and_permissions(client, test_db):
     admin_user = await test_db.create_user_by_email("admin.check.role@example.com")
     await test_db.set_admin_with_role(

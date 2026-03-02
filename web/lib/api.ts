@@ -830,16 +830,12 @@ export async function declineCoopTestInvite(
 }
 
 // Admin Statistics API
-export async function getAdminStatistics(email: string): Promise<{ data: AdminStatistics | null; error: string | null }> {
-  return fetchWithErrorHandling<AdminStatistics>(
-    `${apiPath('admin/statistics')}?email=${encodeURIComponent(email)}`
-  );
+export async function getAdminStatistics(): Promise<{ data: AdminStatistics | null; error: string | null }> {
+  return fetchWithErrorHandling<AdminStatistics>(apiPath("admin/statistics"));
 }
 
-export async function getOnboardingStatistics(email: string): Promise<{ data: OnboardingStatistics | null; error: string | null }> {
-  return fetchWithErrorHandling<OnboardingStatistics>(
-    `${apiPath('admin/onboarding-statistics')}?email=${encodeURIComponent(email)}`
-  );
+export async function getOnboardingStatistics(): Promise<{ data: OnboardingStatistics | null; error: string | null }> {
+  return fetchWithErrorHandling<OnboardingStatistics>(apiPath("admin/onboarding-statistics"));
 }
 
 export async function getAdminOpsHealthSummary(
