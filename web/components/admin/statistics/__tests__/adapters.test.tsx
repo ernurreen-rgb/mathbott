@@ -117,6 +117,6 @@ describe("StatsChartsSection", () => {
 
   it("renders no-data panels when chart series are empty", () => {
     render(<StatsChartsSection stats={makeBaseStats()} />);
-    expect(screen.getAllByText(/Деректер жоқ|Р”РµСЂРµРєС‚РµСЂ Р¶РѕТ›/i).length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText(/ÐÐµÑÐµÐºÑÐµÑ Ð¶Ð¾Ò/i).length).toBeGreaterThanOrEqual(6);
   });
 });

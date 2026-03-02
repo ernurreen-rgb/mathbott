@@ -135,8 +135,8 @@ def normalize_task_answer_for_compare(task: dict, user_answer: str) -> str:
         return json.dumps(_sort_factor_grid_rows(normalized), ensure_ascii=False)
     if qt == "tf":
         v = ans.strip().lower()
-        true_set = {"true", "1", "t", "РґР°", "РёСЃС‚РёРЅР°", "РїСЂР°РІРґР°", "РІРµСЂРЅРѕ", "yes"}
-        false_set = {"false", "0", "f", "РЅРµС‚", "Р»РѕР¶СЊ", "РЅРµРІРµСЂРЅРѕ", "no"}
+        true_set = {"true", "1", "t", "да", "истина", "правда", "верно", "yes"}
+        false_set = {"false", "0", "f", "нет", "ложь", "неверно", "no"}
         if v in true_set:
             return "true"
         if v in false_set:

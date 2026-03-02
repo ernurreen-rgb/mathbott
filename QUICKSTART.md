@@ -1,25 +1,25 @@
-﻿## Контейнерный запуск (рекомендуется)
+## Containerized Run (Recommended)
 
-Поднять весь проект одной командой:
+Start the whole project with one command:
 
 ```bash
 docker compose up --build -d
 ```
 
-Проверка статуса:
+Check status:
 
 ```bash
 docker compose ps
 docker compose logs -f backend frontend
 ```
 
-Остановка:
+Stop:
 
 ```bash
 docker compose down
 ```
 
-Переменные окружения для compose (задаются в shell или `.env` рядом с `docker-compose.yml`):
+Environment variables for compose (set them in your shell or in `.env` next to `docker-compose.yml`):
 
 ```env
 NEXTAUTH_SECRET=change-me-in-production
@@ -28,7 +28,8 @@ GOOGLE_CLIENT_SECRET=
 ADMIN_SECRET=change-me-in-production
 ADMIN_EMAIL=
 ```
-# Р‘С‹СЃС‚СЂС‹Р№ СЃС‚Р°СЂС‚ Mathbot
+
+# Quick Start: Mathbot
 
 ## 1. Backend (API)
 
@@ -48,16 +49,17 @@ $env:PORT="8000"
 python main.py
 ```
 
-API Р·Р°РїСѓСЃС‚РёС‚СЃСЏ РЅР° `http://localhost:8000`
+The API will be available at `http://localhost:8000`.
 
-## 2. Frontend (Р’РµР±-РёРЅС‚РµСЂС„РµР№СЃ)
+## 2. Frontend (Web Interface)
 
 ```bash
 cd web
 npm install
 ```
 
-РЎРѕР·РґР°Р№С‚Рµ `.env.local`:
+Create `.env.local`:
+
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXTAUTH_URL=http://localhost:3000
@@ -71,26 +73,25 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 # NEXT_PUBLIC_DEBUG_UI=true
 ```
 
-Р—Р°РїСѓСЃС‚РёС‚Рµ:
+Start the frontend:
+
 ```bash
 npm run dev
 ```
 
-Р’РµР±-РёРЅС‚РµСЂС„РµР№СЃ Р±СѓРґРµС‚ РґРѕСЃС‚СѓРїРµРЅ РЅР° `http://localhost:3000`
+The web interface will be available at `http://localhost:3000`.
 
-## РџРµСЂРІС‹Рµ С€Р°РіРё
+## First Steps
 
-1. **Р’РµР±-РёРЅС‚РµСЂС„РµР№СЃ**: РћС‚РєСЂРѕР№С‚Рµ `http://localhost:3000` Рё РІРѕР№РґРёС‚Рµ С‡РµСЂРµР· Google
-2. **Р”РѕР±Р°РІСЊС‚Рµ Р·Р°РґР°С‡Сѓ**: РСЃРїРѕР»СЊР·СѓР№С‚Рµ Р°РґРјРёРЅ-РїР°РЅРµР»СЊ РІ РІРµР±-РёРЅС‚РµСЂС„РµР№СЃРµ
-3. **Р РµС€РёС‚Рµ Р·Р°РґР°С‡Сѓ**: РСЃРїРѕР»СЊР·СѓР№С‚Рµ РєРЅРѕРїРєСѓ "РќРѕРІР°СЏ Р·Р°РґР°С‡Р°" РІ РІРµР±-РёРЅС‚РµСЂС„РµР№СЃРµ
+1. Open `http://localhost:3000` and sign in with Google.
+2. Add tasks through the admin panel in the web interface.
+3. Solve a task from the main UI.
 
-## РќР°СЃС‚СЂРѕР№РєР° Google OAuth
+## Google OAuth Setup
 
-1. РџРµСЂРµР№РґРёС‚Рµ РІ [Google Cloud Console](https://console.cloud.google.com/)
-2. РЎРѕР·РґР°Р№С‚Рµ РЅРѕРІС‹Р№ РїСЂРѕРµРєС‚
-3. Р’РєР»СЋС‡РёС‚Рµ Google+ API
-4. РЎРѕР·РґР°Р№С‚Рµ OAuth 2.0 credentials
-5. Р”РѕР±Р°РІСЊС‚Рµ `http://localhost:3000/api/auth/callback/google` РІ authorized redirect URIs
-6. РЎРєРѕРїРёСЂСѓР№С‚Рµ Client ID Рё Client Secret РІ `.env.local`
-
-
+1. Open [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project.
+3. Enable the Google OAuth APIs you need.
+4. Create OAuth 2.0 credentials.
+5. Add `http://localhost:3000/api/auth/callback/google` to authorized redirect URIs.
+6. Copy the Client ID and Client Secret into `.env.local`.

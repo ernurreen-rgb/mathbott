@@ -183,8 +183,8 @@ export default function LeaguePage() {
                   <h3 className="text-xl font-bold text-white drop-shadow-md">{expandedLeague}</h3>
                   <p className="text-sm text-white/90 drop-shadow-sm">
                     {leaguesData[expandedLeague]?.length > 0 
-                      ? `${leaguesData[expandedLeague].length} игроков` 
-                      : "Пусто"}
+                      ? `${leaguesData[expandedLeague].length} қолданушы` 
+                      : "бос"}
                   </p>
                 </div>
                 {expandedLeague === userLeague && (

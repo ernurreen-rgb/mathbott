@@ -143,7 +143,6 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         logger.info("Task %s updated from report by admin %s", task_id, email)
         return {"success": True, "message": "Task updated successfully"}
-
     @app.put("/api/admin/tasks/{task_id}")
     async def update_task_web(
         task_id: int,
@@ -239,7 +238,6 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
 
         return {"success": True, "message": "Task updated successfully"}
-
     @app.delete("/api/admin/tasks/{task_id}")
     async def delete_task_web(
         task_id: int,
@@ -267,7 +265,6 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=500, detail="Internal server error")
             
             return {"success": True, "message": "Task moved to trash"}
-        except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error deleting task {task_id}: {e}", exc_info=True)
@@ -322,7 +319,6 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         
         await db.restore_task(task_id)
         return {"success": True, "message": "Task restored successfully"}
-
     @app.post("/api/admin/tasks/trash/empty")
     async def empty_trash_web(
         email: str = Query(...),
@@ -337,9 +333,9 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             
             logger.info(f"User {email} emptied trash: {deleted_count} tasks deleted. ID counter reset: {id_reset}")
             
-            message = f"РљРѕСЂР·РёРЅР° РѕС‡РёС‰РµРЅР°. РЈРґР°Р»РµРЅРѕ Р·Р°РґР°С‡: {deleted_count}"
+            message = f"Корзина очищена. Удалено задач: {deleted_count}"
             if id_reset:
-                message += ". РЎС‡РµС‚С‡РёРє ID СЃР±СЂРѕС€РµРЅ - РЅРѕРІС‹Рµ Р·Р°РґР°С‡Рё РЅР°С‡РЅСѓС‚СЃСЏ СЃ #1"
+                message += ". Счетчик ID сброшен - новые задачи начнутся с #1"
             
             return {
                 "success": True,
@@ -373,12 +369,12 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 logger.info(f"User {email} reset task ID counter")
                 return {
                     "success": True,
-                    "message": "РЎС‡РµС‚С‡РёРє ID Р·Р°РґР°С‡ СЃР±СЂРѕС€РµРЅ. РќРѕРІС‹Рµ Р·Р°РґР°С‡Рё РЅР°С‡РЅСѓС‚СЃСЏ СЃ #1"
+                    "message": "Счетчик ID задач сброшен. Новые задачи начнутся с #1"
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"РќРµ СѓРґР°Р»РѕСЃСЊ СЃР±СЂРѕСЃРёС‚СЊ СЃС‡РµС‚С‡РёРє. Р’ Р±Р°Р·Рµ РґР°РЅРЅС‹С… РµС‰Рµ РµСЃС‚СЊ Р·Р°РґР°С‡Рё ({task_count} С€С‚.). РЈРґР°Р»РёС‚Рµ РІСЃРµ Р·Р°РґР°С‡Рё (РІРєР»СЋС‡Р°СЏ РєРѕСЂР·РёРЅСѓ) РїРµСЂРµРґ СЃР±СЂРѕСЃРѕРј СЃС‡РµС‚С‡РёРєР°."
+                    "message": f"Не удалось сбросить счетчик. В базе данных еще есть задачи ({task_count} шт.). Удалите все задачи (включая корзину) перед сбросом счетчика."
                 }
         except HTTPException:
             raise

@@ -167,7 +167,7 @@ export default function PublicProfilePage() {
         if (data?.has_pending_outgoing) {
           setFriendActionMessage(null); // Clear message since button will be hidden
         } else {
-          setFriendActionMessage("Запрос уже отправлен");
+          setFriendActionMessage("Сұраныс жіберілген");
         }
       } else {
         setFriendActionMessage(errorString);
@@ -245,20 +245,20 @@ export default function PublicProfilePage() {
                 {session?.user?.email && friendStatus && !friendStatus.is_self && !friendStatus.is_blocked && !friendStatus.is_friend && (
                   <div className="mt-2">
                     {friendStatus.has_pending_outgoing ? (
-                      <span className="text-sm text-blue-100">Запрос уже отправлен</span>
+                      <span className="text-sm text-blue-100">Сұраныс жіберілген</span>
                     ) : (
                       <button
                         onClick={handleSendFriendRequest}
                         disabled={friendActionLoading || friendStatusLoading}
                         className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all text-sm font-semibold"
                       >
-                        {friendActionLoading ? "Отправка..." : "Добавить в друзья"}
+                        {friendActionLoading ? "Жіберілуде..." : "Дос ретінде қосу"}
                       </button>
                     )}
                   </div>
                 )}
                 {friendStatus?.is_friend && (
-                  <div className="mt-2 text-sm text-blue-100">Вы уже друзья</div>
+                  <div className="mt-2 text-sm text-blue-100">Сіздер доссыздар</div>
                 )}
                 {friendStatus?.is_blocked && (
                   <div className="mt-2 text-sm text-blue-100">Нельзя добавить в друзья</div>
