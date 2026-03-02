@@ -2423,6 +2423,122 @@ async def test_admin_bank_audit_requires_admin(client, test_db):
 
 
 @pytest.mark.asyncio
+async def test_admin_bank_export_json_returns_import_compatible_active_tasks(client, test_db):
+    admin_user = await test_db.create_user_by_email("admin.bank.export@example.com")
+    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+
+    select_answer = '["A","C"]'
+    factor_answer = '["2x","-1","x","3"]'
+
+    await test_db.create_bank_task(
+        text="Select export task",
+        answer=select_answer,
+        question_type="select",
+        difficulty="A",
+        text_scale="lg",
+        topics=["Algebra", "Export"],
+        options=[
+            {"label": "A", "text": "1"},
+            {"label": "B", "text": "2"},
+            {"label": "C", "text": "3"},
+            {"label": "D", "text": "4"},
+        ],
+        subquestions=[
+            {"text": "First", "correct": "A"},
+            {"text": "Second", "correct": "C"},
+        ],
+        image_filename="task.png",
+        solution_filename="solution.png",
+        created_by=admin_user["id"],
+    )
+    await test_db.create_bank_task(
+        text="Factor export task",
+        answer=factor_answer,
+        question_type="factor_grid",
+        difficulty="C",
+        topics=["Factor"],
+        options=None,
+        subquestions=None,
+        created_by=admin_user["id"],
+    )
+    deleted_task = await test_db.create_bank_task(
+        text="Deleted export task",
+        answer="42",
+        question_type="input",
+        difficulty="B",
+        topics=["Hidden"],
+        created_by=admin_user["id"],
+    )
+    await test_db.soft_delete_bank_task(deleted_task["id"], actor_user_id=admin_user["id"])
+
+    response = client.get(
+        "/api/admin/bank/tasks/export",
+        params={"email": admin_user["email"]},
+    )
+
+    assert response.status_code == 200
+    assert "application/json" in response.headers["content-type"]
+    assert "attachment;" in response.headers["content-disposition"]
+    assert "bank_tasks_export_" in response.headers["content-disposition"]
+
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 2
+    assert [item["text"] for item in payload] == ["Select export task", "Factor export task"]
+
+    expected_keys = {
+        "text",
+        "answer",
+        "question_type",
+        "text_scale",
+        "difficulty",
+        "topics",
+        "options",
+        "subquestions",
+        "image_filename",
+        "solution_filename",
+    }
+
+    select_item = payload[0]
+    assert set(select_item.keys()) == expected_keys
+    assert select_item["answer"] == select_answer
+    assert select_item["question_type"] == "select"
+    assert select_item["text_scale"] == "lg"
+    assert select_item["difficulty"] == "A"
+    assert select_item["topics"] == ["Algebra", "Export"]
+    assert select_item["options"][0]["label"] == "A"
+    assert select_item["subquestions"][0]["correct"] == "A"
+    assert select_item["image_filename"] == "task.png"
+    assert select_item["solution_filename"] == "solution.png"
+    assert "id" not in select_item
+    assert "created_at" not in select_item
+    assert "updated_at" not in select_item
+    assert "deleted_at" not in select_item
+    assert "current_version" not in select_item
+    assert "active_usage_count" not in select_item
+    assert "created_by" not in select_item
+
+    factor_item = payload[1]
+    assert factor_item["answer"] == factor_answer
+    assert factor_item["question_type"] == "factor_grid"
+    assert factor_item["text_scale"] == "md"
+    assert factor_item["options"] is None
+    assert factor_item["subquestions"] is None
+
+
+@pytest.mark.asyncio
+async def test_admin_bank_export_json_requires_admin(client, test_db):
+    user = await test_db.create_user_by_email("admin.bank.export.nonadmin@example.com")
+
+    response = client.get(
+        "/api/admin/bank/tasks/export",
+        params={"email": user["email"]},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_admin_bank_audit_not_written_for_failed_operations(client, test_db):
     admin_user = await test_db.create_user_by_email("admin.bank.audit.failed.ops@example.com")
     await test_db.set_admin(email=admin_user["email"], is_admin=True)
@@ -2696,6 +2812,7 @@ def test_admin_routes_contract_and_no_duplicates(client):
         ("GET", "/api/admin/tasks"),
         ("GET", "/api/admin/trial-tests"),
         ("GET", "/api/admin/bank/tasks"),
+        ("GET", "/api/admin/bank/tasks/export"),
         ("GET", "/api/admin/bank/quality/summary"),
         ("GET", "/api/admin/bank/audit"),
         ("POST", "/api/admin/bank/tasks/import"),

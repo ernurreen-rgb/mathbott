@@ -718,6 +718,9 @@ class Database:
             offset=offset,
         )
 
+    async def export_bank_tasks(self, include_deleted: bool = False) -> List[Dict[str, Any]]:
+        return await self.bank_tasks.export_tasks(include_deleted=include_deleted)
+
     async def get_bank_quality_summary(self) -> Dict[str, Any]:
         return await self.bank_tasks.get_quality_summary()
 

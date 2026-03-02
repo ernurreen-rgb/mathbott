@@ -7,6 +7,7 @@ const debugLog = (...args: any[]) => {
 };
 
 type FetchResult<T> = { data: T | null; error: string | null };
+type FileDownloadResult = { blob: Blob | null; filename: string | null; error: string | null };
 
 // Deduplicate in-flight GETs and briefly cache successful GET responses.
 // This significantly reduces duplicate calls like /user/web on route changes where multiple components request the same data.
@@ -1578,4 +1579,57 @@ export async function addTasksFromBankToTrialTest(
       }),
     }
   );
+}
+
+export async function exportAdminBankTasksJson(): Promise<FileDownloadResult> {
+  try {
+    const response = await fetch(apiPath("admin/bank/tasks/export"), {
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") || "";
+      const responseText = await response.text();
+      if (contentType.includes("application/json") && responseText) {
+        try {
+          const parsed = JSON.parse(responseText);
+          const detail = parsed?.detail ?? parsed?.error?.detail ?? parsed?.message ?? parsed;
+          if (typeof detail === "string") {
+            return { blob: null, filename: null, error: detail };
+          }
+          if (detail && typeof detail === "object") {
+            return { blob: null, filename: null, error: JSON.stringify(detail) };
+          }
+        } catch {
+          // Fall back to plain-text handling below.
+        }
+      }
+
+      return {
+        blob: null,
+        filename: null,
+        error: responseText || `Server error: ${response.status} ${response.statusText}`,
+      };
+    }
+
+    const contentDisposition = response.headers.get("content-disposition") || "";
+    const filenameMatch =
+      contentDisposition.match(/filename\*=UTF-8''([^;]+)/i) ||
+      contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    const filename = filenameMatch?.[1]
+      ? decodeURIComponent(filenameMatch[1])
+      : "bank_tasks_export.json";
+
+    return {
+      blob: await response.blob(),
+      filename,
+      error: null,
+    };
+  } catch (error: any) {
+    return {
+      blob: null,
+      filename: null,
+      error: error?.message || "Network error",
+    };
+  }
 }

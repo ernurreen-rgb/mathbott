@@ -12,6 +12,7 @@ import {
   createAdminBankTask,
   deleteAdminBankTask,
   deleteAdminBankTaskVersion,
+  exportAdminBankTasksJson,
   getAdminBankTasks,
   getAdminBankTaskUsage,
   getAdminBankTaskVersion,
@@ -198,6 +199,7 @@ export default function AdminBankPage() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [confirmingImport, setConfirmingImport] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [pendingDedup, setPendingDedup] = useState<PendingDedupState | null>(null);
   const [importPreviewState, setImportPreviewState] = useState<ImportPreviewState | null>(null);
@@ -518,6 +520,34 @@ export default function AdminBankPage() {
       setError(err?.message || "JSON оқу немесе талдау қатесі");
     } finally {
       e.target.value = "";
+    }
+  };
+
+  const handleExportJson = async () => {
+    setExporting(true);
+    setError(null);
+
+    try {
+      const { blob, filename, error: err } = await exportAdminBankTasksJson();
+      if (err) {
+        setError(err);
+        return;
+      }
+      if (!blob) {
+        setError("JSON экспорт қатесі");
+        return;
+      }
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename || "bank_tasks_export.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -923,6 +953,13 @@ export default function AdminBankPage() {
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg"
                 >
                   {importing ? "Preview..." : "JSON импорт"}
+                </button>
+                <button
+                  onClick={() => void handleExportJson()}
+                  disabled={exporting}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg"
+                >
+                  {exporting ? "Экспортталуда..." : "JSON экспорт"}
                 </button>
                 <button
                   onClick={() => {

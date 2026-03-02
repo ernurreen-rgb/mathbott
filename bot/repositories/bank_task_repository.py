@@ -468,6 +468,39 @@ class BankTaskRepository(BaseRepository):
                 "has_more": (offset + limit) < total,
             }
 
+    async def export_tasks(
+        self,
+        *,
+        include_deleted: bool = False,
+    ) -> List[Dict[str, Any]]:
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+
+            where_clause = ""
+            if not include_deleted:
+                where_clause = "WHERE bt.deleted_at IS NULL"
+
+            async with db.execute(
+                f"""
+                SELECT bt.*
+                FROM bank_tasks bt
+                {where_clause}
+                ORDER BY bt.id ASC
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+            task_ids = [int(row["id"]) for row in rows]
+            topics_map = await self._fetch_topics_map(db, task_ids)
+
+            items: List[Dict[str, Any]] = []
+            for row in rows:
+                item = self._serialize_task_row(row, topics_map.get(int(row["id"]), []))
+                item["current_version"] = int(item.get("current_version") or 1)
+                items.append(item)
+
+            return items
+
     async def get_quality_summary(self) -> Dict[str, Any]:
         async with self._connection() as db:
             active_total = 0

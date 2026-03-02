@@ -630,6 +630,50 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     }
 
 
+def _serialize_bank_task_for_import_export(task: dict) -> Dict[str, Any]:
+    text_scale_raw = str(task.get("text_scale") or "md").strip().lower()
+    text_scale = text_scale_raw if text_scale_raw in {"sm", "md", "lg"} else "md"
+
+    difficulty_raw = str(task.get("difficulty") or "B").strip().upper()
+    difficulty = difficulty_raw if difficulty_raw in ALLOWED_BANK_DIFFICULTIES else "B"
+
+    topics = task.get("topics")
+    topics_value = topics if isinstance(topics, list) else []
+
+    options = _parse_json_safe(task.get("options"))
+    options_value = options if isinstance(options, list) else None
+
+    subquestions = _parse_json_safe(task.get("subquestions"))
+    subquestions_value = subquestions if isinstance(subquestions, list) else None
+
+    image_filename_raw = task.get("image_filename")
+    image_filename = (
+        image_filename_raw.strip()
+        if isinstance(image_filename_raw, str) and image_filename_raw.strip()
+        else None
+    )
+
+    solution_filename_raw = task.get("solution_filename")
+    solution_filename = (
+        solution_filename_raw.strip()
+        if isinstance(solution_filename_raw, str) and solution_filename_raw.strip()
+        else None
+    )
+
+    return {
+        "text": str(task.get("text") or ""),
+        "answer": str(task.get("answer") or ""),
+        "question_type": str(task.get("question_type") or "input"),
+        "text_scale": text_scale,
+        "difficulty": difficulty,
+        "topics": topics_value,
+        "options": options_value,
+        "subquestions": subquestions_value,
+        "image_filename": image_filename,
+        "solution_filename": solution_filename,
+    }
+
+
 def _serialize_bank_placement_task(task: dict) -> dict:
     options = _parse_json_safe(task.get("options"))
     subquestions = _parse_json_safe(task.get("subquestions"))

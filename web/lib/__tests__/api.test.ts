@@ -16,6 +16,7 @@ import {
   getAdminOpsIncidents,
   getRating,
   getUserData,
+  exportAdminBankTasksJson,
   importAdminBankTasks,
 } from "../api";
 
@@ -196,6 +197,55 @@ describe("API Client", () => {
       expect(result.data?.role).toBe("reviewer");
       expect(result.data?.is_super_admin).toBe(false);
       expect(result.data?.permissions).toEqual(["review_manage"]);
+    });
+  });
+
+  describe("exportAdminBankTasksJson", () => {
+    it("returns blob and filename for successful export", async () => {
+      const blob = new Blob(['[{"text":"Task"}]'], { type: "application/json" });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-type": "application/json",
+          "content-disposition": 'attachment; filename="bank_tasks_export_test.json"',
+        }),
+        blob: async () => blob,
+      });
+
+      const result = await exportAdminBankTasksJson();
+      expect(result.error).toBeNull();
+      expect(result.filename).toBe("bank_tasks_export_test.json");
+      expect(result.blob).toBe(blob);
+    });
+
+    it("falls back to default filename when header is missing", async () => {
+      const blob = new Blob(["[]"], { type: "application/json" });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        blob: async () => blob,
+      });
+
+      const result = await exportAdminBankTasksJson();
+      expect(result.error).toBeNull();
+      expect(result.filename).toBe("bank_tasks_export.json");
+    });
+
+    it("returns error message on failed export", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        headers: new Headers({ "content-type": "application/json" }),
+        text: async () => JSON.stringify({ detail: "Access denied" }),
+      });
+
+      const result = await exportAdminBankTasksJson();
+      expect(result.blob).toBeNull();
+      expect(result.filename).toBeNull();
+      expect(result.error).toBe("Access denied");
     });
   });
 

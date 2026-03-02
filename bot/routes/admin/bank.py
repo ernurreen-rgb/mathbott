@@ -2,6 +2,7 @@
 Admin bank routes.
 """
 from .common import *  # noqa: F401,F403
+from fastapi import Response
 
 def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Bank tasks admin
@@ -45,6 +46,21 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             topics=topics_list,
             limit=limit,
             offset=offset,
+        )
+
+    @app.get("/api/admin/bank/tasks/export")
+    async def export_bank_tasks_json(
+        admin_user: dict = Depends(require_admin_any_admin),
+        db: Database = Depends(get_db),
+    ):
+        items = await db.export_bank_tasks(include_deleted=False)
+        export_payload = [_serialize_bank_task_for_import_export(item) for item in items]
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        filename = f"bank_tasks_export_{timestamp}.json"
+        return Response(
+            content=json.dumps(export_payload, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     @app.get("/api/admin/bank/quality/summary")
