@@ -377,11 +377,40 @@ class Database:
         )
 
     # Delegate solution methods
-    async def record_solution(self, user_id: int, task_id: int, answer: str, is_correct: bool):
+    async def record_solution(
+        self,
+        user_id: int,
+        task_id: int,
+        answer: str,
+        is_correct: bool,
+        task_snapshot: Optional[Dict[str, Any]] = None,
+    ):
         """Record user solution"""
         return await self.solutions.record_solution(
             user_id, task_id, answer, is_correct,
-            self.progress, self.users, self.achievements
+            self.progress, self.users, self.achievements, self.rating, self.tasks, task_snapshot
+        )
+
+    async def award_task_reward_once(
+        self,
+        *,
+        user_id: int,
+        reward_key: str,
+        bank_task_id: Optional[int],
+        difficulty: str,
+        points: int,
+        source: str,
+        source_ref_id: Optional[int],
+    ) -> Dict[str, Any]:
+        """Award task points once per unique reward key for a user."""
+        return await self.users.award_task_reward_once(
+            user_id=user_id,
+            reward_key=reward_key,
+            bank_task_id=bank_task_id,
+            difficulty=difficulty,
+            points=points,
+            source=source,
+            source_ref_id=source_ref_id,
         )
 
     # Delegate rating methods

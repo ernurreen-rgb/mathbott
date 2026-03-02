@@ -9,6 +9,8 @@ from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from utils.cache import cache
+from utils.scoring import build_reward_identity
 from utils.validation import normalize_task_answer_for_compare
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             results = {}
             score = 0
             total = len(tasks)
+            had_any_correct = False
             
             for task in tasks:
                 task_id = task["id"]
@@ -186,6 +189,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 
                 if is_correct:
                     score += 1
+                    had_any_correct = True
                 
                 results[int(task_id)] = {
                     "answer": user_answer,
@@ -204,8 +208,33 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 percentage=percentage,
                 answers=answers_for_db
             )
+
+            awarded_any = False
+            for task in tasks:
+                task_result = results.get(int(task["id"])) or {}
+                if not task_result.get("correct"):
+                    continue
+                reward = build_reward_identity(task, surface="trial_test")
+                award_result = await db.award_task_reward_once(
+                    user_id=user["id"],
+                    reward_key=reward["reward_key"],
+                    bank_task_id=reward["bank_task_id"],
+                    difficulty=reward["difficulty"],
+                    points=reward["points"],
+                    source="trial_test",
+                    source_ref_id=int(task["id"]),
+                )
+                awarded_any = awarded_any or bool(award_result.get("awarded"))
+
+            if had_any_correct:
+                await db.update_streak(user["id"])
+            if awarded_any:
+                await db.check_and_unlock_achievements(user["id"])
+
             await db.delete_trial_test_draft(user["id"], test_id)
             logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
+            cache.invalidate_pattern(f"user:stats:{email}")
+            cache.invalidate_pattern("rating:")
 
             return {
                 "score": score,

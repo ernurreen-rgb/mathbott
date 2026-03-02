@@ -526,6 +526,54 @@ class UserRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
 
+    async def award_task_reward_once(
+        self,
+        *,
+        user_id: int,
+        reward_key: str,
+        bank_task_id: Optional[int],
+        difficulty: str,
+        points: int,
+        source: str,
+        source_ref_id: Optional[int],
+    ) -> Dict[str, Any]:
+        """Award task points once per unique reward key for a user."""
+        async with self._connection() as db:
+            try:
+                await db.execute(
+                    """
+                    INSERT INTO user_task_rewards
+                    (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        reward_key,
+                        bank_task_id,
+                        difficulty,
+                        points,
+                        source,
+                        source_ref_id,
+                    ),
+                )
+            except aiosqlite.IntegrityError:
+                return {"awarded": False, "points": 0}
+
+            await db.execute(
+                """
+                UPDATE users SET
+                    total_points = total_points + ?,
+                    week_points = week_points + ?,
+                    total_solved = total_solved + 1,
+                    week_solved = week_solved + 1,
+                    last_active = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (points, points, user_id),
+            )
+            await db.commit()
+            return {"awarded": True, "points": points}
+
     async def update_streak(self, user_id: int):
         """Update user streak - increment if solved today or yesterday, reset if longer gap"""
         try:

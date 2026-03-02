@@ -30,7 +30,7 @@ async def test_complete_task_solving_flow(test_db, test_user):
     # Check user stats updated
     user = await test_db.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
-    assert user["total_points"] == 10
+    assert user["total_points"] == 15
 
 
 @pytest.mark.asyncio
@@ -156,7 +156,7 @@ async def test_weekly_reset_flow(test_db, test_user):
     # Check week stats
     user = await test_db.get_user_by_email("test@example.com")
     assert user["week_solved"] == 1
-    assert user["week_points"] == 10
+    assert user["week_points"] == 15
     
     # Reset week (this would normally be called by a scheduled task)
     # Note: This test might fail if reset was already done today

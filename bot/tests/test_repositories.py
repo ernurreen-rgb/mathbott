@@ -361,6 +361,68 @@ async def test_user_repository_get_solved_task_ids(test_db, test_user):
 
 
 @pytest.mark.asyncio
+async def test_user_repository_award_task_reward_once_deduplicates(test_db, test_user):
+    repo = UserRepository(db_path=test_db.db_path)
+
+    first = await repo.award_task_reward_once(
+        user_id=test_user["id"],
+        reward_key="bank:123",
+        bank_task_id=None,
+        difficulty="C",
+        points=20,
+        source="trial_test",
+        source_ref_id=77,
+    )
+    assert first == {"awarded": True, "points": 20}
+
+    user_after_first = await test_db.get_user_by_id(test_user["id"])
+    assert user_after_first["total_points"] == 20
+    assert user_after_first["week_points"] == 20
+    assert user_after_first["total_solved"] == 1
+    assert user_after_first["week_solved"] == 1
+
+    second = await repo.award_task_reward_once(
+        user_id=test_user["id"],
+        reward_key="bank:123",
+        bank_task_id=None,
+        difficulty="C",
+        points=20,
+        source="trial_test",
+        source_ref_id=77,
+    )
+    assert second == {"awarded": False, "points": 0}
+
+    user_after_second = await test_db.get_user_by_id(test_user["id"])
+    assert user_after_second["total_points"] == 20
+    assert user_after_second["week_points"] == 20
+    assert user_after_second["total_solved"] == 1
+    assert user_after_second["week_solved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_record_solution_uses_difficulty_and_blocks_repeat_points(test_db, test_user):
+    module = await test_db.create_module("Scoring Module", sort_order=1)
+    section = await test_db.create_section(module["id"], "Scoring Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Scoring task",
+        "42",
+        test_user["id"],
+        bank_difficulty="A",
+    )
+
+    await test_db.record_solution(test_user["id"], task["id"], "42", True)
+    after_first = await test_db.get_user_by_id(test_user["id"])
+    assert after_first["total_points"] == 10
+    assert after_first["total_solved"] == 1
+
+    await test_db.record_solution(test_user["id"], task["id"], "42", True)
+    after_second = await test_db.get_user_by_id(test_user["id"])
+    assert after_second["total_points"] == 10
+    assert after_second["total_solved"] == 1
+
+
+@pytest.mark.asyncio
 async def test_task_repository_get_task_by_id(test_db, test_user):
     """Test getting task by ID"""
     repo = TaskRepository(db_path=test_db.db_path)

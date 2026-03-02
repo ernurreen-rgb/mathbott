@@ -4,6 +4,7 @@ Tests for utility functions
 import pytest
 from fastapi import HTTPException
 from routes.admin.common import _normalize_text_scale
+from utils.scoring import build_reward_identity, normalize_difficulty_code, points_for_difficulty
 from utils.validation import (
     canonicalize_factor_grid_answer,
     validate_email,
@@ -107,4 +108,36 @@ def test_normalize_text_scale():
     with pytest.raises(HTTPException) as exc_info:
         _normalize_text_scale("xl")
     assert exc_info.value.detail == "text_scale must be one of sm, md, lg"
+
+
+def test_scoring_helpers():
+    assert normalize_difficulty_code("a") == "A"
+    assert normalize_difficulty_code("B") == "B"
+    assert normalize_difficulty_code("c") == "C"
+    assert normalize_difficulty_code("bad") == "B"
+
+    assert points_for_difficulty("A") == 10
+    assert points_for_difficulty("B") == 15
+    assert points_for_difficulty("C") == 20
+    assert points_for_difficulty(None) == 15
+
+    module_identity = build_reward_identity(
+        {"id": 11, "bank_task_id": 5, "difficulty": "C"},
+        surface="module",
+    )
+    assert module_identity["reward_key"] == "bank:5"
+    assert module_identity["difficulty"] == "C"
+    assert module_identity["points"] == 20
+
+    module_fallback = build_reward_identity(
+        {"id": 12, "bank_task_id": None, "difficulty": "A"},
+        surface="module",
+    )
+    assert module_fallback["reward_key"] == "module-task:12"
+
+    trial_fallback = build_reward_identity(
+        {"id": 21, "bank_task_id": 0, "bank_difficulty": "B"},
+        surface="trial_test",
+    )
+    assert trial_fallback["reward_key"] == "trial-task:21"
 

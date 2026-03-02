@@ -122,7 +122,13 @@ def setup_tasks_routes(app, db, limiter: Limiter):
 
             # Record solution synchronously to guarantee progress is saved
             try:
-                await db.record_solution(user["id"], task_check_request.task_id, task_check_request.answer, is_correct)
+                await db.record_solution(
+                    user["id"],
+                    task_check_request.task_id,
+                    task_check_request.answer,
+                    is_correct,
+                    task_snapshot=task,
+                )
                 # Invalidate cache for user stats and modules map
                 cache.invalidate_pattern(f"user:stats:{task_check_request.email}")
                 cache.invalidate_pattern(f"modules:map:{task_check_request.email}")

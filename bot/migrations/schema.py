@@ -477,6 +477,29 @@ async def create_schema(db):
     except Exception:
         pass
 
+    # Reward ledger for first-time task point awards
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS user_task_rewards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reward_key TEXT NOT NULL,
+            bank_task_id INTEGER,
+            difficulty TEXT NOT NULL,
+            points_awarded INTEGER NOT NULL,
+            source TEXT NOT NULL,
+            source_ref_id INTEGER,
+            awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, reward_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (bank_task_id) REFERENCES bank_tasks(id) ON DELETE SET NULL
+        )
+    """)
+
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_task_rewards_user_id
+        ON user_task_rewards(user_id)
+    """)
+
     # User progress for tasks (used by modules map)
     await db.execute("""
         CREATE TABLE IF NOT EXISTS user_progress (

@@ -142,6 +142,45 @@ async def test_check_task_answer_factor_grid_accepts_swapped_rows(client, test_d
 
 
 @pytest.mark.asyncio
+async def test_check_task_answer_awards_points_once_by_difficulty(client, test_db, test_user):
+    module = await test_db.create_module("Points Module", sort_order=1)
+    section = await test_db.create_section(module["id"], "Points Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "What is 2+2?",
+        "4",
+        test_user["id"],
+        bank_difficulty="A",
+    )
+
+    first = client.post(
+        "/api/task/check",
+        json={"task_id": task["id"], "answer": "4", "email": test_user["email"]},
+    )
+    assert first.status_code == 200
+    assert first.json()["correct"] is True
+
+    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_first["total_points"] == 10
+    assert user_after_first["week_points"] == 10
+    assert user_after_first["total_solved"] == 1
+    assert user_after_first["week_solved"] == 1
+
+    second = client.post(
+        "/api/task/check",
+        json={"task_id": task["id"], "answer": "4", "email": test_user["email"]},
+    )
+    assert second.status_code == 200
+    assert second.json()["correct"] is True
+
+    user_after_second = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_second["total_points"] == 10
+    assert user_after_second["week_points"] == 10
+    assert user_after_second["total_solved"] == 1
+    assert user_after_second["week_solved"] == 1
+
+
+@pytest.mark.asyncio
 async def test_check_task_answer_user_not_found(client, test_db, test_user):
     """Test checking answer with non-existent user"""
     # Create task
@@ -161,6 +200,202 @@ async def test_check_task_answer_user_not_found(client, test_db, test_user):
         }
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(client, test_db, test_user):
+    trial_test = await test_db.create_trial_test("Points Trial", sort_order=0, created_by=test_user["id"])
+
+    bank_task_a = await test_db.create_bank_task(
+        text="Task A",
+        answer="A",
+        question_type="input",
+        difficulty="A",
+        created_by=test_user["id"],
+    )
+    bank_task_b = await test_db.create_bank_task(
+        text="Task B",
+        answer="B",
+        question_type="input",
+        difficulty="B",
+        created_by=test_user["id"],
+    )
+    bank_task_c = await test_db.create_bank_task(
+        text="Task C",
+        answer="C",
+        question_type="input",
+        difficulty="C",
+        created_by=test_user["id"],
+    )
+
+    task_a = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Task A",
+        answer="A",
+        created_by=test_user["id"],
+        sort_order=0,
+        bank_task_id=bank_task_a["id"],
+    )
+    task_b = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Task B",
+        answer="B",
+        created_by=test_user["id"],
+        sort_order=1,
+        bank_task_id=bank_task_b["id"],
+    )
+    task_c = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Task C",
+        answer="C",
+        created_by=test_user["id"],
+        sort_order=2,
+        bank_task_id=bank_task_c["id"],
+    )
+
+    payload = {
+        "email": test_user["email"],
+        "answers": {
+            str(task_a["id"]): "A",
+            str(task_b["id"]): "B",
+            str(task_c["id"]): "C",
+        },
+    }
+    first = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
+    assert first.status_code == 200
+    first_json = first.json()
+    assert first_json["score"] == 3
+    assert first_json["total"] == 3
+    assert first_json["percentage"] == 100.0
+
+    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_first["total_points"] == 45
+    assert user_after_first["week_points"] == 45
+    assert user_after_first["total_solved"] == 3
+    assert user_after_first["week_solved"] == 3
+
+    second = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
+    assert second.status_code == 200
+    second_json = second.json()
+    assert second_json["score"] == 3
+    assert second_json["total"] == 3
+    assert second_json["percentage"] == 100.0
+
+    user_after_second = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_second["total_points"] == 45
+    assert user_after_second["week_points"] == 45
+    assert user_after_second["total_solved"] == 3
+    assert user_after_second["week_solved"] == 3
+
+
+@pytest.mark.asyncio
+async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_module(client, test_db, test_user):
+    module = await test_db.create_module("Shared Module", sort_order=1)
+    section = await test_db.create_section(module["id"], "Shared Section", sort_order=1)
+    trial_test = await test_db.create_trial_test("Shared Trial", sort_order=0, created_by=test_user["id"])
+
+    shared_bank_task = await test_db.create_bank_task(
+        text="Shared task",
+        answer="42",
+        question_type="input",
+        difficulty="A",
+        created_by=test_user["id"],
+    )
+    module_task = await test_db.create_task_in_section(
+        section["id"],
+        "Shared task",
+        "42",
+        test_user["id"],
+        bank_task_id=shared_bank_task["id"],
+    )
+    trial_task = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Shared task",
+        answer="42",
+        created_by=test_user["id"],
+        sort_order=0,
+        bank_task_id=shared_bank_task["id"],
+    )
+
+    module_response = client.post(
+        "/api/task/check",
+        json={"task_id": module_task["id"], "answer": "42", "email": test_user["email"]},
+    )
+    assert module_response.status_code == 200
+
+    user_after_module = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_module["total_points"] == 10
+    assert user_after_module["total_solved"] == 1
+
+    trial_response = client.post(
+        f"/api/trial-tests/{trial_test['id']}/submit",
+        json={"email": test_user["email"], "answers": {str(trial_task["id"]): "42"}},
+    )
+    assert trial_response.status_code == 200
+    assert trial_response.json()["score"] == 1
+
+    user_after_trial = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_trial["total_points"] == 10
+    assert user_after_trial["total_solved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_coop_finish_awards_points_once(client, test_db, test_user):
+    trial_test = await test_db.create_trial_test("Coop Points Trial", sort_order=0, created_by=test_user["id"])
+    bank_task = await test_db.create_bank_task(
+        text="Coop task",
+        answer="yes",
+        question_type="input",
+        difficulty="C",
+        created_by=test_user["id"],
+    )
+    trial_task = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Coop task",
+        answer="yes",
+        created_by=test_user["id"],
+        sort_order=0,
+        bank_task_id=bank_task["id"],
+    )
+
+    session = await test_db.create_trial_test_coop_session(trial_test["id"], test_user["id"])
+    await test_db.add_trial_test_coop_participant(session["id"], test_user["id"], "red")
+
+    response = client.post(
+        f"/api/trial-tests/{trial_test['id']}/coop/finish",
+        json={
+            "email": test_user["email"],
+            "session_id": session["id"],
+            "answers": {str(trial_task["id"]): "yes"},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["score"] == 1
+    assert payload["total"] == 1
+    assert payload["percentage"] == 100.0
+
+    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_first["total_points"] == 20
+    assert user_after_first["week_points"] == 20
+    assert user_after_first["total_solved"] == 1
+    assert user_after_first["week_solved"] == 1
+
+    repeat = client.post(
+        f"/api/trial-tests/{trial_test['id']}/coop/finish",
+        json={
+            "email": test_user["email"],
+            "session_id": session["id"],
+            "answers": {str(trial_task["id"]): "yes"},
+        },
+    )
+    assert repeat.status_code == 200
+
+    user_after_repeat = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_repeat["total_points"] == 20
+    assert user_after_repeat["week_points"] == 20
+    assert user_after_repeat["total_solved"] == 1
+    assert user_after_repeat["week_solved"] == 1
 
 
 @pytest.mark.asyncio

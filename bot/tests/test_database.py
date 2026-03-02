@@ -71,7 +71,7 @@ async def test_record_solution(test_db, test_user):
     # Check user stats updated
     user = await test_db.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
-    assert user["total_points"] == 10
+    assert user["total_points"] == 15
 
 
 @pytest.mark.asyncio
