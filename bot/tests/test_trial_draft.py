@@ -1,8 +1,11 @@
 """
 API tests for trial test draft (GET/PUT draft, delete on submit)
 """
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from main import app
 from dependencies import get_db
@@ -113,3 +116,49 @@ async def test_submit_deletes_draft(client_with_db, test_db, test_user):
     )
     assert r_get.status_code == 200
     assert r_get.json() == {"answers": {}, "current_task_index": 0}
+
+
+@pytest.mark.asyncio
+async def test_put_draft_requests_are_serialized_per_user_and_test():
+    """Concurrent draft saves for one user/test should not overlap DB writes."""
+
+    class FakeDraftDb:
+        def __init__(self):
+            self.active_calls = 0
+            self.max_active_calls = 0
+
+        async def get_user_by_email(self, email):
+            return {"id": 123, "email": email}
+
+        async def upsert_trial_test_draft(self, user_id, trial_test_id, answers, current_task_index):
+            self.active_calls += 1
+            self.max_active_calls = max(self.max_active_calls, self.active_calls)
+            try:
+                await asyncio.sleep(0.05)
+            finally:
+                self.active_calls -= 1
+
+    fake_db = FakeDraftDb()
+
+    async def override_get_db():
+        return fake_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            payload = {
+                "email": "test@example.com",
+                "answers": {"1": "42"},
+                "current_task_index": 1,
+            }
+            response_1, response_2 = await asyncio.gather(
+                client.put("/api/trial-tests/1/draft", json=payload),
+                client.put("/api/trial-tests/1/draft", json=payload),
+            )
+
+        assert response_1.status_code == 200
+        assert response_2.status_code == 200
+        assert fake_db.max_active_calls == 1
+    finally:
+        app.dependency_overrides.pop(get_db, None)

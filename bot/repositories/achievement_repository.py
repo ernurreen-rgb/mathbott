@@ -62,12 +62,15 @@ class AchievementRepository(BaseRepository):
                         continue
             
             if achievement["check"](user):
-                async with self._connection() as db:
-                    await db.execute(
-                        "INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)",
-                        (user_id, achievement["id"])
-                    )
-                    await db.commit()
+                async def operation() -> None:
+                    async with self._connection() as db:
+                        await db.execute(
+                            "INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)",
+                            (user_id, achievement["id"])
+                        )
+                        await db.commit()
+
+                await self._run_with_lock_retry(operation)
                 unlocked.append(achievement)
                 
                 try:

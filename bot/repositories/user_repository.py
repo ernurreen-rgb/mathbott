@@ -538,101 +538,111 @@ class UserRepository(BaseRepository):
         source_ref_id: Optional[int],
     ) -> Dict[str, Any]:
         """Award task points once per unique reward key for a user."""
-        async with self._connection() as db:
-            try:
+        async def operation() -> Dict[str, Any]:
+            async with self._connection() as db:
+                try:
+                    await db.execute(
+                        """
+                        INSERT INTO user_task_rewards
+                        (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            user_id,
+                            reward_key,
+                            bank_task_id,
+                            difficulty,
+                            points,
+                            source,
+                            source_ref_id,
+                        ),
+                    )
+                except aiosqlite.IntegrityError:
+                    return {"awarded": False, "points": 0}
+
                 await db.execute(
                     """
-                    INSERT INTO user_task_rewards
-                    (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    UPDATE users SET
+                        total_points = total_points + ?,
+                        week_points = week_points + ?,
+                        total_solved = total_solved + 1,
+                        week_solved = week_solved + 1,
+                        last_active = CURRENT_TIMESTAMP
+                    WHERE id = ?
                     """,
-                    (
-                        user_id,
-                        reward_key,
-                        bank_task_id,
-                        difficulty,
-                        points,
-                        source,
-                        source_ref_id,
-                    ),
+                    (points, points, user_id),
                 )
-            except aiosqlite.IntegrityError:
-                return {"awarded": False, "points": 0}
+                await db.commit()
+                return {"awarded": True, "points": points}
 
-            await db.execute(
-                """
-                UPDATE users SET
-                    total_points = total_points + ?,
-                    week_points = week_points + ?,
-                    total_solved = total_solved + 1,
-                    week_solved = week_solved + 1,
-                    last_active = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (points, points, user_id),
-            )
-            await db.commit()
-            return {"awarded": True, "points": points}
+        return await self._run_with_lock_retry(operation)
 
     async def update_streak(self, user_id: int):
         """Update user streak - increment if solved today or yesterday, reset if longer gap"""
         try:
-            async with self._connection() as db:
-                async with db.execute(
-                    "SELECT streak, last_streak_date FROM users WHERE id = ?", (user_id,)
-                ) as cursor:
-                    row = await cursor.fetchone()
-                    if not row:
-                        return
-                    
-                    current_streak = row[0] or 0
-                    last_streak_date_str = row[1]
-                    
-                    from datetime import date, datetime
-                    today = date.today()
-                    
-                    if last_streak_date_str:
-                        try:
-                            if isinstance(last_streak_date_str, str):
-                                if ' ' in last_streak_date_str:
-                                    last_streak_date = datetime.strptime(last_streak_date_str.split()[0], "%Y-%m-%d").date()
+            async def operation():
+                async with self._connection() as db:
+                    async with db.execute(
+                        "SELECT streak, last_streak_date FROM users WHERE id = ?", (user_id,)
+                    ) as cursor:
+                        row = await cursor.fetchone()
+                        if not row:
+                            return None
+
+                        current_streak = row[0] or 0
+                        last_streak_date_str = row[1]
+
+                        from datetime import date, datetime
+                        today = date.today()
+
+                        if last_streak_date_str:
+                            try:
+                                if isinstance(last_streak_date_str, str):
+                                    if ' ' in last_streak_date_str:
+                                        last_streak_date = datetime.strptime(last_streak_date_str.split()[0], "%Y-%m-%d").date()
+                                    else:
+                                        last_streak_date = datetime.strptime(last_streak_date_str, "%Y-%m-%d").date()
                                 else:
-                                    last_streak_date = datetime.strptime(last_streak_date_str, "%Y-%m-%d").date()
-                            else:
-                                last_streak_date = last_streak_date_str
-                            
-                            days_diff = (today - last_streak_date).days
-                            
-                            if days_diff == 0:
-                                new_streak = current_streak
-                            elif days_diff == 1:
-                                new_streak = current_streak + 1
-                            else:
+                                    last_streak_date = last_streak_date_str
+
+                                days_diff = (today - last_streak_date).days
+
+                                if days_diff == 0:
+                                    new_streak = current_streak
+                                elif days_diff == 1:
+                                    new_streak = current_streak + 1
+                                else:
+                                    new_streak = 1
+                            except Exception as e:
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                logger.error(f"Error parsing streak date: {e}, value: {last_streak_date_str}")
                                 new_streak = 1
-                        except Exception as e:
-                            import logging
-                            logger = logging.getLogger(__name__)
-                            logger.error(f"Error parsing streak date: {e}, value: {last_streak_date_str}")
+                        else:
                             new_streak = 1
-                    else:
-                        new_streak = 1
-                    
-                    await db.execute(
-                        """UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?""",
-                        (new_streak, today.isoformat(), user_id)
-                    )
-                    await db.commit()
-                    
-                    if new_streak > current_streak and new_streak in [7, 30, 100]:
-                        try:
-                            from utils.notifications import send_streak_notification
-                            user = await self.get_user_by_id(user_id)
-                            if user and user.get("email"):
-                                await send_streak_notification(user["email"], new_streak)
-                        except Exception as e:
-                            import logging
-                            logger = logging.getLogger(__name__)
-                            logger.error(f"Error sending streak notification: {e}", exc_info=True)
+
+                        await db.execute(
+                            """UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?""",
+                            (new_streak, today.isoformat(), user_id)
+                        )
+                        await db.commit()
+                        return current_streak, new_streak
+
+            streak_result = await self._run_with_lock_retry(operation)
+            if not streak_result:
+                return
+
+            current_streak, new_streak = streak_result
+            if new_streak > current_streak and new_streak in [7, 30, 100]:
+                try:
+                    from utils.notifications import send_streak_notification
+                    user = await self.get_user_by_id(user_id)
+                    if user and user.get("email"):
+                        await send_streak_notification(user["email"], new_streak)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Error sending streak notification: {e}", exc_info=True)
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

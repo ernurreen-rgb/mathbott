@@ -1,6 +1,7 @@
 """
 Trial tests роуты (публичные)
 """
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -14,6 +15,17 @@ from utils.scoring import build_reward_identity
 from utils.validation import normalize_task_answer_for_compare
 
 logger = logging.getLogger(__name__)
+_trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
+
+
+def _get_trial_test_write_lock(user_id: int, test_id: int) -> asyncio.Lock:
+    """Serialize writes per user/test pair to reduce SQLite lock contention."""
+    key = (int(user_id), int(test_id))
+    lock = _trial_test_write_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _trial_test_write_locks[key] = lock
+    return lock
 
 
 def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -171,77 +183,78 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not tasks:
                 raise HTTPException(status_code=404, detail="No tasks found in trial test")
             
-            results = {}
-            score = 0
-            total = len(tasks)
-            had_any_correct = False
-            
-            for task in tasks:
-                task_id = task["id"]
-                user_answer = answers.get(str(task_id), answers.get(int(task_id), "")).strip()
-                
-                correct_answer = task.get("answer", "").strip()
-                
-                user_normalized = normalize_task_answer_for_compare(task, user_answer)
-                correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
-                
-                is_correct = user_normalized == correct_normalized
-                
-                if is_correct:
-                    score += 1
-                    had_any_correct = True
-                
-                results[int(task_id)] = {
-                    "answer": user_answer,
-                    "correct": is_correct,
-                    "correct_answer": task.get("answer")
-                }
-            
-            percentage = (score / total * 100) if total > 0 else 0.0
-            
-            answers_for_db = {int(k): v for k, v in results.items()}
-            await db.save_trial_test_result(
-                user_id=user["id"],
-                trial_test_id=test_id,
-                score=score,
-                total=total,
-                percentage=percentage,
-                answers=answers_for_db
-            )
+            async with _get_trial_test_write_lock(user["id"], test_id):
+                results = {}
+                score = 0
+                total = len(tasks)
+                had_any_correct = False
 
-            awarded_any = False
-            for task in tasks:
-                task_result = results.get(int(task["id"])) or {}
-                if not task_result.get("correct"):
-                    continue
-                reward = build_reward_identity(task, surface="trial_test")
-                award_result = await db.award_task_reward_once(
+                for task in tasks:
+                    task_id = task["id"]
+                    user_answer = answers.get(str(task_id), answers.get(int(task_id), "")).strip()
+
+                    correct_answer = task.get("answer", "").strip()
+
+                    user_normalized = normalize_task_answer_for_compare(task, user_answer)
+                    correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
+
+                    is_correct = user_normalized == correct_normalized
+
+                    if is_correct:
+                        score += 1
+                        had_any_correct = True
+
+                    results[int(task_id)] = {
+                        "answer": user_answer,
+                        "correct": is_correct,
+                        "correct_answer": task.get("answer")
+                    }
+
+                percentage = (score / total * 100) if total > 0 else 0.0
+
+                answers_for_db = {int(k): v for k, v in results.items()}
+                await db.save_trial_test_result(
                     user_id=user["id"],
-                    reward_key=reward["reward_key"],
-                    bank_task_id=reward["bank_task_id"],
-                    difficulty=reward["difficulty"],
-                    points=reward["points"],
-                    source="trial_test",
-                    source_ref_id=int(task["id"]),
+                    trial_test_id=test_id,
+                    score=score,
+                    total=total,
+                    percentage=percentage,
+                    answers=answers_for_db
                 )
-                awarded_any = awarded_any or bool(award_result.get("awarded"))
 
-            if had_any_correct:
-                await db.update_streak(user["id"])
-            if awarded_any:
-                await db.check_and_unlock_achievements(user["id"])
+                awarded_any = False
+                for task in tasks:
+                    task_result = results.get(int(task["id"])) or {}
+                    if not task_result.get("correct"):
+                        continue
+                    reward = build_reward_identity(task, surface="trial_test")
+                    award_result = await db.award_task_reward_once(
+                        user_id=user["id"],
+                        reward_key=reward["reward_key"],
+                        bank_task_id=reward["bank_task_id"],
+                        difficulty=reward["difficulty"],
+                        points=reward["points"],
+                        source="trial_test",
+                        source_ref_id=int(task["id"]),
+                    )
+                    awarded_any = awarded_any or bool(award_result.get("awarded"))
 
-            await db.delete_trial_test_draft(user["id"], test_id)
-            logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
-            cache.invalidate_pattern(f"user:stats:{email}")
-            cache.invalidate_pattern("rating:")
+                if had_any_correct:
+                    await db.update_streak(user["id"])
+                if awarded_any:
+                    await db.check_and_unlock_achievements(user["id"])
 
-            return {
-                "score": score,
-                "total": total,
-                "percentage": round(percentage, 2),
-                "results": results
-            }
+                await db.delete_trial_test_draft(user["id"], test_id)
+                logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
+                cache.invalidate_pattern(f"user:stats:{email}")
+                cache.invalidate_pattern("rating:")
+
+                return {
+                    "score": score,
+                    "total": total,
+                    "percentage": round(percentage, 2),
+                    "results": results
+                }
         except HTTPException:
             raise
         except Exception as e:
@@ -304,7 +317,8 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         answers_int[key] = str(v)
                 except (TypeError, ValueError):
                     continue
-            await db.upsert_trial_test_draft(user["id"], test_id, answers_int, current_task_index)
+            async with _get_trial_test_write_lock(user["id"], test_id):
+                await db.upsert_trial_test_draft(user["id"], test_id, answers_int, current_task_index)
             logger.info(f"[draft] PUT draft saved user_id={user['id']} test_id={test_id} answers_count={len(answers_int)}")
             return {"ok": True}
         except HTTPException:

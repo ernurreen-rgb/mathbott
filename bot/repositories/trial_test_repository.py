@@ -413,20 +413,23 @@ class TrialTestRepository(BaseRepository):
         percentage: float,
         answers: Dict[int, Dict[str, Any]],
     ) -> Dict[str, Any]:
-        async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
-            answers_json = json.dumps(answers)
-            await db.execute(
-                """
-                INSERT INTO trial_test_results (user_id, trial_test_id, score, total, percentage, answers)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (user_id, trial_test_id, score, total, percentage, answers_json),
-            )
-            await db.commit()
-            async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else {}
+        async def operation() -> Dict[str, Any]:
+            async with self._connection() as db:
+                db.row_factory = aiosqlite.Row
+                answers_json = json.dumps(answers)
+                await db.execute(
+                    """
+                    INSERT INTO trial_test_results (user_id, trial_test_id, score, total, percentage, answers)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, trial_test_id, score, total, percentage, answers_json),
+                )
+                await db.commit()
+                async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
+                    row = await cursor.fetchone()
+                    return dict(row) if row else {}
+
+        return await self._run_with_lock_retry(operation)
 
     async def get_user_trial_test_results(self, user_id: int, trial_test_id: Optional[int] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
@@ -473,28 +476,34 @@ class TrialTestRepository(BaseRepository):
         answers: Dict[int, str],
         current_task_index: int,
     ) -> None:
-        async with self._connection() as db:
-            answers_json = json.dumps({str(k): v for k, v in answers.items()})
-            await db.execute(
-                """
-                INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, trial_test_id) DO UPDATE SET
-                  answers = excluded.answers,
-                  current_task_index = excluded.current_task_index,
-                  updated_at = CURRENT_TIMESTAMP
-                """,
-                (user_id, trial_test_id, answers_json, current_task_index),
-            )
-            await db.commit()
+        async def operation() -> None:
+            async with self._connection() as db:
+                answers_json = json.dumps({str(k): v for k, v in answers.items()})
+                await db.execute(
+                    """
+                    INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id, trial_test_id) DO UPDATE SET
+                      answers = excluded.answers,
+                      current_task_index = excluded.current_task_index,
+                      updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (user_id, trial_test_id, answers_json, current_task_index),
+                )
+                await db.commit()
+
+        await self._run_with_lock_retry(operation)
 
     async def delete_trial_test_draft(self, user_id: int, trial_test_id: int) -> None:
-        async with self._connection() as db:
-            await db.execute(
-                "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
-                (user_id, trial_test_id),
-            )
-            await db.commit()
+        async def operation() -> None:
+            async with self._connection() as db:
+                await db.execute(
+                    "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
+                    (user_id, trial_test_id),
+                )
+                await db.commit()
+
+        await self._run_with_lock_retry(operation)
 
     async def get_user_trial_test_draft_ids(self, user_id: int) -> List[int]:
         async with self._connection() as db:

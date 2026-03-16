@@ -1,8 +1,10 @@
 """
 Base repository with common database connection methods
 """
+import asyncio
 import aiosqlite
 import logging
+import sqlite3
 from typing import Optional, Dict
 from functools import lru_cache
 from contextlib import asynccontextmanager
@@ -191,5 +193,15 @@ class BaseRepository:
     def clear_statement_cache(self) -> None:
         """Clear prepared statements cache"""
         self._statement_cache.clear()
+
+    async def _run_with_lock_retry(self, operation, *, attempts: int = 5, base_delay: float = 0.15):
+        """Retry SQLite write operations when the database is temporarily locked."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return await operation()
+            except sqlite3.OperationalError as e:
+                if "database is locked" not in str(e).lower() or attempt == attempts:
+                    raise
+                await asyncio.sleep(base_delay * attempt)
 
 
