@@ -213,39 +213,49 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 percentage = (score / total * 100) if total > 0 else 0.0
 
                 answers_for_db = {int(k): v for k, v in results.items()}
-                await db.save_trial_test_result(
-                    user_id=user["id"],
-                    trial_test_id=test_id,
-                    score=score,
-                    total=total,
-                    percentage=percentage,
-                    answers=answers_for_db
-                )
-
-                awarded_any = False
+                rewards = []
                 for task in tasks:
                     task_result = results.get(int(task["id"])) or {}
                     if not task_result.get("correct"):
                         continue
                     reward = build_reward_identity(task, surface="trial_test")
-                    award_result = await db.award_task_reward_once(
-                        user_id=user["id"],
-                        reward_key=reward["reward_key"],
-                        bank_task_id=reward["bank_task_id"],
-                        difficulty=reward["difficulty"],
-                        points=reward["points"],
-                        source="trial_test",
-                        source_ref_id=int(task["id"]),
+                    rewards.append(
+                        {
+                            "reward_key": reward["reward_key"],
+                            "bank_task_id": reward["bank_task_id"],
+                            "difficulty": reward["difficulty"],
+                            "points": reward["points"],
+                            "source": "trial_test",
+                            "source_ref_id": int(task["id"]),
+                        }
                     )
-                    awarded_any = awarded_any or bool(award_result.get("awarded"))
 
-                if had_any_correct:
-                    await db.update_streak(user["id"])
-                if awarded_any:
-                    await db.check_and_unlock_achievements(user["id"])
-
-                await db.delete_trial_test_draft(user["id"], test_id)
+                submit_result = await db.submit_trial_test_attempt(
+                    user_id=user["id"],
+                    trial_test_id=test_id,
+                    score=score,
+                    total=total,
+                    percentage=percentage,
+                    answers=answers_for_db,
+                    rewards=rewards,
+                    should_update_streak=had_any_correct,
+                    delete_draft=True,
+                )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
+
+                if submit_result.get("streak_milestone") and user.get("email"):
+                    try:
+                        from utils.notifications import send_streak_notification
+                        await send_streak_notification(user["email"], int(submit_result["streak_milestone"]))
+                    except Exception as e:
+                        logger.error(f"Failed to send streak notification after trial submit: {e}", exc_info=True)
+
+                if submit_result.get("awarded_any") or had_any_correct:
+                    try:
+                        await db.check_and_unlock_achievements(user["id"])
+                    except Exception as e:
+                        logger.error(f"Failed to unlock achievements after trial submit: {e}", exc_info=True)
+
                 cache.invalidate_pattern(f"user:stats:{email}")
                 cache.invalidate_pattern("rating:")
 

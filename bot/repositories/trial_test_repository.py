@@ -4,6 +4,7 @@ Trial test repository (placement model with bank_tasks as content source).
 import aiosqlite
 import json
 import logging
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 
 from .base import BaseRepository
@@ -45,6 +46,36 @@ class TrialTestRepository(BaseRepository):
         if isinstance(value, str):
             return value
         return json.dumps(value)
+
+    @staticmethod
+    def _calculate_next_streak(current_streak: int, last_streak_date_value: Any) -> tuple[int, str]:
+        """Match the user streak rules while staying inside one submit transaction."""
+        today = date.today()
+        last_streak_date = None
+
+        if last_streak_date_value:
+            try:
+                if isinstance(last_streak_date_value, str):
+                    raw_value = last_streak_date_value.split()[0]
+                    last_streak_date = datetime.strptime(raw_value, "%Y-%m-%d").date()
+                elif isinstance(last_streak_date_value, datetime):
+                    last_streak_date = last_streak_date_value.date()
+                else:
+                    last_streak_date = last_streak_date_value
+            except Exception:
+                last_streak_date = None
+
+        if last_streak_date is None:
+            return 1, today.isoformat()
+
+        days_diff = (today - last_streak_date).days
+        if days_diff == 0:
+            new_streak = current_streak
+        elif days_diff == 1:
+            new_streak = current_streak + 1
+        else:
+            new_streak = 1
+        return new_streak, today.isoformat()
 
     async def _create_bank_task_for_inline(
         self,
@@ -428,6 +459,124 @@ class TrialTestRepository(BaseRepository):
                 async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
                     row = await cursor.fetchone()
                     return dict(row) if row else {}
+
+        return await self._run_with_lock_retry(operation)
+
+    async def submit_trial_test_attempt(
+        self,
+        *,
+        user_id: int,
+        trial_test_id: int,
+        score: int,
+        total: int,
+        percentage: float,
+        answers: Dict[int, Dict[str, Any]],
+        rewards: List[Dict[str, Any]],
+        should_update_streak: bool,
+        delete_draft: bool = True,
+    ) -> Dict[str, Any]:
+        """Persist a trial-test submit in one transaction to minimize SQLite lock windows."""
+
+        async def operation() -> Dict[str, Any]:
+            async with self._connection() as db:
+                db.row_factory = aiosqlite.Row
+                try:
+                    await db.execute("BEGIN IMMEDIATE")
+
+                    answers_json = json.dumps(answers)
+                    cursor = await db.execute(
+                        """
+                        INSERT INTO trial_test_results (user_id, trial_test_id, score, total, percentage, answers)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (user_id, trial_test_id, score, total, percentage, answers_json),
+                    )
+                    result_id = int(cursor.lastrowid)
+
+                    awarded_any = False
+                    awarded_count = 0
+                    awarded_points = 0
+                    for reward in rewards:
+                        before_changes = db.total_changes
+                        await db.execute(
+                            """
+                            INSERT INTO user_task_rewards
+                            (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(user_id, reward_key) DO NOTHING
+                            """,
+                            (
+                                user_id,
+                                reward["reward_key"],
+                                reward.get("bank_task_id"),
+                                reward["difficulty"],
+                                int(reward["points"]),
+                                reward["source"],
+                                reward.get("source_ref_id"),
+                            ),
+                        )
+                        if db.total_changes > before_changes:
+                            awarded_any = True
+                            awarded_count += 1
+                            awarded_points += int(reward["points"])
+
+                    if awarded_count > 0:
+                        await db.execute(
+                            """
+                            UPDATE users SET
+                                total_points = total_points + ?,
+                                week_points = week_points + ?,
+                                total_solved = total_solved + ?,
+                                week_solved = week_solved + ?,
+                                last_active = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                            """,
+                            (awarded_points, awarded_points, awarded_count, awarded_count, user_id),
+                        )
+
+                    streak_milestone = None
+                    if should_update_streak:
+                        async with db.execute(
+                            "SELECT streak, last_streak_date FROM users WHERE id = ?",
+                            (user_id,),
+                        ) as cursor_user:
+                            user_row = await cursor_user.fetchone()
+
+                        if user_row:
+                            current_streak = int(user_row["streak"] or 0)
+                            new_streak, streak_date = self._calculate_next_streak(
+                                current_streak,
+                                user_row["last_streak_date"],
+                            )
+                            await db.execute(
+                                "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
+                                (new_streak, streak_date, user_id),
+                            )
+                            if new_streak > current_streak and new_streak in (7, 30, 100):
+                                streak_milestone = new_streak
+
+                    if delete_draft:
+                        await db.execute(
+                            "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
+                            (user_id, trial_test_id),
+                        )
+
+                    await db.commit()
+
+                    async with db.execute(
+                        "SELECT * FROM trial_test_results WHERE id = ?",
+                        (result_id,),
+                    ) as cursor_result:
+                        result_row = await cursor_result.fetchone()
+
+                    return {
+                        "result": dict(result_row) if result_row else {"id": result_id},
+                        "awarded_any": awarded_any,
+                        "streak_milestone": streak_milestone,
+                    }
+                except Exception:
+                    await db.rollback()
+                    raise
 
         return await self._run_with_lock_retry(operation)
 

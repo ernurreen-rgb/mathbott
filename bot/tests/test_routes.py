@@ -340,6 +340,40 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
 
 
 @pytest.mark.asyncio
+async def test_trial_test_submit_still_returns_200_when_achievement_check_fails(
+    client,
+    test_db,
+    test_user,
+    monkeypatch,
+):
+    trial_test = await test_db.create_trial_test("Achievement Failure Trial", sort_order=0, created_by=test_user["id"])
+    trial_task = await test_db.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Task",
+        answer="42",
+        created_by=test_user["id"],
+        sort_order=0,
+    )
+
+    async def broken_check_and_unlock_achievements(user_id: int):
+        raise RuntimeError("achievement side effect failed")
+
+    monkeypatch.setattr(test_db, "check_and_unlock_achievements", broken_check_and_unlock_achievements)
+
+    response = client.post(
+        f"/api/trial-tests/{trial_test['id']}/submit",
+        json={"email": test_user["email"], "answers": {str(trial_task["id"]): "42"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["score"] == 1
+
+    user_after_submit = await test_db.get_user_by_email(test_user["email"])
+    assert user_after_submit["total_points"] == 15
+    assert user_after_submit["total_solved"] == 1
+
+
+@pytest.mark.asyncio
 async def test_coop_finish_awards_points_once(client, test_db, test_user):
     trial_test = await test_db.create_trial_test("Coop Points Trial", sort_order=0, created_by=test_user["id"])
     bank_task = await test_db.create_bank_task(

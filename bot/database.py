@@ -1178,6 +1178,32 @@ class Database:
         """Save trial test result"""
         return await self.trial_tests.save_trial_test_result(user_id, trial_test_id, score, total, percentage, answers)
 
+    async def submit_trial_test_attempt(
+        self,
+        *,
+        user_id: int,
+        trial_test_id: int,
+        score: int,
+        total: int,
+        percentage: float,
+        answers: Dict[int, Dict[str, Any]],
+        rewards: List[Dict[str, Any]],
+        should_update_streak: bool,
+        delete_draft: bool = True,
+    ) -> Dict[str, Any]:
+        """Persist a full trial-test submit atomically."""
+        return await self.trial_tests.submit_trial_test_attempt(
+            user_id=user_id,
+            trial_test_id=trial_test_id,
+            score=score,
+            total=total,
+            percentage=percentage,
+            answers=answers,
+            rewards=rewards,
+            should_update_streak=should_update_streak,
+            delete_draft=delete_draft,
+        )
+
     async def get_user_trial_test_results(self, user_id: int, trial_test_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get trial test results for a user"""
         return await self.trial_tests.get_user_trial_test_results(user_id, trial_test_id)
