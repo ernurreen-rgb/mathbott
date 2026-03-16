@@ -7,9 +7,10 @@ import logging
 import time
 from uuid import uuid4
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from middleware.error_handler import http_exception_handler
 from utils.request_context import (
     reset_current_request,
     reset_request_id,
@@ -49,6 +50,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         try:
             response = await call_next(request)
+        except HTTPException as exc:
+            response = await http_exception_handler(request, exc)
         except Exception:
             duration_ms = round((time.perf_counter() - start) * 1000.0, 2)
             logger.exception(

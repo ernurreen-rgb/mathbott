@@ -9,6 +9,7 @@ from middleware.error_handler import (
     validation_exception_handler,
     general_exception_handler
 )
+from middleware.csrf import CSRFMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
@@ -125,4 +126,27 @@ def test_request_context_middleware_sets_x_request_id():
     assert response.status_code == 200
     assert isinstance(response.headers.get("X-Request-ID"), str)
     assert len(response.headers.get("X-Request-ID", "")) >= 8
+
+
+def test_csrf_http_exception_from_middleware_returns_403_not_500(monkeypatch):
+    monkeypatch.setenv("CSRF_ENABLED", "true")
+
+    app = FastAPI()
+    app.state.environment = "production"
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, general_exception_handler)
+    app.add_middleware(CSRFMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+
+    @app.put("/test-write")
+    async def test_write_endpoint():
+        return {"ok": True}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.put("/test-write")
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["error"]["detail"] == "CSRF token missing"
+    assert isinstance(response.headers.get("X-Request-ID"), str)
 
