@@ -1,0 +1,10 @@
+services:
+  frontend:
+    networks:
+      - default
+      - proxy_network
+
+networks:
+  proxy_network:
+    name: ${PROXY_NETWORK_NAME:-common_network}
+    external: true

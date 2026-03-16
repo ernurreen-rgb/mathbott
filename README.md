@@ -42,6 +42,7 @@ docker-compose.yml             local development stack
 docker-compose.prod.yml        production stack with Caddy
 docker-compose.prod.nginx.yml  production stack behind existing nginx
 docker-compose.prod.nginx.hub.yml  production stack behind nginx using Docker Hub images
+docker-compose.prod.nginx.proxy-network.yml  optional override for Dockerized reverse proxy
 .env.production.example        production env template
 ```
 
@@ -129,6 +130,12 @@ BACKEND_IMAGE=yourdockerhubuser/mathbott-backend:latest
 FRONTEND_IMAGE=yourdockerhubuser/mathbott-frontend:latest
 ```
 
+If the public reverse proxy runs in Docker, also set:
+
+```env
+PROXY_NETWORK_NAME=common_network
+```
+
 ## Recommended Production Model
 
 If the VPS already runs `nginx` for other projects, use:
@@ -141,6 +148,13 @@ In both cases:
 - `frontend` binds only to `127.0.0.1:${FRONTEND_BIND_PORT}`
 - `backend` stays private inside the Docker network
 - public `80/443` remain owned by the existing `nginx`
+
+If the public reverse proxy is itself another Docker stack, also add:
+
+- `docker-compose.prod.nginx.proxy-network.yml`
+- an external Docker network named by `PROXY_NETWORK_NAME` (defaults to `common_network`)
+
+That override attaches `frontend` to the shared proxy network without changing the safer host-only default.
 
 ## Production Behind Existing nginx (Build on VPS)
 
@@ -157,6 +171,13 @@ docker compose --env-file .env.production -f docker-compose.prod.nginx.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.nginx.yml logs -f frontend backend
 ```
 
+If `nginx` itself runs in Docker, use:
+
+```bash
+docker network create common_network
+docker compose --env-file .env.production -f docker-compose.prod.nginx.yml -f docker-compose.prod.nginx.proxy-network.yml up -d --build
+```
+
 ## Production Behind Existing nginx (Docker Hub)
 
 Run:
@@ -171,6 +192,14 @@ Update later:
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml pull
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml up -d
+```
+
+If `nginx` itself runs in Docker, use:
+
+```bash
+docker network create common_network
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml up -d
 ```
 
 ## Docker Hub Release Flow
@@ -203,6 +232,8 @@ The nginx site should:
 - use a unique `server_name`
 - terminate TLS
 - proxy requests to `http://127.0.0.1:3001`
+
+If your public `nginx` runs as a container instead of on the host, proxy to `http://mathbot-frontend-prod:3000` over the shared Docker network from `docker-compose.prod.nginx.proxy-network.yml`.
 
 After installing the config:
 

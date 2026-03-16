@@ -93,6 +93,12 @@ ALERT_TELEGRAM_BOT_TOKEN=
 ALERT_TELEGRAM_CHAT_ID=
 ```
 
+If the public reverse proxy is another Docker stack, also set:
+
+```env
+PROXY_NETWORK_NAME=common_network
+```
+
 ## 4. Docker Hub Publishing
 
 Images are built by GitHub Actions:
@@ -127,6 +133,20 @@ It must proxy to:
 http://127.0.0.1:3001
 ```
 
+If the public reverse proxy is another Docker stack instead of host `nginx`, attach Mathbot with:
+
+```bash
+docker network create common_network
+```
+
+Then proxy to:
+
+```text
+http://mathbot-frontend-prod:3000
+```
+
+using the shared network from `docker-compose.prod.nginx.proxy-network.yml`.
+
 Test and reload:
 
 ```bash
@@ -154,11 +174,26 @@ docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml p
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml up -d
 ```
 
+If the public reverse proxy is another Docker stack, run:
+
+```bash
+cd /opt/mathbott
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml up -d
+```
+
 Check:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml logs -f frontend backend
+```
+
+If the public reverse proxy is another Docker stack, check with the same override file:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml ps
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml logs -f frontend backend
 ```
 
 ## 8. Update Later
@@ -170,6 +205,15 @@ cd /opt/mathbott
 git pull
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml pull
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml up -d
+```
+
+If the public reverse proxy is another Docker stack, update with:
+
+```bash
+cd /opt/mathbott
+git pull
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml up -d
 ```
 
 ## 9. Google OAuth
