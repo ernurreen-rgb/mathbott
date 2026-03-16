@@ -8,7 +8,7 @@ import Image from "next/image";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import MathRender from "@/components/ui/MathRender";
-import { inviteFriendToCoopTest, getTrialTestDetails, submitTrialTest, getTrialTestDraft, saveTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
+import { inviteFriendToCoopTest, getTrialTestDetails, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
@@ -71,6 +71,58 @@ export default function TrialTestPage() {
   }, []);
 
   const saveAbortRef = useRef<AbortController | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedDraftSignatureRef = useRef("");
+
+  const buildDraftSnapshot = useCallback((snapshot = draftRef.current) => {
+    const { email: e, testId: id, answers: a, currentTaskIndex: idx } = snapshot;
+    if (!e || !id) return null;
+    const sortedAnswers = Object.fromEntries(
+      Object.entries(a).sort(([left], [right]) => Number(left) - Number(right))
+    );
+    const payload = { email: e, answers: sortedAnswers, current_task_index: idx };
+    return {
+      url: apiPath(`trial-tests/${id}/draft`),
+      payload,
+      signature: JSON.stringify({ test_id: id, ...payload }),
+    };
+  }, []);
+
+  const sendDraftSnapshot = useCallback(
+    async (snapshot = draftRef.current, options?: { keepalive?: boolean }) => {
+      const request = buildDraftSnapshot(snapshot);
+      if (!request || request.signature === lastSavedDraftSignatureRef.current) return;
+
+      const keepalive = options?.keepalive === true;
+      if (saveAbortRef.current) {
+        saveAbortRef.current.abort();
+        saveAbortRef.current = null;
+      }
+
+      const controller = keepalive ? null : new AbortController();
+      if (controller) saveAbortRef.current = controller;
+
+      try {
+        const res = await fetch(request.url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request.payload),
+          keepalive,
+          signal: controller?.signal,
+        });
+        if (res.ok) {
+          lastSavedDraftSignatureRef.current = request.signature;
+        } else {
+          console.warn("[trial-draft] save failed", { testId: snapshot.testId, status: res.status });
+        }
+      } catch (err: any) {
+        if (err?.name !== "AbortError") console.warn("[trial-draft] save error", err);
+      } finally {
+        if (controller && saveAbortRef.current === controller) saveAbortRef.current = null;
+      }
+    },
+    [buildDraftSnapshot]
+  );
 
   const fetchTest = useCallback(async () => {
     if (!email || !testId) return;
@@ -95,13 +147,25 @@ export default function TrialTestPage() {
             const id = Number(k);
             if (!Number.isNaN(id) && taskIds.has(id) && v != null && v !== "") filtered[id] = String(v);
           }
-          console.log("[trial-draft] loaded draft", { testId, answersCount: Object.keys(filtered).length, current_task_index: draft.current_task_index });
           const idx = Math.min(Math.max(0, draft.current_task_index), data.tasks.length - 1);
           setAnswers(filtered);
           setCurrentTaskIndex(idx);
           draftRef.current = { ...draftRef.current, answers: filtered, currentTaskIndex: idx };
+          const snapshot = buildDraftSnapshot({
+            answers: filtered,
+            currentTaskIndex: idx,
+            email,
+            testId,
+          });
+          lastSavedDraftSignatureRef.current = snapshot?.signature || "";
         } else {
-          console.log("[trial-draft] no draft", { testId });
+          const snapshot = buildDraftSnapshot({
+            answers: {},
+            currentTaskIndex: 0,
+            email,
+            testId,
+          });
+          lastSavedDraftSignatureRef.current = snapshot?.signature || "";
         }
       }
     } catch (e: any) {
@@ -109,7 +173,7 @@ export default function TrialTestPage() {
     } finally {
       setLoading(false);
     }
-  }, [email, testId]);
+  }, [buildDraftSnapshot, email, testId]);
 
   const handleReportClick = (taskId: number) => {
     setReportDialog({ taskId, show: true });
@@ -165,65 +229,37 @@ export default function TrialTestPage() {
   }, [test?.tasks?.length, currentTaskIndex, setCurrentTaskIndexAndRef]);
 
   // Отправить черновик из ref (keepalive — не отменяется при unload)
-  const flushDraftFromRef = () => {
-    const { email: e, testId: id, answers: a, currentTaskIndex: idx } = draftRef.current;
-    if (!e || !id) return;
-    const url = apiPath(`trial-tests/${id}/draft`);
-    fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: e, answers: a, current_task_index: idx }),
-      keepalive: true,
-    }).catch(() => {});
-  };
-
   // Сохранение черновика при изменении; при отмене запроса сразу шлём keepalive, чтобы не потерять данные
   useEffect(() => {
-    if (!test || !email) return;
-    const payload = { email, answers, current_task_index: currentTaskIndex };
-    console.log("[trial-draft] save effect", { testId, answersCount: Object.keys(answers).length, currentTaskIndex });
-    if (saveAbortRef.current) {
-      saveAbortRef.current.abort();
-      flushDraftFromRef();
-    }
-    saveAbortRef.current = new AbortController();
-    const signal = saveAbortRef.current.signal;
-    const url = apiPath(`trial-tests/${testId}/draft`);
-    fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    })
-      .then((res) => {
-        if (res.ok) console.log("[trial-draft] save OK", { testId });
-        else console.warn("[trial-draft] save failed", { testId, status: res.status });
-      })
-      .catch((err) => {
-        if (err?.name !== "AbortError") console.warn("[trial-draft] save error", err);
-      })
-      .finally(() => {
-        if (saveAbortRef.current?.signal === signal) saveAbortRef.current = null;
-      });
+    if (!test || !email || submitting) return;
+    const snapshot = buildDraftSnapshot({ answers, currentTaskIndex, email, testId });
+    if (!snapshot || snapshot.signature === lastSavedDraftSignatureRef.current) return;
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      void sendDraftSnapshot();
+    }, 800);
     return () => {
-      if (saveAbortRef.current?.signal === signal) {
-        saveAbortRef.current.abort();
-        flushDraftFromRef();
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
       }
     };
-  }, [answers, currentTaskIndex, testId, email, test]);
+  }, [answers, buildDraftSnapshot, currentTaskIndex, email, sendDraftSnapshot, submitting, test, testId]);
 
   // Сохранение при уходе со страницы (обновление, закрытие вкладки)
   useEffect(() => {
     const onPageHide = () => {
-      const { email: e, testId: id, answers: a } = draftRef.current;
-      if (!e || !id) return;
-      console.log("[trial-draft] pagehide flush", { testId: id, answersCount: Object.keys(a).length });
-      flushDraftFromRef();
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      void sendDraftSnapshot(draftRef.current, { keepalive: true });
     };
     window.addEventListener("pagehide", onPageHide);
     return () => window.removeEventListener("pagehide", onPageHide);
-  }, []);
+  }, [sendDraftSnapshot]);
 
   const renderTaskControls = (task: LessonTask) => {
     const qt: QuestionType = (task.question_type || "input") as QuestionType;
@@ -455,6 +491,15 @@ export default function TrialTestPage() {
 
     setSubmitting(true);
     try {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      if (saveAbortRef.current) {
+        saveAbortRef.current.abort();
+        saveAbortRef.current = null;
+      }
+
       const { data, error: err } = await submitTrialTest(testId, {
         email,
         answers: allAnswers,
