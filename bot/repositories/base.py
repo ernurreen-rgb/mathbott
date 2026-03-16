@@ -8,8 +8,20 @@ import sqlite3
 from typing import Optional, Dict
 from functools import lru_cache
 from contextlib import asynccontextmanager
+from weakref import WeakKeyDictionary
 
 logger = logging.getLogger(__name__)
+_process_write_locks: "WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = WeakKeyDictionary()
+
+
+def _get_process_write_lock() -> asyncio.Lock:
+    """Share one write lock per event loop to avoid in-process SQLite write contention."""
+    loop = asyncio.get_running_loop()
+    lock = _process_write_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _process_write_locks[loop] = lock
+    return lock
 
 
 class BaseRepository:
@@ -196,9 +208,11 @@ class BaseRepository:
 
     async def _run_with_lock_retry(self, operation, *, attempts: int = 5, base_delay: float = 0.15):
         """Retry SQLite write operations when the database is temporarily locked."""
+        write_lock = _get_process_write_lock()
         for attempt in range(1, attempts + 1):
             try:
-                return await operation()
+                async with write_lock:
+                    return await operation()
             except sqlite3.OperationalError as e:
                 if "database is locked" not in str(e).lower() or attempt == attempts:
                     raise

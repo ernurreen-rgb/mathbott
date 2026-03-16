@@ -37,29 +37,32 @@ class OpsRepository(BaseRepository):
         avg_ms_5m: float,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> int:
-        async with self._connection() as db:
-            cursor = await db.execute(
-                """
-                INSERT INTO ops_health_samples
-                (
-                    service_status, database_status, requests_5m, errors_5m,
-                    error_rate_5m, p95_ms_5m, avg_ms_5m, metadata_json
+        async def operation() -> int:
+            async with self._connection() as db:
+                cursor = await db.execute(
+                    """
+                    INSERT INTO ops_health_samples
+                    (
+                        service_status, database_status, requests_5m, errors_5m,
+                        error_rate_5m, p95_ms_5m, avg_ms_5m, metadata_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        service_status,
+                        database_status,
+                        int(requests_5m),
+                        int(errors_5m),
+                        float(error_rate_5m),
+                        float(p95_ms_5m),
+                        float(avg_ms_5m),
+                        json.dumps(metadata or {}, ensure_ascii=False),
+                    ),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    service_status,
-                    database_status,
-                    int(requests_5m),
-                    int(errors_5m),
-                    float(error_rate_5m),
-                    float(p95_ms_5m),
-                    float(avg_ms_5m),
-                    json.dumps(metadata or {}, ensure_ascii=False),
-                ),
-            )
-            await db.commit()
-            return int(cursor.lastrowid)
+                await db.commit()
+                return int(cursor.lastrowid)
+
+        return await self._run_with_lock_retry(operation)
 
     async def get_latest_health_sample(self) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
@@ -161,58 +164,22 @@ class OpsRepository(BaseRepository):
         message: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                """
-                SELECT id, occurrences
-                FROM ops_incidents
-                WHERE fingerprint = ? AND status = 'open'
-                LIMIT 1
-                """,
-                (fingerprint,),
-            ) as cursor:
-                existing = await cursor.fetchone()
-
-            if existing:
-                incident_id = int(existing["id"])
-                await db.execute(
-                    """
-                    UPDATE ops_incidents
-                    SET kind = ?,
-                        severity = ?,
-                        title = ?,
-                        message = ?,
-                        metadata_json = ?,
-                        occurrences = COALESCE(occurrences, 0) + 1,
-                        last_seen_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (
-                        kind,
-                        severity,
-                        title,
-                        message,
-                        json.dumps(metadata or {}, ensure_ascii=False),
-                        incident_id,
-                    ),
-                )
-                is_new = False
-            else:
+        async def operation() -> Dict[str, Any]:
+            async with self._connection() as db:
+                db.row_factory = aiosqlite.Row
                 async with db.execute(
                     """
                     SELECT id, occurrences
                     FROM ops_incidents
-                    WHERE fingerprint = ? AND status = 'resolved'
-                    ORDER BY last_seen_at DESC, id DESC
+                    WHERE fingerprint = ? AND status = 'open'
                     LIMIT 1
                     """,
                     (fingerprint,),
-                ) as resolved_cursor:
-                    resolved_row = await resolved_cursor.fetchone()
+                ) as cursor:
+                    existing = await cursor.fetchone()
 
-                if resolved_row:
-                    incident_id = int(resolved_row["id"])
+                if existing:
+                    incident_id = int(existing["id"])
                     await db.execute(
                         """
                         UPDATE ops_incidents
@@ -220,13 +187,9 @@ class OpsRepository(BaseRepository):
                             severity = ?,
                             title = ?,
                             message = ?,
-                            status = 'open',
                             metadata_json = ?,
                             occurrences = COALESCE(occurrences, 0) + 1,
-                            first_seen_at = CURRENT_TIMESTAMP,
-                            last_seen_at = CURRENT_TIMESTAMP,
-                            telegram_last_sent_at = NULL,
-                            resolved_at = NULL
+                            last_seen_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
                         (
@@ -238,40 +201,83 @@ class OpsRepository(BaseRepository):
                             incident_id,
                         ),
                     )
-                    is_new = True
+                    is_new = False
                 else:
-                    cursor = await db.execute(
+                    async with db.execute(
                         """
-                        INSERT INTO ops_incidents
-                        (
-                            kind, severity, fingerprint, title, message,
-                            status, metadata_json
-                        )
-                        VALUES (?, ?, ?, ?, ?, 'open', ?)
+                        SELECT id, occurrences
+                        FROM ops_incidents
+                        WHERE fingerprint = ? AND status = 'resolved'
+                        ORDER BY last_seen_at DESC, id DESC
+                        LIMIT 1
                         """,
-                        (
-                            kind,
-                            severity,
-                            fingerprint,
-                            title,
-                            message,
-                            json.dumps(metadata or {}, ensure_ascii=False),
-                        ),
-                    )
-                    incident_id = int(cursor.lastrowid)
-                    is_new = True
+                        (fingerprint,),
+                    ) as resolved_cursor:
+                        resolved_row = await resolved_cursor.fetchone()
 
-            await db.commit()
+                    if resolved_row:
+                        incident_id = int(resolved_row["id"])
+                        await db.execute(
+                            """
+                            UPDATE ops_incidents
+                            SET kind = ?,
+                                severity = ?,
+                                title = ?,
+                                message = ?,
+                                status = 'open',
+                                metadata_json = ?,
+                                occurrences = COALESCE(occurrences, 0) + 1,
+                                first_seen_at = CURRENT_TIMESTAMP,
+                                last_seen_at = CURRENT_TIMESTAMP,
+                                telegram_last_sent_at = NULL,
+                                resolved_at = NULL
+                            WHERE id = ?
+                            """,
+                            (
+                                kind,
+                                severity,
+                                title,
+                                message,
+                                json.dumps(metadata or {}, ensure_ascii=False),
+                                incident_id,
+                            ),
+                        )
+                        is_new = True
+                    else:
+                        cursor = await db.execute(
+                            """
+                            INSERT INTO ops_incidents
+                            (
+                                kind, severity, fingerprint, title, message,
+                                status, metadata_json
+                            )
+                            VALUES (?, ?, ?, ?, ?, 'open', ?)
+                            """,
+                            (
+                                kind,
+                                severity,
+                                fingerprint,
+                                title,
+                                message,
+                                json.dumps(metadata or {}, ensure_ascii=False),
+                            ),
+                        )
+                        incident_id = int(cursor.lastrowid)
+                        is_new = True
 
-            async with db.execute(
-                "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
-                (incident_id,),
-            ) as cursor:
-                row = await cursor.fetchone()
-            item = dict(row) if row else {"id": incident_id}
-            item["metadata"] = self._parse_json(item.pop("metadata_json", None))
-            item["is_new"] = is_new
-            return item
+                await db.commit()
+
+                async with db.execute(
+                    "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
+                    (incident_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                item = dict(row) if row else {"id": incident_id}
+                item["metadata"] = self._parse_json(item.pop("metadata_json", None))
+                item["is_new"] = is_new
+                return item
+
+        return await self._run_with_lock_retry(operation)
 
     async def resolve_incident(
         self,
@@ -279,59 +285,65 @@ class OpsRepository(BaseRepository):
         fingerprint: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                """
-                SELECT *
-                FROM ops_incidents
-                WHERE fingerprint = ? AND status = 'open'
-                LIMIT 1
-                """,
-                (fingerprint,),
-            ) as cursor:
-                existing = await cursor.fetchone()
-            if not existing:
-                return None
+        async def operation() -> Optional[Dict[str, Any]]:
+            async with self._connection() as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    """
+                    SELECT *
+                    FROM ops_incidents
+                    WHERE fingerprint = ? AND status = 'open'
+                    LIMIT 1
+                    """,
+                    (fingerprint,),
+                ) as cursor:
+                    existing = await cursor.fetchone()
+                if not existing:
+                    return None
 
-            incident_id = int(existing["id"])
-            merged_metadata = self._parse_json(existing["metadata_json"])
-            if metadata:
-                merged_metadata.update(metadata)
+                incident_id = int(existing["id"])
+                merged_metadata = self._parse_json(existing["metadata_json"])
+                if metadata:
+                    merged_metadata.update(metadata)
 
-            await db.execute(
-                """
-                UPDATE ops_incidents
-                SET status = 'resolved',
-                    last_seen_at = CURRENT_TIMESTAMP,
-                    resolved_at = CURRENT_TIMESTAMP,
-                    metadata_json = ?
-                WHERE id = ?
-                """,
-                (json.dumps(merged_metadata, ensure_ascii=False), incident_id),
-            )
-            await db.commit()
+                await db.execute(
+                    """
+                    UPDATE ops_incidents
+                    SET status = 'resolved',
+                        last_seen_at = CURRENT_TIMESTAMP,
+                        resolved_at = CURRENT_TIMESTAMP,
+                        metadata_json = ?
+                    WHERE id = ?
+                    """,
+                    (json.dumps(merged_metadata, ensure_ascii=False), incident_id),
+                )
+                await db.commit()
 
-            async with db.execute(
-                "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
-                (incident_id,),
-            ) as cursor:
-                row = await cursor.fetchone()
-            item = dict(row) if row else {"id": incident_id}
-            item["metadata"] = self._parse_json(item.pop("metadata_json", None))
-            return item
+                async with db.execute(
+                    "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
+                    (incident_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                item = dict(row) if row else {"id": incident_id}
+                item["metadata"] = self._parse_json(item.pop("metadata_json", None))
+                return item
+
+        return await self._run_with_lock_retry(operation)
 
     async def touch_incident_telegram_sent(self, incident_id: int) -> None:
-        async with self._connection() as db:
-            await db.execute(
-                """
-                UPDATE ops_incidents
-                SET telegram_last_sent_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (incident_id,),
-            )
-            await db.commit()
+        async def operation() -> None:
+            async with self._connection() as db:
+                await db.execute(
+                    """
+                    UPDATE ops_incidents
+                    SET telegram_last_sent_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (incident_id,),
+                )
+                await db.commit()
+
+        await self._run_with_lock_retry(operation)
 
     async def list_incidents(
         self,
@@ -391,25 +403,31 @@ class OpsRepository(BaseRepository):
             }
 
     async def cleanup_old_health_samples(self, retention_days: int) -> int:
-        async with self._connection() as db:
-            cursor = await db.execute(
-                """
-                DELETE FROM ops_health_samples
-                WHERE collected_at < datetime('now', '-' || ? || ' days')
-                """,
-                (int(retention_days),),
-            )
-            await db.commit()
-            return int(cursor.rowcount or 0)
+        async def operation() -> int:
+            async with self._connection() as db:
+                cursor = await db.execute(
+                    """
+                    DELETE FROM ops_health_samples
+                    WHERE collected_at < datetime('now', '-' || ? || ' days')
+                    """,
+                    (int(retention_days),),
+                )
+                await db.commit()
+                return int(cursor.rowcount or 0)
+
+        return await self._run_with_lock_retry(operation)
 
     async def cleanup_old_incidents(self, retention_days: int) -> int:
-        async with self._connection() as db:
-            cursor = await db.execute(
-                """
-                DELETE FROM ops_incidents
-                WHERE COALESCE(resolved_at, last_seen_at) < datetime('now', '-' || ? || ' days')
-                """,
-                (int(retention_days),),
-            )
-            await db.commit()
-            return int(cursor.rowcount or 0)
+        async def operation() -> int:
+            async with self._connection() as db:
+                cursor = await db.execute(
+                    """
+                    DELETE FROM ops_incidents
+                    WHERE COALESCE(resolved_at, last_seen_at) < datetime('now', '-' || ? || ' days')
+                    """,
+                    (int(retention_days),),
+                )
+                await db.commit()
+                return int(cursor.rowcount or 0)
+
+        return await self._run_with_lock_retry(operation)
