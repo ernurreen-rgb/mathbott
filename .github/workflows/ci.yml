@@ -62,11 +62,11 @@ jobs:
     
     - name: Run linter (ESLint)
       working-directory: ./web
-      run: npm run lint || true
+      run: npm run lint
     
     - name: Run tests
       working-directory: ./web
-      run: npm test -- --coverage --watchAll=false || true
+      run: npm test -- --coverage --watchAll=false
     
     - name: Check security (npm audit)
       working-directory: ./web

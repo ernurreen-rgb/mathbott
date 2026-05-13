@@ -68,7 +68,7 @@ const nextAuthHandler = NextAuth(authOptions);
 // We need to adapt the Request object to include query.nextauth for NextAuth compatibility
 export async function GET(
   req: Request,
-  context: { params: Promise<{ nextauth?: string[] }> | { nextauth?: string[] } }
+  context: { params: Promise<{ nextauth?: string[] }> }
 ) {
   if (isProduction && !configuredNextAuthSecret) {
     throw new Error("Missing NEXTAUTH_SECRET in production.");
@@ -90,8 +90,7 @@ export async function GET(
     console.error('Error setting secure cookies:', e);
   }
   
-  // Resolve params if it's a Promise (Next.js 15+) or use directly
-  const params = context.params instanceof Promise ? await context.params : context.params;
+  const params = await context.params;
   
   // Adapt Request to include query.nextauth for NextAuth compatibility
   const adaptedReq = Object.assign(req, {
@@ -105,7 +104,7 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  context: { params: Promise<{ nextauth?: string[] }> | { nextauth?: string[] } }
+  context: { params: Promise<{ nextauth?: string[] }> }
 ) {
   if (isProduction && !configuredNextAuthSecret) {
     throw new Error("Missing NEXTAUTH_SECRET in production.");
@@ -127,8 +126,7 @@ export async function POST(
     console.error('Error setting secure cookies:', e);
   }
   
-  // Resolve params if it's a Promise (Next.js 15+) or use directly
-  const params = context.params instanceof Promise ? await context.params : context.params;
+  const params = await context.params;
   
   // Adapt Request to include query.nextauth for NextAuth compatibility
   const adaptedReq = Object.assign(req, {

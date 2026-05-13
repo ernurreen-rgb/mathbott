@@ -11,7 +11,14 @@ module.exports = withSentryConfig(
   nextConfig,
   {
     silent: true,
-    disableLogger: true,
+    webpack: {
+      treeshake: {
+        removeDebugLogging: true,
+      },
+    },
+    sourcemaps: {
+      deleteSourcemapsAfterUpload: true,
+    },
   },
   {
     hideSourceMaps: true,
