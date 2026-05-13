@@ -41,7 +41,7 @@ export function useAdminPageAccess(
     setLoading(true);
 
     void (async () => {
-      const { data, error } = await checkAdminStatus();
+      const { data, error } = await checkAdminStatus(email);
       if (cancelled) return;
 
       if (error || !data?.is_admin) {

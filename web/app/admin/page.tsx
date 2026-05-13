@@ -37,7 +37,7 @@ export default function AdminPage() {
     setAccessLoading(true);
 
     void (async () => {
-      const { data, error } = await checkAdminStatus();
+      const { data, error } = await checkAdminStatus(sessionEmail);
       if (cancelled) return;
 
       if (error || !data?.is_admin) {

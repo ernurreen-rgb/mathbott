@@ -21,7 +21,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       const email = session?.user?.email;
       if (email) {
         try {
-          const { data, error } = await checkAdminStatus();
+          const { data, error } = await checkAdminStatus(email);
           if (error) {
             // Only log in development, silently fail in production
             if (process.env.NODE_ENV === "development") {

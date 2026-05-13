@@ -509,9 +509,12 @@ export async function listBlockedUsers(
   );
 }
 
-export async function checkAdminStatus(_email?: string): Promise<{ data: AdminCheckResponse | null; error: string | null }> {
+export async function checkAdminStatus(email?: string): Promise<{ data: AdminCheckResponse | null; error: string | null }> {
+  const url = email
+    ? `${apiPath("admin/check")}?email=${encodeURIComponent(email)}`
+    : apiPath("admin/check");
   return fetchWithErrorHandling<AdminCheckResponse>(
-    apiPath("admin/check")
+    url
   );
 }
 
@@ -830,12 +833,18 @@ export async function declineCoopTestInvite(
 }
 
 // Admin Statistics API
-export async function getAdminStatistics(): Promise<{ data: AdminStatistics | null; error: string | null }> {
-  return fetchWithErrorHandling<AdminStatistics>(apiPath("admin/statistics"));
+export async function getAdminStatistics(email?: string): Promise<{ data: AdminStatistics | null; error: string | null }> {
+  const url = email
+    ? `${apiPath("admin/statistics")}?email=${encodeURIComponent(email)}`
+    : apiPath("admin/statistics");
+  return fetchWithErrorHandling<AdminStatistics>(url);
 }
 
-export async function getOnboardingStatistics(): Promise<{ data: OnboardingStatistics | null; error: string | null }> {
-  return fetchWithErrorHandling<OnboardingStatistics>(apiPath("admin/onboarding-statistics"));
+export async function getOnboardingStatistics(email?: string): Promise<{ data: OnboardingStatistics | null; error: string | null }> {
+  const url = email
+    ? `${apiPath("admin/onboarding-statistics")}?email=${encodeURIComponent(email)}`
+    : apiPath("admin/onboarding-statistics");
+  return fetchWithErrorHandling<OnboardingStatistics>(url);
 }
 
 export async function getAdminOpsHealthSummary(
