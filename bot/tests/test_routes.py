@@ -1,7 +1,10 @@
 """
 Extended tests for API routes
 """
+import hashlib
+import hmac
 import json
+import time
 
 import aiosqlite
 import pytest
@@ -15,6 +18,62 @@ def _extract_http_detail(payload):
         if isinstance(error, dict):
             return error.get("detail")
     return None
+
+
+def _proxy_headers(method: str, path: str, raw_query: str, email: str, secret: str):
+    timestamp = str(int(time.time()))
+    payload = "\n".join([method.upper(), path, raw_query, email, timestamp]).encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return {
+        "X-Proxy-Request-Ts": timestamp,
+        "X-Proxy-User-Email": email,
+        "X-Proxy-Request-Signature": signature,
+    }
+
+
+def test_production_private_email_route_requires_trusted_proxy(client, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    response = client.get("/api/user/web/someone@example.com")
+
+    assert response.status_code == 401
+    assert _extract_http_detail(response.json()) == "Trusted proxy authentication required."
+
+
+def test_trusted_proxy_identity_rejects_email_mismatch(client, monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    raw_query = "email=other%40example.com"
+
+    response = client.get(
+        f"/api/modules/map?{raw_query}",
+        headers=_proxy_headers(
+            "GET",
+            "/api/modules/map",
+            raw_query,
+            "owner@example.com",
+            secret,
+        ),
+    )
+
+    assert response.status_code == 403
+    assert _extract_http_detail(response.json()) == "Client email does not match authenticated user."
+
+
+def test_trusted_proxy_identity_allows_matching_private_route(client, monkeypatch):
+    secret = "test-shared-secret"
+    email = "owner@example.com"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+
+    response = client.get(
+        f"/api/user/web/{email}",
+        headers=_proxy_headers("GET", f"/api/user/web/{email}", "", email, secret),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == email
 
 
 @pytest.mark.asyncio

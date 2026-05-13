@@ -26,35 +26,35 @@ const STRIP_REQUEST_HEADERS = new Set([
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   return proxyRequest(request, params);
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   return proxyRequest(request, params);
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   return proxyRequest(request, params);
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   return proxyRequest(request, params);
 }
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   return proxyRequest(request, params);
 }
@@ -107,7 +107,7 @@ function buildProxySignature({
     .digest("hex");
 }
 
-async function getAdminProxyUserEmail(request: NextRequest): Promise<string | null> {
+async function getProxyUserEmail(request: NextRequest): Promise<string | null> {
   const nextAuthSecret =
     process.env.NEXTAUTH_SECRET?.trim() ||
     (IS_PRODUCTION ? "" : "dev-secret-key-change-in-production");
@@ -122,20 +122,66 @@ async function getAdminProxyUserEmail(request: NextRequest): Promise<string | nu
   return email || null;
 }
 
+function encodeBackendPath(pathSegments: string[]): string {
+  return pathSegments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+function normalizeEmail(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function pathContainsPrivateEmail(pathSegments: string[]): boolean {
+  return (
+    (pathSegments[0] === "user" && pathSegments[1] === "web" && pathSegments.length >= 3) ||
+    (pathSegments[0] === "export" && pathSegments[1] === "user" && pathSegments.length >= 3)
+  );
+}
+
+function replacePrivatePathEmail(pathSegments: string[], proxyUserEmail: string): string[] {
+  const nextSegments = [...pathSegments];
+  if (pathContainsPrivateEmail(nextSegments)) {
+    nextSegments[2] = proxyUserEmail;
+  }
+  return nextSegments;
+}
+
+function hasEmailSearchParam(searchParams: URLSearchParams): boolean {
+  const value = searchParams.get("email");
+  return value !== null && value.trim() !== "";
+}
+
+function redactBackendUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname
+      .split("/")
+      .map((segment) => {
+        const decoded = decodeURIComponent(segment);
+        if (decoded.includes("@")) return "[email]";
+        if (decoded.length >= 24 && /^[A-Za-z0-9_-]+$/.test(decoded)) return "[token]";
+        return segment;
+      })
+      .join("/");
+    return `${parsed.origin}${path}${parsed.search ? "?[redacted]" : ""}`;
+  } catch {
+    return "[unparseable backend url]";
+  }
+}
+
 async function proxyRequest(
   request: NextRequest,
-  params: Promise<{ path: string[] }> | { path: string[] }
+  params: Promise<{ path: string[] }>
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params;
-    const pathString = resolvedParams.path.join("/");
-    const searchParams = request.nextUrl.searchParams.toString();
-    const backendPath = pathString.startsWith("api/") ? pathString : `api/${pathString}`;
-    const backendRequestPath = `/${backendPath}`;
-    const url = `${BACKEND_URL}/${backendPath}${searchParams ? `?${searchParams}` : ""}`;
-    const isAdminPath = backendRequestPath.startsWith("/api/admin/");
-
-    console.log(`[Proxy] ${request.method} ${request.nextUrl.pathname} -> ${url}`);
+    const resolvedParams = await params;
+    const originalPathSegments = [...resolvedParams.path];
+    const apiPathSegments =
+      originalPathSegments[0] === "api" ? originalPathSegments.slice(1) : originalPathSegments;
+    let effectivePathSegments = [...apiPathSegments];
+    const searchParams = new URLSearchParams(request.nextUrl.searchParams);
+    const preliminaryBackendRequestPath = `/api/${encodeBackendPath(effectivePathSegments)}`;
+    const isAdminPath = preliminaryBackendRequestPath.startsWith("/api/admin/");
+    const hasPrivatePathEmail = pathContainsPrivateEmail(effectivePathSegments);
 
     if (IS_PRODUCTION && !INTERNAL_PROXY_SHARED_SECRET) {
       return NextResponse.json(
@@ -151,32 +197,100 @@ async function proxyRequest(
       );
     }
 
-    let proxyUserEmail = "";
-    if (isAdminPath) {
-      const adminEmail = await getAdminProxyUserEmail(request);
-      if (!adminEmail) {
-        return NextResponse.json(
-          { detail: "Authenticated admin session is required" },
-          { status: 401 }
-        );
-      }
-      proxyUserEmail = adminEmail;
-    }
-
     let body: BodyInit | undefined;
     const contentType = request.headers.get("content-type") || "";
+    let bodyHasEmail = false;
 
     if (contentType.includes("application/json")) {
-      body = await request.text();
+      const rawBody = await request.text();
+      if (rawBody) {
+        try {
+          const payload = JSON.parse(rawBody);
+          if (
+            payload &&
+            typeof payload === "object" &&
+            !Array.isArray(payload) &&
+            normalizeEmail(payload.email)
+          ) {
+            bodyHasEmail = true;
+          }
+          body = rawBody;
+        } catch {
+          body = rawBody;
+        }
+      } else {
+        body = rawBody;
+      }
     } else if (contentType.includes("multipart/form-data")) {
-      body = await request.formData();
+      const formData = await request.formData();
+      bodyHasEmail = normalizeEmail(String(formData.get("email") || "")) !== "";
+      body = formData;
     } else if (request.method !== "GET" && request.method !== "HEAD") {
       try {
-        body = await request.text();
+        const rawBody = await request.text();
+        bodyHasEmail = new URLSearchParams(rawBody).has("email");
+        body = rawBody;
       } catch {
         body = undefined;
       }
     }
+
+    const requiresProxyUserEmail =
+      isAdminPath || hasPrivatePathEmail || hasEmailSearchParam(searchParams) || bodyHasEmail;
+
+    let proxyUserEmail = "";
+    if (requiresProxyUserEmail) {
+      const sessionEmail = await getProxyUserEmail(request);
+      if (!sessionEmail) {
+        return NextResponse.json(
+          { detail: "Authenticated session is required" },
+          { status: 401 }
+        );
+      }
+      proxyUserEmail = sessionEmail;
+      if (hasEmailSearchParam(searchParams)) {
+        searchParams.set("email", proxyUserEmail);
+      }
+      if (hasPrivatePathEmail) {
+        effectivePathSegments = replacePrivatePathEmail(effectivePathSegments, proxyUserEmail);
+      }
+      if (contentType.includes("application/json") && typeof body === "string" && body) {
+        try {
+          const payload = JSON.parse(body);
+          if (
+            payload &&
+            typeof payload === "object" &&
+            !Array.isArray(payload) &&
+            Object.prototype.hasOwnProperty.call(payload, "email")
+          ) {
+            body = JSON.stringify({ ...payload, email: proxyUserEmail });
+          }
+        } catch {
+          // Keep non-JSON payloads unchanged. Backend validation will reject malformed JSON.
+        }
+      } else if (body instanceof FormData && body.has("email")) {
+        body.set("email", proxyUserEmail);
+      } else if (
+        typeof body === "string" &&
+        body &&
+        contentType.includes("application/x-www-form-urlencoded")
+      ) {
+        const formParams = new URLSearchParams(body);
+        if (formParams.has("email")) {
+          formParams.set("email", proxyUserEmail);
+          body = formParams.toString();
+        }
+      }
+    }
+
+    const searchString = searchParams.toString();
+    const backendPath = `api/${encodeBackendPath(effectivePathSegments)}`;
+    const backendSignaturePath = `/api/${effectivePathSegments.join("/")}`;
+    const url = `${BACKEND_URL}/${backendPath}${searchString ? `?${searchString}` : ""}`;
+
+    console.log(
+      `[Proxy] ${request.method} ${request.nextUrl.pathname} -> ${redactBackendUrl(url)}`
+    );
 
     const headers = new Headers();
     request.headers.forEach((value, key) => {
@@ -198,8 +312,8 @@ async function proxyRequest(
       const timestamp = String(Math.floor(Date.now() / 1000));
       const signature = buildProxySignature({
         method: request.method,
-        path: backendRequestPath,
-        rawQuery: searchParams,
+        path: backendSignaturePath,
+        rawQuery: searchString,
         userEmail: proxyUserEmail,
         timestamp,
       });
@@ -232,7 +346,7 @@ async function proxyRequest(
       const data = await response.text();
 
       if (!response.ok) {
-        console.error(`Backend API error (${response.status}):`, url);
+        console.error(`Backend API error (${response.status}):`, redactBackendUrl(url));
         console.error("Response:", data.substring(0, 500));
       }
 

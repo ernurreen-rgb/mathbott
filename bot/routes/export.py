@@ -6,8 +6,10 @@ import csv
 import json
 from io import StringIO
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
+
+from dependencies import require_admin_review_manage
 
 logger = logging.getLogger(__name__)
 
@@ -217,8 +219,8 @@ def setup_export_routes(app, db):
     
     @app.get("/api/export/admin/stats")
     async def export_admin_stats(
-        email: str = Query(...),
-        format: str = Query("json", pattern="^(json|csv)$")
+        format: str = Query("json", pattern="^(json|csv)$"),
+        _admin_user: dict = Depends(require_admin_review_manage),
     ):
         """
         Export admin statistics (admin only)
@@ -233,9 +235,6 @@ def setup_export_routes(app, db):
         - 403: Access denied (not admin)
         - 500: Internal server error
         """
-        if not await db.is_admin(email=email):
-            raise HTTPException(status_code=403, detail="Access denied. Admin rights required.")
-        
         # Get statistics
         import aiosqlite
         async with aiosqlite.connect(db.db_path) as conn:

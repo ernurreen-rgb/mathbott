@@ -25,6 +25,7 @@ from middleware.csrf import CSRFMiddleware
 from middleware.connection_cleanup_middleware import ConnectionCleanupMiddleware
 from middleware.cache_headers_middleware import CacheHeadersMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
+from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
 from config import get_cors_origins
 from instrument import APP_VERSION, ENVIRONMENT, SENTRY_ENABLED
 
@@ -91,6 +92,8 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     # CSRF middleware (опционально, можно отключить в development)
     if os.getenv("CSRF_ENABLED", "false").lower() == "true" or environment == "production":
         app.add_middleware(CSRFMiddleware)
+
+    app.add_middleware(TrustedProxyIdentityMiddleware)
 
     # Must be outermost middleware for request_id propagation through the full stack.
     app.add_middleware(RequestContextMiddleware)
