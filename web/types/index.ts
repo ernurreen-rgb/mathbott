@@ -5,7 +5,6 @@ export interface RatingUser {
   total_points: number;
   week_points: number;
   total_solved: number;
-  email?: string | null;
 }
 
 export interface Achievement {

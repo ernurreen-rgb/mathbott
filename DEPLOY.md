@@ -85,7 +85,10 @@ Optional:
 ```env
 SENTRY_DSN=
 NEXT_PUBLIC_SENTRY_DSN=
+NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
 SENTRY_AUTH_TOKEN=
+SENTRY_ORG=
+SENTRY_PROJECT=
 
 ALERTS_ENABLED=false
 ALERT_TELEGRAM_ENABLED=false
@@ -109,6 +112,13 @@ Required GitHub repository secrets:
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
+
+Optional Sentry build secrets for the frontend image:
+
+- `NEXT_PUBLIC_SENTRY_DSN`
+- `SENTRY_AUTH_TOKEN`
+- `SENTRY_ORG`
+- `SENTRY_PROJECT`
 
 Published tags:
 

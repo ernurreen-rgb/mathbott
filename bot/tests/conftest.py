@@ -9,10 +9,9 @@ import tempfile
 import os
 
 from database import Database
-from app import create_app
+from app import create_app, get_rate_limit_key
 from routes import register_routes
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from fastapi.testclient import TestClient
 from utils.cache import cache
 
@@ -65,7 +64,7 @@ def client(test_db):
     app = create_app()
     # Use the test database and a fresh limiter for isolation
     app.state.db = test_db
-    app.state.limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = Limiter(key_func=get_rate_limit_key)
     register_routes(app, app.state.db, app.state.limiter)
     return TestClient(app)
 

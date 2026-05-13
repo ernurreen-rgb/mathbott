@@ -4,7 +4,9 @@ Tests for utility functions
 import pytest
 from fastapi import HTTPException
 from routes.admin.common import _normalize_text_scale
+from utils.file_storage import normalize_stored_image_filename
 from utils.scoring import build_reward_identity, normalize_difficulty_code, points_for_difficulty
+from utils.internal_proxy_auth import build_ws_token, verify_ws_token
 from utils.validation import (
     canonicalize_factor_grid_answer,
     validate_email,
@@ -140,4 +142,35 @@ def test_scoring_helpers():
         surface="trial_test",
     )
     assert trial_fallback["reward_key"] == "trial-task:21"
+
+
+def test_stored_image_filename_normalization():
+    assert normalize_stored_image_filename("valid-image_1.png") == "valid-image_1.png"
+    assert normalize_stored_image_filename("valid.IMAGE.webp") == "valid.IMAGE.webp"
+    assert normalize_stored_image_filename("../outside.png") is None
+    assert normalize_stored_image_filename("nested/outside.png") is None
+    assert normalize_stored_image_filename("bad<script>.png") is None
+    assert normalize_stored_image_filename("not-image.txt") is None
+
+
+def test_ws_token_round_trip(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", "test-shared-secret")
+
+    token = build_ws_token(session_id=42, user_email="USER@example.com", timestamp=1_700_000_000)
+
+    monkeypatch.setattr("utils.internal_proxy_auth.time.time", lambda: 1_700_000_010)
+    assert verify_ws_token(session_id=42, user_email="user@example.com", token=token) == (True, None)
+    assert verify_ws_token(session_id=43, user_email="user@example.com", token=token) == (
+        False,
+        "invalid_signature",
+    )
+
+
+def test_ws_token_requires_secret_in_production(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("INTERNAL_PROXY_SHARED_SECRET", raising=False)
+
+    with pytest.raises(ValueError, match="proxy_secret_missing"):
+        build_ws_token(session_id=1, user_email="user@example.com")
 

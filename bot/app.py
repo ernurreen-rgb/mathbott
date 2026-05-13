@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Optional, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.exceptions import RequestValidationError
@@ -28,12 +28,25 @@ from middleware.request_context_middleware import RequestContextMiddleware
 from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
 from config import get_cors_origins
 from instrument import APP_VERSION, ENVIRONMENT, SENTRY_ENABLED
+from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 
 # Загрузить переменные окружения
 environment = ENVIRONMENT
 
 # Настроить логирование
 logger = logging.getLogger(__name__)
+
+
+def get_rate_limit_key(request: Request) -> str:
+    """Rate limit signed proxy requests per authenticated user, fallback to client IP."""
+    if has_proxy_signature_headers(request):
+        try:
+            is_valid_proxy, proxy_email, _ = verify_proxy_signature(request)
+            if is_valid_proxy and proxy_email:
+                return f"user:{proxy_email}"
+        except Exception:
+            logger.debug("Failed to resolve proxy rate-limit key", exc_info=True)
+    return get_remote_address(request)
 
 
 def create_app(lifespan: Optional[Any] = None) -> FastAPI:
@@ -52,7 +65,7 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     # Инициализировать базу данных и лимитер
     db_path = os.getenv("DB_PATH", "mathbot.db")
     db = Database(db_path=db_path)
-    limiter = Limiter(key_func=get_remote_address)
+    limiter = Limiter(key_func=get_rate_limit_key)
     
     # Сохранить в app.state для доступа через dependencies
     app.state.db = db

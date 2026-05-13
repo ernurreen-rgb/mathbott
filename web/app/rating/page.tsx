@@ -6,13 +6,14 @@ import { useState, useEffect, useCallback } from "react";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
 import { RatingUser } from "@/types";
-import { getRating } from "@/lib/api";
+import { getRating, getUserData } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
 export default function RatingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [globalRating, setGlobalRating] = useState<RatingUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const sessionEmail = session?.user?.email || null;
 
@@ -22,7 +23,21 @@ export default function RatingPage() {
     setLoading(true);
     
     try {
-      const { data, error } = await getRating(50);
+      const [ratingResult, userResult] = await Promise.all([
+        getRating(50),
+        getUserData(sessionEmail),
+      ]);
+
+      if (userResult.error || !userResult.data) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Failed to fetch current user:", userResult.error);
+        }
+        setCurrentUserId(null);
+      } else {
+        setCurrentUserId(userResult.data.id);
+      }
+
+      const { data, error } = ratingResult;
       if (error) {
         // Only log in development
         if (process.env.NODE_ENV === "development") {
@@ -97,20 +112,22 @@ export default function RatingPage() {
           <div className="space-y-3">
             {globalRating.length > 0 ? (
               globalRating.map((user, idx) => {
-                const isCurrentUser = user.email === session?.user?.email;
+                const isCurrentUser = user.id === currentUserId;
                 const hasDefaultNickname = user.nickname?.startsWith("User ") && /User -?\d+/.test(user.nickname);
                 // All users are clickable now (for public profiles)
-                const isClickable = user.email && true;
+                const isClickable = user.id > 0;
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={user.id}
                     onClick={() => {
                       if (isClickable && user.id) {
                         router.push(`/profile/${user.id}`);
                       }
                     }}
-                    className={`flex justify-between items-center p-5 rounded-2xl border-2 transition-all ${
+                    disabled={!isClickable}
+                    className={`w-full text-left flex justify-between items-center p-5 rounded-2xl border-2 transition-all ${
                       isClickable
                         ? "cursor-pointer hover:shadow-glow hover:border-purple-400"
                         : "hover:shadow-lg"
@@ -131,7 +148,7 @@ export default function RatingPage() {
                       </div>
                       <div>
                         <div className="font-semibold text-gray-800">
-                          {user.nickname || user.email?.split("@")[0] || "Ойыншы"}
+                          {user.nickname || "Ойыншы"}
                           {hasDefaultNickname && isCurrentUser && (
                             <span className="ml-2 text-xs text-orange-600">(никнеймді орнату үшін)</span>
                           )}
@@ -149,7 +166,7 @@ export default function RatingPage() {
                       </div>
                       <div className="text-xs text-gray-500">ұпай</div>
                     </div>
-                  </div>
+                  </button>
                 );
               })
             ) : (

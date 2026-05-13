@@ -10,6 +10,7 @@ import MathRender from "@/components/ui/MathRender";
 import {
   finishTrialTestCoopSession,
   getTrialTestCoopSession,
+  getTrialTestCoopWsToken,
   getTrialTestDetails,
   apiPath,
 } from "@/lib/api";
@@ -55,6 +56,7 @@ export default function TrialTestCoopPage() {
   }, [coopSession]);
 
   const currentUserId = coopSession?.current_user_id ?? null;
+  const coopSessionId = coopSession?.id ?? null;
   const currentColor = coopSession?.current_user_color || "red";
   const otherParticipant = coopSession?.participants.find((p) => p.user_id !== currentUserId);
   const otherUserId = otherParticipant?.user_id ?? null;
@@ -149,7 +151,7 @@ export default function TrialTestCoopPage() {
   }, [test?.tasks?.length, currentTaskIndex]);
 
   useEffect(() => {
-    if (!email || !coopSession) return;
+    if (!email || !coopSessionId) return;
     const wsEnvBase = process.env.NEXT_PUBLIC_WS_API_URL;
     const envApiUrl = process.env.NEXT_PUBLIC_API_URL;
     const apiBase = envApiUrl && !envApiUrl.startsWith("/") ? envApiUrl : API_URL;
@@ -158,49 +160,61 @@ export default function TrialTestCoopPage() {
       // WS cannot be proxied through Next.js API routes; rely on polling instead.
       return;
     }
-    const wsBase = base.replace(/^http/, "ws").replace(/\/$/, "");
-    const wsUrl = `${wsBase}/ws/trial-tests/coop/${coopSession.id}?email=${encodeURIComponent(email)}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    let closed = false;
+    let ws: WebSocket | null = null;
 
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === "answer_update") {
-          const userId = Number(payload.user_id);
-          const taskId = Number(payload.task_id);
-          const answer = String(payload.answer || "");
-          if (currentUserId && userId === currentUserId) {
-            setAnswers((prev) => ({ ...prev, [taskId]: answer }));
-          } else {
-            setOtherAnswers((prev) => ({
-              ...prev,
-              [userId]: { ...(prev[userId] || {}), [taskId]: answer },
-            }));
-          }
-        }
-        if (payload.type === "presence") {
-          getTrialTestCoopSession(sessionId, email).then((res) => {
-            if (!res.error && res.data) {
-              setCoopSession(res.data);
-              setOtherAnswers(res.data.answers?.others || {});
-            }
-          });
-        }
-      } catch (e) {
+    const connect = async () => {
+      const wsBase = base.replace(/^http/, "ws").replace(/\/$/, "");
+      const { data: tokenData, error: tokenError } = await getTrialTestCoopWsToken(coopSessionId, email);
+      if (closed || tokenError || !tokenData?.token) {
         return;
       }
+      const wsUrl = `${wsBase}/ws/trial-tests/coop/${coopSessionId}?email=${encodeURIComponent(email)}&token=${encodeURIComponent(tokenData.token)}`;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "answer_update") {
+            const userId = Number(payload.user_id);
+            const taskId = Number(payload.task_id);
+            const answer = String(payload.answer || "");
+            if (currentUserId && userId === currentUserId) {
+              setAnswers((prev) => ({ ...prev, [taskId]: answer }));
+            } else {
+              setOtherAnswers((prev) => ({
+                ...prev,
+                [userId]: { ...(prev[userId] || {}), [taskId]: answer },
+              }));
+            }
+          }
+          if (payload.type === "presence") {
+            getTrialTestCoopSession(sessionId, email).then((res) => {
+              if (!res.error && res.data) {
+                setCoopSession(res.data);
+                setOtherAnswers(res.data.answers?.others || {});
+              }
+            });
+          }
+        } catch (e) {
+          return;
+        }
+      };
+
+      ws.onerror = () => {
+        // Silent - fallback to polling
+      };
     };
 
-    ws.onerror = () => {
-      // Silent - fallback to local behavior
-    };
+    void connect();
 
     return () => {
-      ws.close();
+      closed = true;
+      ws?.close();
       wsRef.current = null;
     };
-  }, [email, coopSession, currentUserId, sessionId]);
+  }, [email, coopSessionId, currentUserId, sessionId]);
 
   useEffect(() => {
     if (!email || !sessionId) return;

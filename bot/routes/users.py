@@ -41,8 +41,7 @@ def setup_users_routes(app, db, limiter: Limiter):
               "league": "Алмас",
               "total_points": 1000,
               "week_points": 100,
-              "total_solved": 50,
-              "email": "user1@example.com"
+              "total_solved": 50
             }
           ],
           "total": 150,
@@ -81,8 +80,7 @@ def setup_users_routes(app, db, limiter: Limiter):
                     "league": u["league"],
                     "total_points": u["total_points"],
                     "week_points": u["week_points"],
-                    "total_solved": u["total_solved"],
-                    "email": u.get("email")
+                    "total_solved": u["total_solved"]
                 }
                 for u in rating
             ],
@@ -253,16 +251,13 @@ def setup_users_routes(app, db, limiter: Limiter):
     @app.get("/api/user/public/{identifier}")
     async def get_public_user_profile(identifier: str):
         """
-        Get public user profile by ID or email (statistics and achievements)
+        Get public user profile by ID (statistics and achievements)
         Does not require authentication
         Returns public data without email and is_admin
-        
-        Tries to parse identifier as integer (ID) first, then falls back to email
         
         **Example Request:**
         ```
         GET /api/user/public/123
-        GET /api/user/public/user@example.com
         ```
         
         **Example Response:**
@@ -288,31 +283,20 @@ def setup_users_routes(app, db, limiter: Limiter):
         - 404: User not found
         - 500: Internal server error
         """
-        # Try to parse as integer (user ID) first
-        user_id = None
         try:
             user_id = int(identifier)
         except ValueError:
-            pass
-        
-        # Determine cache key and fetch method
-        if user_id is not None:
-            # Use ID-based cache and lookup
-            cache_key = f"user:public:id:{user_id}"
-            cached_profile = cache.get(cache_key)
-            if cached_profile is not None:
-                return cached_profile
-            
-            user = await db.get_user_by_id(user_id)
-        else:
-            # Use email-based cache and lookup
-            email = identifier
-            cache_key = f"user:public:{email}"
-            cached_profile = cache.get(cache_key)
-            if cached_profile is not None:
-                return cached_profile
-            
-            user = await db.get_user_by_email(email)
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if user_id <= 0:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        cache_key = f"user:public:id:{user_id}"
+        cached_profile = cache.get(cache_key)
+        if cached_profile is not None:
+            return cached_profile
+
+        user = await db.get_user_by_id(user_id)
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")

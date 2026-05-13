@@ -34,7 +34,7 @@ from database import Database
 from repositories.bank_task_repository import BankTaskVersionConflictError, BankTaskVersionDeleteError
 from repositories.user_repository import AdminRoleConflictError, LastSuperAdminError
 from utils.validation import canonicalize_factor_grid_answer, validate_email, validate_string_length, sanitize_html
-from utils.file_storage import save_image_upload, delete_image_file
+from utils.file_storage import delete_image_file, normalize_stored_image_filename, save_image_upload
 from utils.metrics import metrics
 
 logger = logging.getLogger(__name__)
@@ -571,7 +571,11 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     raw_image_filename = raw_task.get("image_filename")
     if raw_image_filename is not None and not isinstance(raw_image_filename, str):
         raise ImportTaskValidationError("image_filename", "image_filename must be a string or null")
-    image_filename = raw_image_filename if (isinstance(raw_image_filename, str) and raw_image_filename.strip()) else None
+    image_filename = None
+    if isinstance(raw_image_filename, str) and raw_image_filename.strip():
+        image_filename = normalize_stored_image_filename(raw_image_filename)
+        if image_filename is None:
+            raise ImportTaskValidationError("image_filename", "image_filename is not a safe stored image filename")
 
     raw_solution_filename = raw_task.get("solution_filename")
     if raw_solution_filename is not None and not isinstance(raw_solution_filename, str):

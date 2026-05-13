@@ -4,6 +4,7 @@ File storage helpers for uploaded images.
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -24,6 +25,7 @@ ALLOWED_IMAGE_TYPES = {
     "image/webp": {".webp"},
 }
 DEFAULT_MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+STORED_IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 def _get_max_upload_bytes() -> int:
@@ -51,6 +53,33 @@ def _detect_image_type(content: bytes) -> tuple[Optional[str], Optional[str]]:
 
 def get_images_dir() -> Path:
     return _IMAGES_DIR
+
+
+def normalize_stored_image_filename(filename: str) -> Optional[str]:
+    """Return a safe stored image basename, or None when the value is unsafe."""
+    if not isinstance(filename, str):
+        return None
+    value = filename.strip()
+    if not value or Path(value).name != value:
+        return None
+    if "/" in value or "\\" in value or not STORED_IMAGE_FILENAME_PATTERN.fullmatch(value):
+        return None
+    ext = Path(value).suffix.lower()
+    allowed_exts = {ext for exts in ALLOWED_IMAGE_TYPES.values() for ext in exts}
+    if ext not in allowed_exts:
+        return None
+    return value
+
+
+def _resolve_image_path(filename: str) -> Optional[Path]:
+    safe_filename = normalize_stored_image_filename(filename)
+    if not safe_filename:
+        return None
+    images_dir = _IMAGES_DIR.resolve()
+    file_path = (images_dir / safe_filename).resolve()
+    if images_dir not in file_path.parents:
+        return None
+    return file_path
 
 
 async def save_image_upload(image: UploadFile) -> str:
@@ -101,24 +130,26 @@ async def save_image_upload(image: UploadFile) -> str:
 
 def delete_image_file(filename: str) -> None:
     """Delete an image file from the images directory."""
-    if not filename:
+    file_path = _resolve_image_path(filename)
+    if file_path is None:
+        logger.warning("Refusing to delete unsafe image filename: %s", filename)
         return
-    
-    file_path = _IMAGES_DIR / filename
+
     if file_path.exists():
         try:
             file_path.unlink()
-            logger.info("Image file deleted: %s", filename)
+            logger.info("Image file deleted: %s", file_path.name)
         except Exception as e:
             logger.warning("Failed to delete image file %s: %s", filename, e)
 
 
 def copy_image_file(filename: str) -> Optional[str]:
     """Create a physical copy of an existing image and return new filename."""
-    if not filename:
+    src_path = _resolve_image_path(filename)
+    if src_path is None:
+        logger.warning("Refusing to copy unsafe image filename: %s", filename)
         return None
 
-    src_path = _IMAGES_DIR / filename
     if not src_path.exists() or not src_path.is_file():
         logger.warning("Source image for copy not found: %s", filename)
         return None

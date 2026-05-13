@@ -16,6 +16,7 @@ PROXY_TS_HEADER = "X-Proxy-Request-Ts"
 PROXY_SIGNATURE_HEADER = "X-Proxy-Request-Signature"
 PROXY_EMAIL_HEADER = "X-Proxy-User-Email"
 PROXY_SIGNATURE_TTL_SECONDS = 60
+WEBSOCKET_TOKEN_TTL_SECONDS = 120
 
 
 def _get_proxy_secret() -> str:
@@ -42,6 +43,22 @@ def build_canonical_proxy_payload(
             str(path or ""),
             str(raw_query or ""),
             str(user_email or ""),
+            str(timestamp or ""),
+        ]
+    ).encode("utf-8")
+
+
+def build_canonical_ws_payload(
+    *,
+    session_id: int,
+    user_email: str,
+    timestamp: str,
+) -> bytes:
+    return "\n".join(
+        [
+            "WS",
+            f"/ws/trial-tests/coop/{int(session_id)}",
+            str(user_email or "").strip().lower(),
             str(timestamp or ""),
         ]
     ).encode("utf-8")
@@ -104,3 +121,51 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
 
     normalized_email = user_email or None
     return True, normalized_email, None
+
+
+def build_ws_token(*, session_id: int, user_email: str, timestamp: Optional[int] = None) -> str:
+    secret = _get_proxy_secret()
+    if not secret:
+        raise ValueError("proxy_secret_missing")
+
+    timestamp_value = str(int(timestamp if timestamp is not None else time.time()))
+    payload = build_canonical_ws_payload(
+        session_id=session_id,
+        user_email=user_email,
+        timestamp=timestamp_value,
+    )
+    signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return f"{timestamp_value}.{signature}"
+
+
+def verify_ws_token(*, session_id: int, user_email: str, token: str) -> Tuple[bool, Optional[str]]:
+    if not token or "." not in token:
+        return False, "missing_token"
+
+    timestamp, signature = token.split(".", 1)
+    if not timestamp or not signature:
+        return False, "invalid_token"
+
+    secret = _get_proxy_secret()
+    if not secret:
+        return False, "secret_missing"
+
+    try:
+        timestamp_int = int(timestamp)
+    except Exception:
+        return False, "invalid_timestamp"
+
+    now = int(time.time())
+    if abs(now - timestamp_int) > WEBSOCKET_TOKEN_TTL_SECONDS:
+        return False, "timestamp_out_of_range"
+
+    payload = build_canonical_ws_payload(
+        session_id=session_id,
+        user_email=user_email,
+        timestamp=timestamp,
+    )
+    expected_signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return False, "invalid_signature"
+
+    return True, None

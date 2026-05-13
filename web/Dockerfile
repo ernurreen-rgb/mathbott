@@ -11,6 +11,14 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Build-time public config and Sentry source map upload credentials
+ARG NEXT_PUBLIC_API_URL=/api/backend
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
+ARG SENTRY_AUTH_TOKEN=
+ARG SENTRY_ORG=
+ARG SENTRY_PROJECT=
+
 # Build the application
 RUN npm run build
 

@@ -3,6 +3,7 @@ Trial tests coop routes (private)
 """
 import json
 import logging
+import os
 from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends
@@ -11,6 +12,7 @@ from slowapi import Limiter
 from dependencies import get_db
 from database import Database
 from utils.cache import cache
+from utils.internal_proxy_auth import WEBSOCKET_TOKEN_TTL_SECONDS, build_ws_token, verify_ws_token
 from utils.scoring import build_reward_identity
 from utils.validation import normalize_task_answer_for_compare
 
@@ -58,6 +60,9 @@ def _map_answers(rows):
 
 def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = CoopConnectionManager()
+
+    def _is_production() -> bool:
+        return os.getenv("ENVIRONMENT", "development").strip().lower() == "production"
 
     @app.post("/api/trial-tests/{test_id}/coop/session")
     async def create_coop_session(
@@ -444,6 +449,30 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             logger.error(f"Error declining coop invite: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+    @app.get("/api/trial-tests/coop/session/{session_id}/ws-token")
+    async def get_coop_ws_token(
+        session_id: int,
+        email: str = Query(...),
+        db: Database = Depends(get_db),
+    ):
+        user = await db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        participant = await db.get_trial_test_coop_participant(session_id, user["id"])
+        if not participant:
+            raise HTTPException(status_code=403, detail="Not a participant")
+
+        try:
+            token = build_ws_token(session_id=session_id, user_email=email)
+        except ValueError:
+            raise HTTPException(status_code=503, detail="WebSocket token signing is not configured")
+
+        return {
+            "token": token,
+            "expires_in": WEBSOCKET_TOKEN_TTL_SECONDS,
+        }
+
     @app.websocket("/ws/trial-tests/coop/{session_id}")
     async def coop_ws(websocket: WebSocket, session_id: int):
         email = websocket.query_params.get("email")
@@ -451,8 +480,23 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             await websocket.close(code=1008)
             return
 
+        if _is_production():
+            token = websocket.query_params.get("token") or ""
+            is_valid_token, error_code = verify_ws_token(
+                session_id=session_id,
+                user_email=email,
+                token=token,
+            )
+            if not is_valid_token:
+                logger.warning("Rejected coop websocket token: session_id=%s error=%s", session_id, error_code)
+                await websocket.close(code=1008)
+                return
+
         user = await db.get_user_by_email(email)
         if not user:
+            if _is_production():
+                await websocket.close(code=1008)
+                return
             user = await db.create_user_by_email(email)
 
         participant = await db.get_trial_test_coop_participant(session_id, user["id"])

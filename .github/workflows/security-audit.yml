@@ -17,7 +17,7 @@ jobs:
       working-directory: ./bot
       run: |
         pip install pip-audit
-        pip-audit --desc --format=json > backend-audit.json || true
+        pip-audit --desc --format=json -r requirements.txt > backend-audit.json || true
     
     - name: Frontend security audit
       working-directory: ./web

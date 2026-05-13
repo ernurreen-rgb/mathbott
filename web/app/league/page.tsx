@@ -17,6 +17,7 @@ export default function LeaguePage() {
   const [leaguesData, setLeaguesData] = useState<Record<string, RatingUser[]>>({});
   const [userLeague, setUserLeague] = useState<string>("");
   const [userPosition, setUserPosition] = useState<number | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
 
@@ -34,12 +35,14 @@ export default function LeaguePage() {
         if (process.env.NODE_ENV === "development") {
           console.error("Failed to fetch user data:", userError);
         }
+        setCurrentUserId(null);
         setLoading(false);
         return;
       }
       
       setUserLeague(userData.league || "");
       setUserPosition(userData.league_position ?? null);
+      setCurrentUserId(userData.id);
 
       // Fetch rating ONLY for user's league
       const leagues: Record<string, RatingUser[]> = {};
@@ -206,20 +209,22 @@ export default function LeaguePage() {
               ) : (
                 <div className="space-y-2">
                   {leaguesData[expandedLeague].map((user, idx) => {
-                    const isCurrentUser = user.email === session?.user?.email;
+                    const isCurrentUser = user.id === currentUserId;
                     const hasDefaultNickname = user.nickname?.startsWith("User ") && /User -?\d+/.test(user.nickname);
                     // All users are clickable now (for public profiles)
-                    const isClickable = user.email && true;
+                    const isClickable = user.id > 0;
                     
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={user.id}
                         onClick={() => {
                           if (isClickable && user.id) {
                             router.push(`/profile/${user.id}`);
                           }
                         }}
-                        className={`flex justify-between items-center p-3 rounded-lg border transition-all ${
+                        disabled={!isClickable}
+                        className={`w-full text-left flex justify-between items-center p-3 rounded-lg border transition-all ${
                           isClickable
                             ? "cursor-pointer hover:shadow-glow hover:border-purple-400"
                             : "hover:shadow-md"
@@ -246,7 +251,7 @@ export default function LeaguePage() {
                                 ? "text-green-700" 
                                 : "text-gray-800"
                             }`}>
-                              {user.nickname || user.email?.split("@")[0] || "Ойыншы"}
+                              {user.nickname || "Ойыншы"}
                               {hasDefaultNickname && isCurrentUser && (
                                 <span className="ml-2 text-xs text-orange-600">(никнеймді орнату үшін)</span>
                               )}
@@ -264,7 +269,7 @@ export default function LeaguePage() {
                           </div>
                           <div className="text-xs text-gray-500">ұпай</div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

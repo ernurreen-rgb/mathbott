@@ -114,32 +114,7 @@ class TrustedProxyIdentityMiddleware:
         path = str(scope.get("path") or "")
         headers = Headers(scope=scope)
         content_type = headers.get("content-type", "")
-        should_inspect_body = (
-            "application/json" in content_type
-            or "application/x-www-form-urlencoded" in content_type
-        )
-
-        body = b""
-        replay_receive = receive
-        if should_inspect_body:
-            body_messages: list[Message] = []
-            more_body = True
-            while more_body:
-                message = await receive()
-                body_messages.append(message)
-                if message["type"] != "http.request":
-                    break
-                body += message.get("body", b"")
-                more_body = bool(message.get("more_body", False))
-
-            async def _replay_receive() -> Message:
-                if body_messages:
-                    return body_messages.pop(0)
-                return {"type": "http.request", "body": b"", "more_body": False}
-
-            replay_receive = _replay_receive
-
-        request = Request(scope, replay_receive)
+        request = Request(scope, receive)
         has_signature = has_proxy_signature_headers(request)
         is_valid_proxy = False
         proxy_email: Optional[str] = None
@@ -152,16 +127,67 @@ class TrustedProxyIdentityMiddleware:
                     {"detail": "Invalid trusted proxy signature."},
                     status_code=401,
                 )
-                await response(scope, replay_receive, send)
+                await response(scope, receive, send)
                 return
 
+        environment = _get_environment()
+        explicit_query_email = _extract_query_email(scope)
+        explicit_path_email = _private_email_from_path(path)
+
+        if environment == "production" and (
+            _is_sensitive_identity_path(path)
+            or explicit_query_email is not None
+            or explicit_path_email is not None
+        ):
+            if not is_valid_proxy or not proxy_email:
+                response = JSONResponse(
+                    {"detail": "Trusted proxy authentication required."},
+                    status_code=401,
+                )
+                await response(scope, receive, send)
+                return
+
+        should_inspect_body = (
+            "application/json" in content_type
+            or "application/x-www-form-urlencoded" in content_type
+        )
+        # In production, signed proxy requests already passed the trusted identity boundary.
+        # Avoid buffering large bodies on hot paths such as admin imports.
+        should_inspect_body = should_inspect_body and not (environment == "production" and is_valid_proxy)
+
+        body = b""
+        replay_receive = receive
+        if should_inspect_body:
+            body_messages: list[Message] = []
+            more_body = True
+            while more_body:
+                message = await receive()
+                body_messages.append(message)
+                if message["type"] != "http.request":
+                    break
+                body += message.get("body", b"")
+                if len(body) > MAX_IDENTITY_BODY_BYTES:
+                    response = JSONResponse(
+                        {"detail": "Request body is too large for identity validation."},
+                        status_code=413,
+                    )
+                    await response(scope, receive, send)
+                    return
+                more_body = bool(message.get("more_body", False))
+
+            async def _replay_receive() -> Message:
+                if body_messages:
+                    return body_messages.pop(0)
+                return {"type": "http.request", "body": b"", "more_body": False}
+
+            replay_receive = _replay_receive
+
         explicit_emails = [
-            _extract_query_email(scope),
-            _private_email_from_path(path),
+            explicit_query_email,
+            explicit_path_email,
             _extract_body_email(content_type, body),
         ]
         has_explicit_email = any(email is not None for email in explicit_emails)
-        environment = _get_environment()
 
         if environment == "production" and (_is_sensitive_identity_path(path) or has_explicit_email):
             if not is_valid_proxy or not proxy_email:

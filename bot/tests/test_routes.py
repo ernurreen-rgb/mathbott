@@ -9,6 +9,8 @@ import time
 import aiosqlite
 import pytest
 
+from utils.internal_proxy_auth import verify_ws_token
+
 
 def _extract_http_detail(payload):
     if isinstance(payload, dict):
@@ -492,6 +494,33 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
 
 
 @pytest.mark.asyncio
+async def test_coop_ws_token_requires_participant(client, test_db, test_user):
+    trial_test = await test_db.create_trial_test("Coop WS Token Trial", sort_order=0, created_by=test_user["id"])
+    session = await test_db.create_trial_test_coop_session(trial_test["id"], test_user["id"])
+    await test_db.add_trial_test_coop_participant(session["id"], test_user["id"], "red")
+
+    response = client.get(
+        f"/api/trial-tests/coop/session/{session['id']}/ws-token",
+        params={"email": test_user["email"]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["expires_in"] == 120
+    assert verify_ws_token(
+        session_id=session["id"],
+        user_email=test_user["email"],
+        token=payload["token"],
+    ) == (True, None)
+
+    outsider = await test_db.create_user_by_email("coop-token-outsider@example.com")
+    outsider_response = client.get(
+        f"/api/trial-tests/coop/session/{session['id']}/ws-token",
+        params={"email": outsider["email"]},
+    )
+    assert outsider_response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_get_user_web(client, test_db):
     """Test getting user web stats"""
     # Create user
@@ -541,7 +570,7 @@ async def test_get_public_user_profile(client, test_db, test_user):
     await test_db.update_user_nickname(test_user["email"], "TestUser")
     
     # Get public profile
-    response = client.get(f"/api/user/public/{test_user['email']}")
+    response = client.get(f"/api/user/public/{test_user['id']}")
     assert response.status_code == 200
     data = response.json()
     assert data["nickname"] == "TestUser"
@@ -551,7 +580,14 @@ async def test_get_public_user_profile(client, test_db, test_user):
 
 def test_get_public_user_profile_not_found(client):
     """Test getting public profile for non-existent user"""
-    response = client.get("/api/user/public/nonexistent@example.com")
+    response = client.get("/api/user/public/999999")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_public_user_profile_rejects_email_identifier(client, test_user):
+    """Public profiles must not be addressable by email."""
+    response = client.get(f"/api/user/public/{test_user['email']}")
     assert response.status_code == 404
 
 
@@ -688,6 +724,7 @@ async def test_get_rating(client, test_db):
     assert "limit" in data
     assert "offset" in data
     assert len(data["items"]) >= 2
+    assert all("email" not in item for item in data["items"])
 
 
 @pytest.mark.asyncio
@@ -728,6 +765,7 @@ async def test_get_rating_with_league_filter(client, test_db):
     # All items should be in the specified league
     for item in data["items"]:
         assert item["league"] == "Қола"
+        assert "email" not in item
 
 
 @pytest.mark.asyncio

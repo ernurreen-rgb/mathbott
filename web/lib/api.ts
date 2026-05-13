@@ -760,6 +760,15 @@ export async function getTrialTestCoopSession(
   );
 }
 
+export async function getTrialTestCoopWsToken(
+  sessionId: number,
+  email: string
+): Promise<{ data: { token: string; expires_in: number } | null; error: string | null }> {
+  return fetchWithErrorHandling<{ token: string; expires_in: number }>(
+    `${apiPath(`trial-tests/coop/session/${sessionId}/ws-token`)}?email=${encodeURIComponent(email)}`
+  );
+}
+
 export async function finishTrialTestCoopSession(
   testId: number,
   sessionId: number,
