@@ -295,6 +295,18 @@ class Database:
         """Get all users"""
         return await self.users.get_all_users()
 
+    async def get_recent_activity_timestamps(
+        self,
+        user_id: int,
+        *,
+        lookback_days: int = 10,
+    ) -> List[str]:
+        """Get recent user activity timestamps for the profile week bar."""
+        return await self.users.get_recent_activity_timestamps(
+            user_id,
+            lookback_days=lookback_days,
+        )
+
     async def list_admin_users(
         self,
         *,

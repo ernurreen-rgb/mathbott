@@ -8,6 +8,7 @@ import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
 import { FriendStatus, UserData } from "@/types";
 import { getFriendStatus, getPublicUserDataById, sendFriendRequest } from "@/lib/api";
+import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
 export default function PublicProfilePage() {
@@ -33,29 +34,11 @@ export default function PublicProfilePage() {
     { short: "Сб", weekDay: 6 }, // Saturday
     { short: "Жс", weekDay: 0 }, // Sunday
   ];
-  const todayWeekDay = new Date().getDay();
-
-  // === Новый расчет streakDaysSet ===
-  const streakDaysSet = new Set<number>();
-  if (userData?.streak && userData.streak > 0 && userData?.last_streak_date) {
-    // Найдём день недели для последнего streak-дня
-    const lastStreakDate = new Date(userData.last_streak_date);
-    const lastStreakWeekday = lastStreakDate.getDay();
-    const daysToMark = Math.min(userData.streak, 7);
-    for (let i = 0; i < daysToMark; i++) {
-      // от последнего дня streak — назад
-      const dayIndex = (lastStreakWeekday - i + 7) % 7;
-      streakDaysSet.add(dayIndex);
-    }
-  }
-  // Если last_streak_date пустой, fallback к старой логике (на случай legacy-данных)
-  else if (userData?.streak && userData.streak > 0) {
-    const daysToMark = Math.min(userData.streak, 7);
-    for (let i = 0; i < daysToMark; i++) {
-      const dayIndex = (todayWeekDay - i + 7) % 7;
-      streakDaysSet.add(dayIndex);
-    }
-  }
+  const streakDaysSet = getProfileWeekActivityDaysSet({
+    recentActivityTimestamps: userData?.recent_activity_timestamps,
+    streak: userData?.streak,
+    lastStreakDate: userData?.last_streak_date,
+  });
 
   const fetchUserData = useCallback(async () => {
     if (!userId || isNaN(userId)) return;

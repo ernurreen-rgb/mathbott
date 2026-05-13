@@ -146,7 +146,8 @@ def setup_users_routes(app, db, limiter: Limiter):
         - 500: Internal server error
         """
         # Cache user stats (TTL 10 seconds as per plan)
-        cache_key = f"user:stats:{email}:{refresh_achievements}"
+        fields_key = ",".join(sorted(f.strip() for f in fields.split(",") if f.strip())) if fields else "all"
+        cache_key = f"user:stats:{email}:{refresh_achievements}:{fields_key}"
         if not refresh_achievements:
             cached_stats = cache.get(cache_key)
             if cached_stats is not None:
@@ -185,6 +186,8 @@ def setup_users_routes(app, db, limiter: Limiter):
                 achievements = await db.get_user_achievements(user["id"])
             except Exception as e:
                 logger.error(f"Error checking achievements: {e}", exc_info=True)
+
+        recent_activity_timestamps = await db.get_recent_activity_timestamps(user["id"])
         
         # Normalize last_streak_date for the frontend (string YYYY-MM-DD or null)
         last_streak_date_value = user.get("last_streak_date")
@@ -227,6 +230,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "total_points": user["total_points"],
             "streak": streak_value,
             "last_streak_date": last_streak_date_value,
+            "recent_activity_timestamps": recent_activity_timestamps,
             "is_admin": is_admin,
             "achievements": achievements
         }
@@ -342,6 +346,7 @@ def setup_users_routes(app, db, limiter: Limiter):
         
         # Get user achievements
         achievements = await db.get_user_achievements(user["id"])
+        recent_activity_timestamps = await db.get_recent_activity_timestamps(user["id"])
         
         # Return public profile data (WITHOUT email and is_admin)
         result = {
@@ -356,6 +361,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "total_points": user["total_points"],
             "streak": streak_value,
             "last_streak_date": last_streak_date_value,
+            "recent_activity_timestamps": recent_activity_timestamps,
             "achievements": achievements
         }
         

@@ -136,6 +136,45 @@ class UserRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
+    async def get_recent_activity_timestamps(
+        self,
+        user_id: int,
+        *,
+        lookback_days: int = 10,
+    ) -> List[str]:
+        """Return recent solve/completion timestamps used by the profile week bar."""
+        window_days = max(1, min(int(lookback_days), 30))
+        window_expr = f"-{window_days} days"
+
+        async with self._connection() as db:
+            async with db.execute(
+                """
+                SELECT event_at
+                FROM (
+                    SELECT completed_at AS event_at
+                    FROM user_progress
+                    WHERE user_id = ?
+                      AND status = 'completed'
+                      AND completed_at IS NOT NULL
+                      AND datetime(completed_at) >= datetime('now', ?)
+
+                    UNION ALL
+
+                    SELECT completed_at AS event_at
+                    FROM trial_test_results
+                    WHERE user_id = ?
+                      AND completed_at IS NOT NULL
+                      AND datetime(completed_at) >= datetime('now', ?)
+                ) recent_activity
+                ORDER BY datetime(event_at) DESC
+                LIMIT 100
+                """,
+                (user_id, window_expr, user_id, window_expr),
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        return [str(row[0]) for row in rows if row and row[0]]
+
     async def list_admin_users(
         self,
         *,

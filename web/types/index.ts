@@ -29,6 +29,7 @@ export interface UserData {
   total_points: number;
   streak?: number;
   last_streak_date?: string | null;
+  recent_activity_timestamps?: string[];
   is_admin?: boolean;
   achievements?: Achievement[];
 }
