@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import DesktopNav from "@/components/DesktopNav";
@@ -292,6 +292,27 @@ export default function AdminBankPage() {
   const LIMIT = 20;
   const page = useMemo(() => Math.floor(offset / LIMIT) + 1, [offset]);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / LIMIT)), [total]);
+  const paginationPages = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = new Set<number>([1, totalPages, page, page - 1, page + 1]);
+    if (page <= 3) {
+      [2, 3, 4, 5].forEach((item) => pages.add(item));
+    }
+    if (page >= totalPages - 2) {
+      [totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1].forEach((item) => pages.add(item));
+    }
+
+    return Array.from(pages)
+      .filter((item) => item >= 1 && item <= totalPages)
+      .sort((a, b) => a - b);
+  }, [page, totalPages]);
+
+  const goToPage = (nextPage: number) => {
+    setOffset((nextPage - 1) * LIMIT);
+  };
 
   const fetchTasks = useCallback(async () => {
     if (!email) return;
@@ -1385,9 +1406,9 @@ export default function AdminBankPage() {
               </div>
             )}
 
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-gray-600">Бет {page} / {totalPages} · Барлығы: {total}</div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setOffset((prev) => Math.max(0, prev - LIMIT))}
                   disabled={offset === 0}
@@ -1395,6 +1416,26 @@ export default function AdminBankPage() {
                 >
                   ← Артқа
                 </button>
+                {paginationPages.map((pageNo, index) => (
+                  <Fragment key={pageNo}>
+                    {index > 0 && pageNo - paginationPages[index - 1] > 1 && (
+                      <span className="px-1 text-sm text-gray-500">...</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => goToPage(pageNo)}
+                      disabled={pageNo === page}
+                      aria-current={pageNo === page ? "page" : undefined}
+                      className={`min-w-10 rounded-lg px-3 py-2 text-sm font-semibold ${
+                        pageNo === page
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                      }`}
+                    >
+                      {pageNo}
+                    </button>
+                  </Fragment>
+                ))}
                 <button
                   onClick={() => setOffset((prev) => prev + LIMIT)}
                   disabled={offset + LIMIT >= total}

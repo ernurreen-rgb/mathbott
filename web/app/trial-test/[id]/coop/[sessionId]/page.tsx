@@ -368,11 +368,6 @@ export default function TrialTestCoopPage() {
 
       return (
         <div className="space-y-2">
-          {requiredCount > 1 && (
-            <div className="text-sm font-semibold text-purple-700">
-              {requiredCount} дұрыс жауап таңдаңыз
-            </div>
-          )}
           <div className="grid grid-cols-1 gap-2">
             {opts.map((o) => {
               const label = o.label as any;

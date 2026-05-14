@@ -272,6 +272,10 @@ export default function AdminTrialTestsPage() {
   const [bankSearch, setBankSearch] = useState("");
   const [bankDifficulty, setBankDifficulty] = useState<BankDifficulty | "">("");
   const [bankItems, setBankItems] = useState<BankTask[]>([]);
+  const [bankTotal, setBankTotal] = useState(0);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankSelectAllLoading, setBankSelectAllLoading] = useState(false);
+  const [bankAssigningSelected, setBankAssigningSelected] = useState(false);
   const [selectedBankTaskIds, setSelectedBankTaskIds] = useState<number[]>([]);
 
   const [showInlineCreate, setShowInlineCreate] = useState(false);
@@ -288,6 +292,14 @@ export default function AdminTrialTestsPage() {
     const map = new Map<number, BankPlacementTask>();
     for (const task of tasks) map.set((task.sort_order || 0) + 1, task);
     return map;
+  }, [tasks]);
+
+  const assignedBankTaskIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const task of tasks) {
+      if (typeof task.bank_task_id === "number") ids.add(task.bank_task_id);
+    }
+    return ids;
   }, [tasks]);
 
   const currentPlacement = selectedTest ? slotMap.get(currentSlotIndex) || null : null;
@@ -329,17 +341,20 @@ export default function AdminTrialTestsPage() {
 
   const fetchBank = useCallback(async () => {
     if (!email || !showBankPicker) return;
+    setBankLoading(true);
     const { data, error: err } = await getAdminBankTasks(email, {
       search: bankSearch,
       difficulty: bankDifficulty,
       limit: 20,
       offset: 0,
     });
+    setBankLoading(false);
     if (err) {
       setError(err);
       return;
     }
     setBankItems(data?.items || []);
+    setBankTotal(data?.total || 0);
   }, [email, showBankPicker, bankSearch, bankDifficulty]);
 
   useEffect(() => {
@@ -365,6 +380,8 @@ export default function AdminTrialTestsPage() {
     setPreviewAnswers({});
     setActiveSlot(null);
     setShowBankPicker(false);
+    setBankItems([]);
+    setBankTotal(0);
     setSelectedBankTaskIds([]);
     setShowInlineCreate(false);
   }, [selectedTestId]);
@@ -459,38 +476,93 @@ export default function AdminTrialTestsPage() {
   };
 
   const toggleBankTaskSelection = (bankTaskId: number) => {
+    if (assignedBankTaskIds.has(bankTaskId)) return;
     setSelectedBankTaskIds((prev) =>
       prev.includes(bankTaskId) ? prev.filter((id) => id !== bankTaskId) : [...prev, bankTaskId]
     );
   };
 
+  const onSelectAllBankTasks = async () => {
+    if (!email) return;
+
+    setBankSelectAllLoading(true);
+    setError(null);
+
+    const limit = 100;
+    let offset = 0;
+    const selectedIds: number[] = [];
+    const seenIds = new Set<number>();
+
+    while (true) {
+      const { data, error: err } = await getAdminBankTasks(email, {
+        search: bankSearch,
+        difficulty: bankDifficulty,
+        limit,
+        offset,
+      });
+
+      if (err || !data) {
+        setError(err || "Банк тапсырмаларын жүктеу қатесі");
+        setBankSelectAllLoading(false);
+        return;
+      }
+
+      if (offset === 0) {
+        setBankItems(data.items || []);
+        setBankTotal(data.total || 0);
+      }
+
+      for (const task of data.items || []) {
+        if (assignedBankTaskIds.has(task.id) || seenIds.has(task.id)) continue;
+        seenIds.add(task.id);
+        selectedIds.push(task.id);
+      }
+
+      if (!data.has_more || data.items.length === 0) break;
+      offset += limit;
+    }
+
+    setSelectedBankTaskIds(selectedIds);
+    setBankSelectAllLoading(false);
+  };
+
   const onAssignSelectedBankTasks = async () => {
     if (!email || !selectedTestId || !activeSlot || selectedBankTaskIds.length === 0) return;
+    const bankTaskIdsToAssign = Array.from(new Set(selectedBankTaskIds))
+      .filter((id) => !assignedBankTaskIds.has(id))
+      .reverse();
+    if (bankTaskIdsToAssign.length === 0) {
+      setError("Таңдалған тапсырмалар бұл тестте бұрыннан бар.");
+      return;
+    }
 
     const targetSlots: number[] = [];
-    for (let slotIndex = activeSlot; slotIndex <= slotCount && targetSlots.length < selectedBankTaskIds.length; slotIndex += 1) {
+    for (let slotIndex = activeSlot; slotIndex <= slotCount && targetSlots.length < bankTaskIdsToAssign.length; slotIndex += 1) {
       if (slotMap.has(slotIndex)) continue;
       targetSlots.push(slotIndex);
     }
 
-    if (targetSlots.length < selectedBankTaskIds.length) {
+    if (targetSlots.length < bankTaskIdsToAssign.length) {
       setError("Таңдалған тапсырмаларға бос ұяшық жеткіліксіз. Ағымдағы ұяшықтан кейінгі бос ұяшықтарды тазалаңыз.");
       return;
     }
 
-    for (let index = 0; index < selectedBankTaskIds.length; index += 1) {
+    setBankAssigningSelected(true);
+    for (let index = 0; index < bankTaskIdsToAssign.length; index += 1) {
       const { error: err } = await upsertTrialTestSlot(selectedTestId, targetSlots[index], {
         email,
-        bank_task_id: selectedBankTaskIds[index],
+        bank_task_id: bankTaskIdsToAssign[index],
       });
       if (err) {
         setError(err);
+        setBankAssigningSelected(false);
         return;
       }
     }
 
     targetSlots.forEach((slotIndex) => clearPreviewAnswerForSlot(slotIndex));
     await fetchTasks(selectedTestId);
+    setBankAssigningSelected(false);
     setShowBankPicker(false);
     setActiveSlot(null);
     setSelectedBankTaskIds([]);
@@ -1036,19 +1108,32 @@ export default function AdminTrialTestsPage() {
                 <option value="C">C</option>
               </select>
             </div>
-            <button className="mb-3 text-sm border border-gray-300 rounded px-3 py-1" onClick={() => void fetchBank()}>
-              Іздеу
+            <button
+              className="mb-3 text-sm border border-gray-300 rounded px-3 py-1 disabled:opacity-50"
+              onClick={() => void fetchBank()}
+              disabled={bankLoading}
+            >
+              {bankLoading ? "Ізделуде..." : "Іздеу"}
             </button>
             <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-gray-700">
                   Таңдалды: <span className="font-semibold">{selectedBankTaskIds.length}</span>
+                  <span className="ml-2 text-xs text-gray-500">Көрсетілген: {bankItems.length}/{bankTotal}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => void onSelectAllBankTasks()}
+                    disabled={bankSelectAllLoading || bankLoading || bankTotal === 0}
+                    className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:opacity-50"
+                  >
+                    {bankSelectAllLoading ? "Жүктелуде..." : "Барлығын таңдау"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setSelectedBankTaskIds([])}
-                    disabled={selectedBankTaskIds.length === 0}
+                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
                     className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-50"
                   >
                     Таңдауды тазалау
@@ -1056,40 +1141,44 @@ export default function AdminTrialTestsPage() {
                   <button
                     type="button"
                     onClick={() => void onAssignSelectedBankTasks()}
-                    disabled={selectedBankTaskIds.length === 0}
+                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
                     className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:bg-gray-300"
                   >
-                    Таңдалғанды қосу
+                    {bankAssigningSelected ? "Қосылуда..." : "Таңдалғанды қосу"}
                   </button>
                 </div>
               </div>
               <div className="mt-2 text-xs text-gray-500">
-                Пакетпен қосу ағымдағы ұяшықтан бастап тек бос ұяшықтарды ретімен толтырады.
+                Барлығын таңдау ағымдағы іздеу/деңгей сүзгісіне сай барлық банк тапсырмаларын алады. Тестте бұрыннан бар тапсырмалар қайталанбайды.
               </div>
             </div>
             <div className="space-y-2 max-h-[420px] overflow-auto">
-              {bankItems.map((task) => (
-                <div key={task.id} className="rounded-lg border border-gray-200 p-2">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <div className="text-xs text-gray-500">#{task.id}</div>
-                    <label className="flex items-center gap-2 text-xs text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={selectedBankTaskIds.includes(task.id)}
-                        onChange={() => toggleBankTaskSelection(task.id)}
-                      />
-                      Таңдау
-                    </label>
+              {bankItems.map((task) => {
+                const alreadyAssigned = assignedBankTaskIds.has(task.id);
+                return (
+                  <div key={task.id} className="rounded-lg border border-gray-200 p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <div className="text-xs text-gray-500">#{task.id}</div>
+                      <label className={`flex items-center gap-2 text-xs ${alreadyAssigned ? "text-gray-400" : "text-gray-700"}`}>
+                        <input
+                          type="checkbox"
+                          disabled={alreadyAssigned}
+                          checked={!alreadyAssigned && selectedBankTaskIds.includes(task.id)}
+                          onChange={() => toggleBankTaskSelection(task.id)}
+                        />
+                        {alreadyAssigned ? "Тестте бар" : "Таңдау"}
+                      </label>
+                    </div>
+                    <div className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}><MathRender latex={task.text || ""} /></div>
+                    <button
+                      className="text-xs bg-green-600 text-white rounded px-2 py-1"
+                      onClick={() => void onAssignBankTask(task.id)}
+                    >
+                      Осы ұяшыққа
+                    </button>
                   </div>
-                  <div className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}><MathRender latex={task.text || ""} /></div>
-                  <button
-                    className="text-xs bg-green-600 text-white rounded px-2 py-1"
-                    onClick={() => void onAssignBankTask(task.id)}
-                  >
-                    Осы ұяшыққа
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

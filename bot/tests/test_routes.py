@@ -943,6 +943,68 @@ async def test_admin_trial_task_update_syncs_linked_bank_task(client, test_db):
 
 
 @pytest.mark.asyncio
+async def test_admin_bank_list_order_survives_task_update(client, test_db):
+    """Updating a bank task should not move it to the top of the active bank list."""
+    admin_user = await test_db.create_user_by_email("admin.bank.order@example.com")
+    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+
+    older_task = await test_db.create_bank_task(
+        text="Stable order older task",
+        answer="A",
+        question_type="input",
+        difficulty="B",
+        topics=[],
+        options=None,
+        subquestions=None,
+        image_filename=None,
+        solution_filename=None,
+        created_by=admin_user["id"],
+    )
+    newer_task = await test_db.create_bank_task(
+        text="Stable order newer task",
+        answer="B",
+        question_type="input",
+        difficulty="B",
+        topics=[],
+        options=None,
+        subquestions=None,
+        image_filename=None,
+        solution_filename=None,
+        created_by=admin_user["id"],
+    )
+
+    async with aiosqlite.connect(test_db.db_path) as db:
+        await db.execute(
+            "UPDATE bank_tasks SET created_at = ?, updated_at = ? WHERE id = ?",
+            ("2026-01-01 00:00:01", "2026-01-01 00:00:01", older_task["id"]),
+        )
+        await db.execute(
+            "UPDATE bank_tasks SET created_at = ?, updated_at = ? WHERE id = ?",
+            ("2026-01-01 00:00:02", "2026-01-01 00:00:02", newer_task["id"]),
+        )
+        await db.commit()
+
+    update_response = client.put(
+        f"/api/admin/bank/tasks/{older_task['id']}",
+        data={
+            "email": admin_user["email"],
+            "text": "Stable order older task edited",
+            "expected_current_version": "1",
+        },
+    )
+    assert update_response.status_code == 200
+
+    list_response = client.get(
+        "/api/admin/bank/tasks",
+        params={"email": admin_user["email"], "limit": 10, "offset": 0},
+    )
+    assert list_response.status_code == 200
+    listed_ids = [item["id"] for item in list_response.json()["items"]]
+    visible_pair = [task_id for task_id in listed_ids if task_id in {older_task["id"], newer_task["id"]}]
+    assert visible_pair == [newer_task["id"], older_task["id"]]
+
+
+@pytest.mark.asyncio
 async def test_admin_trial_task_update_does_not_create_bank_for_legacy_unlinked(client, test_db):
     """Legacy unlinked trial task should not create new bank task on update."""
     admin_user = await test_db.create_user_by_email("admin.legacy@example.com")

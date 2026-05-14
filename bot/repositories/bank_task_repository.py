@@ -436,13 +436,14 @@ class BankTaskRepository(BaseRepository):
                 total_row = await count_cursor.fetchone()
                 total = int(total_row[0]) if total_row else 0
 
+            order_clause = "bt.deleted_at DESC, bt.id DESC" if include_deleted else "bt.created_at DESC, bt.id DESC"
             query_params = [*params, limit, offset]
             async with db.execute(
                 f"""
                 SELECT bt.*
                 FROM bank_tasks bt
                 WHERE {where_clause}
-                ORDER BY bt.updated_at DESC, bt.id DESC
+                ORDER BY {order_clause}
                 LIMIT ? OFFSET ?
                 """,
                 query_params,
