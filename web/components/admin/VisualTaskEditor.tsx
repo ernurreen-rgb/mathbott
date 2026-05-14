@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { apiPath } from "@/lib/api";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { MCQ_OPTION_LABELS, isMcqQuestionType } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType } from "@/types";
 import { createCroppedImageFile } from "@/lib/imageCrop";
@@ -656,9 +657,12 @@ export default function VisualTaskEditor({
           )}
 
           {/* Тапсырмаға арналған басқару элементтері */}
-          {(qt === "mcq" || qt === "mcq6") && (
+          {isMcqQuestionType(qt) && (
             <div className="grid grid-cols-1 gap-2">
-              {(qt === "mcq6" ? ["A", "B", "C", "D", "E", "F"] : ["A", "B", "C", "D"]).map((label) => {
+              {(isEditing
+                ? MCQ_OPTION_LABELS
+                : (taskData.options || []).map((option: any) => option.label).filter(Boolean)
+              ).map((label: string) => {
                 const option = taskData.options?.find((o: any) => o.label === label);
                 const optionText = option?.text || "";
                 const isCorrect = taskData.answer === label;
@@ -1117,8 +1121,8 @@ export default function VisualTaskEditor({
           >
             <option value="input">Енгізу</option>
             <option value="tf">Дұрыс / Жалған</option>
-            <option value="mcq">Көп таңдаулы (4)</option>
-            <option value="mcq6">Көп таңдаулы (6)</option>
+            <option value="mcq">Көп таңдаулы (4-8)</option>
+            <option value="mcq6">Көп таңдаулы legacy</option>
             <option value="select">Сәйкестендіру</option>
             <option value="factor_grid">Factor Grid</option>
           </select>

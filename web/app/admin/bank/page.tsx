@@ -25,6 +25,7 @@ import {
   updateAdminBankTask,
 } from "@/lib/api";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { MCQ_OPTION_LABELS, McqOptionLabel, isMcqQuestionType } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import {
@@ -54,7 +55,9 @@ type BankFormState = {
   optionD: string;
   optionE: string;
   optionF: string;
-  correctOption: "A" | "B" | "C" | "D" | "E" | "F";
+  optionG: string;
+  optionH: string;
+  correctOption: McqOptionLabel;
   correctTf: "true" | "false";
   subQuestion1: string;
   subQuestion2: string;
@@ -98,6 +101,8 @@ const createEmptyForm = (): BankFormState => ({
   optionD: "",
   optionE: "",
   optionF: "",
+  optionG: "",
+  optionH: "",
   correctOption: "A",
   correctTf: "true",
   subQuestion1: "",
@@ -129,8 +134,10 @@ const parseTaskToForm = (task: BankTask): BankFormState => {
   form.optionD = options.find((o) => o.label === "D")?.text || "";
   form.optionE = options.find((o) => o.label === "E")?.text || "";
   form.optionF = options.find((o) => o.label === "F")?.text || "";
+  form.optionG = options.find((o) => o.label === "G")?.text || "";
+  form.optionH = options.find((o) => o.label === "H")?.text || "";
 
-  if (task.question_type === "mcq" || task.question_type === "mcq6") {
+  if (isMcqQuestionType(task.question_type)) {
     form.correctOption = (task.answer || "A") as BankFormState["correctOption"];
   }
   if (task.question_type === "tf") {
@@ -171,6 +178,63 @@ const formatDifficultyLabel = (difficulty: BankDifficulty): string => {
   if (difficulty === "A") return "A (оңай)";
   if (difficulty === "B") return "B (орташа)";
   return "C (қиын)";
+};
+
+const getBankFormOptionValue = (form: BankFormState, label: McqOptionLabel): string => {
+  switch (label) {
+    case "A":
+      return form.optionA;
+    case "B":
+      return form.optionB;
+    case "C":
+      return form.optionC;
+    case "D":
+      return form.optionD;
+    case "E":
+      return form.optionE;
+    case "F":
+      return form.optionF;
+    case "G":
+      return form.optionG;
+    case "H":
+      return form.optionH;
+  }
+};
+
+const setBankFormOptionValue = (
+  form: BankFormState,
+  label: McqOptionLabel,
+  value: string
+): BankFormState => {
+  switch (label) {
+    case "A":
+      return { ...form, optionA: value };
+    case "B":
+      return { ...form, optionB: value };
+    case "C":
+      return { ...form, optionC: value };
+    case "D":
+      return { ...form, optionD: value };
+    case "E":
+      return { ...form, optionE: value };
+    case "F":
+      return { ...form, optionF: value };
+    case "G":
+      return { ...form, optionG: value };
+    case "H":
+      return { ...form, optionH: value };
+  }
+};
+
+const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string; text: string }> => {
+  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
+    const value = getBankFormOptionValue(form, label).trim();
+    return value || form.correctOption === label ? Math.max(highest, index) : highest;
+  }, 3);
+  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
+    label,
+    text: getBankFormOptionValue(form, label),
+  }));
 };
 
 export default function AdminBankPage() {
@@ -556,18 +620,9 @@ export default function AdminBankPage() {
     let options: Array<{ label: string; text: string }> | null = null;
     let subquestions: Array<{ text: string; correct: string }> | null = null;
 
-    if (currentForm.question_type === "mcq" || currentForm.question_type === "mcq6") {
+    if (isMcqQuestionType(currentForm.question_type)) {
       answer = currentForm.correctOption;
-      options = [
-        { label: "A", text: currentForm.optionA },
-        { label: "B", text: currentForm.optionB },
-        { label: "C", text: currentForm.optionC },
-        { label: "D", text: currentForm.optionD },
-      ];
-      if (currentForm.question_type === "mcq6") {
-        options.push({ label: "E", text: currentForm.optionE });
-        options.push({ label: "F", text: currentForm.optionF });
-      }
+      options = buildMcqOptionsFromBankForm(currentForm);
     } else if (currentForm.question_type === "tf") {
       answer = currentForm.correctTf;
     } else if (currentForm.question_type === "select") {
@@ -1036,8 +1091,8 @@ export default function AdminBankPage() {
                       >
                         <option value="input">Енгізу</option>
                         <option value="tf">Шын/Жалған</option>
-                        <option value="mcq">MCQ (4)</option>
-                        <option value="mcq6">MCQ (6)</option>
+                        <option value="mcq">MCQ (4-8)</option>
+                        <option value="mcq6">MCQ legacy (4-8)</option>
                         <option value="select">Сәйкестендіру</option>
                         <option value="factor_grid">Factor Grid</option>
                       </select>
@@ -1139,41 +1194,25 @@ export default function AdminBankPage() {
                     </div>
                   )}
 
-                  {(form.question_type === "mcq" || form.question_type === "mcq6" || form.question_type === "select") && (
+                  {(isMcqQuestionType(form.question_type) || form.question_type === "select") && (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">A</label>
-                          <MathFieldInput value={form.optionA} onChange={(value) => setForm((prev) => ({ ...prev, optionA: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">B</label>
-                          <MathFieldInput value={form.optionB} onChange={(value) => setForm((prev) => ({ ...prev, optionB: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">C</label>
-                          <MathFieldInput value={form.optionC} onChange={(value) => setForm((prev) => ({ ...prev, optionC: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">D</label>
-                          <MathFieldInput value={form.optionD} onChange={(value) => setForm((prev) => ({ ...prev, optionD: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                        </div>
+                        {(isMcqQuestionType(form.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label, index) => (
+                          <div key={label}>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">
+                              {label}
+                              {isMcqQuestionType(form.question_type) && index >= 4 ? " (қосымша)" : ""}
+                            </label>
+                            <MathFieldInput
+                              value={getBankFormOptionValue(form, label)}
+                              onChange={(value) => setForm((prev) => setBankFormOptionValue(prev, label, value))}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            />
+                          </div>
+                        ))}
                       </div>
 
-                      {form.question_type === "mcq6" && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">E</label>
-                            <MathFieldInput value={form.optionE} onChange={(value) => setForm((prev) => ({ ...prev, optionE: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">F</label>
-                            <MathFieldInput value={form.optionF} onChange={(value) => setForm((prev) => ({ ...prev, optionF: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                          </div>
-                        </div>
-                      )}
-
-                      {(form.question_type === "mcq" || form.question_type === "mcq6") && (
+                      {isMcqQuestionType(form.question_type) && (
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
                           <select
@@ -1181,16 +1220,9 @@ export default function AdminBankPage() {
                             onChange={(e) => setForm((prev) => ({ ...prev, correctOption: e.target.value as BankFormState["correctOption"] }))}
                             className="w-full border border-gray-300 rounded-lg px-3 py-2"
                           >
-                            <option value="A">MCQ: A</option>
-                            <option value="B">MCQ: B</option>
-                            <option value="C">MCQ: C</option>
-                            <option value="D">MCQ: D</option>
-                            {form.question_type === "mcq6" && (
-                              <>
-                                <option value="E">MCQ: E</option>
-                                <option value="F">MCQ: F</option>
-                              </>
-                            )}
+                            {MCQ_OPTION_LABELS.map((label) => (
+                              <option key={label} value={label}>MCQ: {label}</option>
+                            ))}
                           </select>
                         </div>
                       )}

@@ -20,6 +20,7 @@ import {
   upsertTrialTestSlot,
 } from "@/lib/api";
 import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { MCQ_OPTION_LABELS, McqOptionLabel, isMcqQuestionType } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { BankDifficulty, BankPlacementTask, BankTask, QuestionType, TaskTextScale, TrialTest } from "@/types";
@@ -36,7 +37,9 @@ type SlotForm = {
   optionD: string;
   optionE: string;
   optionF: string;
-  correctOption: "A" | "B" | "C" | "D" | "E" | "F";
+  optionG: string;
+  optionH: string;
+  correctOption: McqOptionLabel;
   correctTf: "true" | "false";
   subQuestion1: string;
   subQuestion2: string;
@@ -61,6 +64,8 @@ const emptySlotForm = (): SlotForm => ({
   optionD: "",
   optionE: "",
   optionF: "",
+  optionG: "",
+  optionH: "",
   correctOption: "A",
   correctTf: "true",
   subQuestion1: "",
@@ -81,6 +86,59 @@ const parseTopics = (raw: string): string[] =>
     .filter(Boolean)
     .slice(0, 10);
 
+const getSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel): string => {
+  switch (label) {
+    case "A":
+      return form.optionA;
+    case "B":
+      return form.optionB;
+    case "C":
+      return form.optionC;
+    case "D":
+      return form.optionD;
+    case "E":
+      return form.optionE;
+    case "F":
+      return form.optionF;
+    case "G":
+      return form.optionG;
+    case "H":
+      return form.optionH;
+  }
+};
+
+const setSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel, value: string): SlotForm => {
+  switch (label) {
+    case "A":
+      return { ...form, optionA: value };
+    case "B":
+      return { ...form, optionB: value };
+    case "C":
+      return { ...form, optionC: value };
+    case "D":
+      return { ...form, optionD: value };
+    case "E":
+      return { ...form, optionE: value };
+    case "F":
+      return { ...form, optionF: value };
+    case "G":
+      return { ...form, optionG: value };
+    case "H":
+      return { ...form, optionH: value };
+  }
+};
+
+const buildMcqOptionsFromSlotForm = (form: SlotForm): Array<{ label: string; text: string }> => {
+  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
+    const value = getSlotFormOptionValue(form, label).trim();
+    return value || form.correctOption === label ? Math.max(highest, index) : highest;
+  }, 3);
+  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
+    label,
+    text: getSlotFormOptionValue(form, label),
+  }));
+};
+
 const buildSlotPayload = (form: SlotForm) => {
   const payload: Record<string, any> = {
     text: form.text,
@@ -98,20 +156,9 @@ const buildSlotPayload = (form: SlotForm) => {
     payload.answer = form.correctTf;
     return payload;
   }
-  if (form.question_type === "mcq" || form.question_type === "mcq6") {
+  if (isMcqQuestionType(form.question_type)) {
     payload.answer = form.correctOption;
-    payload.options = [
-      { label: "A", text: form.optionA },
-      { label: "B", text: form.optionB },
-      { label: "C", text: form.optionC },
-      { label: "D", text: form.optionD },
-      ...(form.question_type === "mcq6"
-        ? [
-            { label: "E", text: form.optionE },
-            { label: "F", text: form.optionF },
-          ]
-        : []),
-    ];
+    payload.options = buildMcqOptionsFromSlotForm(form);
     return payload;
   }
   if (form.question_type === "factor_grid") {
@@ -1068,7 +1115,7 @@ export default function AdminTrialTestsPage() {
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => setSlotForm((p) => ({ ...p, question_type: e.target.value as QuestionType }))}>
-                  <option value="mcq">MCQ(4)</option><option value="mcq6">MCQ(6)</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option><option value="factor_grid">Factor Grid</option>
+                  <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option><option value="factor_grid">Factor Grid</option>
                 </select>
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
                   <option value="A">A</option><option value="B">B</option><option value="C">C</option>
@@ -1076,14 +1123,16 @@ export default function AdminTrialTestsPage() {
                 <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Тақырыптар (үтір арқылы)" value={slotForm.topicsRaw} onChange={(e) => setSlotForm((p) => ({ ...p, topicsRaw: e.target.value }))} />
               </div>
 
-              {(slotForm.question_type === "mcq" || slotForm.question_type === "mcq6" || slotForm.question_type === "select") && (
+              {(isMcqQuestionType(slotForm.question_type) || slotForm.question_type === "select") && (
                 <div className="grid grid-cols-2 gap-2">
-                  <MathFieldInput value={slotForm.optionA} onChange={(v) => setSlotForm((p) => ({ ...p, optionA: v }))} placeholder="A" />
-                  <MathFieldInput value={slotForm.optionB} onChange={(v) => setSlotForm((p) => ({ ...p, optionB: v }))} placeholder="B" />
-                  <MathFieldInput value={slotForm.optionC} onChange={(v) => setSlotForm((p) => ({ ...p, optionC: v }))} placeholder="C" />
-                  <MathFieldInput value={slotForm.optionD} onChange={(v) => setSlotForm((p) => ({ ...p, optionD: v }))} placeholder="D" />
-                  {slotForm.question_type === "mcq6" && <MathFieldInput value={slotForm.optionE} onChange={(v) => setSlotForm((p) => ({ ...p, optionE: v }))} placeholder="E" />}
-                  {slotForm.question_type === "mcq6" && <MathFieldInput value={slotForm.optionF} onChange={(v) => setSlotForm((p) => ({ ...p, optionF: v }))} placeholder="F" />}
+                  {(isMcqQuestionType(slotForm.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
+                    <MathFieldInput
+                      key={label}
+                      value={getSlotFormOptionValue(slotForm, label)}
+                      onChange={(v) => setSlotForm((p) => setSlotFormOptionValue(p, label, v))}
+                      placeholder={label}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -1101,11 +1150,11 @@ export default function AdminTrialTestsPage() {
                   <option value="true">Шын</option><option value="false">Жалған</option>
                 </select>
               )}
-              {(slotForm.question_type === "mcq" || slotForm.question_type === "mcq6") && (
+              {isMcqQuestionType(slotForm.question_type) && (
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.correctOption} onChange={(e) => setSlotForm((p) => ({ ...p, correctOption: e.target.value as SlotForm["correctOption"] }))}>
-                  <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
-                  {slotForm.question_type === "mcq6" && <option value="E">E</option>}
-                  {slotForm.question_type === "mcq6" && <option value="F">F</option>}
+                  {MCQ_OPTION_LABELS.map((label) => (
+                    <option key={label} value={label}>{label}</option>
+                  ))}
                 </select>
               )}
               {slotForm.question_type === "select" && (

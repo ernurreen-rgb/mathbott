@@ -46,6 +46,10 @@ BANK_QUALITY_DUPLICATE_THRESHOLD_DEFAULT = 0.92
 BANK_IMPORT_LIMIT = 200
 BANK_IMPORT_PREVIEW_TOKEN_TTL_SECONDS = 15 * 60
 BANK_IMPORT_PREVIEW_TOKEN_VERSION = 1
+MCQ_QUESTION_TYPES = {"mcq", "mcq6"}
+MCQ_OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"]
+MIN_MCQ_OPTIONS = 4
+MAX_MCQ_OPTIONS = len(MCQ_OPTION_LABELS)
 BANK_AUDIT_ACTIONS = {"import_confirm", "version_delete", "rollback", "hard_delete", "role_change"}
 OPS_TIMESERIES_RANGES = {"1h": "-1 hour", "24h": "-24 hours", "7d": "-7 days"}
 OPS_TIMESERIES_STEPS = {"1m": 60, "5m": 300, "1h": 3600}
@@ -162,14 +166,31 @@ def _validate_trial_like_payload(
     if question_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported question_type: {question_type}")
 
-    if question_type in {"mcq", "mcq6", "select"} and options_list is None:
+    if question_type in {*MCQ_QUESTION_TYPES, "select"} and options_list is None:
         raise HTTPException(status_code=400, detail="options are required for this question_type")
-    if question_type == "mcq" and options_list is not None and len(options_list) != 4:
-        raise HTTPException(status_code=400, detail="mcq requires exactly 4 options")
-    if question_type == "mcq6" and options_list is not None and len(options_list) != 6:
-        raise HTTPException(status_code=400, detail="mcq6 requires exactly 6 options")
+    if question_type in MCQ_QUESTION_TYPES and options_list is not None:
+        if not MIN_MCQ_OPTIONS <= len(options_list) <= MAX_MCQ_OPTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{question_type} requires {MIN_MCQ_OPTIONS} to {MAX_MCQ_OPTIONS} options",
+            )
+        labels = [str(item.get("label") or "").strip().upper() if isinstance(item, dict) else "" for item in options_list]
+        expected = MCQ_OPTION_LABELS[: len(options_list)]
+        if labels != expected:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{question_type} options labels must be exactly {', '.join(expected)}",
+            )
     if question_type == "select" and options_list is not None and len(options_list) != 4:
         raise HTTPException(status_code=400, detail="select requires exactly 4 options")
+    if question_type == "select" and options_list is not None:
+        labels = [str(item.get("label") or "").strip().upper() if isinstance(item, dict) else "" for item in options_list]
+        expected = ["A", "B", "C", "D"]
+        if labels != expected:
+            raise HTTPException(
+                status_code=400,
+                detail=f"select options labels must be exactly {', '.join(expected)}",
+            )
 
     if question_type == "select":
         if subquestions_list is None or len(subquestions_list) != 2:
@@ -511,11 +532,15 @@ def _normalize_import_subquestions(raw_subquestions: Any, question_type: str) ->
 
 
 def _validate_option_labels_for_question_type(question_type: str, options: Optional[List[dict]]) -> None:
-    if question_type not in {"mcq", "mcq6", "select"} or options is None:
+    if question_type not in {*MCQ_QUESTION_TYPES, "select"} or options is None:
         return
     labels = [str(item.get("label") or "").strip().upper() for item in options]
-    expected = ["A", "B", "C", "D", "E", "F"] if question_type == "mcq6" else ["A", "B", "C", "D"]
-    if len(labels) != len(expected) or set(labels) != set(expected):
+    expected = (
+        MCQ_OPTION_LABELS[: len(options)]
+        if question_type in MCQ_QUESTION_TYPES
+        else ["A", "B", "C", "D"]
+    )
+    if labels != expected:
         raise ImportTaskValidationError(
             "options",
             f"{question_type} options labels must be exactly {', '.join(expected)}",
@@ -601,11 +626,17 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
         answer = _normalize_import_factor_grid_answer(raw_answer)
     elif question_type == "tf":
         answer = _normalize_import_tf_answer(raw_answer)
-    elif question_type in {"mcq", "mcq6"}:
+    elif question_type in MCQ_QUESTION_TYPES:
         answer = str(raw_answer or "").strip().upper()
         if not answer:
             raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6")
-        allowed = {"A", "B", "C", "D"} if question_type == "mcq" else {"A", "B", "C", "D", "E", "F"}
+        allowed = {
+            str(item.get("label") or "").strip().upper()
+            for item in (options or [])
+            if str(item.get("label") or "").strip()
+        }
+        if not allowed:
+            allowed = set(MCQ_OPTION_LABELS[:MIN_MCQ_OPTIONS])
         if answer not in allowed:
             raise ImportTaskValidationError(
                 "answer",

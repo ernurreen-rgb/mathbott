@@ -236,7 +236,7 @@ export interface ModuleDetails {
 }
 
 export interface LessonTaskOption {
-  label: string; // "A" | "B" | "C" | "D" | "E" | "F"
+  label: string; // "A" through "H" for MCQ, "A" through "D" for select
   text: string;
 }
 

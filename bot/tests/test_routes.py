@@ -1624,6 +1624,37 @@ async def test_admin_bank_import_dry_run_single_select_task(client, test_db):
 
 
 @pytest.mark.asyncio
+async def test_admin_bank_import_dry_run_mcq_accepts_eight_options(client, test_db):
+    admin_user = await test_db.create_user_by_email("admin.bank.import.mcq8@example.com")
+    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+
+    response = client.post(
+        "/api/admin/bank/tasks/import",
+        json={
+            "email": admin_user["email"],
+            "mode": "dry_run",
+            "tasks": {
+                "text": "Import eight-option MCQ",
+                "answer": "H",
+                "question_type": "mcq",
+                "options": [
+                    {"label": label, "text": f"Option {label}"}
+                    for label in ["A", "B", "C", "D", "E", "F", "G", "H"]
+                ],
+                "difficulty": "B",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["total_tasks"] == 1
+    assert payload["summary"]["valid_count"] == 1
+    assert payload["summary"]["invalid_count"] == 0
+    assert payload["validation_errors"] == []
+
+
+@pytest.mark.asyncio
 async def test_admin_bank_import_dry_run_mixed_validation_errors(client, test_db):
     admin_user = await test_db.create_user_by_email("admin.bank.import.dryrun.validation@example.com")
     await test_db.set_admin(email=admin_user["email"], is_admin=True)
@@ -1791,6 +1822,32 @@ async def test_admin_bank_create_factor_grid_canonicalizes_answer(client, test_d
     payload = response.json()
     assert payload["question_type"] == "factor_grid"
     assert payload["answer"] == '["2x", "-1", "x", "3"]'
+
+
+@pytest.mark.asyncio
+async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
+    admin_user = await test_db.create_user_by_email("admin.bank.mcq8@example.com")
+    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    options = [{"label": label, "text": f"Option {label}"} for label in ["A", "B", "C", "D", "E", "F", "G", "H"]]
+
+    response = client.post(
+        "/api/admin/bank/tasks",
+        data={
+            "text": "Eight option MCQ",
+            "answer": "H",
+            "question_type": "mcq",
+            "difficulty": "B",
+            "options": json.dumps(options),
+            "email": admin_user["email"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["question_type"] == "mcq"
+    assert payload["answer"] == "H"
+    assert len(payload["options"]) == 8
+    assert payload["options"][-1]["label"] == "H"
 
 
 @pytest.mark.asyncio
