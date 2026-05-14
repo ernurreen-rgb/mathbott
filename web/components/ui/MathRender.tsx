@@ -18,6 +18,11 @@ const HAS_DIGIT_RE = /\d/;
 const IS_SINGLE_LATIN_RE = /^[A-Za-z]$/;
 const TOKEN_SPLIT_RE = /(\s+)/;
 const BREAKABLE_MATH_OPERATOR_RE = /[=<>]/;
+const LATEX_ENVIRONMENT_RE = /\\begin\{[A-Za-z*]+\}/;
+const LEFT_DELIMITER_AT_END_RE = /(\\left(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.])\s*)$/;
+const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.]))/;
+
+type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
 const normalizeSpacesForMathDisplay = (value: string): string => {
   if (!value) return "";
@@ -62,7 +67,57 @@ const isMathToken = (token: string): boolean => {
   return false;
 };
 
-const splitMixedContent = (value: string): Array<{ type: "space" | "text" | "math"; value: string }> => {
+const splitLatexEnvironmentBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
+  const parts: Array<{ type: "text" | "math"; value: string }> = [];
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const beginIndex = value.indexOf("\\begin{", cursor);
+    if (beginIndex === -1) break;
+
+    const envNameStart = beginIndex + "\\begin{".length;
+    const envNameEnd = value.indexOf("}", envNameStart);
+    if (envNameEnd === -1) break;
+
+    const envName = value.slice(envNameStart, envNameEnd);
+    if (!/^[A-Za-z*]+$/.test(envName)) {
+      cursor = envNameStart;
+      continue;
+    }
+
+    const endToken = `\\end{${envName}}`;
+    const endIndex = value.indexOf(endToken, envNameEnd + 1);
+    if (endIndex === -1) break;
+
+    let mathStart = beginIndex;
+    const leftCandidate = value.slice(cursor, beginIndex).match(LEFT_DELIMITER_AT_END_RE);
+    if (leftCandidate?.index !== undefined) {
+      mathStart = cursor + leftCandidate.index;
+    }
+
+    let mathEnd = endIndex + endToken.length;
+    const rightCandidate = value.slice(mathEnd).match(RIGHT_DELIMITER_AT_START_RE);
+    if (rightCandidate) {
+      mathEnd += rightCandidate[1].length;
+    }
+
+    if (mathStart > cursor) {
+      parts.push({ type: "text", value: value.slice(cursor, mathStart) });
+    }
+    parts.push({ type: "math", value: value.slice(mathStart, mathEnd) });
+    cursor = mathEnd;
+  }
+
+  if (cursor === 0) {
+    return [{ type: "text", value }];
+  }
+  if (cursor < value.length) {
+    parts.push({ type: "text", value: value.slice(cursor) });
+  }
+  return parts;
+};
+
+const splitMixedContent = (value: string): MixedContentPart[] => {
   const parts = value.split(TOKEN_SPLIT_RE).filter((part) => part.length > 0);
   return parts.map((part) => {
     if (/^\s+$/.test(part)) {
@@ -100,6 +155,14 @@ const splitBreakableMathToken = (value: string): Array<{ type: "math" | "operato
 };
 
 const renderBreakableMathSegments = (value: string, keyPrefix: string, className?: string) => {
+  if (LATEX_ENVIRONMENT_RE.test(value)) {
+    return (
+      <math-span key={`${keyPrefix}-math-env`} className={className}>
+        {normalizeSpacesForMathDisplay(value)}
+      </math-span>
+    );
+  }
+
   const segments = splitBreakableMathToken(value);
 
   if (segments.length <= 1) {
@@ -146,7 +209,10 @@ export default function MathRender({
     wordBreak: "break-word",
     maxWidth: "100%",
   };
-  const mixedParts = splitMixedContent(normalizedLatex);
+  const protectedParts = splitLatexEnvironmentBlocks(normalizedLatex);
+  const mixedParts = protectedParts.flatMap((part) =>
+    part.type === "math" ? [{ type: "math" as const, value: part.value }] : splitMixedContent(part.value)
+  );
   const hasTextPart = mixedParts.some((part) => part.type === "text");
   const hasMathPart = mixedParts.some((part) => part.type === "math");
 
