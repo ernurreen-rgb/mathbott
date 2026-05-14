@@ -93,4 +93,14 @@ describe("MathRender", () => {
     expect(container.textContent).toContain("}-2} \u04e9\u0440\u043d\u0435\u043a\u0442\u0456");
     expect(container.textContent).toContain("\u043c\u04b1\u043d\u0434\u0430\u0493\u044b 1<x<y");
   });
+
+  it("keeps long standalone math horizontally scrollable", () => {
+    const { container } = render(
+      <MathRender latex="2\\left(x^{2}-6x+13\\right)^{\\log_{2}\\left(x+1\\right)}+\\left(x+1\\right)^{\\log_{2}\\left(x^{2}-6x+13\\right)}=3x^{3}+9x^{2}+9x+3" />
+    );
+
+    const math = container.querySelector("math-div");
+
+    expect(math).toHaveStyle({ overflowX: "auto", maxWidth: "100%" });
+  });
 });
