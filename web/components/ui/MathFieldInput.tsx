@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
+import { normalizeLatexForMathDisplay, normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 
 type MathFieldElement = HTMLElement & {
   value: string;
   mode?: "math" | "text" | "latex";
   mathModeSpace?: string;
-  getValue?: () => string;
-  setValue?: (value: string, options?: { silenceNotifications?: boolean }) => void;
+  getValue?: (format?: "latex" | "latex-expanded" | "latex-without-placeholders" | "plain-text") => string;
+  setValue?: (
+    value: string,
+    options?: {
+      silenceNotifications?: boolean;
+      mode?: "math" | "text" | "latex" | "auto";
+      format?: "latex" | "auto";
+    }
+  ) => void;
   insert?: (value: string, options?: { format?: "latex" | "ascii-math"; mode?: "math" | "text" | "latex" }) => boolean;
   executeCommand?: (selector: string | [string, ...unknown[]], ...args: unknown[]) => boolean;
   keybindings?: unknown[];
@@ -208,12 +215,11 @@ const getMathValue = (el: MathFieldElement): string => {
   return el.value || "";
 };
 
-const normalizeMathFieldOutput = (raw: string): string =>
-  normalizeLatexForMathDisplay(raw).replace(/\\text\{\s*\}/g, " ");
+const normalizeMathFieldOutput = (raw: string): string => normalizeMathFieldValueForStorage(raw);
 
 const setMathValue = (el: MathFieldElement, nextValue: string) => {
   if (typeof el.setValue === "function") {
-    el.setValue(nextValue, { silenceNotifications: true });
+    el.setValue(nextValue, { silenceNotifications: true, mode: "text", format: "latex" });
     return;
   }
   el.value = nextValue;
