@@ -18,6 +18,8 @@ const QRCode = dynamic(() => import("react-qr-code"), {
   ssr: false,
 });
 
+const COOP_TEST_UI_ENABLED = false;
+
 export default function TrialTestPage() {
   const { data: session } = useSession();
   const params = useParams();
@@ -690,14 +692,16 @@ export default function TrialTestPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={handleStartCoop}
-                disabled={creatingCoop || loadingFriends}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
-              >
-                {creatingCoop || loadingFriends ? "Жасалуда..." : "Бірлескен тест"}
-              </button>
+            <div className={`flex items-center ${COOP_TEST_UI_ENABLED ? "justify-between" : "justify-end"} mb-4`}>
+              {COOP_TEST_UI_ENABLED && (
+                <button
+                  onClick={handleStartCoop}
+                  disabled={creatingCoop || loadingFriends}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
+                >
+                  {creatingCoop || loadingFriends ? "Жасалуда..." : "Бірлескен тест"}
+                </button>
+              )}
               <button
                 onClick={handleFinishTest}
                 disabled={submitting}
