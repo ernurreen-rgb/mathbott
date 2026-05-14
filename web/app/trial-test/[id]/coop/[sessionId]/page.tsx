@@ -16,9 +16,10 @@ import {
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { API_URL } from "@/lib/constants";
-import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
+import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { getTaskMcqCorrectCount, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { LessonTask, QuestionType, TrialTestCoopSession, TrialTestDetails } from "@/types";
 
 type AnswersMap = Record<number, string>;
@@ -447,42 +448,12 @@ export default function TrialTestCoopPage() {
     );
   };
 
-  const isSelectAnswerComplete = (value?: string) => {
-    if (!value) return false;
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) && parsed.length >= 2 && parsed.every((v) => String(v).trim());
-    } catch {
-      return false;
-    }
-  };
-
-  const isFactorGridAnswerComplete = (value?: string) => isFactorGridComplete(parseFactorGridAnswer(value));
-
   const handleFinishTest = async () => {
     if (!email || !test || submitting || !coopSession) return;
     const allAnswers: Record<number, string> = {};
     test.tasks.forEach((task) => {
       const value = answers[task.id];
-      if (task.question_type === "select") {
-        if (isSelectAnswerComplete(value)) {
-          allAnswers[task.id] = value;
-        }
-        return;
-      }
-      if (task.question_type === "factor_grid") {
-        if (isFactorGridAnswerComplete(value)) {
-          allAnswers[task.id] = value;
-        }
-        return;
-      }
-      if (task.question_type === "mcq" || task.question_type === "mcq6") {
-        if (isMcqAnswerComplete(value, getTaskMcqCorrectCount(task))) {
-          allAnswers[task.id] = value;
-        }
-        return;
-      }
-      if (value) {
+      if (isTrialTaskAnswerComplete(task, value) && value != null) {
         allAnswers[task.id] = value;
       }
     });
@@ -534,15 +505,9 @@ export default function TrialTestCoopPage() {
   }
 
   const currentTask = test.tasks[currentTaskIndex];
-  const allTasksAnswered = test.tasks.every((t) => {
-    if (t.question_type === "select") {
-      return isSelectAnswerComplete(answers[t.id]);
-    }
-    if (t.question_type === "factor_grid") {
-      return isFactorGridAnswerComplete(answers[t.id]);
-    }
-    return !!answers[t.id];
-  });
+  const answeredTasksCount = getAnsweredTrialTaskCount(test.tasks, answers);
+  const answerProgress = getTrialTaskAnswerProgress(test.tasks, answers);
+  const allTasksAnswered = answeredTasksCount === test.tasks.length;
 
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
@@ -602,14 +567,14 @@ export default function TrialTestCoopPage() {
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-purple-600 h-2 rounded-full transition-all"
-                  style={{ width: `${((currentTaskIndex + 1) / test.tasks.length) * 100}%` }}
+                  style={{ width: `${answerProgress}%` }}
                 />
               </div>
             </div>
 
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
               {test.tasks.map((task, idx) => {
-                const isAnswered = !!answers[task.id];
+                const isAnswered = isTrialTaskAnswerComplete(task, answers[task.id]);
                 const isCurrent = idx === currentTaskIndex;
                 return (
                   <button

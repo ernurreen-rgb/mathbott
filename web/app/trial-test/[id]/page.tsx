@@ -9,10 +9,11 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import MathRender from "@/components/ui/MathRender";
 import { inviteFriendToCoopTest, getTrialTestDetails, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
-import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
+import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { getTaskMcqCorrectCount, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
+import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
 
 const QRCode = dynamic(() => import("react-qr-code"), {
@@ -452,33 +453,10 @@ export default function TrialTestPage() {
     );
   };
 
-  const isSelectAnswerComplete = (value?: string) => {
-    if (!value) return false;
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) && parsed.length >= 2 && parsed.every((v) => String(v).trim());
-    } catch {
-      return false;
-    }
-  };
-
-  const isFactorGridAnswerComplete = (value?: string) => isFactorGridComplete(parseFactorGridAnswer(value));
-
   const handleFinishTest = async () => {
     if (!email || !test || submitting) return;
 
-    const firstUnansweredIndex = test.tasks.findIndex((task) => {
-      if (task.question_type === "select") {
-        return !isSelectAnswerComplete(answers[task.id]);
-      }
-      if (task.question_type === "factor_grid") {
-        return !isFactorGridAnswerComplete(answers[task.id]);
-      }
-      if (task.question_type === "mcq" || task.question_type === "mcq6") {
-        return !isMcqAnswerComplete(answers[task.id], getTaskMcqCorrectCount(task));
-      }
-      return !answers[task.id];
-    });
+    const firstUnansweredIndex = test.tasks.findIndex((task) => !isTrialTaskAnswerComplete(task, answers[task.id]));
     if (firstUnansweredIndex !== -1) {
       setCurrentTaskIndexAndRef(firstUnansweredIndex);
       return;
@@ -488,25 +466,7 @@ export default function TrialTestPage() {
     const allAnswers: Record<string, string> = {};
     test.tasks.forEach((task) => {
       const value = answers[task.id];
-      if (task.question_type === "select") {
-        if (isSelectAnswerComplete(value)) {
-          allAnswers[task.id.toString()] = value;
-        }
-        return;
-      }
-      if (task.question_type === "factor_grid") {
-        if (isFactorGridAnswerComplete(value)) {
-          allAnswers[task.id.toString()] = value;
-        }
-        return;
-      }
-      if (task.question_type === "mcq" || task.question_type === "mcq6") {
-        if (isMcqAnswerComplete(value, getTaskMcqCorrectCount(task))) {
-          allAnswers[task.id.toString()] = value;
-        }
-        return;
-      }
-      if (value) {
+      if (isTrialTaskAnswerComplete(task, value) && value != null) {
         allAnswers[task.id.toString()] = value;
       }
     });
@@ -673,15 +633,9 @@ export default function TrialTestPage() {
   }
 
   const currentTask = test.tasks[currentTaskIndex];
-  const allTasksAnswered = test.tasks.every((t) => {
-    if (t.question_type === "select") {
-      return isSelectAnswerComplete(answers[t.id]);
-    }
-    if (t.question_type === "factor_grid") {
-      return isFactorGridAnswerComplete(answers[t.id]);
-    }
-    return !!answers[t.id];
-  });
+  const answeredTasksCount = getAnsweredTrialTaskCount(test.tasks, answers);
+  const answerProgress = getTrialTaskAnswerProgress(test.tasks, answers);
+  const allTasksAnswered = answeredTasksCount === test.tasks.length;
 
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
@@ -854,7 +808,7 @@ export default function TrialTestPage() {
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-purple-600 h-2 rounded-full transition-all"
-                  style={{ width: `${((currentTaskIndex + 1) / test.tasks.length) * 100}%` }}
+                  style={{ width: `${answerProgress}%` }}
                 />
               </div>
             </div>
@@ -862,7 +816,7 @@ export default function TrialTestPage() {
             {/* Task navigation */}
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
               {test.tasks.map((task, idx) => {
-                const isAnswered = !!answers[task.id];
+                const isAnswered = isTrialTaskAnswerComplete(task, answers[task.id]);
                 const isCurrent = idx === currentTaskIndex;
                 return (
                   <button
