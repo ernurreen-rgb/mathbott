@@ -24,6 +24,14 @@ const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
+const makeRenderKey = (value: string): string => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return `${value.length}-${hash >>> 0}`;
+};
+
 const normalizeSpacesForMathDisplay = (value: string): string => {
   if (!value) return "";
   const normalized = value.replace(/\\text\{\s*\}/g, "\\ ");
@@ -155,9 +163,11 @@ const splitBreakableMathToken = (value: string): Array<{ type: "math" | "operato
 };
 
 const renderBreakableMathSegments = (value: string, keyPrefix: string, className?: string) => {
+  const valueKey = makeRenderKey(value);
+
   if (LATEX_ENVIRONMENT_RE.test(value)) {
     return (
-      <math-span key={`${keyPrefix}-math-env`} className={className}>
+      <math-span key={`${keyPrefix}-math-env-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );
@@ -167,16 +177,18 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
 
   if (segments.length <= 1) {
     return (
-      <math-span key={`${keyPrefix}-math-0`} className={className}>
+      <math-span key={`${keyPrefix}-math-0-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );
   }
 
   return segments.map((segment, index) => {
+    const segmentKey = makeRenderKey(segment.value);
+
     if (segment.type === "operator") {
       return (
-        <span key={`${keyPrefix}-op-${index}`} className={className}>
+        <span key={`${keyPrefix}-op-${index}-${segmentKey}`} className={className}>
           <wbr />
           {segment.value}
           <wbr />
@@ -185,7 +197,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
     }
 
     return (
-      <math-span key={`${keyPrefix}-math-${index}`} className={className}>
+      <math-span key={`${keyPrefix}-math-${index}-${segmentKey}`} className={className}>
         {normalizeSpacesForMathDisplay(segment.value)}
       </math-span>
     );
@@ -202,6 +214,7 @@ export default function MathRender({
   }, []);
 
   const normalizedLatex = normalizeLatexForMathDisplay(latex || "");
+  const renderKey = makeRenderKey(normalizedLatex);
   const content = normalizeSpacesForMathDisplay(normalizedLatex);
   const wrapStyle: CSSProperties = {
     whiteSpace: "normal",
@@ -219,14 +232,14 @@ export default function MathRender({
   if (shouldRenderAsPlainText(normalizedLatex)) {
     if (inline) {
       return (
-        <span className={className} style={wrapStyle}>
+        <span key={`plain-inline-${renderKey}`} className={className} style={wrapStyle}>
           {normalizedLatex}
         </span>
       );
     }
 
     return (
-      <div className={className} style={wrapStyle}>
+      <div key={`plain-block-${renderKey}`} className={className} style={wrapStyle}>
         {normalizedLatex}
       </div>
     );
@@ -238,21 +251,21 @@ export default function MathRender({
         return <span key={`space-${index}`}>{part.value}</span>;
       }
       if (part.type === "text") {
-        return <span key={`text-${index}`}>{part.value}</span>;
+        return <span key={`text-${index}-${makeRenderKey(part.value)}`}>{part.value}</span>;
       }
-      return renderBreakableMathSegments(part.value, `mixed-${index}`, className);
+      return renderBreakableMathSegments(part.value, `mixed-${index}-${makeRenderKey(part.value)}`, className);
     });
 
     if (inline) {
       return (
-        <span className={className} style={wrapStyle}>
+        <span key={`mixed-inline-${renderKey}`} className={className} style={wrapStyle}>
           {contentNodes}
         </span>
       );
     }
 
     return (
-      <div className={className} style={wrapStyle}>
+      <div key={`mixed-block-${renderKey}`} className={className} style={wrapStyle}>
         {contentNodes}
       </div>
     );
@@ -262,21 +275,21 @@ export default function MathRender({
     const breakableContent = renderBreakableMathSegments(normalizedLatex, "inline", className);
     if (Array.isArray(breakableContent)) {
       return (
-        <span className={className} style={wrapStyle}>
+        <span key={`inline-wrap-${renderKey}`} className={className} style={wrapStyle}>
           {breakableContent}
         </span>
       );
     }
 
     return (
-      <math-span className={className} style={wrapStyle}>
+      <math-span key={`inline-root-${renderKey}`} className={className} style={wrapStyle}>
         {content}
       </math-span>
     );
   }
 
   return (
-    <math-div className={className} style={wrapStyle}>
+    <math-div key={`block-root-${renderKey}`} className={className} style={wrapStyle}>
       {content}
     </math-div>
   );
