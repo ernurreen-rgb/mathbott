@@ -150,6 +150,27 @@ function hasEmailSearchParam(searchParams: URLSearchParams): boolean {
   return value !== null && value.trim() !== "";
 }
 
+function pathRequiresProxyUserEmail(pathSegments: string[]): boolean {
+  const path = `/api/${pathSegments.join("/")}`;
+  const sensitivePrefixes = [
+    "/api/admin/",
+    "/api/export/admin/",
+    "/api/export/user/",
+    "/api/friends",
+    "/api/reports",
+    "/api/task/check",
+    "/api/trial-test-reports",
+    "/api/trial-tests",
+    "/api/user/onboarding",
+    "/api/user/web",
+  ];
+
+  return (
+    sensitivePrefixes.some((prefix) => path.startsWith(prefix)) ||
+    (path.startsWith("/api/tasks/") && path.endsWith("/questions/check"))
+  );
+}
+
 function redactBackendUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -236,7 +257,11 @@ async function proxyRequest(
     }
 
     const requiresProxyUserEmail =
-      isAdminPath || hasPrivatePathEmail || hasEmailSearchParam(searchParams) || bodyHasEmail;
+      isAdminPath ||
+      pathRequiresProxyUserEmail(effectivePathSegments) ||
+      hasPrivatePathEmail ||
+      hasEmailSearchParam(searchParams) ||
+      bodyHasEmail;
 
     let proxyUserEmail = "";
     if (requiresProxyUserEmail) {
