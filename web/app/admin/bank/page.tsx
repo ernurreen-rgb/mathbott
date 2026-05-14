@@ -25,7 +25,15 @@ import {
   updateAdminBankTask,
 } from "@/lib/api";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { MCQ_OPTION_LABELS, McqOptionLabel, isMcqQuestionType } from "@/lib/question-options";
+import {
+  MAX_MCQ_CORRECT_OPTIONS,
+  MCQ_OPTION_LABELS,
+  McqOptionLabel,
+  isMcqQuestionType,
+  parseMcqAnswerLabels,
+  serializeMcqAnswerLabels,
+  toggleMcqAnswerLabel,
+} from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import {
@@ -57,7 +65,7 @@ type BankFormState = {
   optionF: string;
   optionG: string;
   optionH: string;
-  correctOption: McqOptionLabel;
+  correctOptions: McqOptionLabel[];
   correctTf: "true" | "false";
   subQuestion1: string;
   subQuestion2: string;
@@ -103,7 +111,7 @@ const createEmptyForm = (): BankFormState => ({
   optionF: "",
   optionG: "",
   optionH: "",
-  correctOption: "A",
+  correctOptions: ["A"],
   correctTf: "true",
   subQuestion1: "",
   subQuestion2: "",
@@ -138,7 +146,8 @@ const parseTaskToForm = (task: BankTask): BankFormState => {
   form.optionH = options.find((o) => o.label === "H")?.text || "";
 
   if (isMcqQuestionType(task.question_type)) {
-    form.correctOption = (task.answer || "A") as BankFormState["correctOption"];
+    const correctOptions = parseMcqAnswerLabels(task.answer || "A");
+    form.correctOptions = correctOptions.length ? correctOptions : ["A"];
   }
   if (task.question_type === "tf") {
     form.correctTf = task.answer === "false" ? "false" : "true";
@@ -229,7 +238,7 @@ const setBankFormOptionValue = (
 const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string; text: string }> => {
   const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
     const value = getBankFormOptionValue(form, label).trim();
-    return value || form.correctOption === label ? Math.max(highest, index) : highest;
+    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
   }, 3);
   return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
     label,
@@ -621,7 +630,7 @@ export default function AdminBankPage() {
     let subquestions: Array<{ text: string; correct: string }> | null = null;
 
     if (isMcqQuestionType(currentForm.question_type)) {
-      answer = currentForm.correctOption;
+      answer = serializeMcqAnswerLabels(currentForm.correctOptions);
       options = buildMcqOptionsFromBankForm(currentForm);
     } else if (currentForm.question_type === "tf") {
       answer = currentForm.correctTf;
@@ -1215,15 +1224,42 @@ export default function AdminBankPage() {
                       {isMcqQuestionType(form.question_type) && (
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
-                          <select
-                            value={form.correctOption}
-                            onChange={(e) => setForm((prev) => ({ ...prev, correctOption: e.target.value as BankFormState["correctOption"] }))}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                          >
-                            {MCQ_OPTION_LABELS.map((label) => (
-                              <option key={label} value={label}>MCQ: {label}</option>
-                            ))}
-                          </select>
+                          <div className="flex flex-wrap gap-2">
+                            {MCQ_OPTION_LABELS.map((label) => {
+                              const isSelected = form.correctOptions.includes(label);
+                              return (
+                                <button
+                                  key={label}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((prev) => {
+                                      if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        correctOptions: parseMcqAnswerLabels(
+                                          toggleMcqAnswerLabel(
+                                            serializeMcqAnswerLabels(prev.correctOptions),
+                                            label,
+                                            MAX_MCQ_CORRECT_OPTIONS
+                                          )
+                                        ),
+                                      };
+                                    })
+                                  }
+                                  className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-bold ${
+                                    isSelected
+                                      ? "border-purple-700 bg-purple-600 text-white"
+                                      : "border-gray-300 bg-white text-gray-800 hover:border-purple-300 hover:bg-purple-50"
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</p>
                         </div>
                       )}
                     </>

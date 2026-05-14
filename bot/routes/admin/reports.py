@@ -49,8 +49,8 @@ async def _update_task_from_report_common(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
 
-    if question_type == "factor_grid":
-        answer = _normalize_factor_grid_answer_or_raise(answer)
+    _validate_trial_like_payload(question_type, options_list, subquestions_list)
+    answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
     text_scale_value = _normalize_text_scale(text_scale)
     image_filename = await save_image_upload(image) if image else None
 

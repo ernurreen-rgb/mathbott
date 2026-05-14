@@ -250,6 +250,7 @@ export interface LessonTask {
   text: string;
   answer?: string;
   question_type: QuestionType;
+  correct_count?: number | null;
   text_scale?: TaskTextScale | null;
   options?: LessonTaskOption[] | null;
   subquestions?: LessonTaskSubquestion[] | null;

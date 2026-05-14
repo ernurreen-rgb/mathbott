@@ -8,6 +8,7 @@ import MobileNav from "@/components/MobileNav";
 import { getLessonDetails } from "@/lib/api";
 import { API_URL } from "@/lib/constants";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { formatMcqAnswerLabels, getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
 import { showToast } from "@/lib/toast";
@@ -219,7 +220,9 @@ export default function LessonPage() {
         // Quietly refresh lesson progress without showing the full-page loader
         void fetchLesson({ silent: true });
       } else {
-        const correctText = data.correct_answer ? `Дұрыс жауап: ${data.correct_answer}` : "Қате";
+        const isMcqTask = task.question_type === "mcq" || task.question_type === "mcq6";
+        const formattedCorrectAnswer = isMcqTask ? formatMcqAnswerLabels(data.correct_answer || "") : data.correct_answer;
+        const correctText = formattedCorrectAnswer ? `Дұрыс жауап: ${formattedCorrectAnswer}` : "Қате";
         setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: correctText } }));
         // Save correct answer even if wrong
         if (data.correct_answer) {
@@ -434,43 +437,63 @@ export default function LessonPage() {
     if (qt === "mcq" || qt === "mcq6") {
       const opts = task.options || [];
       const selectedAnswer = selectedAnswers[task.id];
+      const currentAnswer = selectedAnswer ?? answers[task.id];
       const correctAnswer = correctAnswers[task.id];
+      const requiredCount = getTaskMcqCorrectCount(task);
+      const selectedLabels = parseMcqAnswerLabels(currentAnswer);
+      const correctLabels = parseMcqAnswerLabels(correctAnswer);
       const isAnswered = selectedAnswer !== undefined;
       const isCompleted = task.status === "completed";
 
       return (
-        <div className="grid grid-cols-1 gap-2">
-          {opts.map((o) => {
-            const isSelected = isAnswered && selectedAnswer === o.label;
-            const isCorrect = correctAnswer === o.label;
-            const isWrong = isSelected && !isCorrect;
+        <div className="space-y-2">
+          {requiredCount > 1 && !isAnswered && !isCompleted && (
+            <div className="text-sm font-semibold text-purple-700">
+              {requiredCount} дұрыс жауап таңдаңыз
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2">
+            {opts.map((o) => {
+              const label = o.label as any;
+              const isSelected = selectedLabels.includes(label);
+              const isCorrect = correctLabels.includes(label);
+              const isWrong = isAnswered && isSelected && !isCorrect;
 
-            return (
-              <button
-                key={o.label}
-                onClick={() => submitCheck(task, o.label)}
-                disabled={!!checking[task.id] || isCompleted}
-                className={`text-left border rounded-lg p-3 transition-colors ${
-                  isSelected && isCorrect
-                    ? "bg-green-600 border-green-700 text-white"
-                    : isWrong
-                    ? "bg-red-600 border-red-700 text-white"
-                    : isAnswered && isCorrect
-                    ? "bg-green-600 border-green-700 text-white"
-                    : isCompleted
-                    ? "border-gray-200 bg-gray-100"
-                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
-                }`}
-              >
-                <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-700"}`}>
-                  <span className={`font-bold shrink-0 ${isSelected && isCorrect || isAnswered && isCorrect ? "text-white" : isWrong ? "text-white" : "text-gray-900"}`}>
-                    {o.label}
-                  </span>
-                  <span className="min-w-0 break-words whitespace-normal">{o.text}</span>
-                </div>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={o.label}
+                  onClick={() => {
+                    const nextAnswer = toggleMcqAnswerLabel(currentAnswer, label, requiredCount);
+                    setAnswers((m) => ({ ...m, [task.id]: nextAnswer }));
+                    if (isMcqAnswerComplete(nextAnswer, requiredCount)) {
+                      submitCheck(task, nextAnswer);
+                    }
+                  }}
+                  disabled={!!checking[task.id] || isCompleted}
+                  className={`text-left border rounded-lg p-3 transition-colors ${
+                    isAnswered && isSelected && isCorrect
+                      ? "bg-green-600 border-green-700 text-white"
+                      : isWrong
+                      ? "bg-red-600 border-red-700 text-white"
+                      : isAnswered && isCorrect
+                      ? "bg-green-600 border-green-700 text-white"
+                      : isSelected
+                      ? "bg-purple-600 border-purple-700 text-white"
+                      : isCompleted
+                      ? "border-gray-200 bg-gray-100"
+                      : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
+                  }`}
+                >
+                  <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected || (isAnswered && isCorrect) ? "text-white" : "text-gray-700"}`}>
+                    <span className={`font-bold shrink-0 ${isSelected || (isAnswered && isCorrect) ? "text-white" : "text-gray-900"}`}>
+                      {o.label}
+                    </span>
+                    <span className="min-w-0 break-words whitespace-normal">{o.text}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }

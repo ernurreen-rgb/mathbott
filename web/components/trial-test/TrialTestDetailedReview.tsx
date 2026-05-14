@@ -5,6 +5,7 @@ import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api";
 import { normalizeFactorGridRows, parseFactorGridAnswer } from "@/lib/factor-grid";
+import { parseMcqAnswerLabels } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
 
@@ -170,6 +171,8 @@ export default function TrialTestDetailedReview({
   const isCorrect = isReviewResultActuallyCorrect(task, resultAnswer);
   const userUpper = String(userAnswerRaw).trim().toUpperCase();
   const correctUpper = String(correctAnswer).trim().toUpperCase();
+  const userMcqLabels = parseMcqAnswerLabels(userAnswerRaw);
+  const correctMcqLabels = parseMcqAnswerLabels(correctAnswer);
 
   const renderAnswerBlock = () => {
     if (qt === "mcq" || qt === "mcq6") {
@@ -178,8 +181,8 @@ export default function TrialTestDetailedReview({
         <div className="grid grid-cols-1 gap-2 mt-2">
           {options.map((option) => {
             const labelUpper = (option.label || "").trim().toUpperCase();
-            const isUserChoice = labelUpper === userUpper;
-            const isCorrectOption = labelUpper === correctUpper;
+            const isUserChoice = userMcqLabels.includes(labelUpper as any);
+            const isCorrectOption = correctMcqLabels.includes(labelUpper as any);
             let style = "bg-gray-50 border-gray-200";
             if (isUserChoice && isCorrect) style = "bg-green-100 border-green-500";
             else if (isUserChoice && !isCorrect) style = "bg-red-100 border-red-500";

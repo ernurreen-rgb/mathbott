@@ -17,6 +17,7 @@ import {
 import { showToast } from "@/lib/toast";
 import { API_URL } from "@/lib/constants";
 import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType, TrialTestCoopSession, TrialTestDetails } from "@/types";
 
@@ -354,6 +355,9 @@ export default function TrialTestCoopPage() {
       const opts = task.options || [];
       const currentAnswer = answers[task.id];
       const otherAnswer = otherUserId ? otherAnswers[otherUserId]?.[task.id] : undefined;
+      const requiredCount = getTaskMcqCorrectCount(task);
+      const selectedLabels = parseMcqAnswerLabels(currentAnswer);
+      const otherSelectedLabels = parseMcqAnswerLabels(otherAnswer);
 
       const localSelectedClass =
         currentColor === "red"
@@ -363,32 +367,41 @@ export default function TrialTestCoopPage() {
         otherColor === "red" ? "ring-2 ring-red-400" : "ring-2 ring-blue-400";
 
       return (
-        <div className="grid grid-cols-1 gap-2">
-          {opts.map((o) => {
-            const isSelected = currentAnswer === o.label;
-            const isOtherSelected = otherAnswer === o.label;
-            return (
-              <button
-                key={`${task.id}-${o.label}`}
-                onClick={() => {
-                  setAnswers((m) => ({ ...m, [task.id]: o.label }));
-                  sendAnswerUpdate(task.id, o.label);
-                }}
-                className={`text-left border rounded-lg p-3 transition-colors ${
-                  isSelected
-                    ? localSelectedClass
-                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
-                } ${isOtherSelected ? otherSelectedClass : ""}`}
-              >
-                <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
-                  <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
-                  <div className="min-w-0 break-words whitespace-normal">
-                    <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+        <div className="space-y-2">
+          {requiredCount > 1 && (
+            <div className="text-sm font-semibold text-purple-700">
+              {requiredCount} дұрыс жауап таңдаңыз
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2">
+            {opts.map((o) => {
+              const label = o.label as any;
+              const isSelected = selectedLabels.includes(label);
+              const isOtherSelected = otherSelectedLabels.includes(label);
+              return (
+                <button
+                  key={`${task.id}-${o.label}`}
+                  onClick={() => {
+                    const nextAnswer = toggleMcqAnswerLabel(currentAnswer, label, requiredCount);
+                    setAnswers((m) => ({ ...m, [task.id]: nextAnswer }));
+                    sendAnswerUpdate(task.id, nextAnswer);
+                  }}
+                  className={`text-left border rounded-lg p-3 transition-colors ${
+                    isSelected
+                      ? localSelectedClass
+                      : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
+                  } ${isOtherSelected ? otherSelectedClass : ""}`}
+                >
+                  <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
+                    <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
+                    <div className="min-w-0 break-words whitespace-normal">
+                      <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }
@@ -464,6 +477,12 @@ export default function TrialTestCoopPage() {
       }
       if (task.question_type === "factor_grid") {
         if (isFactorGridAnswerComplete(value)) {
+          allAnswers[task.id] = value;
+        }
+        return;
+      }
+      if (task.question_type === "mcq" || task.question_type === "mcq6") {
+        if (isMcqAnswerComplete(value, getTaskMcqCorrectCount(task))) {
           allAnswers[task.id] = value;
         }
         return;

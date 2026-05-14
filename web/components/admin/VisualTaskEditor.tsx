@@ -4,7 +4,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { apiPath } from "@/lib/api";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { MCQ_OPTION_LABELS, isMcqQuestionType } from "@/lib/question-options";
+import {
+  MAX_MCQ_CORRECT_OPTIONS,
+  MCQ_OPTION_LABELS,
+  isMcqQuestionType,
+  parseMcqAnswerLabels,
+  toggleMcqAnswerLabel,
+} from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType } from "@/types";
 import { createCroppedImageFile } from "@/lib/imageCrop";
@@ -184,7 +190,7 @@ export default function VisualTaskEditor({
       text: "",
       question_type: "mcq",
       text_scale: "md",
-      answer: "",
+      answer: "A",
       sort_order: tasks.length,
       options: undefined,
       subquestions: undefined,
@@ -210,11 +216,6 @@ export default function VisualTaskEditor({
       taskToSave.removeImage = false;
     } else if (removeImage) {
       taskToSave.removeImage = true;
-    }
-    
-    // For MCQ, answer should be the label (A, B, C, or D)
-    if (taskToSave.question_type === "mcq") {
-      // answer is already set correctly
     }
     
     // For select, answer should be JSON array of correct answers
@@ -665,8 +666,16 @@ export default function VisualTaskEditor({
               ).map((label: string) => {
                 const option = taskData.options?.find((o: any) => o.label === label);
                 const optionText = option?.text || "";
-                const isCorrect = taskData.answer === label;
+                const correctLabels = parseMcqAnswerLabels(String(taskData.answer || ""));
+                const isCorrect = correctLabels.includes(label as any);
                 const isEditingOption = isEditing && editingField === `option-${label}`;
+                const toggleCorrectAnswer = () => {
+                  const current = String(taskData.answer || "");
+                  if (isCorrect && correctLabels.length <= 1) return;
+                  updateTempTask({
+                    answer: toggleMcqAnswerLabel(current, label as any, MAX_MCQ_CORRECT_OPTIONS),
+                  });
+                };
 
                 return (
                   <div key={label}>
@@ -692,7 +701,7 @@ export default function VisualTaskEditor({
                         />
                         <button
                           onClick={() => {
-                            updateTempTask({ answer: label });
+                            toggleCorrectAnswer();
                             setEditingField(null);
                           }}
                           className={`w-full text-xs px-2 py-1 rounded ${
@@ -711,7 +720,7 @@ export default function VisualTaskEditor({
                             if (editingField === null) {
                               setEditingField(`option-${label}`);
                             } else {
-                              updateTempTask({ answer: label });
+                              toggleCorrectAnswer();
                             }
                           }
                         }}

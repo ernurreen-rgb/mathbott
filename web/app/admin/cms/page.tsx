@@ -7,6 +7,14 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import VisualTaskEditor from "@/components/admin/VisualTaskEditor";
 import MathRender from "@/components/ui/MathRender";
+import {
+  MAX_MCQ_CORRECT_OPTIONS,
+  MCQ_OPTION_LABELS,
+  McqOptionLabel,
+  parseMcqAnswerLabels,
+  serializeMcqAnswerLabels,
+  toggleMcqAnswerLabel,
+} from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { TaskTextScale } from "@/types";
@@ -167,7 +175,7 @@ export default function CMSPage() {
     optionD: "",
     optionE: "",
     optionF: "",
-    correctOption: "A" as "A" | "B" | "C" | "D" | "E" | "F",
+    correctOptions: ["A"] as McqOptionLabel[],
     correctTf: "true" as "true" | "false",
     subQuestion1: "",
     subQuestion2: "",
@@ -197,7 +205,7 @@ export default function CMSPage() {
     optionD: "",
     optionE: "",
     optionF: "",
-    correctOption: "A" as "A" | "B" | "C" | "D" | "E" | "F",
+    correctOptions: ["A"] as McqOptionLabel[],
     correctTf: "true" as "true" | "false",
     subQuestion1: "",
     subQuestion2: "",
@@ -556,7 +564,7 @@ export default function CMSPage() {
             : []),
         ];
         formData.append("options", JSON.stringify(options));
-        formData.append("answer", taskForm.correctOption);
+        formData.append("answer", serializeMcqAnswerLabels(taskForm.correctOptions));
       } else if (taskForm.question_type === "select") {
         if (!taskForm.subQuestion1.trim() || !taskForm.subQuestion2.trim()) {
           setError("select үшін екі қосымша сұрақ мәтінін енгізіңіз");
@@ -609,7 +617,7 @@ export default function CMSPage() {
         optionD: "",
         optionE: "",
         optionF: "",
-        correctOption: "A",
+        correctOptions: ["A"],
         correctTf: "true",
         subQuestion1: "",
         subQuestion2: "",
@@ -767,10 +775,10 @@ export default function CMSPage() {
       }
     }
 
-    const correctOption =
+    const correctOptions: McqOptionLabel[] =
       (task.question_type || "input") === "mcq" || (task.question_type || "input") === "mcq6"
-        ? ((task.answer || "A") as any)
-        : "A";
+        ? parseMcqAnswerLabels(task.answer || "A")
+        : ["A"];
     const fallbackDifficulty = (task as any)?.bank_task?.difficulty;
     const fallbackTopics = Array.isArray((task as any)?.bank_task?.topics) ? (task as any).bank_task.topics : [];
     const fallbackTextScale = normalizeTaskTextScale(
@@ -793,7 +801,7 @@ export default function CMSPage() {
       optionD,
       optionE,
       optionF,
-      correctOption,
+      correctOptions: correctOptions.length ? correctOptions : ["A"],
       correctTf: (task.answer === "false" ? "false" : "true") as any,
       subQuestion1,
       subQuestion2,
@@ -820,7 +828,7 @@ export default function CMSPage() {
       optionD: "",
       optionE: "",
       optionF: "",
-      correctOption: "A",
+      correctOptions: ["A"],
       correctTf: "true",
       subQuestion1: "",
       subQuestion2: "",
@@ -858,7 +866,7 @@ export default function CMSPage() {
           : []),
       ];
       formData.append("options", JSON.stringify(options));
-      formData.append("answer", editTaskForm.correctOption);
+      formData.append("answer", serializeMcqAnswerLabels(editTaskForm.correctOptions));
     } else if (editTaskForm.question_type === "select") {
       if (!editTaskForm.subQuestion1.trim() || !editTaskForm.subQuestion2.trim()) {
         setError("select үшін екі қосымша сұрақ мәтінін енгізіңіз");
@@ -1900,22 +1908,37 @@ export default function CMSPage() {
                                     <option value="false">Қате</option>
                                   </select>
                                 ) : taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" ? (
-                                  <select
-                                    value={taskForm.correctOption}
-                                    onChange={(e) => setTaskForm({ ...taskForm, correctOption: e.target.value as any })}
-                                    className="p-2 rounded border"
-                                  >
-                                    <option value="A">Дұрыс: A</option>
-                                    <option value="B">Дұрыс: B</option>
-                                    <option value="C">Дұрыс: C</option>
-                                    <option value="D">Дұрыс: D</option>
-                                    {taskForm.question_type === "mcq6" && (
-                                      <>
-                                        <option value="E">Дұрыс: E</option>
-                                        <option value="F">Дұрыс: F</option>
-                                      </>
-                                    )}
-                                  </select>
+                                  <div className="flex flex-wrap gap-2">
+                                    {MCQ_OPTION_LABELS.slice(0, taskForm.question_type === "mcq6" ? 6 : 4).map((label) => {
+                                      const isSelected = taskForm.correctOptions.includes(label);
+                                      return (
+                                        <button
+                                          key={label}
+                                          type="button"
+                                          onClick={() =>
+                                            setTaskForm((prev) => {
+                                              if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) return prev;
+                                              return {
+                                                ...prev,
+                                                correctOptions: parseMcqAnswerLabels(
+                                                  toggleMcqAnswerLabel(
+                                                    serializeMcqAnswerLabels(prev.correctOptions),
+                                                    label,
+                                                    MAX_MCQ_CORRECT_OPTIONS
+                                                  )
+                                                ),
+                                              };
+                                            })
+                                          }
+                                          className={`h-9 min-w-9 rounded border px-2 text-sm font-bold ${
+                                            isSelected ? "border-purple-700 bg-purple-600 text-white" : "border-gray-300 bg-white text-gray-800"
+                                          }`}
+                                        >
+                                          {label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 ) : (
                                   <input
                                     value={taskForm.answer}
@@ -2140,22 +2163,37 @@ export default function CMSPage() {
                                               <option value="false">Жалған</option>
                                             </select>
                                           ) : editTaskForm.question_type === "mcq" || editTaskForm.question_type === "mcq6" ? (
-                                            <select
-                                              value={editTaskForm.correctOption}
-                                              onChange={(e) => setEditTaskForm({ ...editTaskForm, correctOption: e.target.value as any })}
-                                              className="p-2 rounded border text-sm"
-                                            >
-                                              <option value="A">A</option>
-                                              <option value="B">B</option>
-                                              <option value="C">C</option>
-                                              <option value="D">D</option>
-                                              {editTaskForm.question_type === "mcq6" && (
-                                                <>
-                                                  <option value="E">E</option>
-                                                  <option value="F">F</option>
-                                                </>
-                                              )}
-                                            </select>
+                                            <div className="flex flex-wrap gap-2">
+                                              {MCQ_OPTION_LABELS.slice(0, editTaskForm.question_type === "mcq6" ? 6 : 4).map((label) => {
+                                                const isSelected = editTaskForm.correctOptions.includes(label);
+                                                return (
+                                                  <button
+                                                    key={label}
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setEditTaskForm((prev) => {
+                                                        if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) return prev;
+                                                        return {
+                                                          ...prev,
+                                                          correctOptions: parseMcqAnswerLabels(
+                                                            toggleMcqAnswerLabel(
+                                                              serializeMcqAnswerLabels(prev.correctOptions),
+                                                              label,
+                                                              MAX_MCQ_CORRECT_OPTIONS
+                                                            )
+                                                          ),
+                                                        };
+                                                      })
+                                                    }
+                                                    className={`h-9 min-w-9 rounded border px-2 text-sm font-bold ${
+                                                      isSelected ? "border-purple-700 bg-purple-600 text-white" : "border-gray-300 bg-white text-gray-800"
+                                                    }`}
+                                                  >
+                                                    {label}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
                                           ) : (
                                             <input
                                               value={editTaskForm.answer}

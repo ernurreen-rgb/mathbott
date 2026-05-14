@@ -117,8 +117,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
 
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
-        if question_type == "factor_grid":
-            answer = _normalize_factor_grid_answer_or_raise(answer)
+        answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
         text_scale_value = _normalize_text_scale(text_scale)
 
         image_filename = await save_image_upload(image) if image else None
@@ -206,8 +205,12 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             effective_subquestions,
         )
         effective_answer = answer if answer is not None else task.get("answer", "")
-        if effective_question_type == "factor_grid":
-            effective_answer = _normalize_factor_grid_answer_or_raise(effective_answer)
+        if effective_question_type in MCQ_QUESTION_TYPES or effective_question_type == "factor_grid":
+            effective_answer = _normalize_trial_like_answer_or_raise(
+                effective_question_type,
+                effective_answer,
+                effective_options if isinstance(effective_options, list) else None,
+            )
             answer = effective_answer
 
         text_scale_value = _normalize_text_scale(text_scale) if text_scale is not None else None
@@ -570,8 +573,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             else:
                 effective_qt = question_type or "input"
                 _validate_trial_like_payload(effective_qt, options_list, subquestions_list)
-                if effective_qt == "factor_grid":
-                    answer = _normalize_factor_grid_answer_or_raise(answer)
+                answer = _normalize_trial_like_answer_or_raise(effective_qt, answer, options_list)
                 text_scale_value = _normalize_text_scale(text_scale)
                 difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty else "B"
                 topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=[]) or []
@@ -756,8 +758,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             image_filename = None
         else:
             _validate_trial_like_payload(question_type, options_list, subquestions_list)
-            if question_type == "factor_grid":
-                answer = _normalize_factor_grid_answer_or_raise(answer)
+            answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
             text_scale_value = _normalize_text_scale(text_scale)
             difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty else "B"
             topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=[]) or []

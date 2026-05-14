@@ -514,8 +514,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         options_list = _parse_options_json(options)
         subquestions_list = _parse_subquestions_json(subquestions)
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
-        if question_type == "factor_grid":
-            answer = _normalize_factor_grid_answer_or_raise(answer)
+        answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         parsed_topics = []
         if topics is not None and topics.strip():
@@ -590,8 +589,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             effective_subquestions,
         )
         effective_answer = answer if answer is not None else existing.get("answer", "")
-        if effective_question_type == "factor_grid":
-            effective_answer = _normalize_factor_grid_answer_or_raise(effective_answer)
+        if effective_question_type in MCQ_QUESTION_TYPES or effective_question_type == "factor_grid":
+            effective_answer = _normalize_trial_like_answer_or_raise(
+                effective_question_type,
+                effective_answer,
+                effective_options if isinstance(effective_options, list) else None,
+            )
             answer = effective_answer
 
         text_scale_value = _normalize_text_scale(text_scale) if text_scale is not None else None

@@ -58,6 +58,12 @@ def _map_answers(rows):
     return result
 
 
+def _answer_to_string(value) -> str:
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return "" if value is None else str(value)
+
+
 def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = CoopConnectionManager()
 
@@ -197,9 +203,11 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
 
             for task in tasks:
                 task_id = task["id"]
-                user_answer = answers.get(str(task_id), answers.get(int(task_id), "")).strip()
+                user_answer = _answer_to_string(
+                    answers.get(str(task_id), answers.get(int(task_id), ""))
+                ).strip()
 
-                correct_answer = task.get("answer", "").strip()
+                correct_answer = _answer_to_string(task.get("answer", "")).strip()
                 user_normalized = normalize_task_answer_for_compare(task, user_answer)
                 correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
                 is_correct = user_normalized == correct_normalized

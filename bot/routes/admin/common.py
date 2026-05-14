@@ -33,7 +33,15 @@ from dependencies import (
 from database import Database
 from repositories.bank_task_repository import BankTaskVersionConflictError, BankTaskVersionDeleteError
 from repositories.user_repository import AdminRoleConflictError, LastSuperAdminError
-from utils.validation import canonicalize_factor_grid_answer, validate_email, validate_string_length, sanitize_html
+from utils.validation import (
+    MAX_MCQ_CORRECT_OPTIONS,
+    canonicalize_factor_grid_answer,
+    parse_mcq_answer_labels,
+    serialize_mcq_answer_labels,
+    validate_email,
+    validate_string_length,
+    sanitize_html,
+)
 from utils.file_storage import delete_image_file, normalize_stored_image_filename, save_image_upload
 from utils.metrics import metrics
 
@@ -222,6 +230,51 @@ def _normalize_factor_grid_answer_or_raise(raw_answer: Any) -> str:
         return canonicalize_factor_grid_answer(raw_answer)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+def _get_allowed_mcq_answer_labels(options_list: Optional[List[dict]]) -> List[str]:
+    labels = [
+        str(item.get("label") or "").strip().upper()
+        for item in (options_list or [])
+        if isinstance(item, dict) and str(item.get("label") or "").strip()
+    ]
+    return labels or MCQ_OPTION_LABELS[:MIN_MCQ_OPTIONS]
+
+
+def _normalize_mcq_answer_or_raise(
+    raw_answer: Any,
+    options_list: Optional[List[dict]],
+    question_type: str,
+) -> str:
+    labels = parse_mcq_answer_labels(raw_answer)
+    if not labels:
+        raise HTTPException(status_code=400, detail="answer is required for mcq/mcq6")
+    if len(labels) > MAX_MCQ_CORRECT_OPTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{question_type} answer can contain at most {MAX_MCQ_CORRECT_OPTIONS} correct options",
+        )
+
+    allowed = _get_allowed_mcq_answer_labels(options_list)
+    invalid = [label for label in labels if label not in allowed]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{question_type} answer must use only {', '.join(allowed)}",
+        )
+    return serialize_mcq_answer_labels(labels)
+
+
+def _normalize_trial_like_answer_or_raise(
+    question_type: str,
+    raw_answer: Any,
+    options_list: Optional[List[dict]],
+) -> str:
+    if question_type in MCQ_QUESTION_TYPES:
+        return _normalize_mcq_answer_or_raise(raw_answer, options_list, question_type)
+    if question_type == "factor_grid":
+        return _normalize_factor_grid_answer_or_raise(raw_answer)
+    return str(raw_answer or "")
 
 
 def _parse_bool_flag(raw_value: Optional[str]) -> bool:
@@ -470,6 +523,30 @@ def _normalize_import_factor_grid_answer(raw_answer: Any) -> str:
         raise ImportTaskValidationError("answer", str(exc))
 
 
+def _normalize_import_mcq_answer(
+    raw_answer: Any,
+    options: Optional[List[dict]],
+    question_type: str,
+) -> str:
+    labels = parse_mcq_answer_labels(raw_answer)
+    if not labels:
+        raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6")
+    if len(labels) > MAX_MCQ_CORRECT_OPTIONS:
+        raise ImportTaskValidationError(
+            "answer",
+            f"{question_type} answer can contain at most {MAX_MCQ_CORRECT_OPTIONS} correct options",
+        )
+
+    allowed = _get_allowed_mcq_answer_labels(options)
+    invalid = [label for label in labels if label not in allowed]
+    if invalid:
+        raise ImportTaskValidationError(
+            "answer",
+            f"{question_type} answer must use only {', '.join(allowed)}",
+        )
+    return serialize_mcq_answer_labels(labels)
+
+
 def _normalize_import_options(raw_options: Any) -> Optional[List[dict]]:
     if raw_options is None:
         return None
@@ -627,25 +704,7 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     elif question_type == "tf":
         answer = _normalize_import_tf_answer(raw_answer)
     elif question_type in MCQ_QUESTION_TYPES:
-        answer = str(raw_answer or "").strip().upper()
-        if not answer:
-            raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6")
-        allowed = {
-            str(item.get("label") or "").strip().upper()
-            for item in (options or [])
-            if str(item.get("label") or "").strip()
-        }
-        if not allowed:
-            allowed = set(MCQ_OPTION_LABELS[:MIN_MCQ_OPTIONS])
-        if answer not in allowed:
-            raise ImportTaskValidationError(
-                "answer",
-                f"{question_type} answer must be one of {', '.join(sorted(allowed))}",
-            )
-        if options:
-            option_labels = {str(item.get("label") or "").strip().upper() for item in options}
-            if answer not in option_labels:
-                raise ImportTaskValidationError("answer", "answer must match one of options labels")
+        answer = _normalize_import_mcq_answer(raw_answer, options, question_type)
     else:
         answer = str(raw_answer or "")
         if not answer.strip():

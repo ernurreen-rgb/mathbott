@@ -20,7 +20,15 @@ import {
   upsertTrialTestSlot,
 } from "@/lib/api";
 import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { MCQ_OPTION_LABELS, McqOptionLabel, isMcqQuestionType } from "@/lib/question-options";
+import {
+  MAX_MCQ_CORRECT_OPTIONS,
+  MCQ_OPTION_LABELS,
+  McqOptionLabel,
+  isMcqQuestionType,
+  parseMcqAnswerLabels,
+  serializeMcqAnswerLabels,
+  toggleMcqAnswerLabel,
+} from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { BankDifficulty, BankPlacementTask, BankTask, QuestionType, TaskTextScale, TrialTest } from "@/types";
@@ -39,7 +47,7 @@ type SlotForm = {
   optionF: string;
   optionG: string;
   optionH: string;
-  correctOption: McqOptionLabel;
+  correctOptions: McqOptionLabel[];
   correctTf: "true" | "false";
   subQuestion1: string;
   subQuestion2: string;
@@ -66,7 +74,7 @@ const emptySlotForm = (): SlotForm => ({
   optionF: "",
   optionG: "",
   optionH: "",
-  correctOption: "A",
+  correctOptions: ["A"],
   correctTf: "true",
   subQuestion1: "",
   subQuestion2: "",
@@ -131,7 +139,7 @@ const setSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel, value: st
 const buildMcqOptionsFromSlotForm = (form: SlotForm): Array<{ label: string; text: string }> => {
   const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
     const value = getSlotFormOptionValue(form, label).trim();
-    return value || form.correctOption === label ? Math.max(highest, index) : highest;
+    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
   }, 3);
   return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
     label,
@@ -157,7 +165,7 @@ const buildSlotPayload = (form: SlotForm) => {
     return payload;
   }
   if (isMcqQuestionType(form.question_type)) {
-    payload.answer = form.correctOption;
+    payload.answer = serializeMcqAnswerLabels(form.correctOptions);
     payload.options = buildMcqOptionsFromSlotForm(form);
     return payload;
   }
@@ -633,16 +641,22 @@ export default function AdminTrialTestsPage() {
     }
 
     if (questionType === "mcq" || questionType === "mcq6") {
+      const selectedLabels = parseMcqAnswerLabels(value);
       return (
         <div className="grid grid-cols-1 gap-2">
           {options.map((option, optionIndex) => {
             const label = String(option?.label || "");
-            const isSelected = value === label;
+            const isSelected = selectedLabels.includes(label as McqOptionLabel);
             return (
               <button
                 key={`slot-${currentSlotIndex}-option-${optionIndex}`}
                 type="button"
-                onClick={() => setPreviewAnswer(currentSlotIndex, label)}
+                onClick={() =>
+                  setPreviewAnswer(
+                    currentSlotIndex,
+                    toggleMcqAnswerLabel(value, label as McqOptionLabel, MAX_MCQ_CORRECT_OPTIONS)
+                  )
+                }
                 className={`text-left border rounded-lg p-3 transition-colors ${
                   isSelected
                     ? "bg-purple-600 border-purple-700 text-white"
@@ -1151,11 +1165,44 @@ export default function AdminTrialTestsPage() {
                 </select>
               )}
               {isMcqQuestionType(slotForm.question_type) && (
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.correctOption} onChange={(e) => setSlotForm((p) => ({ ...p, correctOption: e.target.value as SlotForm["correctOption"] }))}>
-                  {MCQ_OPTION_LABELS.map((label) => (
-                    <option key={label} value={label}>{label}</option>
-                  ))}
-                </select>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap gap-2">
+                    {MCQ_OPTION_LABELS.map((label) => {
+                      const isSelected = slotForm.correctOptions.includes(label);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() =>
+                            setSlotForm((prev) => {
+                              if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) {
+                                return prev;
+                              }
+                              return {
+                                ...prev,
+                                correctOptions: parseMcqAnswerLabels(
+                                  toggleMcqAnswerLabel(
+                                    serializeMcqAnswerLabels(prev.correctOptions),
+                                    label,
+                                    MAX_MCQ_CORRECT_OPTIONS
+                                  )
+                                ),
+                              };
+                            })
+                          }
+                          className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-bold ${
+                            isSelected
+                              ? "border-purple-700 bg-purple-600 text-white"
+                              : "border-gray-300 bg-white text-gray-800 hover:border-purple-300 hover:bg-purple-50"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</div>
+                </div>
               )}
               {slotForm.question_type === "select" && (
                 <div className="grid grid-cols-2 gap-2">

@@ -9,6 +9,9 @@ from utils.scoring import build_reward_identity, normalize_difficulty_code, poin
 from utils.internal_proxy_auth import build_ws_token, verify_ws_token
 from utils.validation import (
     canonicalize_factor_grid_answer,
+    get_mcq_answer_count,
+    parse_mcq_answer_labels,
+    serialize_mcq_answer_labels,
     validate_email,
     validate_string_length,
     sanitize_html,
@@ -71,6 +74,12 @@ def test_normalize_task_answer_for_compare():
     # MCQ should be uppercase
     task_mcq = {"question_type": "mcq", "answer": "A"}
     assert normalize_task_answer_for_compare(task_mcq, "a") == "A"
+
+    # MCQ with multiple correct labels should be order-insensitive
+    task_mcq_multi = {"question_type": "mcq", "answer": '["A","C","E"]'}
+    assert normalize_task_answer_for_compare(task_mcq_multi, '["E","A","C"]') == '["A", "C", "E"]'
+    assert normalize_task_answer_for_compare(task_mcq_multi, "e,a,c") == '["A", "C", "E"]'
+    assert normalize_task_answer_for_compare(task_mcq_multi, "A,C") != normalize_task_answer_for_compare(task_mcq_multi, "A,B")
     
     # True/False should be lowercase
     task_tf = {"question_type": "tf", "answer": "true"}
@@ -98,6 +107,15 @@ def test_factor_grid_invalid_payload_rejected():
 
     with pytest.raises(ValueError, match="exactly 4 items"):
         canonicalize_factor_grid_answer('["2x","-1","x"]')
+
+
+def test_mcq_answer_label_helpers():
+    assert parse_mcq_answer_labels("a,c,a") == ["A", "C"]
+    assert parse_mcq_answer_labels('["B","D"]') == ["B", "D"]
+    assert serialize_mcq_answer_labels(["A"]) == "A"
+    assert serialize_mcq_answer_labels(["A", "C"]) == '["A", "C"]'
+    assert get_mcq_answer_count('["A","C","E"]') == 3
+    assert get_mcq_answer_count("") == 1
 
 
 def test_normalize_text_scale():

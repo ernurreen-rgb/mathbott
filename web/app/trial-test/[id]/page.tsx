@@ -10,6 +10,7 @@ import MobileNav from "@/components/MobileNav";
 import MathRender from "@/components/ui/MathRender";
 import { inviteFriendToCoopTest, getTrialTestDetails, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
+import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
 import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
@@ -365,31 +366,46 @@ export default function TrialTestPage() {
     if (qt === "mcq" || qt === "mcq6") {
       const opts = task.options || [];
       const currentAnswer = answers[task.id];
+      const requiredCount = getTaskMcqCorrectCount(task);
+      const selectedLabels = parseMcqAnswerLabels(currentAnswer);
 
       return (
-        <div className="grid grid-cols-1 gap-2">
-          {opts.map((o) => {
-            const isSelected = currentAnswer === o.label;
+        <div className="space-y-2">
+          {requiredCount > 1 && (
+            <div className="text-sm font-semibold text-purple-700">
+              {requiredCount} дұрыс жауап таңдаңыз
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2">
+            {opts.map((o) => {
+              const label = o.label as any;
+              const isSelected = selectedLabels.includes(label);
 
-            return (
-              <button
-                key={`${task.id}-${o.label}`}
-                onClick={() => setAnswersAndRef((m) => ({ ...m, [task.id]: o.label }))}
-                className={`text-left border rounded-lg p-3 transition-colors ${
-                  isSelected
-                    ? "bg-purple-600 border-purple-700 text-white"
-                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
-                }`}
-              >
-                <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
-                  <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
-                  <div className="min-w-0 break-words whitespace-normal">
-                    <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+              return (
+                <button
+                  key={`${task.id}-${o.label}`}
+                  onClick={() =>
+                    setAnswersAndRef((m) => ({
+                      ...m,
+                      [task.id]: toggleMcqAnswerLabel(m[task.id], label, requiredCount),
+                    }))
+                  }
+                  className={`text-left border rounded-lg p-3 transition-colors ${
+                    isSelected
+                      ? "bg-purple-600 border-purple-700 text-white"
+                      : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
+                  }`}
+                >
+                  <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
+                    <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
+                    <div className="min-w-0 break-words whitespace-normal">
+                      <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }
@@ -463,6 +479,9 @@ export default function TrialTestPage() {
       if (task.question_type === "factor_grid") {
         return !isFactorGridAnswerComplete(answers[task.id]);
       }
+      if (task.question_type === "mcq" || task.question_type === "mcq6") {
+        return !isMcqAnswerComplete(answers[task.id], getTaskMcqCorrectCount(task));
+      }
       return !answers[task.id];
     });
     if (firstUnansweredIndex !== -1) {
@@ -482,6 +501,12 @@ export default function TrialTestPage() {
       }
       if (task.question_type === "factor_grid") {
         if (isFactorGridAnswerComplete(value)) {
+          allAnswers[task.id.toString()] = value;
+        }
+        return;
+      }
+      if (task.question_type === "mcq" || task.question_type === "mcq6") {
+        if (isMcqAnswerComplete(value, getTaskMcqCorrectCount(task))) {
           allAnswers[task.id.toString()] = value;
         }
         return;

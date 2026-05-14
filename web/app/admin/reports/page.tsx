@@ -7,6 +7,14 @@ import Link from "next/link";
 import { apiPath, updateAdminReportTask } from "@/lib/api";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
+import {
+  MAX_MCQ_CORRECT_OPTIONS,
+  MCQ_OPTION_LABELS,
+  McqOptionLabel,
+  parseMcqAnswerLabels,
+  serializeMcqAnswerLabels,
+  toggleMcqAnswerLabel,
+} from "@/lib/question-options";
 import { showToast } from "@/lib/toast";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 
@@ -61,7 +69,7 @@ function ReportsPageContent() {
     optionD: "",
     optionE: "",
     optionF: "",
-    correctOption: "A" as "A" | "B" | "C" | "D" | "E" | "F",
+    correctOptions: ["A"] as McqOptionLabel[],
     correctTf: "true" as "true" | "false",
   });
 
@@ -181,7 +189,7 @@ function ReportsPageContent() {
       optionD: "",
       optionE: "",
       optionF: "",
-      correctOption: "A",
+      correctOptions: parseMcqAnswerLabels(report.task_answer || "A"),
       correctTf: report.task_question_type === "tf" ? (report.task_answer === "true" ? "true" : "false") : "true",
     });
   };
@@ -212,7 +220,7 @@ function ReportsPageContent() {
         ];
         formData.append("options", JSON.stringify(options));
         // Update answer to be the correct option label
-        formData.set("answer", taskForm.correctOption);
+        formData.set("answer", serializeMcqAnswerLabels(taskForm.correctOptions));
       } else if (taskForm.question_type === "tf") {
         formData.set("answer", taskForm.correctTf);
       }
@@ -646,22 +654,37 @@ function ReportsPageContent() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Дұрыс жауап
                       </label>
-                      <select
-                        value={taskForm.correctOption}
-                        onChange={(e) => setTaskForm({ ...taskForm, correctOption: e.target.value as any })}
-                        className="border border-gray-300 rounded-md px-3 py-2 text-sm"
-                      >
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        {taskForm.question_type === "mcq6" && (
-                          <>
-                            <option value="E">E</option>
-                            <option value="F">F</option>
-                          </>
-                        )}
-                      </select>
+                      <div className="flex flex-wrap gap-2">
+                        {MCQ_OPTION_LABELS.slice(0, taskForm.question_type === "mcq6" ? 6 : 4).map((label) => {
+                          const isSelected = taskForm.correctOptions.includes(label);
+                          return (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() =>
+                                setTaskForm((prev) => {
+                                  if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) return prev;
+                                  return {
+                                    ...prev,
+                                    correctOptions: parseMcqAnswerLabels(
+                                      toggleMcqAnswerLabel(
+                                        serializeMcqAnswerLabels(prev.correctOptions),
+                                        label,
+                                        MAX_MCQ_CORRECT_OPTIONS
+                                      )
+                                    ),
+                                  };
+                                })
+                              }
+                              className={`h-9 min-w-9 rounded border px-2 text-sm font-bold ${
+                                isSelected ? "border-purple-700 bg-purple-600 text-white" : "border-gray-300 bg-white text-gray-800"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}

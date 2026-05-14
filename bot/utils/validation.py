@@ -5,6 +5,9 @@ import json
 import re
 from typing import Any, List, Optional
 
+MCQ_ANSWER_LABELS = tuple("ABCDEFGH")
+MAX_MCQ_CORRECT_OPTIONS = 3
+
 _MATH_CHAR_TRANSLATION = str.maketrans({
     "\u2212": "-",
     "\u2013": "-",
@@ -110,12 +113,69 @@ def canonicalize_factor_grid_answer(raw_answer: Any) -> str:
     return json.dumps(flattened, ensure_ascii=False)
 
 
-def normalize_task_answer_for_compare(task: dict, user_answer: str) -> str:
+def parse_mcq_answer_labels(raw_answer: Any) -> List[str]:
+    if raw_answer is None:
+        return []
+
+    if isinstance(raw_answer, list):
+        values = raw_answer
+    elif isinstance(raw_answer, str):
+        text = raw_answer.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            values = parsed if isinstance(parsed, list) else [parsed]
+        except Exception:
+            if re.search(r"[,;|]", text):
+                values = re.split(r"[,;|]", text)
+            elif re.fullmatch(r"[A-Ha-h](?:\s+[A-Ha-h]){1,7}", text):
+                values = re.split(r"\s+", text)
+            else:
+                values = [text]
+    else:
+        values = [raw_answer]
+
+    labels: List[str] = []
+    seen: set[str] = set()
+    for item in values:
+        label = str(item or "").strip().upper()
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+    return labels
+
+
+def serialize_mcq_answer_labels(raw_answer: Any) -> str:
+    labels = parse_mcq_answer_labels(raw_answer)
+    if not labels:
+        return ""
+    if len(labels) == 1:
+        return labels[0]
+    return json.dumps(labels, ensure_ascii=False)
+
+
+def get_mcq_answer_count(raw_answer: Any) -> int:
+    labels = parse_mcq_answer_labels(raw_answer)
+    if not labels:
+        return 1
+    return min(len(labels), MAX_MCQ_CORRECT_OPTIONS)
+
+
+def _normalize_mcq_answer_for_compare(raw_answer: Any) -> str:
+    labels = parse_mcq_answer_labels(raw_answer)
+    if len(labels) <= 1:
+        return labels[0] if labels else ""
+    return json.dumps(sorted(labels), ensure_ascii=False)
+
+
+def normalize_task_answer_for_compare(task: dict, user_answer: Any) -> str:
     """Normalize user answer depending on task type (mcq/tf/input)."""
     qt = (task.get("question_type") or "input").strip().lower()
-    ans = (user_answer or "").strip()
+    ans = "" if user_answer is None else str(user_answer).strip()
     if qt in {"mcq", "mcq6"}:
-        return ans.upper()
+        return _normalize_mcq_answer_for_compare(user_answer)
     if qt == "select":
         try:
             parsed = json.loads(ans) if ans else []

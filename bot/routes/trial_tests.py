@@ -12,7 +12,7 @@ from dependencies import get_db
 from database import Database
 from utils.cache import cache
 from utils.scoring import build_reward_identity
-from utils.validation import normalize_task_answer_for_compare
+from utils.validation import get_mcq_answer_count, normalize_task_answer_for_compare
 
 logger = logging.getLogger(__name__)
 _trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
@@ -26,6 +26,12 @@ def _get_trial_test_write_lock(user_id: int, test_id: int) -> asyncio.Lock:
         lock = asyncio.Lock()
         _trial_test_write_locks[key] = lock
     return lock
+
+
+def _answer_to_string(value) -> str:
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return "" if value is None else str(value)
 
 
 def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -131,6 +137,11 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         "id": t.get("id"),
                         "text": t.get("text", ""),
                         "question_type": t.get("question_type", "input"),
+                        "correct_count": (
+                            get_mcq_answer_count(t.get("answer"))
+                            if (t.get("question_type") or "input") in {"mcq", "mcq6"}
+                            else 1
+                        ),
                         "text_scale": t.get("text_scale", "md"),
                         "options": options,
                         "subquestions": subquestions,
@@ -191,9 +202,11 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
                 for task in tasks:
                     task_id = task["id"]
-                    user_answer = answers.get(str(task_id), answers.get(int(task_id), "")).strip()
+                    user_answer = _answer_to_string(
+                        answers.get(str(task_id), answers.get(int(task_id), ""))
+                    ).strip()
 
-                    correct_answer = task.get("answer", "").strip()
+                    correct_answer = _answer_to_string(task.get("answer", "")).strip()
 
                     user_normalized = normalize_task_answer_for_compare(task, user_answer)
                     correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
@@ -324,7 +337,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 try:
                     key = int(k) if not isinstance(k, int) else k
                     if v is not None and v != "":
-                        answers_int[key] = str(v)
+                        answers_int[key] = _answer_to_string(v)
                 except (TypeError, ValueError):
                     continue
             async with _get_trial_test_write_lock(user["id"], test_id):

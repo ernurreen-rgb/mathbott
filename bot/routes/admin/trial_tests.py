@@ -181,8 +181,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 subquestions_list = raw_subquestions if isinstance(raw_subquestions, list) else None
 
             _validate_trial_like_payload(question_type, options_list, subquestions_list)
-            if question_type == "factor_grid":
-                answer = _normalize_factor_grid_answer_or_raise(answer)
+            answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
             difficulty_value = _validate_bank_difficulty(payload.get("bank_difficulty") or "B")
             raw_topics = payload.get("bank_topics")
@@ -293,6 +292,9 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
         logger.info("Parsed subquestions (trial test create): %s", subquestions_list)
 
+        _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
+
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty else "B"
         text_scale_value = _normalize_text_scale(text_scale)
         topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=[]) or []
@@ -399,6 +401,9 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
         logger.info("Parsed subquestions (trial test %s): %s", source_label, subquestions_list)
+
+        _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
         text_scale_value = _normalize_text_scale(text_scale)
