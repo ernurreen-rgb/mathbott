@@ -32,11 +32,30 @@ def _normalize_email(value: object) -> Optional[str]:
     return normalized or None
 
 
+def _is_email_path_segment(value: object) -> bool:
+    normalized = _normalize_email(value)
+    if normalized is None:
+        return False
+    return "@" in normalized and "." in normalized.rsplit("@", 1)[-1]
+
+
 def _private_email_from_path(path: str) -> Optional[str]:
     parts = [unquote(part) for part in path.split("/") if part]
-    if len(parts) >= 4 and parts[0] == "api" and parts[1] == "user" and parts[2] == "web":
+    if (
+        len(parts) >= 4
+        and parts[0] == "api"
+        and parts[1] == "user"
+        and parts[2] == "web"
+        and _is_email_path_segment(parts[3])
+    ):
         return _normalize_email(parts[3])
-    if len(parts) >= 4 and parts[0] == "api" and parts[1] == "export" and parts[2] == "user":
+    if (
+        len(parts) >= 4
+        and parts[0] == "api"
+        and parts[1] == "export"
+        and parts[2] == "user"
+        and _is_email_path_segment(parts[3])
+    ):
         return _normalize_email(parts[3])
     return None
 

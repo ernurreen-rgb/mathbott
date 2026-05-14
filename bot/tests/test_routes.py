@@ -79,6 +79,33 @@ def test_trusted_proxy_identity_allows_matching_private_route(client, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_trusted_proxy_identity_allows_nickname_endpoint(client, test_db, test_user, monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+
+    response = client.post(
+        "/api/user/web/nickname",
+        headers=_proxy_headers(
+            "POST",
+            "/api/user/web/nickname",
+            "",
+            test_user["email"],
+            secret,
+        ),
+        json={
+            "email": test_user["email"],
+            "nickname": "ProxyNick",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    user = await test_db.get_user_by_email(test_user["email"])
+    assert user["nickname"] == "ProxyNick"
+
+
+@pytest.mark.asyncio
 async def test_get_task_by_id(client, test_db, test_user):
     """Test getting task by ID"""
     # Create task
