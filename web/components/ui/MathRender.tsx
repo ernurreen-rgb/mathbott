@@ -400,6 +400,82 @@ const splitPairedLeftRightBlocks = (value: string): Array<{ type: "text" | "math
   return parts;
 };
 
+const findNextTopLevelLatexCommand = (value: string, start: number): number => {
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let cursor = start;
+
+  while (cursor < value.length) {
+    const char = value[cursor];
+    const previous = cursor > 0 ? value[cursor - 1] : "";
+
+    if (previous !== "\\") {
+      if (char === "{") {
+        braceDepth += 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "}" && braceDepth > 0) {
+        braceDepth -= 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "[") {
+        bracketDepth += 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "]" && bracketDepth > 0) {
+        bracketDepth -= 1;
+        cursor += 1;
+        continue;
+      }
+    }
+
+    if (braceDepth === 0 && bracketDepth === 0 && char === "\\") {
+      const next = value[cursor + 1];
+      if (next && /[A-Za-z]/.test(next)) {
+        return cursor;
+      }
+    }
+
+    cursor += 1;
+  }
+
+  return -1;
+};
+
+const splitTopLevelLatexCommandBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
+  const parts: Array<{ type: "text" | "math"; value: string }> = [];
+  let cursor = 0;
+  let found = false;
+
+  while (cursor < value.length) {
+    const commandStart = findNextTopLevelLatexCommand(value, cursor);
+    if (commandStart === -1) break;
+
+    let commandEnd = consumeLatexCommand(value, commandStart);
+    while (value[commandEnd] === "\\") {
+      commandEnd = consumeLatexCommand(value, commandEnd);
+    }
+
+    found = true;
+    if (commandStart > cursor) {
+      parts.push({ type: "text", value: value.slice(cursor, commandStart) });
+    }
+    parts.push({ type: "math", value: value.slice(commandStart, commandEnd) });
+    cursor = commandEnd;
+  }
+
+  if (!found) {
+    return [{ type: "text", value }];
+  }
+  if (cursor < value.length) {
+    parts.push({ type: "text", value: value.slice(cursor) });
+  }
+  return parts;
+};
+
 const splitLatexEnvironmentBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
   const parts: Array<{ type: "text" | "math"; value: string }> = [];
   let cursor = 0;
@@ -458,6 +534,29 @@ const splitMixedContent = (value: string): MixedContentPart[] => {
     }
     return mergeAdjacentMathParts(splitEmbeddedMath(part));
   });
+};
+
+const needsImplicitBoundarySpace = (left: MixedContentPart, right: MixedContentPart): boolean => {
+  if (left.type === "space" || right.type === "space") return false;
+  if (left.type === right.type) return false;
+
+  const textPart = left.type === "text" ? left : right.type === "text" ? right : null;
+  if (!textPart) return false;
+  return HAS_CYRILLIC_RE.test(textPart.value);
+};
+
+const addImplicitBoundarySpaces = (parts: MixedContentPart[]): MixedContentPart[] => {
+  const spaced: MixedContentPart[] = [];
+
+  for (const part of parts) {
+    const previous = spaced[spaced.length - 1];
+    if (previous && needsImplicitBoundarySpace(previous, part)) {
+      spaced.push({ type: "space", value: " " });
+    }
+    spaced.push(part);
+  }
+
+  return spaced;
 };
 
 const splitBreakableMathToken = (value: string): Array<{ type: "math" | "operator"; value: string }> => {
@@ -557,9 +656,13 @@ export default function MathRender({
   const delimiterProtectedParts = protectedParts.flatMap((part) =>
     part.type === "math" ? [part] : splitPairedLeftRightBlocks(part.value)
   );
-  const mixedParts = delimiterProtectedParts.flatMap((part) =>
+  const commandProtectedParts = delimiterProtectedParts.flatMap((part) =>
+    part.type === "math" ? [part] : splitTopLevelLatexCommandBlocks(part.value)
+  );
+  const rawMixedParts = commandProtectedParts.flatMap((part) =>
     part.type === "math" ? [{ type: "math" as const, value: part.value }] : splitMixedContent(part.value)
   );
+  const mixedParts = addImplicitBoundarySpaces(mergeAdjacentMathParts(rawMixedParts));
   const hasTextPart = mixedParts.some((part) => part.type === "text");
   const hasMathPart = mixedParts.some((part) => part.type === "math");
 

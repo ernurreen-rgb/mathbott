@@ -22,9 +22,8 @@ describe("MathRender", () => {
     const mathSpans = Array.from(container.querySelectorAll("math-span"));
 
     expect(container).toHaveTextContent(prompt);
-    expect(mathSpans.some((span) => span.textContent?.includes("\\right|\\le"))).toBe(false);
     expect(mathSpans[0]).toHaveTextContent("\\left|2\\cos\\ x\\right|");
-    expect(mathSpans[1]).toHaveTextContent("\\le");
+    expect(mathSpans[0]).toHaveTextContent("\\le1");
   });
 
   it("renders glued relation and function commands as math", () => {
@@ -77,5 +76,21 @@ describe("MathRender", () => {
     expect(mathText).toContain("\\frac{2}{\\left|x-2\\right|}");
     expect(textSpans.some((span) => span.textContent?.includes("\\frac{2}{"))).toBe(false);
     expect(mathText).toContain("\\ge\\left|\\frac{-3}{2x-1}\\right|");
+  });
+
+  it("keeps long sqrt commands with spaces intact and separates attached text", () => {
+    const text =
+      "\u04e9\u0440\u043d\u0435\u043a\u0442\u0456 \u044b\u049b\u0448\u0430\u043c\u0434\u0430 \u043c\u04b1\u043d\u0434\u0430\u0493\u044b";
+    const latex = `\\sqrt{\\sqrt{\\log_{x}^{4} y+\\log_{y}^{4} x+2}-2}${text}1<x<y`;
+
+    const { container } = render(<MathRender latex={latex} />);
+    const mathText = Array.from(container.querySelectorAll("math-span"))
+      .map((span) => span.textContent || "")
+      .join("");
+
+    expect(mathText).toContain("\\sqrt{\\sqrt{\\log_{x}^{4}\\ y+\\log_{y}^{4}\\ x+2}-2}");
+    expect(mathText).toContain("1<x<y");
+    expect(container.textContent).toContain("}-2} \u04e9\u0440\u043d\u0435\u043a\u0442\u0456");
+    expect(container.textContent).toContain("\u043c\u04b1\u043d\u0434\u0430\u0493\u044b 1<x<y");
   });
 });
