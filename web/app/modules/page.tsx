@@ -185,7 +185,7 @@ export default function ModulesPage() {
               {!MODULES_UI_ENABLED && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/25 backdrop-blur-[2px]">
                   <div className="text-3xl sm:text-4xl font-bold text-gray-900 drop-shadow-sm">
-                    В разработке
+                    Жасалуда
                   </div>
                 </div>
               )}
