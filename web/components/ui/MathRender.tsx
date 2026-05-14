@@ -299,6 +299,48 @@ const findNextStandaloneLatexCommand = (
   return -1;
 };
 
+const findNextTopLevelStandaloneLeft = (value: string, start: number): number => {
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let cursor = start;
+
+  while (cursor < value.length) {
+    const char = value[cursor];
+    const previous = cursor > 0 ? value[cursor - 1] : "";
+
+    if (previous !== "\\") {
+      if (char === "{") {
+        braceDepth += 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "}" && braceDepth > 0) {
+        braceDepth -= 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "[") {
+        bracketDepth += 1;
+        cursor += 1;
+        continue;
+      }
+      if (char === "]" && bracketDepth > 0) {
+        bracketDepth -= 1;
+        cursor += 1;
+        continue;
+      }
+    }
+
+    if (braceDepth === 0 && bracketDepth === 0 && isStandaloneLatexCommandAt(value, cursor, "left")) {
+      return cursor;
+    }
+
+    cursor += 1;
+  }
+
+  return -1;
+};
+
 const findPairedRightDelimiterEnd = (value: string, leftStart: number): number => {
   let depth = 1;
   let cursor = consumeLatexDelimiter(value, leftStart + "\\left".length);
@@ -332,7 +374,7 @@ const splitPairedLeftRightBlocks = (value: string): Array<{ type: "text" | "math
   let found = false;
 
   while (cursor < value.length) {
-    const leftIndex = findNextStandaloneLatexCommand(value, "left", cursor);
+    const leftIndex = findNextTopLevelStandaloneLeft(value, cursor);
     if (leftIndex === -1) break;
 
     const rightEnd = findPairedRightDelimiterEnd(value, leftIndex);

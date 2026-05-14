@@ -62,4 +62,20 @@ describe("MathRender", () => {
     expect(mathSpans[0].textContent).toContain("x+y=");
     expect(mathSpans[0].textContent).toContain("sigma_{1}");
   });
+
+  it("keeps left/right delimiters inside fractions attached to the fraction", () => {
+    const prompt = "\u0422\u0435\u04a3\u0441\u0456\u0437\u0434\u0456\u043a\u0442\u0456 \u0448\u0435\u0448\u0456\u04a3\u0456\u0437:";
+
+    const { container } = render(
+      <MathRender latex={`${prompt} \\frac{2}{\\left|x-2\\right|}\\ge\\left|\\frac{-3}{2x-1}\\right|`} />
+    );
+    const mathText = Array.from(container.querySelectorAll("math-span"))
+      .map((span) => span.textContent || "")
+      .join("");
+    const textSpans = Array.from(container.querySelectorAll("span"));
+
+    expect(mathText).toContain("\\frac{2}{\\left|x-2\\right|}");
+    expect(textSpans.some((span) => span.textContent?.includes("\\frac{2}{"))).toBe(false);
+    expect(mathText).toContain("\\ge\\left|\\frac{-3}{2x-1}\\right|");
+  });
 });
