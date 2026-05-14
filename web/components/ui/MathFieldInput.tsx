@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { normalizeLatexForMathDisplay, normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
+import {
+  hasMathLiveTextEscapes,
+  normalizeLatexForMathDisplay,
+  normalizeMathFieldValueForStorage,
+} from "@/lib/math-normalize";
 
 type MathFieldElement = HTMLElement & {
   value: string;
@@ -12,8 +16,6 @@ type MathFieldElement = HTMLElement & {
     value: string,
     options?: {
       silenceNotifications?: boolean;
-      mode?: "math" | "text" | "latex" | "auto";
-      format?: "latex" | "auto";
     }
   ) => void;
   insert?: (value: string, options?: { format?: "latex" | "ascii-math"; mode?: "math" | "text" | "latex" }) => boolean;
@@ -219,7 +221,7 @@ const normalizeMathFieldOutput = (raw: string): string => normalizeMathFieldValu
 
 const setMathValue = (el: MathFieldElement, nextValue: string) => {
   if (typeof el.setValue === "function") {
-    el.setValue(nextValue, { silenceNotifications: true, mode: "text", format: "latex" });
+    el.setValue(nextValue, { silenceNotifications: true });
     return;
   }
   el.value = nextValue;
@@ -335,9 +337,10 @@ export default function MathFieldInput({
     const el = fieldRef.current;
     if (!el) return;
 
-    const current = normalizeMathFieldOutput(getMathValue(el));
+    const rawCurrent = getMathValue(el);
+    const current = normalizeMathFieldOutput(rawCurrent);
     const next = normalizeLatexForMathDisplay(value || "");
-    if (current !== normalizeMathFieldOutput(next)) {
+    if (current !== normalizeMathFieldOutput(next) || hasMathLiveTextEscapes(rawCurrent)) {
       setMathValue(el, next);
     }
     if (next !== (value || "")) {
