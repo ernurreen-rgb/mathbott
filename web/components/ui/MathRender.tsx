@@ -21,6 +21,7 @@ const BREAKABLE_MATH_OPERATOR_RE = /[=<>]/;
 const LATEX_ENVIRONMENT_RE = /\\begin\{[A-Za-z*]+\}/;
 const LEFT_DELIMITER_AT_END_RE = /(\\left(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.])\s*)$/;
 const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.]))/;
+const LATEX_COMMAND_NAME_RE = /^[A-Za-z]+/;
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
@@ -75,6 +76,99 @@ const isMathToken = (token: string): boolean => {
   return false;
 };
 
+const findBalancedGroupEnd = (value: string, start: number, open: string, close: string): number => {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    const previous = index > 0 ? value[index - 1] : "";
+    if (char === open && previous !== "\\") {
+      depth += 1;
+    } else if (char === close && previous !== "\\") {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return start + 1;
+};
+
+const consumeLatexDelimiter = (value: string, start: number): number => {
+  let cursor = start;
+  while (cursor < value.length && /\s/.test(value[cursor])) cursor += 1;
+  if (cursor >= value.length) return cursor;
+
+  if (value[cursor] === "\\") {
+    cursor += 1;
+    const command = value.slice(cursor).match(LATEX_COMMAND_NAME_RE)?.[0];
+    if (command) return cursor + command.length;
+    return Math.min(cursor + 1, value.length);
+  }
+
+  return cursor + 1;
+};
+
+const consumeLatexCommand = (value: string, start: number): number => {
+  if (value[start] !== "\\") return start + 1;
+
+  let cursor = start + 1;
+  const command = value.slice(cursor).match(LATEX_COMMAND_NAME_RE)?.[0];
+  if (command) {
+    cursor += command.length;
+  } else {
+    cursor = Math.min(cursor + 1, value.length);
+  }
+
+  if (command === "left") {
+    cursor = consumeLatexDelimiter(value, cursor);
+    const rightIndex = value.indexOf("\\right", cursor);
+    if (rightIndex !== -1) {
+      return consumeLatexDelimiter(value, rightIndex + "\\right".length);
+    }
+  } else if (command === "right") {
+    return consumeLatexDelimiter(value, cursor);
+  }
+
+  while (cursor < value.length && (value[cursor] === "[" || value[cursor] === "{")) {
+    cursor = findBalancedGroupEnd(value, cursor, value[cursor], value[cursor] === "[" ? "]" : "}");
+  }
+
+  return cursor;
+};
+
+const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
+  if (!HAS_LATEX_COMMAND_RE.test(value)) {
+    return [isMathToken(value) ? { type: "math", value } : { type: "text", value }];
+  }
+
+  const parts: MixedContentPart[] = [];
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const commandStart = value.indexOf("\\", cursor);
+    if (commandStart === -1) {
+      const text = value.slice(cursor);
+      if (text) {
+        parts.push(isMathToken(text) ? { type: "math", value: text } : { type: "text", value: text });
+      }
+      break;
+    }
+
+    if (commandStart > cursor) {
+      const text = value.slice(cursor, commandStart);
+      parts.push(isMathToken(text) ? { type: "math", value: text } : { type: "text", value: text });
+    }
+
+    let mathEnd = consumeLatexCommand(value, commandStart);
+    while (value[mathEnd] === "\\") {
+      mathEnd = consumeLatexCommand(value, mathEnd);
+    }
+
+    parts.push({ type: "math", value: value.slice(commandStart, mathEnd) });
+    cursor = mathEnd;
+  }
+
+  return parts;
+};
+
 const splitLatexEnvironmentBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
   const parts: Array<{ type: "text" | "math"; value: string }> = [];
   let cursor = 0;
@@ -127,13 +221,11 @@ const splitLatexEnvironmentBlocks = (value: string): Array<{ type: "text" | "mat
 
 const splitMixedContent = (value: string): MixedContentPart[] => {
   const parts = value.split(TOKEN_SPLIT_RE).filter((part) => part.length > 0);
-  return parts.map((part) => {
+  return parts.flatMap((part) => {
     if (/^\s+$/.test(part)) {
-      return { type: "space" as const, value: part };
+      return [{ type: "space" as const, value: part }];
     }
-    return isMathToken(part)
-      ? { type: "math" as const, value: part }
-      : { type: "text" as const, value: part };
+    return splitEmbeddedLatexCommands(part);
   });
 };
 
