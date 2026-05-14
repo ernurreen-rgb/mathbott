@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
 
 type MathFieldElement = HTMLElement & {
   value: string;
@@ -207,7 +208,8 @@ const getMathValue = (el: MathFieldElement): string => {
   return el.value || "";
 };
 
-const normalizeMathFieldOutput = (raw: string): string => raw.replace(/\\text\{\s*\}/g, " ");
+const normalizeMathFieldOutput = (raw: string): string =>
+  normalizeLatexForMathDisplay(raw).replace(/\\text\{\s*\}/g, " ");
 
 const setMathValue = (el: MathFieldElement, nextValue: string) => {
   if (typeof el.setValue === "function") {
@@ -328,9 +330,12 @@ export default function MathFieldInput({
     if (!el) return;
 
     const current = normalizeMathFieldOutput(getMathValue(el));
-    const next = value || "";
+    const next = normalizeLatexForMathDisplay(value || "");
     if (current !== normalizeMathFieldOutput(next)) {
       setMathValue(el, next);
+    }
+    if (next !== (value || "")) {
+      onChangeRef.current(next);
     }
   }, [value]);
 

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
+import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
 
 interface MathRenderProps {
   latex?: string | null;
@@ -137,29 +138,30 @@ export default function MathRender({
     void import("mathlive");
   }, []);
 
-  const content = normalizeSpacesForMathDisplay(latex || "");
+  const normalizedLatex = normalizeLatexForMathDisplay(latex || "");
+  const content = normalizeSpacesForMathDisplay(normalizedLatex);
   const wrapStyle: CSSProperties = {
     whiteSpace: "normal",
     overflowWrap: "anywhere",
     wordBreak: "break-word",
     maxWidth: "100%",
   };
-  const mixedParts = splitMixedContent(latex || "");
+  const mixedParts = splitMixedContent(normalizedLatex);
   const hasTextPart = mixedParts.some((part) => part.type === "text");
   const hasMathPart = mixedParts.some((part) => part.type === "math");
 
-  if (shouldRenderAsPlainText(latex || "")) {
+  if (shouldRenderAsPlainText(normalizedLatex)) {
     if (inline) {
       return (
         <span className={className} style={wrapStyle}>
-          {latex || ""}
+          {normalizedLatex}
         </span>
       );
     }
 
     return (
       <div className={className} style={wrapStyle}>
-        {latex || ""}
+        {normalizedLatex}
       </div>
     );
   }
@@ -191,7 +193,7 @@ export default function MathRender({
   }
 
   if (inline) {
-    const breakableContent = renderBreakableMathSegments(latex || "", "inline", className);
+    const breakableContent = renderBreakableMathSegments(normalizedLatex, "inline", className);
     if (Array.isArray(breakableContent)) {
       return (
         <span className={className} style={wrapStyle}>
