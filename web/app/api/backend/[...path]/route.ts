@@ -130,10 +130,17 @@ function normalizeEmail(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function isEmailPathSegment(value: string | null | undefined): boolean {
+  const normalized = normalizeEmail(value);
+  return /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(normalized);
+}
+
 function pathContainsPrivateEmail(pathSegments: string[]): boolean {
+  const privateSegment = pathSegments[2];
   return (
-    (pathSegments[0] === "user" && pathSegments[1] === "web" && pathSegments.length >= 3) ||
-    (pathSegments[0] === "export" && pathSegments[1] === "user" && pathSegments.length >= 3)
+    ((pathSegments[0] === "user" && pathSegments[1] === "web") ||
+      (pathSegments[0] === "export" && pathSegments[1] === "user")) &&
+    isEmailPathSegment(privateSegment)
   );
 }
 
