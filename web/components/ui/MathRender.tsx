@@ -22,6 +22,8 @@ const LATEX_ENVIRONMENT_RE = /\\begin\{[A-Za-z*]+\}/;
 const LEFT_DELIMITER_AT_END_RE = /(\\left(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.])\s*)$/;
 const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.]))/;
 const LATEX_COMMAND_NAME_RE = /^[A-Za-z]+/;
+const RAW_MATH_START_RE = /[A-Za-z0-9]/;
+const RAW_MATH_CHAR_RE = /[A-Za-z0-9{}^_=+\-*/<>()[\]|.,;]/;
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
@@ -197,6 +199,85 @@ const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
   return parts;
 };
 
+const containsStrongRawMath = (value: string): boolean =>
+  /[{}^_=+\-*/<>|]/.test(value) && /[A-Za-z0-9]/.test(value);
+
+const consumeRawMathRun = (value: string, start: number): number => {
+  let cursor = start;
+
+  while (cursor < value.length) {
+    if (value[cursor] === "\\") {
+      cursor = consumeLatexCommand(value, cursor);
+      continue;
+    }
+
+    if (!RAW_MATH_CHAR_RE.test(value[cursor])) break;
+    cursor += 1;
+  }
+
+  return cursor;
+};
+
+const splitEmbeddedRawMath = (value: string): MixedContentPart[] => {
+  if (!HAS_CYRILLIC_RE.test(value) || !containsStrongRawMath(value)) {
+    return [isMathToken(value) ? { type: "math", value } : { type: "text", value }];
+  }
+
+  const parts: MixedContentPart[] = [];
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    let mathStart = -1;
+
+    for (let index = cursor; index < value.length; index += 1) {
+      if (!RAW_MATH_START_RE.test(value[index])) continue;
+
+      const runEnd = consumeRawMathRun(value, index);
+      const run = value.slice(index, runEnd);
+      if (containsStrongRawMath(run)) {
+        mathStart = index;
+        break;
+      }
+    }
+
+    if (mathStart === -1) {
+      const text = value.slice(cursor);
+      if (text) parts.push({ type: "text", value: text });
+      break;
+    }
+
+    if (mathStart > cursor) {
+      parts.push({ type: "text", value: value.slice(cursor, mathStart) });
+    }
+
+    const mathEnd = consumeRawMathRun(value, mathStart);
+    parts.push({ type: "math", value: value.slice(mathStart, mathEnd) });
+    cursor = mathEnd;
+  }
+
+  return parts;
+};
+
+const splitEmbeddedMath = (value: string): MixedContentPart[] =>
+  splitEmbeddedLatexCommands(value).flatMap((part) =>
+    part.type === "text" ? splitEmbeddedRawMath(part.value) : [part]
+  );
+
+const mergeAdjacentMathParts = (parts: MixedContentPart[]): MixedContentPart[] => {
+  const merged: MixedContentPart[] = [];
+
+  for (const part of parts) {
+    const previous = merged[merged.length - 1];
+    if (part.type === "math" && previous?.type === "math") {
+      previous.value += part.value;
+      continue;
+    }
+    merged.push({ ...part });
+  }
+
+  return merged;
+};
+
 const isStandaloneLatexCommandAt = (value: string, start: number, command: "left" | "right"): boolean => {
   if (!value.startsWith(`\\${command}`, start)) return false;
   const next = value[start + command.length + 1];
@@ -333,7 +414,7 @@ const splitMixedContent = (value: string): MixedContentPart[] => {
     if (/^\s+$/.test(part)) {
       return [{ type: "space" as const, value: part }];
     }
-    return splitEmbeddedLatexCommands(part);
+    return mergeAdjacentMathParts(splitEmbeddedMath(part));
   });
 };
 
@@ -368,6 +449,14 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
   if (LATEX_ENVIRONMENT_RE.test(value)) {
     return (
       <math-span key={`${keyPrefix}-math-env-${valueKey}`} className={className}>
+        {normalizeSpacesForMathDisplay(value)}
+      </math-span>
+    );
+  }
+
+  if (value.length <= 24) {
+    return (
+      <math-span key={`${keyPrefix}-math-short-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );

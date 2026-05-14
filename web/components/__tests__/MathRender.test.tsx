@@ -37,4 +37,29 @@ describe("MathRender", () => {
     expect(container).not.toHaveTextContent("\\gecos");
     expect(container).toHaveTextContent("\\ge\\cos^{2}");
   });
+
+  it("splits raw polynomial math attached to Cyrillic text", () => {
+    const prompt =
+      "\u0422\u04e9\u043c\u0435\u043d\u0434\u0435 \u0431\u0435\u0440\u0456\u043b\u0433\u0435\u043d \u043a\u04e9\u043f\u043c\u04af\u0448\u0435\u043d\u0456";
+    const tail =
+      "\u0442\u04af\u0440\u0456\u043d\u0434\u0435 \u04e9\u0440\u043d\u0435\u043a\u0442\u0456\u04a3\u0456\u0437:";
+
+    const { container } = render(
+      <MathRender latex={`${prompt} ${tail}x^{3}+y^{3}+4x^{2}y+4xy^{2}`} />
+    );
+
+    const textSpans = Array.from(container.querySelectorAll("span"));
+    const mathSpans = Array.from(container.querySelectorAll("math-span"));
+
+    expect(textSpans.some((span) => span.textContent?.includes(`${tail}x`))).toBe(false);
+    expect(mathSpans.some((span) => span.textContent === "x^{3}+y^{3}+4x^{2}y+4xy^{2}")).toBe(true);
+  });
+
+  it("keeps short equations with LaTeX commands in one math span", () => {
+    const { container } = render(<MathRender latex="x+y=\\sigma_{1}, x\\cdot y=\\sigma_{2}" />);
+    const mathSpans = Array.from(container.querySelectorAll("math-span"));
+
+    expect(mathSpans[0].textContent).toContain("x+y=");
+    expect(mathSpans[0].textContent).toContain("sigma_{1}");
+  });
 });
