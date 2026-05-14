@@ -84,7 +84,7 @@ export default function OnboardingSurvey({ onComplete }: OnboardingSurveyProps) 
 
       showToast.success("Қош келдіңіз! 🎉");
       onComplete();
-      router.push("/modules");
+      router.push("/trial-test");
     } catch (error: any) {
       showToast.error(error.message || "Қате орын алды");
     } finally {

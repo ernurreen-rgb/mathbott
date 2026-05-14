@@ -22,7 +22,7 @@ export default function Home() {
             const data = await response.json();
             setOnboardingCompleted(data.completed);
             if (data.completed) {
-              router.push("/modules");
+              router.push("/trial-test");
             }
           }
         } catch (error) {
@@ -52,7 +52,7 @@ export default function Home() {
       <OnboardingSurvey
         onComplete={() => {
           setOnboardingCompleted(true);
-          router.push("/modules");
+          router.push("/trial-test");
         }}
       />
     );
