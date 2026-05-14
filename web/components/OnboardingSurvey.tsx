@@ -133,7 +133,7 @@ export default function OnboardingSurvey({ onComplete }: OnboardingSurveyProps) 
                 value={formData.nickname}
                 onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                 placeholder="Мысалы: Асхат"
-                className="w-full border-2 border-gray-300 rounded-xl px-4 py-4 text-lg focus:border-purple-500 focus:outline-none"
+                className="w-full border-2 border-gray-300 rounded-xl px-4 py-4 text-lg bg-white text-gray-900 placeholder:text-gray-500 focus:border-purple-500 focus:outline-none"
                 maxLength={50}
                 autoFocus
               />
@@ -177,10 +177,10 @@ export default function OnboardingSurvey({ onComplete }: OnboardingSurveyProps) 
                   <button
                     key={option}
                     onClick={() => setFormData({ ...formData, how_did_you_hear: option })}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all text-lg font-semibold shadow-sm ${
                       formData.how_did_you_hear === option
-                        ? "border-purple-500 bg-purple-50 shadow-lg"
-                        : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                        ? "border-purple-600 bg-white text-purple-950 shadow-lg ring-2 ring-purple-200"
+                        : "border-white/80 bg-white/85 text-gray-900 hover:border-purple-400 hover:bg-white"
                     }`}
                   >
                     {option}
@@ -229,10 +229,10 @@ export default function OnboardingSurvey({ onComplete }: OnboardingSurveyProps) 
                     key={option.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, math_level: option.value })}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all text-lg font-semibold shadow-sm ${
                       formData.math_level === option.value
-                        ? "border-purple-500 bg-purple-50 shadow-lg"
-                        : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                        ? "border-purple-600 bg-white text-purple-950 shadow-lg ring-2 ring-purple-200"
+                        : "border-white/80 bg-white/85 text-gray-900 hover:border-purple-400 hover:bg-white"
                     }`}
                   >
                     {option.label}
