@@ -27,16 +27,6 @@ const RAW_MATH_CHAR_RE = /[A-Za-z0-9{}^_=+\-*/<>()[\]|.,;]/;
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
-const scrollableMathStyle: CSSProperties = {
-  display: "inline-block",
-  maxWidth: "100%",
-  minWidth: 0,
-  overflowX: "auto",
-  overflowY: "hidden",
-  verticalAlign: "middle",
-  WebkitOverflowScrolling: "touch",
-};
-
 const makeRenderKey = (value: string): string => {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -599,7 +589,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
 
   if (LATEX_ENVIRONMENT_RE.test(value)) {
     return (
-      <math-span key={`${keyPrefix}-math-env-${valueKey}`} className={className} style={scrollableMathStyle}>
+      <math-span key={`${keyPrefix}-math-env-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );
@@ -607,7 +597,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
 
   if (value.length <= 24) {
     return (
-      <math-span key={`${keyPrefix}-math-short-${valueKey}`} className={className} style={scrollableMathStyle}>
+      <math-span key={`${keyPrefix}-math-short-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );
@@ -617,7 +607,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
 
   if (segments.length <= 1) {
     return (
-      <math-span key={`${keyPrefix}-math-0-${valueKey}`} className={className} style={scrollableMathStyle}>
+      <math-span key={`${keyPrefix}-math-0-${valueKey}`} className={className}>
         {normalizeSpacesForMathDisplay(value)}
       </math-span>
     );
@@ -637,7 +627,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
     }
 
     return (
-      <math-span key={`${keyPrefix}-math-${index}-${segmentKey}`} className={className} style={scrollableMathStyle}>
+      <math-span key={`${keyPrefix}-math-${index}-${segmentKey}`} className={className}>
         {normalizeSpacesForMathDisplay(segment.value)}
       </math-span>
     );
@@ -661,7 +651,6 @@ export default function MathRender({
     overflowWrap: "anywhere",
     wordBreak: "break-word",
     maxWidth: "100%",
-    minWidth: 0,
   };
   const protectedParts = splitLatexEnvironmentBlocks(normalizedLatex);
   const delimiterProtectedParts = protectedParts.flatMap((part) =>
@@ -730,14 +719,14 @@ export default function MathRender({
     }
 
     return (
-      <math-span key={`inline-root-${renderKey}`} className={className} style={{ ...wrapStyle, ...scrollableMathStyle }}>
+      <math-span key={`inline-root-${renderKey}`} className={className} style={wrapStyle}>
         {content}
       </math-span>
     );
   }
 
   return (
-    <math-div key={`block-root-${renderKey}`} className={className} style={{ ...wrapStyle, ...scrollableMathStyle, display: "block" }}>
+    <math-div key={`block-root-${renderKey}`} className={className} style={wrapStyle}>
       {content}
     </math-div>
   );

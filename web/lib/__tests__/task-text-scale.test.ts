@@ -14,9 +14,9 @@ describe("task-text-scale helpers", () => {
     expect(normalizeTaskTextScale("xl")).toBe("md");
   });
 
-  it("uses smaller mobile text sizes before scaling up on wider screens", () => {
-    expect(getTaskTextScaleClass("sm")).toBe("text-sm sm:text-base");
-    expect(getTaskTextScaleClass("md")).toBe("text-base sm:text-lg");
-    expect(getTaskTextScaleClass("lg")).toBe("text-lg sm:text-xl md:text-2xl");
+  it("returns stable classes for each scale", () => {
+    expect(getTaskTextScaleClass("sm")).toBe("text-base");
+    expect(getTaskTextScaleClass("md")).toBe("text-lg");
+    expect(getTaskTextScaleClass("lg")).toBe("text-xl md:text-2xl");
   });
 });
