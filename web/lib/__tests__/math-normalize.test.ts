@@ -33,6 +33,10 @@ describe("normalizeLatexForMathDisplay", () => {
     ).toBe("Prompt:\\sqrt[3]{6}\\cdot \\sqrt[7]{2}");
   });
 
+  it("splits relation commands accidentally glued to functions", () => {
+    expect(normalizeLatexForMathDisplay("\\sin 2x\\gecos^{2} 2x")).toBe("\\sin 2x\\ge\\cos^{2} 2x");
+  });
+
   it("detects MathLive text-mode escapes", () => {
     expect(hasMathLiveTextEscapes("\\textbackslash sqrt[3]\\textbraceleft 6\\textbraceright")).toBe(true);
     expect(hasMathLiveTextEscapes("\\sqrt[3]{6}")).toBe(false);

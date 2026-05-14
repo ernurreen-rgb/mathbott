@@ -28,6 +28,8 @@ const LATEX_SPACING_COMMAND_RE = /(^|[^\\])\\(?: |,|:|;|quad|qquad)/g;
 const MATHLIVE_TEXT_ESCAPE_RE = /\\(?:textbackslash|textbraceleft|textbraceright|lbrack|rbrack|textunderscore)\b/;
 const LATEX_COMMAND_GROUP_SPACE_RE = /(\\[a-zA-Z]+)\s+([\[{])/g;
 const LATEX_OPTIONAL_TO_REQUIRED_GROUP_SPACE_RE = /(\])\s+(\{)/g;
+const GLUED_RELATION_FUNCTION_RE =
+  /\\(geq?|leq?|neq?|lt|gt|approx|sim)(sin|cos|tan|tg|ctg|ln|log|sqrt|frac|arcsin|arccos|arctg|arcctg)\b/g;
 
 export const hasMathLiveTextEscapes = (value: string): boolean => MATHLIVE_TEXT_ESCAPE_RE.test(value);
 
@@ -47,6 +49,7 @@ export const normalizeLatexForMathDisplay = (value: string): string => {
   if (!value) return "";
 
   return normalizeMathLiveTextEscapes(value)
+    .replace(GLUED_RELATION_FUNCTION_RE, "\\$1\\$2")
     .replace(SPACED_ENVIRONMENT_COMMAND_RE, "\\$1{$2}")
     .replace(REDUNDANT_CASES_WRAPPER_RE, "\\begin{$1}$2\\end{$1}");
 };

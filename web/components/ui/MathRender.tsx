@@ -106,6 +106,34 @@ const consumeLatexDelimiter = (value: string, start: number): number => {
   return cursor + 1;
 };
 
+const consumeLatexScripts = (value: string, start: number): number => {
+  let cursor = start;
+
+  while (cursor < value.length && (value[cursor] === "^" || value[cursor] === "_")) {
+    cursor += 1;
+    if (cursor >= value.length) return cursor;
+
+    if (value[cursor] === "{" || value[cursor] === "[") {
+      cursor = findBalancedGroupEnd(value, cursor, value[cursor], value[cursor] === "[" ? "]" : "}");
+    } else if (value[cursor] === "\\") {
+      cursor += 1;
+      const command = value.slice(cursor).match(LATEX_COMMAND_NAME_RE)?.[0];
+      if (command) {
+        cursor += command.length;
+      } else {
+        cursor = Math.min(cursor + 1, value.length);
+      }
+      while (cursor < value.length && (value[cursor] === "[" || value[cursor] === "{")) {
+        cursor = findBalancedGroupEnd(value, cursor, value[cursor], value[cursor] === "[" ? "]" : "}");
+      }
+    } else {
+      cursor += 1;
+    }
+  }
+
+  return cursor;
+};
+
 const consumeLatexCommand = (value: string, start: number): number => {
   if (value[start] !== "\\") return start + 1;
 
@@ -131,7 +159,7 @@ const consumeLatexCommand = (value: string, start: number): number => {
     cursor = findBalancedGroupEnd(value, cursor, value[cursor], value[cursor] === "[" ? "]" : "}");
   }
 
-  return cursor;
+  return consumeLatexScripts(value, cursor);
 };
 
 const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
@@ -166,6 +194,86 @@ const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
     cursor = mathEnd;
   }
 
+  return parts;
+};
+
+const isStandaloneLatexCommandAt = (value: string, start: number, command: "left" | "right"): boolean => {
+  if (!value.startsWith(`\\${command}`, start)) return false;
+  const next = value[start + command.length + 1];
+  return !next || !/[A-Za-z]/.test(next);
+};
+
+const findNextStandaloneLatexCommand = (
+  value: string,
+  command: "left" | "right",
+  start: number
+): number => {
+  let cursor = start;
+  while (cursor < value.length) {
+    const index = value.indexOf(`\\${command}`, cursor);
+    if (index === -1) return -1;
+    if (isStandaloneLatexCommandAt(value, index, command)) return index;
+    cursor = index + command.length + 1;
+  }
+  return -1;
+};
+
+const findPairedRightDelimiterEnd = (value: string, leftStart: number): number => {
+  let depth = 1;
+  let cursor = consumeLatexDelimiter(value, leftStart + "\\left".length);
+
+  while (cursor < value.length) {
+    const nextLeft = findNextStandaloneLatexCommand(value, "left", cursor);
+    const nextRight = findNextStandaloneLatexCommand(value, "right", cursor);
+
+    if (nextRight === -1) return -1;
+
+    if (nextLeft !== -1 && nextLeft < nextRight) {
+      depth += 1;
+      cursor = consumeLatexDelimiter(value, nextLeft + "\\left".length);
+      continue;
+    }
+
+    depth -= 1;
+    const rightEnd = consumeLatexDelimiter(value, nextRight + "\\right".length);
+    if (depth === 0) {
+      return consumeLatexScripts(value, rightEnd);
+    }
+    cursor = rightEnd;
+  }
+
+  return -1;
+};
+
+const splitPairedLeftRightBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
+  const parts: Array<{ type: "text" | "math"; value: string }> = [];
+  let cursor = 0;
+  let found = false;
+
+  while (cursor < value.length) {
+    const leftIndex = findNextStandaloneLatexCommand(value, "left", cursor);
+    if (leftIndex === -1) break;
+
+    const rightEnd = findPairedRightDelimiterEnd(value, leftIndex);
+    if (rightEnd === -1) {
+      cursor = leftIndex + "\\left".length;
+      continue;
+    }
+
+    found = true;
+    if (leftIndex > cursor) {
+      parts.push({ type: "text", value: value.slice(cursor, leftIndex) });
+    }
+    parts.push({ type: "math", value: value.slice(leftIndex, rightEnd) });
+    cursor = rightEnd;
+  }
+
+  if (!found) {
+    return [{ type: "text", value }];
+  }
+  if (cursor < value.length) {
+    parts.push({ type: "text", value: value.slice(cursor) });
+  }
   return parts;
 };
 
@@ -315,7 +423,10 @@ export default function MathRender({
     maxWidth: "100%",
   };
   const protectedParts = splitLatexEnvironmentBlocks(normalizedLatex);
-  const mixedParts = protectedParts.flatMap((part) =>
+  const delimiterProtectedParts = protectedParts.flatMap((part) =>
+    part.type === "math" ? [part] : splitPairedLeftRightBlocks(part.value)
+  );
+  const mixedParts = delimiterProtectedParts.flatMap((part) =>
     part.type === "math" ? [{ type: "math" as const, value: part.value }] : splitMixedContent(part.value)
   );
   const hasTextPart = mixedParts.some((part) => part.type === "text");
