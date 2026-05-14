@@ -178,7 +178,7 @@ class TrustedProxyIdentityMiddleware:
             async def _replay_receive() -> Message:
                 if body_messages:
                     return body_messages.pop(0)
-                return {"type": "http.request", "body": b"", "more_body": False}
+                return {"type": "http.disconnect"}
 
             replay_receive = _replay_receive
 

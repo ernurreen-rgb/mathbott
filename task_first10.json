@@ -1,0 +1,347 @@
+[
+  {
+    "text": "Шектеусіз периодты санды көрсетіңіз",
+    "answer": "D",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "\\sqrt{15}"
+      },
+      {
+        "label": "B",
+        "text": "\\frac{\\pi}{9}"
+      },
+      {
+        "label": "C",
+        "text": "\\frac{2}{\\sqrt{2}}"
+      },
+      {
+        "label": "D",
+        "text": "0"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Сандар ұғымы",
+      "ЕҮОБ және ЕКОЕ",
+      "Арифметикалық амалдар",
+      "Қатынас, пропорция, пайыз"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Иррационал санды анықтаңыз",
+    "answer": "A",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "0{,}101001000100001\\ldots"
+      },
+      {
+        "label": "B",
+        "text": "0{,}505505505505505\\ldots"
+      },
+      {
+        "label": "C",
+        "text": "\\frac{\\sqrt{8}}{\\sqrt{2}}"
+      },
+      {
+        "label": "D",
+        "text": "0"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Сандар ұғымы",
+      "ЕҮОБ және ЕКОЕ",
+      "Арифметикалық амалдар",
+      "Қатынас, пропорция, пайыз"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Егер x = \\sqrt[11]{2^{12}} болса, онда \\sqrt{x\\cdot\\sqrt[3]{x^2\\cdot\\sqrt{x}}} өрнегінің мәнін табыңыз",
+    "answer": "D",
+    "question_type": "mcq6",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "4"
+      },
+      {
+        "label": "B",
+        "text": "8"
+      },
+      {
+        "label": "C",
+        "text": "\\sqrt[11]{4}"
+      },
+      {
+        "label": "D",
+        "text": "2"
+      },
+      {
+        "label": "E",
+        "text": "\\sqrt{2}"
+      },
+      {
+        "label": "F",
+        "text": ""
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Дәреже",
+      "Арифметикалық түбір"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "\\sqrt[3]{x^6}+\\sqrt{x^2} өрнегін ықшамдаңыз, мұндағы x<0",
+    "answer": "B",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "x^2+x"
+      },
+      {
+        "label": "B",
+        "text": "x^2-x"
+      },
+      {
+        "label": "C",
+        "text": "-x^2+x"
+      },
+      {
+        "label": "D",
+        "text": "-x^2-x"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Дәреже",
+      "Арифметикалық түбір"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Есептеңіз: \\sqrt[3]{6}\\cdot\\sqrt[7]{2}\\cdot\\sqrt[5]{4}",
+    "answer": "A",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "\\sqrt[105]{6^{35}\\cdot2^{57}}"
+      },
+      {
+        "label": "B",
+        "text": "\\sqrt[95]{4^{55}\\cdot2^{65}}"
+      },
+      {
+        "label": "C",
+        "text": "\\sqrt[105]{6^{21}\\cdot2^{45}}"
+      },
+      {
+        "label": "D",
+        "text": "\\sqrt[80]{3^{20}\\cdot2^{75}}"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Дәреже",
+      "Арифметикалық түбір"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "n -ның қанша мәнінде \\frac{3n-2}{n+2} өрнегі бүтін болады?",
+    "answer": "C",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "6"
+      },
+      {
+        "label": "B",
+        "text": "7"
+      },
+      {
+        "label": "C",
+        "text": "8"
+      },
+      {
+        "label": "D",
+        "text": "Ондай сандар шексіз"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Алгебралық өрнектер",
+      "Қысқаша көбейту формулалары",
+      "Алгебралық бөлшек"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Төменде берілген көпмүшені симметриялы көпмүше түріне келтіріңіз және егер x+y=\\sigma_1, x\\cdot y=\\sigma_2 болса, берілген көпмүшені \\sigma_1 мен \\sigma_2 -ге тәуелді көпмүше түрінде өрнектіңіз: x^3+y^3+4x^2y+4xy^2",
+    "answer": "B",
+    "question_type": "mcq6",
+    "text_scale": "sm",
+    "options": [
+      {
+        "label": "A",
+        "text": "2\\sigma_1\\cdot\\sigma_2"
+      },
+      {
+        "label": "B",
+        "text": "\\sigma_1^3+\\sigma_1\\sigma_2"
+      },
+      {
+        "label": "C",
+        "text": "\\sigma_1^3-\\sigma_1\\sigma_2"
+      },
+      {
+        "label": "D",
+        "text": "\\sigma_1^3+\\sigma_2"
+      },
+      {
+        "label": "E",
+        "text": "6\\sigma_1\\cdot\\sigma_2"
+      },
+      {
+        "label": "F",
+        "text": "\\sigma_1(\\sigma_1^2-\\sigma_2)"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Алгебралық өрнектер",
+      "Қысқаша көбейту формулалары",
+      "Алгебралық бөлшек"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "a -ның қандай мәндерінде x+4=\\frac{a}{x} теңдеуінің әртүрлі екі түбірі болады",
+    "answer": "A",
+    "question_type": "mcq",
+    "text_scale": "md",
+    "options": [
+      {
+        "label": "A",
+        "text": "(-4;0)\\cup(0;+\\infty)"
+      },
+      {
+        "label": "B",
+        "text": "(-4;+\\infty)"
+      },
+      {
+        "label": "C",
+        "text": "(-\\infty;4)"
+      },
+      {
+        "label": "D",
+        "text": "(-\\infty;0)\\cup(0;+\\infty)"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Алгебралық өрнектер",
+      "Қысқаша көбейту формулалары",
+      "Алгебралық бөлшек"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Өрнекті ықшамдаңыз: \\frac{k^2-25}{k+3}\\cdot\\frac{1}{k^2+5k}-\\frac{k^2+10k+25}{k^3-6k^2+9k}:\\frac{k+5}{k-3}+\\left(\\frac{4}{k-3}\\right)^2",
+    "answer": "D",
+    "question_type": "mcq",
+    "text_scale": "sm",
+    "options": [
+      {
+        "label": "A",
+        "text": "\\frac{48}{(k-3)^3}"
+      },
+      {
+        "label": "B",
+        "text": "\\frac{48}{(k+3)^3}"
+      },
+      {
+        "label": "C",
+        "text": "\\frac{48}{(k+3)(k-3)^2}"
+      },
+      {
+        "label": "D",
+        "text": "\\frac{96}{(k+3)(k-3)^2}"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Алгебралық өрнектер",
+      "Қысқаша көбейту формулалары",
+      "Алгебралық бөлшек"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  },
+  {
+    "text": "Өрнекті ықшамдаңыз: \\left(\\frac{\\sqrt{b}+2}{b+2\\sqrt{b}+1}-\\frac{\\sqrt{b}-2}{b-1}\\right)\\cdot\\frac{\\sqrt{b}+1}{\\sqrt{b}}",
+    "answer": "B",
+    "question_type": "mcq",
+    "text_scale": "sm",
+    "options": [
+      {
+        "label": "A",
+        "text": "\\frac{1}{b+1}"
+      },
+      {
+        "label": "B",
+        "text": "\\frac{2}{b-1}"
+      },
+      {
+        "label": "C",
+        "text": "\\frac{2}{b+1}"
+      },
+      {
+        "label": "D",
+        "text": "\\frac{1}{b-1}"
+      }
+    ],
+    "subquestions": null,
+    "difficulty": "B",
+    "topics": [
+      "Алгебралық өрнектер",
+      "Қысқаша көбейту формулалары",
+      "Алгебралық бөлшек"
+    ],
+    "image_filename": null,
+    "solution_filename": null
+  }
+]

@@ -11,6 +11,7 @@ from middleware.error_handler import (
 )
 from middleware.csrf import CSRFMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
+from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
@@ -149,4 +150,23 @@ def test_csrf_http_exception_from_middleware_returns_403_not_500(monkeypatch):
     payload = response.json()
     assert payload["error"]["detail"] == "CSRF token missing"
     assert isinstance(response.headers.get("X-Request-ID"), str)
+
+
+def test_trusted_proxy_body_replay_allows_json_post_with_request_context(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    app = FastAPI()
+    app.add_middleware(TrustedProxyIdentityMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+
+    @app.post("/echo")
+    async def echo(request: Request):
+        payload = await request.json()
+        return {"email": payload.get("email"), "ok": True}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/echo", json={"email": "user@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"email": "user@example.com", "ok": True}
 
