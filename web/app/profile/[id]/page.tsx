@@ -156,7 +156,7 @@ export default function PublicProfilePage() {
         setFriendActionMessage(errorString);
       }
     } else {
-      setFriendActionMessage("Запрос отправлен");
+      setFriendActionMessage("Сұраныс жіберілді");
     }
     
     setFriendActionLoading(false);
