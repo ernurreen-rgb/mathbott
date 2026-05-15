@@ -621,6 +621,32 @@ async def test_get_user_web(client, test_db):
 
 
 @pytest.mark.asyncio
+async def test_get_user_web_includes_global_position(client, test_db):
+    users = [
+        await test_db.create_user_by_email("web-rank-1@example.com"),
+        await test_db.create_user_by_email("web-rank-2@example.com"),
+    ]
+    await test_db.update_user_nickname(users[0]["email"], "WebRank1")
+    await test_db.update_user_nickname(users[1]["email"], "WebRank2")
+
+    async with aiosqlite.connect(test_db.db_path) as db:
+        await db.execute(
+            "UPDATE users SET total_points = 200, total_solved = 20 WHERE id = ?",
+            (users[0]["id"],),
+        )
+        await db.execute(
+            "UPDATE users SET total_points = 100, total_solved = 10 WHERE id = ?",
+            (users[1]["id"],),
+        )
+        await db.commit()
+
+    response = client.get(f"/api/user/web/{users[1]['email']}")
+
+    assert response.status_code == 200
+    assert response.json()["global_position"] == 2
+
+
+@pytest.mark.asyncio
 async def test_get_user_web_auto_create(client, test_db):
     """Test auto-creating user when getting web stats"""
     # Try to get non-existent user (should auto-create)

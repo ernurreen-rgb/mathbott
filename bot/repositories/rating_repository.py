@@ -29,7 +29,7 @@ class RatingRepository(BaseRepository):
                 query = """
                     SELECT * FROM users
                     WHERE league = ? AND league_group = ? AND nickname IS NOT NULL AND nickname != ''
-                    ORDER BY week_points DESC, total_points DESC
+                    ORDER BY week_points DESC, total_points DESC, id ASC
                     LIMIT ? OFFSET ?
                 """
                 async with db.execute(query, (league, group, limit, offset)) as cursor:
@@ -39,7 +39,7 @@ class RatingRepository(BaseRepository):
                 query = """
                     SELECT * FROM users
                     WHERE league = ? AND nickname IS NOT NULL AND nickname != ''
-                    ORDER BY week_points DESC, total_points DESC
+                    ORDER BY week_points DESC, total_points DESC, id ASC
                     LIMIT ? OFFSET ?
                 """
                 async with db.execute(query, (league, limit, offset)) as cursor:
@@ -49,7 +49,7 @@ class RatingRepository(BaseRepository):
                 query = """
                     SELECT * FROM users
                     WHERE nickname IS NOT NULL AND nickname != ''
-                    ORDER BY total_points DESC, total_solved DESC
+                    ORDER BY total_points DESC, total_solved DESC, id ASC
                     LIMIT ? OFFSET ?
                 """
                 async with db.execute(query, (limit, offset)) as cursor:
@@ -78,6 +78,47 @@ class RatingRepository(BaseRepository):
                     row = await cursor.fetchone()
                     return row[0] if row else 0
 
+    async def get_global_position(self, user_id: int) -> Optional[int]:
+        """Get user's 1-based position in the global rating, or None if unrated."""
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT id, nickname, total_points, total_solved
+                FROM users
+                WHERE id = ?
+                """,
+                (user_id,),
+            ) as cursor:
+                user = await cursor.fetchone()
+
+            if not user or not user["nickname"]:
+                return None
+
+            async with db.execute(
+                """
+                SELECT COUNT(*) + 1
+                FROM users
+                WHERE nickname IS NOT NULL
+                  AND nickname != ''
+                  AND (
+                    total_points > ?
+                    OR (total_points = ? AND total_solved > ?)
+                    OR (total_points = ? AND total_solved = ? AND id < ?)
+                  )
+                """,
+                (
+                    user["total_points"],
+                    user["total_points"],
+                    user["total_solved"],
+                    user["total_points"],
+                    user["total_solved"],
+                    user_id,
+                ),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return int(row[0]) if row else None
+
     async def get_league_rating(self, league: str, group: int) -> List[Dict[str, Any]]:
         """Get rating for specific league group"""
         async with self._connection() as db:
@@ -85,7 +126,7 @@ class RatingRepository(BaseRepository):
             query = """
                 SELECT * FROM users
                 WHERE league = ? AND league_group = ?
-                ORDER BY week_points DESC, total_points DESC
+                ORDER BY week_points DESC, total_points DESC, id ASC
             """
             async with db.execute(query, (league, group)) as cursor:
                 rows = await cursor.fetchall()
@@ -104,7 +145,7 @@ class RatingRepository(BaseRepository):
                 """
                 SELECT * FROM users
                 WHERE league = ? AND league_group = ?
-                ORDER BY week_points DESC, total_points DESC
+                ORDER BY week_points DESC, total_points DESC, id ASC
                 """,
                 (user["league"], user["league_group"])
             ) as cursor:

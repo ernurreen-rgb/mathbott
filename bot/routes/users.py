@@ -165,6 +165,7 @@ def setup_users_routes(app, db, limiter: Limiter):
                 logger.info(f"User {email} created as admin")
 
         stats = await db.get_user_stats(user["id"])
+        global_position = await db.get_global_position(user["id"])
         is_admin = await db.is_admin(email=email)
         
         # Check and update streak if needed (in case user hasn't solved today but streak needs checking)
@@ -225,6 +226,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "nickname": user.get("nickname"),
             "league": user["league"],
             "league_group": user["league_group"],
+            "global_position": global_position,
             "league_position": stats.get("league_position"),
             "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],
@@ -307,6 +309,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             raise HTTPException(status_code=404, detail="User not found")
         
         stats = await db.get_user_stats(user["id"])
+        global_position = await db.get_global_position(user["id"])
         
         # Check and normalize streak (same logic as get_user_web)
         last_streak_date_value = user.get("last_streak_date")
@@ -343,6 +346,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "nickname": user.get("nickname"),
             "league": user["league"],
             "league_group": user["league_group"],
+            "global_position": global_position,
             "league_position": stats.get("league_position"),
             "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],

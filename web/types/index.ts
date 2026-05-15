@@ -22,6 +22,7 @@ export interface UserData {
   nickname?: string;
   league: string;
   league_group?: number;
+  global_position?: number | null;
   league_position?: number;
   league_size?: number;
   total_solved: number;

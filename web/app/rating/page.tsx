@@ -5,15 +5,18 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
-import { RatingUser } from "@/types";
+import { RatingUser, UserData } from "@/types";
 import { getRating, getUserData } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
+
+const GLOBAL_RATING_LIMIT = 100;
 
 export default function RatingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [globalRating, setGlobalRating] = useState<RatingUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const sessionEmail = session?.user?.email || null;
 
@@ -24,7 +27,7 @@ export default function RatingPage() {
     
     try {
       const [ratingResult, userResult] = await Promise.all([
-        getRating(50),
+        getRating(GLOBAL_RATING_LIMIT),
         getUserData(sessionEmail),
       ]);
 
@@ -33,8 +36,10 @@ export default function RatingPage() {
           console.error("Failed to fetch current user:", userResult.error);
         }
         setCurrentUserId(null);
+        setCurrentUser(null);
       } else {
         setCurrentUserId(userResult.data.id);
+        setCurrentUser(userResult.data);
       }
 
       const { data, error } = ratingResult;
@@ -91,6 +96,15 @@ export default function RatingPage() {
     return null;
   }
 
+  const currentUserInTop = currentUserId !== null && globalRating.some((user) => user.id === currentUserId);
+  const showCurrentUserRow = Boolean(
+    currentUser &&
+      currentUserId &&
+      !currentUserInTop &&
+      currentUser.global_position &&
+      currentUser.global_position > GLOBAL_RATING_LIMIT
+  );
+
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
       <div className="absolute inset-0 bg-black/5"></div>
@@ -111,7 +125,8 @@ export default function RatingPage() {
 
           <div className="space-y-3">
             {globalRating.length > 0 ? (
-              globalRating.map((user, idx) => {
+              <>
+              {globalRating.map((user, idx) => {
                 const isCurrentUser = user.id === currentUserId;
                 const hasDefaultNickname = user.nickname?.startsWith("User ") && /User -?\d+/.test(user.nickname);
                 // All users are clickable now (for public profiles)
@@ -168,7 +183,42 @@ export default function RatingPage() {
                     </div>
                   </button>
                 );
-              })
+              })}
+
+              {showCurrentUserRow && currentUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentUser.id) {
+                      router.push(`/profile/${currentUser.id}`);
+                    }
+                  }}
+                  className="w-full text-left flex justify-between items-center p-5 rounded-2xl border-2 transition-all cursor-pointer hover:shadow-glow hover:border-purple-400 bg-white/90 border-purple-300"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg bg-purple-100 text-purple-700">
+                      #{currentUser.global_position}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-800">
+                        Сіз: {currentUser.nickname || "Ойыншы"}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-blue-600 font-medium">{currentUser.league}</span>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-500">{currentUser.total_solved} шешілген</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg text-gray-800">
+                      {currentUser.total_points}
+                    </div>
+                    <div className="text-xs text-gray-500">ұпай</div>
+                  </div>
+                </button>
+              )}
+              </>
             ) : (
               <div className="text-center py-12 text-gray-500">
                 <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">

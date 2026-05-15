@@ -440,6 +440,10 @@ class Database:
         """Get total count of users in rating"""
         return await self.rating.get_rating_count(league=league, group=group)
 
+    async def get_global_position(self, user_id: int) -> Optional[int]:
+        """Get user's position in the global rating"""
+        return await self.rating.get_global_position(user_id)
+
     async def get_league_rating(self, league: str, group: int) -> List[Dict[str, Any]]:
         """Get rating for specific league group"""
         return await self.rating.get_league_rating(league, group)

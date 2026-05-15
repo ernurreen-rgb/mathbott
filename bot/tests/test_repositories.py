@@ -731,6 +731,38 @@ async def test_rating_repository_get_rating_count(test_db):
 
 
 @pytest.mark.asyncio
+async def test_rating_repository_get_global_position(test_db):
+    repo = RatingRepository(db_path=test_db.db_path)
+
+    users = [
+        await test_db.create_user_by_email("rank-1@example.com"),
+        await test_db.create_user_by_email("rank-2@example.com"),
+        await test_db.create_user_by_email("rank-3@example.com"),
+    ]
+    for index, user in enumerate(users, start=1):
+        await test_db.update_user_nickname(user["email"], f"RankUser{index}")
+
+    async with aiosqlite.connect(test_db.db_path) as db:
+        await db.execute(
+            "UPDATE users SET total_points = 300, total_solved = 30 WHERE id = ?",
+            (users[0]["id"],),
+        )
+        await db.execute(
+            "UPDATE users SET total_points = 200, total_solved = 20 WHERE id = ?",
+            (users[1]["id"],),
+        )
+        await db.execute(
+            "UPDATE users SET total_points = 100, total_solved = 10 WHERE id = ?",
+            (users[2]["id"],),
+        )
+        await db.commit()
+
+    assert await repo.get_global_position(users[0]["id"]) == 1
+    assert await repo.get_global_position(users[1]["id"]) == 2
+    assert await repo.get_global_position(users[2]["id"]) == 3
+
+
+@pytest.mark.asyncio
 async def test_rating_repository_get_user_stats(test_db, test_user):
     """Test getting user stats"""
     repo = RatingRepository(db_path=test_db.db_path)
