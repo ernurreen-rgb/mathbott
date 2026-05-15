@@ -61,6 +61,7 @@ function ProfilePageContent() {
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [friendsMessage, setFriendsMessage] = useState<string | null>(null);
   const [removingFriends, setRemovingFriends] = useState<Set<number>>(new Set());
+  const [requestActions, setRequestActions] = useState<Set<number>>(new Set());
   const inviteToken = searchParams?.get("invite");
 
   const weekDays = [
@@ -356,75 +357,102 @@ function ProfilePageContent() {
   };
 
   const handleCancelRequest = async (requestId: number) => {
-    if (!session?.user?.email) return;
+    if (!session?.user?.email || requestActions.has(requestId)) return;
+    setRequestActions(prev => new Set(prev).add(requestId));
     
     // Optimistically remove from outgoing requests
     const requestToCancel = outgoingRequests.find(r => r.id === requestId);
     setOutgoingRequests(prev => prev.filter(r => r.id !== requestId));
     
-    const { error } = await cancelFriendRequest(sessionEmail, requestId);
-    if (error) {
-      // Revert on error
-      if (requestToCancel) {
-        setOutgoingRequests(prev => [...prev, requestToCancel]);
+    try {
+      const { error } = await cancelFriendRequest(sessionEmail, requestId);
+      if (error) {
+        // Revert on error
+        if (requestToCancel) {
+          setOutgoingRequests(prev => [...prev, requestToCancel]);
+        }
+        const errorMessage = normalizeErrorMessage(error);
+        setFriendsMessage(errorMessage);
+      } else {
+        setFriendsMessage(null);
+        // Optionally refresh to ensure sync, but UI is already updated
+        fetchFriendsData().catch(() => {
+          // Silent refresh failure - UI is already updated
+        });
       }
-      const errorMessage = normalizeErrorMessage(error);
-      setFriendsMessage(errorMessage);
-    } else {
-      setFriendsMessage(null);
-      // Optionally refresh to ensure sync, but UI is already updated
-      fetchFriendsData().catch(() => {
-        // Silent refresh failure - UI is already updated
+    } finally {
+      setRequestActions(prev => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
       });
     }
   };
 
   const handleDeclineRequest = async (requestId: number) => {
-    if (!session?.user?.email) return;
+    if (!session?.user?.email || requestActions.has(requestId)) return;
+    setRequestActions(prev => new Set(prev).add(requestId));
     
     // Optimistically remove from incoming requests
     const requestToDecline = incomingRequests.find(r => r.id === requestId);
     setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
     
-    const { error } = await declineFriendRequest(sessionEmail, requestId);
-    if (error) {
-      // Revert on error
-      if (requestToDecline) {
-        setIncomingRequests(prev => [...prev, requestToDecline]);
+    try {
+      const { error } = await declineFriendRequest(sessionEmail, requestId);
+      if (error) {
+        // Revert on error
+        if (requestToDecline) {
+          setIncomingRequests(prev => [...prev, requestToDecline]);
+        }
+        const errorMessage = normalizeErrorMessage(error);
+        setFriendsMessage(errorMessage);
+        return;
       }
-      const errorMessage = normalizeErrorMessage(error);
-      setFriendsMessage(errorMessage);
-      return;
+      // Optionally refresh to ensure sync, but UI is already updated
+      fetchFriendsData().catch(() => {
+        // Silent refresh failure - UI is already updated
+      });
+    } finally {
+      setRequestActions(prev => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
-    // Optionally refresh to ensure sync, but UI is already updated
-    fetchFriendsData().catch(() => {
-      // Silent refresh failure - UI is already updated
-    });
   };
 
   const handleAcceptRequest = async (requestId: number) => {
-    if (!session?.user?.email) return;
+    if (!session?.user?.email || requestActions.has(requestId)) return;
+    setRequestActions(prev => new Set(prev).add(requestId));
     
     // Optimistically remove from incoming requests
     const requestToAccept = incomingRequests.find(r => r.id === requestId);
     setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
     
-    const { error } = await acceptFriendRequest(sessionEmail, requestId);
-    if (error) {
-      // Revert on error
-      if (requestToAccept) {
-        setIncomingRequests(prev => [...prev, requestToAccept]);
+    try {
+      const { error } = await acceptFriendRequest(sessionEmail, requestId);
+      if (error) {
+        // Revert on error
+        if (requestToAccept) {
+          setIncomingRequests(prev => [...prev, requestToAccept]);
+        }
+        // Ensure error is a string
+        const errorMessage = normalizeErrorMessage(error);
+        setFriendsMessage(errorMessage);
+        return;
       }
-      // Ensure error is a string
-      const errorMessage = normalizeErrorMessage(error);
-      setFriendsMessage(errorMessage);
-      return;
+      // Optionally refresh to ensure sync, but UI is already updated
+      // Note: We could also optimistically add to friends, but it's safer to refresh
+      fetchFriendsData().catch(() => {
+        // Silent refresh failure - UI is already updated
+      });
+    } finally {
+      setRequestActions(prev => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
-    // Optionally refresh to ensure sync, but UI is already updated
-    // Note: We could also optimistically add to friends, but it's safer to refresh
-    fetchFriendsData().catch(() => {
-      // Silent refresh failure - UI is already updated
-    });
   };
 
   const handleSaveNickname = async (e: React.FormEvent) => {
@@ -582,15 +610,17 @@ function ProfilePageContent() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleAcceptRequest(req.id)}
-                              className="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:shadow-glow transition-all text-xs"
+                              disabled={requestActions.has(req.id)}
+                              className="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:shadow-glow transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {"\u049a\u0430\u0431\u044b\u043b\u0434\u0430\u0443"}
+                              {requestActions.has(req.id) ? "..." : "\u049a\u0430\u0431\u044b\u043b\u0434\u0430\u0443"}
                             </button>
                             <button
                               onClick={() => handleDeclineRequest(req.id)}
-                              className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
+                              disabled={requestActions.has(req.id)}
+                              className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
+                              {requestActions.has(req.id) ? "..." : "\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                             </button>
                           </div>
                         </div>
@@ -611,9 +641,10 @@ function ProfilePageContent() {
                               </div>
                               <button
                                 onClick={() => handleCancelRequest(req.id)}
-                                className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
+                                disabled={requestActions.has(req.id)}
+                                className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
+                                {requestActions.has(req.id) ? "..." : "\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                               </button>
                             </div>
                           ))}
@@ -975,9 +1006,10 @@ function ProfilePageContent() {
                           </div>
                           <button
                             onClick={() => handleCancelRequest(req.id)}
-                            className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs"
+                            disabled={requestActions.has(req.id)}
+                            className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {"\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
+                            {requestActions.has(req.id) ? "..." : "\u0411\u0430\u0441 \u0442\u0430\u0440\u0442\u0443"}
                           </button>
                         </div>
                       ))}
