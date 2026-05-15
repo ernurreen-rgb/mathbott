@@ -6,8 +6,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 // import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
-  title: "Mathbot - Математикалық есептер",
-  description: "Mathbot үшін веб-интерфейс - математикалық есептер платформасы",
+  title: "QazMath - математикаға дайындық платформасы",
+  description: "Математикалық есептерді шығарып, сынақ тесттерін өтіп, прогресіңізді бақылаңыз.",
 };
 
 export default function RootLayout({
