@@ -1,5 +1,6 @@
 import { API_URL } from "./constants";
 import { RatingUser, UserData, Module, ModuleDetails, LessonDetails, TrialTest, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse, TrialTestCoopCreateResponse, TrialTestCoopFinishResponse, TrialTestCoopResultsResponse, TrialTestCoopSession, FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, BlockedUser, FriendStatus, BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankPlacementTask, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, AdminStatistics, OnboardingStatistics, OpsHealthSummary, OpsHealthTimeseriesResponse, OpsIncidentListResponse, OpsTimeseriesRange, OpsTimeseriesStep, AdminCheckResponse, AdminRole, AdminRoleListResponse, AdminRoleUpdateRequest, AdminRoleUpdateResponse, AdminRoleRestoreRequest, AdminRoleRestoreResponse } from "@/types";
+import type { AdminLeagueGroupListResponse, AdminLeagueParticipantsResponse } from "@/types";
 
 const DEBUG_API = process.env.NEXT_PUBLIC_DEBUG_API === "true";
 const debugLog = (...args: any[]) => {
@@ -862,6 +863,31 @@ export async function getOnboardingStatistics(email?: string): Promise<{ data: O
     ? `${apiPath("admin/onboarding-statistics")}?email=${encodeURIComponent(email)}`
     : apiPath("admin/onboarding-statistics");
   return fetchWithErrorHandling<OnboardingStatistics>(url);
+}
+
+export async function getAdminLeagues(
+  email: string
+): Promise<{ data: AdminLeagueGroupListResponse | null; error: string | null }> {
+  return fetchWithErrorHandling<AdminLeagueGroupListResponse>(
+    `${apiPath("admin/leagues")}?email=${encodeURIComponent(email)}`
+  );
+}
+
+export async function getAdminLeagueParticipants(
+  email: string,
+  league: string,
+  group: number,
+  params?: { limit?: number; offset?: number }
+): Promise<{ data: AdminLeagueParticipantsResponse | null; error: string | null }> {
+  const query = new URLSearchParams();
+  query.set("email", email);
+  query.set("league", league);
+  query.set("group", String(group));
+  query.set("limit", String(params?.limit ?? 100));
+  query.set("offset", String(params?.offset ?? 0));
+  return fetchWithErrorHandling<AdminLeagueParticipantsResponse>(
+    `${apiPath("admin/leagues/participants")}?${query.toString()}`
+  );
 }
 
 export async function getAdminOpsHealthSummary(

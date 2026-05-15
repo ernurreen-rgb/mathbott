@@ -440,6 +440,26 @@ class Database:
         """Get total count of users in rating"""
         return await self.rating.get_rating_count(league=league, group=group)
 
+    async def get_league_groups(self) -> List[Dict[str, Any]]:
+        """Get all league groups for admin views"""
+        return await self.rating.get_league_groups()
+
+    async def get_league_group_participants(
+        self,
+        *,
+        league: str,
+        group: int,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Get participants in one league group for admin views"""
+        return await self.rating.get_league_group_participants(
+            league=league,
+            group=group,
+            limit=limit,
+            offset=offset,
+        )
+
     async def get_global_position(self, user_id: int) -> Optional[int]:
         """Get user's position in the global rating"""
         return await self.rating.get_global_position(user_id)

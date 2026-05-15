@@ -3440,6 +3440,8 @@ def test_admin_routes_contract_and_no_duplicates(client):
         ("GET", "/api/admin/ops/incidents"),
         ("GET", "/api/admin/statistics"),
         ("GET", "/api/admin/onboarding-statistics"),
+        ("GET", "/api/admin/leagues"),
+        ("GET", "/api/admin/leagues/participants"),
     ]
     for method, path in expected_routes:
         assert (method, path) in route_set
@@ -3492,6 +3494,65 @@ async def test_admin_statistics_route_returns_ok(client, test_db):
     payload = response.json()
     assert "question_type_stats" in payload
     assert isinstance(payload["question_type_stats"], list)
+
+
+@pytest.mark.asyncio
+async def test_admin_leagues_routes_return_groups_and_participants(client, test_db):
+    admin_user = await test_db.create_user_by_email("admin.leagues@example.com")
+    await test_db.set_admin_with_role(
+        email=admin_user["email"],
+        is_admin=True,
+        role="reviewer",
+    )
+    first_user = await test_db.create_user_by_email("league.one@example.com")
+    second_user = await test_db.create_user_by_email("league.two@example.com")
+    await test_db.update_user_nickname(first_user["email"], "League One")
+    await test_db.update_user_nickname(second_user["email"], "League Two")
+
+    league_name = "Test League"
+    async with aiosqlite.connect(test_db.db_path) as db:
+        await db.execute(
+            """
+            UPDATE users
+            SET league = ?, league_group = 2, total_points = 200, week_points = 20, total_solved = 12, week_solved = 2
+            WHERE id = ?
+            """,
+            (league_name, first_user["id"]),
+        )
+        await db.execute(
+            """
+            UPDATE users
+            SET league = ?, league_group = 2, total_points = 300, week_points = 10, total_solved = 15, week_solved = 1
+            WHERE id = ?
+            """,
+            (league_name, second_user["id"]),
+        )
+        await db.commit()
+
+    groups_response = client.get(
+        "/api/admin/leagues",
+        params={"email": admin_user["email"]},
+    )
+    assert groups_response.status_code == 200
+    groups = groups_response.json()["items"]
+    target_group = next(
+        item for item in groups if item["league"] == league_name and item["league_group"] == 2
+    )
+    assert target_group["total_users"] == 2
+    assert target_group["named_users"] == 2
+
+    participants_response = client.get(
+        "/api/admin/leagues/participants",
+        params={"email": admin_user["email"], "league": league_name, "group": 2},
+    )
+    assert participants_response.status_code == 200
+    payload = participants_response.json()
+    assert payload["total"] == 2
+    assert [item["email"] for item in payload["items"]] == [
+        first_user["email"],
+        second_user["email"],
+    ]
+    assert payload["items"][0]["week_points"] == 20
 
 
 @pytest.mark.asyncio

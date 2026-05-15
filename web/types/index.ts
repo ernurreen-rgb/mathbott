@@ -61,6 +61,42 @@ export interface AdminRoleListResponse {
   has_more: boolean;
 }
 
+export interface AdminLeagueGroup {
+  league: string;
+  league_group: number;
+  total_users: number;
+  named_users: number;
+  week_points: number;
+  total_points: number;
+}
+
+export interface AdminLeagueGroupListResponse {
+  items: AdminLeagueGroup[];
+}
+
+export interface AdminLeagueParticipant {
+  id: number;
+  email: string | null;
+  nickname: string | null;
+  league: string;
+  league_group: number;
+  total_points: number;
+  week_points: number;
+  total_solved: number;
+  week_solved: number;
+  streak?: number | null;
+  created_at?: string | null;
+  last_active?: string | null;
+}
+
+export interface AdminLeagueParticipantsResponse {
+  items: AdminLeagueParticipant[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface AdminRoleUpdateRequest {
   target_email: string;
   role?: AdminRole;

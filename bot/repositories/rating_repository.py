@@ -78,6 +78,86 @@ class RatingRepository(BaseRepository):
                     row = await cursor.fetchone()
                     return row[0] if row else 0
 
+    async def get_league_groups(self) -> List[Dict[str, Any]]:
+        """List all league groups with participant counts for admin views."""
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT
+                    league,
+                    league_group,
+                    COUNT(*) AS total_users,
+                    SUM(CASE WHEN nickname IS NOT NULL AND nickname != '' THEN 1 ELSE 0 END) AS named_users,
+                    COALESCE(SUM(week_points), 0) AS week_points,
+                    COALESCE(SUM(total_points), 0) AS total_points
+                FROM users
+                GROUP BY league, league_group
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        league_order = {league.value: index for index, league in enumerate(LEAGUE_ORDER)}
+        groups = [dict(row) for row in rows]
+        groups.sort(key=lambda item: (league_order.get(item["league"], 999), item["league_group"]))
+        return groups
+
+    async def get_league_group_participants(
+        self,
+        *,
+        league: str,
+        group: int,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """List participants in one league group for admin views."""
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+            params = (league, group)
+
+            async with db.execute(
+                """
+                SELECT COUNT(*)
+                FROM users
+                WHERE league = ? AND league_group = ?
+                """,
+                params,
+            ) as cursor:
+                row = await cursor.fetchone()
+                total = int(row[0]) if row else 0
+
+            async with db.execute(
+                """
+                SELECT
+                    id,
+                    email,
+                    nickname,
+                    league,
+                    league_group,
+                    total_points,
+                    week_points,
+                    total_solved,
+                    week_solved,
+                    streak,
+                    created_at,
+                    last_active
+                FROM users
+                WHERE league = ? AND league_group = ?
+                ORDER BY week_points DESC, total_points DESC, total_solved DESC, id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+            return {
+                "items": [dict(row) for row in rows],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": (offset + limit) < total,
+            }
+
     async def get_global_position(self, user_id: int) -> Optional[int]:
         """Get user's 1-based position in the global rating, or None if unrated."""
         async with self._connection() as db:
