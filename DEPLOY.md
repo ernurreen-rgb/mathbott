@@ -206,7 +206,37 @@ docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml logs -f frontend backend
 ```
 
-## 8. Update Later
+## 8. Backups
+
+Run a manual SQLite backup:
+
+```bash
+cd /opt/mathbott
+./deploy/scripts/backup-sqlite.sh
+```
+
+For the current backend-only VPS stack, use:
+
+```bash
+cd /opt/mathbott
+ENV_FILE=.env.backend COMPOSE_FILE=docker-compose.backend.yml BACKUP_DIR=/opt/mathbot-backups ./deploy/scripts/backup-sqlite.sh
+```
+
+Suggested daily cron:
+
+```cron
+0 3 * * * cd /opt/mathbott && ENV_FILE=.env.backend COMPOSE_FILE=docker-compose.backend.yml BACKUP_DIR=/opt/mathbot-backups ./deploy/scripts/backup-sqlite.sh >> /var/log/mathbot-backup.log 2>&1
+```
+
+Backups older than `RETENTION_DAYS` are deleted automatically. Default retention is 14 days.
+
+If you use the backend-only VPS stack, apply resource limits and log rotation with:
+
+```bash
+docker compose --env-file .env.backend -f docker-compose.backend.yml -f deploy/docker-compose.backend.override.yml up -d
+```
+
+## 9. Update Later
 
 After new code is pushed and new images are published:
 
@@ -226,7 +256,7 @@ docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -
 docker compose --env-file .env.production -f docker-compose.prod.nginx.hub.yml -f docker-compose.prod.nginx.proxy-network.yml up -d
 ```
 
-## 9. Google OAuth
+## 10. Google OAuth
 
 In Google Cloud Console, add:
 
@@ -237,7 +267,7 @@ In Google Cloud Console, add:
 
 Without this, login will fail.
 
-## 10. Verification
+## 11. Verification
 
 Check the public endpoint:
 
@@ -257,7 +287,7 @@ Expected result:
 - backend health returns `healthy`
 - admin login works through Google OAuth
 
-## 11. Security Notes
+## 12. Security Notes
 
 - Do not commit `.env.production`
 - Do not expose backend port `8000`

@@ -6,9 +6,7 @@ from .common import *  # noqa: F401,F403
 
 def _legacy_role_bootstrap_enabled() -> bool:
     environment = os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
-    if environment != "production":
-        return True
-    return os.getenv("ALLOW_LEGACY_ADMIN_BOOTSTRAP", "false").strip().lower() == "true"
+    return environment != "production"
 
 
 def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -81,7 +79,7 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
             admin_secret = os.getenv("ADMIN_SECRET", "change-me-in-production")
             if not admin_secret or admin_secret == "change-me-in-production":
                 raise HTTPException(status_code=500, detail="ADMIN_SECRET not configured")
-            if secret != admin_secret:
+            if not hmac.compare_digest(secret, admin_secret):
                 logger.warning("Failed set-role attempt with invalid secret for %s", email)
                 raise HTTPException(status_code=403, detail="Invalid secret")
             role_result = await _change_admin_role_common(

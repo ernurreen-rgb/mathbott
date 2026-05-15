@@ -196,8 +196,8 @@ class UserRepository(BaseRepository):
 
             cleaned_search = " ".join((search or "").strip().split()).lower()
             if cleaned_search:
-                where.append("LOWER(email) LIKE ?")
-                params.append(f"%{cleaned_search}%")
+                where.append("LOWER(email) LIKE ? ESCAPE '\\'")
+                params.append(self._contains_like_pattern(cleaned_search))
 
             normalized_role = _normalize_admin_role(role) if role is not None else None
             if normalized_role:

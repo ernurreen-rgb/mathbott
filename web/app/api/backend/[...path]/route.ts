@@ -2,7 +2,7 @@
  * Next.js API route that proxies requests to the FastAPI backend.
  * It is the trusted boundary for backend admin access in production.
  */
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
@@ -88,20 +88,26 @@ function buildProxySignature({
   rawQuery,
   userEmail,
   timestamp,
+  nonce,
 }: {
   method: string;
   path: string;
   rawQuery: string;
   userEmail: string;
   timestamp: string;
+  nonce?: string;
 }): string {
-  const canonicalPayload = [
+  const canonicalPayloadParts = [
     method.toUpperCase(),
     path,
     rawQuery,
     userEmail,
     timestamp,
-  ].join("\n");
+  ];
+  if (nonce !== undefined) {
+    canonicalPayloadParts.push(nonce);
+  }
+  const canonicalPayload = canonicalPayloadParts.join("\n");
   return createHmac("sha256", INTERNAL_PROXY_SHARED_SECRET)
     .update(canonicalPayload, "utf8")
     .digest("hex");
@@ -342,15 +348,26 @@ async function proxyRequest(
 
     if (INTERNAL_PROXY_SHARED_SECRET) {
       const timestamp = String(Math.floor(Date.now() / 1000));
-      const signature = buildProxySignature({
+      const nonce = randomUUID();
+      const legacySignature = buildProxySignature({
         method: request.method,
         path: backendSignaturePath,
         rawQuery: searchString,
         userEmail: proxyUserEmail,
         timestamp,
       });
+      const signatureV2 = buildProxySignature({
+        method: request.method,
+        path: backendSignaturePath,
+        rawQuery: searchString,
+        userEmail: proxyUserEmail,
+        timestamp,
+        nonce,
+      });
       headers.set("X-Proxy-Request-Ts", timestamp);
-      headers.set("X-Proxy-Request-Signature", signature);
+      headers.set("X-Proxy-Request-Nonce", nonce);
+      headers.set("X-Proxy-Request-Signature", legacySignature);
+      headers.set("X-Proxy-Request-Signature-V2", signatureV2);
       if (proxyUserEmail) {
         headers.set("X-Proxy-User-Email", proxyUserEmail);
       }

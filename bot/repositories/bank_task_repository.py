@@ -350,8 +350,8 @@ class BankTaskRepository(BaseRepository):
                 params.append(int(task_id))
             cleaned_actor_email = " ".join((actor_email or "").strip().split()).lower()
             if cleaned_actor_email:
-                where.append("LOWER(actor_email) LIKE ?")
-                params.append(f"%{cleaned_actor_email}%")
+                where.append("LOWER(actor_email) LIKE ? ESCAPE '\\'")
+                params.append(self._contains_like_pattern(cleaned_actor_email))
 
             where_clause = " AND ".join(where)
             async with db.execute(
@@ -405,8 +405,8 @@ class BankTaskRepository(BaseRepository):
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ?")
-                params.append(f"%{cleaned_search}%")
+                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
                 where.append("bt.difficulty = ?")
@@ -571,8 +571,8 @@ class BankTaskRepository(BaseRepository):
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ?")
-                params.append(f"%{cleaned_search}%")
+                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
                 where.append("bt.difficulty = ?")
@@ -693,8 +693,8 @@ class BankTaskRepository(BaseRepository):
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ?")
-                params.append(f"%{cleaned_search}%")
+                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
                 where.append("bt.difficulty = ?")
@@ -1482,11 +1482,11 @@ class BankTaskRepository(BaseRepository):
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
             if normalized_query:
-                like_value = f"%{normalized_query}%"
+                like_value = self._contains_like_pattern(normalized_query)
                 sql = """
                     SELECT name
                     FROM bank_topics
-                    WHERE name_norm LIKE ?
+                    WHERE name_norm LIKE ? ESCAPE '\\'
                     ORDER BY name COLLATE NOCASE ASC
                     LIMIT ?
                 """

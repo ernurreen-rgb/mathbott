@@ -84,7 +84,7 @@ def validate_configuration():
             warnings.append("Telegram alerts enabled but ALERT_TELEGRAM_BOT_TOKEN or ALERT_TELEGRAM_CHAT_ID is missing.")
 
     if environment == "production" and os.getenv("ALLOW_LEGACY_ADMIN_BOOTSTRAP", "false").lower() == "true":
-        warnings.append("ALLOW_LEGACY_ADMIN_BOOTSTRAP is enabled in production. This weakens admin security.")
+        warnings.append("ALLOW_LEGACY_ADMIN_BOOTSTRAP is ignored in production. Legacy admin bootstrap routes stay disabled.")
     
     # Log errors and warnings
     if errors:

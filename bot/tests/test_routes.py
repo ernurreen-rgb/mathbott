@@ -22,7 +22,30 @@ def _extract_http_detail(payload):
     return None
 
 
-def _proxy_headers(method: str, path: str, raw_query: str, email: str, secret: str):
+def _proxy_headers(
+    method: str,
+    path: str,
+    raw_query: str,
+    email: str,
+    secret: str,
+    nonce: str | None = None,
+):
+    timestamp = str(int(time.time()))
+    nonce = nonce or f"test-{time.time_ns()}"
+    legacy_payload = "\n".join([method.upper(), path, raw_query, email, timestamp]).encode("utf-8")
+    payload_v2 = "\n".join([method.upper(), path, raw_query, email, timestamp, nonce]).encode("utf-8")
+    legacy_signature = hmac.new(secret.encode("utf-8"), legacy_payload, hashlib.sha256).hexdigest()
+    signature_v2 = hmac.new(secret.encode("utf-8"), payload_v2, hashlib.sha256).hexdigest()
+    return {
+        "X-Proxy-Request-Ts": timestamp,
+        "X-Proxy-Request-Nonce": nonce,
+        "X-Proxy-User-Email": email,
+        "X-Proxy-Request-Signature": legacy_signature,
+        "X-Proxy-Request-Signature-V2": signature_v2,
+    }
+
+
+def _legacy_proxy_headers(method: str, path: str, raw_query: str, email: str, secret: str):
     timestamp = str(int(time.time()))
     payload = "\n".join([method.upper(), path, raw_query, email, timestamp]).encode("utf-8")
     signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
@@ -76,6 +99,38 @@ def test_trusted_proxy_identity_allows_matching_private_route(client, monkeypatc
 
     assert response.status_code == 200
     assert response.json()["email"] == email
+
+
+def test_trusted_proxy_identity_allows_legacy_signature_without_nonce(client, monkeypatch):
+    secret = "test-shared-secret"
+    email = "legacy.owner@example.com"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+
+    response = client.get(
+        f"/api/user/web/{email}",
+        headers=_legacy_proxy_headers("GET", f"/api/user/web/{email}", "", email, secret),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == email
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_identity_rejects_replayed_signature(client, test_db, monkeypatch):
+    secret = "test-shared-secret"
+    email = "replay.admin@example.com"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    user = await test_db.create_user_by_email(email)
+    await test_db.set_admin_with_role(email=user["email"], is_admin=True, role="super_admin")
+    headers = _proxy_headers("GET", "/api/admin/check", "", email, secret, nonce="fixed-replay-nonce")
+
+    first_response = client.get("/api/admin/check", headers=headers)
+    replay_response = client.get("/api/admin/check", headers=headers)
+
+    assert first_response.status_code == 200
+    assert replay_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -3347,6 +3402,29 @@ def test_admin_routes_contract_and_no_duplicates(client):
         duplicates[key] = duplicates.get(key, 0) + 1
     duplicate_items = [f"{method} {path} x{count}" for (method, path), count in duplicates.items() if count > 1]
     assert not duplicate_items, f"Found duplicate admin routes: {duplicate_items}"
+
+
+def test_legacy_admin_bootstrap_routes_disabled_in_production(test_db, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ALLOW_LEGACY_ADMIN_BOOTSTRAP", "true")
+    from app import create_app, get_rate_limit_key
+    from fastapi.testclient import TestClient
+    from routes import register_routes
+    from slowapi import Limiter
+
+    app = create_app()
+    app.state.db = test_db
+    app.state.limiter = Limiter(key_func=get_rate_limit_key)
+    register_routes(app, app.state.db, app.state.limiter)
+    client = TestClient(app)
+    route_set = {
+        (method, getattr(route, "path", None))
+        for route in client.app.routes
+        for method in (getattr(route, "methods", None) or set())
+    }
+
+    assert ("POST", "/api/admin/set-admin") not in route_set
+    assert ("POST", "/api/admin/set-role") not in route_set
 
 
 @pytest.mark.asyncio

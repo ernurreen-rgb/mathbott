@@ -165,6 +165,45 @@ async def test_user_repository_list_admin_users_filters_and_pagination(test_db):
 
 
 @pytest.mark.asyncio
+async def test_user_repository_admin_search_escapes_like_wildcards(test_db):
+    """Search treats LIKE wildcards as literal input."""
+    repo = UserRepository(db_path=test_db.db_path)
+
+    await repo.create_user_by_email("admin.one@example.com")
+    await repo.create_user_by_email("admin.two@example.com")
+    await repo.set_admin_with_role(email="admin.one@example.com", is_admin=True, role="reviewer")
+    await repo.set_admin_with_role(email="admin.two@example.com", is_admin=True, role="reviewer")
+
+    result = await repo.list_admin_users(search="%", limit=20, offset=0)
+
+    assert result["total"] == 0
+    assert result["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_bank_task_search_escapes_like_wildcards(test_db):
+    """Bank search treats LIKE wildcards as literal input."""
+    await test_db.create_bank_task(
+        text="100% literal task",
+        answer="ok",
+        question_type="input",
+        difficulty="A",
+    )
+    await test_db.create_bank_task(
+        text="plain task",
+        answer="ok",
+        question_type="input",
+        difficulty="A",
+    )
+
+    result = await test_db.get_bank_tasks(search="%", limit=20, offset=0)
+
+    assert result["total"] == 1
+    assert len(result["items"]) == 1
+    assert result["items"][0]["text"] == "100% literal task"
+
+
+@pytest.mark.asyncio
 async def test_user_repository_change_admin_role_with_audit(test_db):
     """Test role change service with audit insert and no-op behavior."""
     repo = UserRepository(db_path=test_db.db_path)

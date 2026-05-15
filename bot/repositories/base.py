@@ -206,6 +206,14 @@ class BaseRepository:
         """Clear prepared statements cache"""
         self._statement_cache.clear()
 
+    def _escape_like_value(self, value: str) -> str:
+        """Escape user-controlled wildcards for SQLite LIKE queries."""
+        return str(value or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    def _contains_like_pattern(self, value: str) -> str:
+        """Build an escaped contains-pattern for SQLite LIKE ... ESCAPE '\\'."""
+        return f"%{self._escape_like_value(value)}%"
+
     async def _run_with_lock_retry(self, operation, *, attempts: int = 5, base_delay: float = 0.15):
         """Retry SQLite write operations when the database is temporarily locked."""
         write_lock = _get_process_write_lock()

@@ -148,7 +148,7 @@ def test_csrf_http_exception_from_middleware_returns_403_not_500(monkeypatch):
 
     assert response.status_code == 403
     payload = response.json()
-    assert payload["error"]["detail"] == "CSRF token missing"
+    assert payload["error"]["detail"] == "Trusted proxy signature required for write requests"
     assert isinstance(response.headers.get("X-Request-ID"), str)
 
 
