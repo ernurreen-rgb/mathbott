@@ -10,6 +10,8 @@ import { ALL_LEAGUES, LEAGUE_COLORS, LEAGUE_ICONS } from "@/lib/constants";
 import { getRating, getUserData } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
+const LEAGUE_GROUP_SIZE = 20;
+
 export default function LeaguePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -41,6 +43,7 @@ export default function LeaguePage() {
       }
       
       setUserLeague(userData.league || "");
+      const leagueGroup = userData.league_group ?? 0;
       setUserPosition(userData.league_position ?? null);
       setCurrentUserId(userData.id);
 
@@ -50,7 +53,11 @@ export default function LeaguePage() {
         if (league === userData.league) {
           // Only fetch rating for user's league
           try {
-            const { data: leagueData, error: leagueError } = await getRating(50, league);
+            const { data: leagueData, error: leagueError } = await getRating(
+              LEAGUE_GROUP_SIZE,
+              league,
+              leagueGroup
+            );
             if (leagueError) {
               // Only log in development
               if (process.env.NODE_ENV === "development") {
@@ -149,7 +156,7 @@ export default function LeaguePage() {
                       setExpandedLeague(league);
                       // Fetch rating if not loaded yet
                       if (rating.length === 0 && league !== userLeague) {
-                        const { data: leagueData } = await getRating(50, league);
+                        const { data: leagueData } = await getRating(LEAGUE_GROUP_SIZE, league, 0);
                         if (leagueData) {
                           setLeaguesData({ ...leaguesData, [league]: leagueData });
                         }

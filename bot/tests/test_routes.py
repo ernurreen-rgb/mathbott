@@ -9,6 +9,7 @@ import time
 import aiosqlite
 import pytest
 
+from models.db_models import LEAGUE_GROUP_SIZE, League
 from utils.internal_proxy_auth import verify_ws_token
 
 
@@ -848,6 +849,27 @@ async def test_get_rating_with_league_filter(client, test_db):
     for item in data["items"]:
         assert item["league"] == "Қола"
         assert "email" not in item
+
+
+@pytest.mark.asyncio
+async def test_get_rating_with_league_group_filter(client, test_db):
+    for index in range(LEAGUE_GROUP_SIZE + 1):
+        email = f"group-rating-{index}@example.com"
+        await test_db.create_user_by_email(email)
+        await test_db.update_user_nickname(email, f"GroupUser{index}")
+
+    response = client.get(
+        f"/api/rating?limit=20&league={League.KOLA.value}&group=1"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["league"] == League.KOLA.value
+    assert data["items"][0]["league_group"] == 1
+    assert data["items"][0]["nickname"] == f"GroupUser{LEAGUE_GROUP_SIZE}"
+    assert "email" not in data["items"][0]
 
 
 @pytest.mark.asyncio

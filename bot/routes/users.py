@@ -19,7 +19,8 @@ def setup_users_routes(app, db, limiter: Limiter):
     async def get_rating(
         limit: int = Query(10, ge=1, le=100),
         offset: int = Query(0, ge=0),
-        league: Optional[str] = Query(None)
+        league: Optional[str] = Query(None),
+        group: Optional[int] = Query(None, ge=0)
     ):
         """
         Get rating - only users with nickname (with pagination)
@@ -39,6 +40,7 @@ def setup_users_routes(app, db, limiter: Limiter):
               "id": 1,
               "nickname": "User1",
               "league": "Алмас",
+              "league_group": 0,
               "total_points": 1000,
               "week_points": 100,
               "total_solved": 50
@@ -54,6 +56,7 @@ def setup_users_routes(app, db, limiter: Limiter):
         **Query Parameters:**
         - `limit` (int, 1-100): Maximum number of users to return (default: 10)
         - `offset` (int, >=0): Number of users to skip (default: 0)
+        - `group` (int, optional): Filter by league group inside the selected league
         - `league` (str, optional): Filter by league name (e.g., "Алмас", "Қола")
         
         **Error Codes:**
@@ -62,22 +65,23 @@ def setup_users_routes(app, db, limiter: Limiter):
         - 500: Internal server error
         """
         # Use cache for rating (cache for 30 seconds as per plan)
-        cache_key = f"rating:{limit}:{offset}:{league or 'all'}"
+        cache_key = f"rating:{limit}:{offset}:{league or 'all'}:{group if group is not None else 'all'}"
         cached_rating = cache.get(cache_key)
         if cached_rating is not None:
             return cached_rating
         
         # Get total count for pagination
-        total = await db.get_rating_count(league=league)
+        total = await db.get_rating_count(league=league, group=group)
         
         # Get paginated rating
-        rating = await db.get_rating(limit=limit, offset=offset, league=league)
+        rating = await db.get_rating(limit=limit, offset=offset, league=league, group=group)
         result = {
             "items": [
                 {
                     "id": u["id"],
                     "nickname": u.get("nickname"),
                     "league": u["league"],
+                    "league_group": u["league_group"],
                     "total_points": u["total_points"],
                     "week_points": u["week_points"],
                     "total_solved": u["total_solved"]
@@ -117,7 +121,7 @@ def setup_users_routes(app, db, limiter: Limiter):
           "nickname": "TestUser",
           "league": "Қола",
           "league_position": 5,
-          "league_size": 30,
+          "league_size": 20,
           "total_solved": 50,
           "week_solved": 10,
           "week_points": 100,
@@ -220,6 +224,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "email": user["email"],
             "nickname": user.get("nickname"),
             "league": user["league"],
+            "league_group": user["league_group"],
             "league_position": stats.get("league_position"),
             "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],
@@ -267,7 +272,7 @@ def setup_users_routes(app, db, limiter: Limiter):
           "nickname": "TestUser",
           "league": "Қола",
           "league_position": 5,
-          "league_size": 30,
+          "league_size": 20,
           "total_solved": 50,
           "week_solved": 10,
           "week_points": 100,
@@ -337,6 +342,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "id": user["id"],
             "nickname": user.get("nickname"),
             "league": user["league"],
+            "league_group": user["league_group"],
             "league_position": stats.get("league_position"),
             "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],

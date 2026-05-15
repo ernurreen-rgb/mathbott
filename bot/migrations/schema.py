@@ -5,6 +5,8 @@ import json
 import logging
 import os
 
+from models.db_models import LEAGUE_GROUP_SIZE
+
 logger = logging.getLogger(__name__)
 
 
@@ -151,6 +153,60 @@ async def _bootstrap_bank_task_versions(db) -> None:
     db.row_factory = old_row_factory
 
 
+async def _rebalance_oversized_league_groups(db) -> None:
+    """Split existing league groups so no group keeps more than LEAGUE_GROUP_SIZE users."""
+    old_row_factory = getattr(db, "row_factory", None)
+    db.row_factory = None
+    try:
+        async with db.execute(
+            """
+            SELECT 1
+            FROM users
+            GROUP BY league, league_group
+            HAVING COUNT(*) > ?
+            LIMIT 1
+            """,
+            (LEAGUE_GROUP_SIZE,),
+        ) as cursor:
+            has_oversized_group = await cursor.fetchone()
+
+        if not has_oversized_group:
+            return
+
+        async with db.execute(
+            """
+            SELECT id, league
+            FROM users
+            ORDER BY league COLLATE NOCASE ASC,
+                     league_group ASC,
+                     week_points DESC,
+                     total_points DESC,
+                     id ASC
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        updates = []
+        current_league = None
+        league_index = 0
+        for user_id, league in rows:
+            if league != current_league:
+                current_league = league
+                league_index = 0
+            updates.append((league_index // LEAGUE_GROUP_SIZE, user_id))
+            league_index += 1
+
+        if updates:
+            await db.executemany(
+                "UPDATE users SET league_group = ? WHERE id = ?",
+                updates,
+            )
+            await db.commit()
+            logger.info("Rebalanced league groups to max %s users", LEAGUE_GROUP_SIZE)
+    finally:
+        db.row_factory = old_row_factory
+
+
 async def create_schema(db):
     """Create all database tables and indexes"""
     if _is_bank_only_migration_requested():
@@ -216,6 +272,8 @@ async def create_schema(db):
         await db.commit()
     except Exception:
         pass  # Column already exists
+
+    await _rebalance_oversized_league_groups(db)
 
     # Backfill existing admins with super_admin role
     try:

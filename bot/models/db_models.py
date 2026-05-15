@@ -13,4 +13,4 @@ class League(Enum):
 
 
 LEAGUE_ORDER = [League.KOLA, League.KUMIS, League.ALTYN, League.PLATINA, League.ALMAS]
-
+LEAGUE_GROUP_SIZE = 20

@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from typing import Optional, Dict, Any, List
-from models.db_models import League
+from models.db_models import League, LEAGUE_GROUP_SIZE
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -77,10 +77,14 @@ class UserRepository(BaseRepository):
                 if existing:
                     return dict(existing)
             
-            # Assign to a league group (simple round-robin)
-            async with db.execute("SELECT COUNT(*) as count FROM users") as cursor:
+            # Assign new users into groups of fixed size within the default league.
+            default_league = League.KOLA.value
+            async with db.execute(
+                "SELECT COUNT(*) as count FROM users WHERE league = ?",
+                (default_league,),
+            ) as cursor:
                 count_row = await cursor.fetchone()
-                group = (count_row["count"] // 30) if count_row else 0
+                group = (count_row["count"] // LEAGUE_GROUP_SIZE) if count_row else 0
 
             # Generate a unique negative telegram_id from email hash
             email_hash = hash(email)
@@ -105,7 +109,7 @@ class UserRepository(BaseRepository):
                 (
                     dummy_telegram_id,
                     email,
-                    League.KOLA.value,
+                    default_league,
                     group,
                     1 if is_admin else 0,
                     admin_role,

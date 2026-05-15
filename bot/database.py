@@ -426,13 +426,19 @@ class Database:
         )
 
     # Delegate rating methods
-    async def get_rating(self, limit: int = 10, offset: int = 0, league: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_rating(
+        self,
+        limit: int = 10,
+        offset: int = 0,
+        league: Optional[str] = None,
+        group: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Get rating with pagination"""
-        return await self.rating.get_rating(limit=limit, offset=offset, league=league)
+        return await self.rating.get_rating(limit=limit, offset=offset, league=league, group=group)
     
-    async def get_rating_count(self, league: Optional[str] = None) -> int:
+    async def get_rating_count(self, league: Optional[str] = None, group: Optional[int] = None) -> int:
         """Get total count of users in rating"""
-        return await self.rating.get_rating_count(league=league)
+        return await self.rating.get_rating_count(league=league, group=group)
 
     async def get_league_rating(self, league: str, group: int) -> List[Dict[str, Any]]:
         """Get rating for specific league group"""

@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from models.db_models import League, LEAGUE_ORDER
+from models.db_models import League, LEAGUE_ORDER, LEAGUE_GROUP_SIZE
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -15,11 +15,27 @@ logger = logging.getLogger(__name__)
 class RatingRepository(BaseRepository):
     """Repository for rating and league operations"""
     
-    async def get_rating(self, limit: int = 10, offset: int = 0, league: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_rating(
+        self,
+        limit: int = 10,
+        offset: int = 0,
+        league: Optional[str] = None,
+        group: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Get rating - only users with nickname (with pagination)"""
         async with self._connection() as db:
             db.row_factory = aiosqlite.Row
-            if league:
+            if league and group is not None:
+                query = """
+                    SELECT * FROM users
+                    WHERE league = ? AND league_group = ? AND nickname IS NOT NULL AND nickname != ''
+                    ORDER BY week_points DESC, total_points DESC
+                    LIMIT ? OFFSET ?
+                """
+                async with db.execute(query, (league, group, limit, offset)) as cursor:
+                    rows = await cursor.fetchall()
+                    return [dict(row) for row in rows]
+            elif league:
                 query = """
                     SELECT * FROM users
                     WHERE league = ? AND nickname IS NOT NULL AND nickname != ''
@@ -40,10 +56,18 @@ class RatingRepository(BaseRepository):
                     rows = await cursor.fetchall()
                     return [dict(row) for row in rows]
     
-    async def get_rating_count(self, league: Optional[str] = None) -> int:
+    async def get_rating_count(self, league: Optional[str] = None, group: Optional[int] = None) -> int:
         """Get total count of users in rating (only with nickname)"""
         async with self._connection() as db:
-            if league:
+            if league and group is not None:
+                query = (
+                    "SELECT COUNT(*) as count FROM users "
+                    "WHERE league = ? AND league_group = ? AND nickname IS NOT NULL AND nickname != ''"
+                )
+                async with db.execute(query, (league, group)) as cursor:
+                    row = await cursor.fetchone()
+                    return row[0] if row else 0
+            elif league:
                 query = "SELECT COUNT(*) as count FROM users WHERE league = ? AND nickname IS NOT NULL AND nickname != ''"
                 async with db.execute(query, (league,)) as cursor:
                     row = await cursor.fetchone()
@@ -146,8 +170,9 @@ class RatingRepository(BaseRepository):
                                         count_row = await count_cursor.fetchone()
                                         league_counts[new_league.value] = count_row[0] if count_row else 0
                                 
-                                new_group = (league_counts[new_league.value] // 30)
+                                new_group = (league_counts[new_league.value] // LEAGUE_GROUP_SIZE)
                                 promotion_updates.append((new_league.value, new_group, user_id))
+                                league_counts[new_league.value] += 1
                                 
                                 # Send notification in background (non-blocking)
                                 try:
@@ -182,8 +207,9 @@ class RatingRepository(BaseRepository):
                                         count_row = await count_cursor.fetchone()
                                         league_counts[new_league.value] = count_row[0] if count_row else 0
                                 
-                                new_group = (league_counts[new_league.value] // 30)
+                                new_group = (league_counts[new_league.value] // LEAGUE_GROUP_SIZE)
                                 demotion_updates.append((new_league.value, new_group, user_id))
+                                league_counts[new_league.value] += 1
 
                 # Batch execute all updates
                 if promotion_updates:

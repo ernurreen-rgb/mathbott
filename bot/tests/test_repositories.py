@@ -1,7 +1,10 @@
 """
 Tests for repository classes
 """
+import aiosqlite
 import pytest
+from models.db_models import LEAGUE_GROUP_SIZE
+from migrations.schema import create_schema
 from repositories.user_repository import (
     AdminRoleConflictError,
     LastSuperAdminError,
@@ -56,6 +59,43 @@ async def test_user_repository_create_user_by_email(test_db):
     # Try to create again (should return existing)
     existing = await repo.create_user_by_email("newuser@example.com")
     assert existing["id"] == user["id"]
+
+
+@pytest.mark.asyncio
+async def test_user_repository_assigns_new_league_group_after_twenty_users(test_db):
+    repo = UserRepository(db_path=test_db.db_path)
+
+    users = [
+        await repo.create_user_by_email(f"league-group-{index}@example.com")
+        for index in range(LEAGUE_GROUP_SIZE + 1)
+    ]
+
+    assert all(user["league_group"] == 0 for user in users[:LEAGUE_GROUP_SIZE])
+    assert users[LEAGUE_GROUP_SIZE]["league_group"] == 1
+
+
+@pytest.mark.asyncio
+async def test_schema_rebalances_oversized_league_groups(test_db):
+    repo = UserRepository(db_path=test_db.db_path)
+    for index in range(LEAGUE_GROUP_SIZE + 1):
+        await repo.create_user_by_email(f"oversized-league-group-{index}@example.com")
+
+    async with aiosqlite.connect(test_db.db_path) as db:
+        await db.execute("UPDATE users SET league_group = 0")
+        await db.commit()
+        await create_schema(db)
+
+        async with db.execute(
+            """
+            SELECT league_group, COUNT(*)
+            FROM users
+            GROUP BY league_group
+            ORDER BY league_group ASC
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+    assert rows == [(0, LEAGUE_GROUP_SIZE), (1, 1)]
 
 
 @pytest.mark.asyncio

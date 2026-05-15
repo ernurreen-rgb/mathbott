@@ -2,6 +2,7 @@ export interface RatingUser {
   id: number;
   nickname: string | null;
   league: string;
+  league_group?: number;
   total_points: number;
   week_points: number;
   total_solved: number;
@@ -20,6 +21,7 @@ export interface UserData {
   email: string;
   nickname?: string;
   league: string;
+  league_group?: number;
   league_position?: number;
   league_size?: number;
   total_solved: number;

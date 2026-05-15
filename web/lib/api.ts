@@ -272,10 +272,18 @@ export async function fetchWithErrorHandling<T>(
   return doFetch();
 }
 
-export async function getRating(limit: number = 50, league?: string): Promise<{ data: RatingUser[] | null; error: string | null }> {
-  const url = league
-    ? `${apiPath('rating')}?limit=${limit}&league=${encodeURIComponent(league)}`
-    : `${apiPath('rating')}?limit=${limit}`;
+export async function getRating(
+  limit: number = 50,
+  league?: string,
+  group?: number
+): Promise<{ data: RatingUser[] | null; error: string | null }> {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (league) query.set("league", league);
+  if (typeof group === "number" && Number.isFinite(group) && group >= 0) {
+    query.set("group", String(group));
+  }
+  const url = `${apiPath("rating")}?${query.toString()}`;
   const result = await fetchWithErrorHandling<{ items: RatingUser[]; total: number; limit: number; offset: number; has_more: boolean } | RatingUser[]>(url);
   
   // Transform API response to expected format
