@@ -220,55 +220,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   return (
     <PresenceContext.Provider value={value}>
       {children}
-      {sessionStatus === "authenticated" && email ? <PresenceFloatingPanel /> : null}
     </PresenceContext.Provider>
-  );
-}
-
-function PresenceFloatingPanel() {
-  const { users, status } = usePresence();
-  const [open, setOpen] = useState(false);
-  const isConnected = status === "connected";
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="fixed right-3 top-3 z-[70] flex items-center gap-2 rounded-full border border-white/50 bg-white/85 px-3 py-2 text-sm font-semibold text-gray-800 shadow-lg backdrop-blur transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-      >
-        <span
-          className={`h-2.5 w-2.5 rounded-full ${isConnected ? "bg-emerald-500" : "bg-gray-400"}`}
-          aria-hidden="true"
-        />
-        <span>Онлайн {users.length}</span>
-      </button>
-
-      {open && (
-        <div className="fixed right-3 top-14 z-[70] w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-white/50 bg-white/95 shadow-2xl backdrop-blur">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-            <div className="font-bold text-gray-900">Қазір онлайн</div>
-            <div className="text-xs font-semibold text-gray-500">{status === "connecting" ? "Қосылуда" : "Live"}</div>
-          </div>
-          <div className="max-h-80 overflow-y-auto p-2">
-            {users.length > 0 ? (
-              users.map((user) => (
-                <div key={user.id} className="flex items-center gap-3 rounded-xl px-3 py-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                  <span className="min-w-0 truncate text-sm font-semibold text-gray-800">
-                    {presenceDisplayName(user)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="px-3 py-6 text-center text-sm text-gray-500">
-                {status === "connecting" ? "Қосылуда..." : "Қазір ешкім жоқ"}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
   );
 }
