@@ -193,7 +193,7 @@ export default function RatingPage() {
       </main>
 
       {showCurrentUserSummary && currentUser && (
-        <div className="fixed left-0 right-0 bottom-24 md:left-64 md:bottom-6 z-40 px-4 sm:px-6 lg:px-8 pointer-events-none">
+        <div className="fixed left-0 right-0 bottom-20 md:left-64 md:bottom-4 z-40 px-4 sm:px-6 lg:px-8 pointer-events-none">
           <div className="mx-auto max-w-4xl pointer-events-auto">
             <RatingButton
               rank={`#${currentUser.global_position}`}
