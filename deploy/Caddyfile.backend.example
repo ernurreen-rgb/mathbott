@@ -1,0 +1,8 @@
+# Backend-only Caddy config for the Google Cloud VPS.
+# Set BACKEND_DOMAIN=qazmath-api.35-225-92-22.sslip.io in the VPS env file.
+# Caddy needs public ports 80 and 443 so it can issue and renew TLS certificates.
+
+{$BACKEND_DOMAIN} {
+    encode gzip zstd
+    reverse_proxy backend:8000
+}

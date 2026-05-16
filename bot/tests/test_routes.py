@@ -10,7 +10,7 @@ import aiosqlite
 import pytest
 
 from models.db_models import LEAGUE_GROUP_SIZE, League
-from utils.internal_proxy_auth import verify_ws_token
+from utils.internal_proxy_auth import verify_presence_ws_token, verify_ws_token
 
 
 def _extract_http_detail(payload):
@@ -601,6 +601,51 @@ async def test_coop_ws_token_requires_participant(client, test_db, test_user):
         params={"email": outsider["email"]},
     )
     assert outsider_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_presence_ws_token_requires_existing_user(client, test_user):
+    response = client.get(
+        "/api/presence/ws-token",
+        params={"email": test_user["email"]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["expires_in"] == 120
+    assert verify_presence_ws_token(
+        user_email=test_user["email"],
+        token=payload["token"],
+    ) == (True, None)
+
+    missing_response = client.get(
+        "/api/presence/ws-token",
+        params={"email": "missing-presence@example.com"},
+    )
+    assert missing_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_presence_ws_sends_snapshot_and_pong(client, test_user):
+    token_response = client.get(
+        "/api/presence/ws-token",
+        params={"email": test_user["email"]},
+    )
+    token = token_response.json()["token"]
+
+    with client.websocket_connect(
+        f"/ws/presence?email={test_user['email']}&token={token}"
+    ) as websocket:
+        snapshot = websocket.receive_json()
+        assert snapshot["type"] == "presence_snapshot"
+        assert snapshot["users"] == [
+            {
+                "id": test_user["id"],
+                "nickname": test_user.get("nickname"),
+            }
+        ]
+
+        websocket.send_json({"type": "ping"})
+        assert websocket.receive_json() == {"type": "pong"}
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from routes import reports
 from routes import onboarding
 from routes import export
 from routes import friends
+from routes import presence
 
 
 def register_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -42,6 +43,7 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     onboarding.setup_onboarding_routes(app, db, limiter)
     export.setup_export_routes(app, db)
     friends.setup_friends_routes(app, db, limiter)
+    presence.setup_presence_routes(app, db, limiter)
     
     # Admin роуты (должны быть последними для правильного порядка)
     admin.setup_admin_routes(app, db, limiter)
