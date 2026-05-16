@@ -117,7 +117,7 @@ export default function RatingPage() {
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
       <div className="absolute inset-0 bg-black/5"></div>
       <DesktopNav />
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 pt-8 pb-40 md:pb-28 relative z-10">
         <div className="w-full max-w-4xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
             <div className="flex items-center gap-4 mb-6">
@@ -137,18 +137,6 @@ export default function RatingPage() {
             <div className="space-y-3">
               {globalRating.length > 0 ? (
                 <>
-                  {showCurrentUserSummary && currentUser && (
-                    <RatingButton
-                      rank={`#${currentUser.global_position}`}
-                      name={`${TEXT.you}: ${currentUser.nickname || TEXT.player}`}
-                      league={currentUser.league}
-                      solved={currentUser.total_solved}
-                      points={currentUser.total_points}
-                      highlighted
-                      onClick={() => router.push(`/profile/${currentUser.id}`)}
-                    />
-                  )}
-
                   {globalRating.map((user, idx) => {
                     const isCurrentUser = user.id === currentUserId;
                     const hasDefaultNickname =
@@ -204,6 +192,23 @@ export default function RatingPage() {
         </div>
       </main>
 
+      {showCurrentUserSummary && currentUser && (
+        <div className="fixed left-0 right-0 bottom-24 md:left-64 md:bottom-6 z-40 px-4 sm:px-6 lg:px-8 pointer-events-none">
+          <div className="mx-auto max-w-4xl pointer-events-auto">
+            <RatingButton
+              rank={`#${currentUser.global_position}`}
+              name={`${TEXT.you}: ${currentUser.nickname || TEXT.player}`}
+              league={currentUser.league}
+              solved={currentUser.total_solved}
+              points={currentUser.total_points}
+              highlighted
+              compact
+              onClick={() => router.push(`/profile/${currentUser.id}`)}
+            />
+          </div>
+        </div>
+      )}
+
       <MobileNav currentPage="rating" />
     </div>
   );
@@ -219,6 +224,7 @@ function RatingButton({
   podium = false,
   highlighted = false,
   disabled = false,
+  compact = false,
   onClick,
 }: {
   rank: string;
@@ -230,6 +236,7 @@ function RatingButton({
   podium?: boolean;
   highlighted?: boolean;
   disabled?: boolean;
+  compact?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -237,7 +244,9 @@ function RatingButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full text-left flex justify-between items-center p-5 rounded-2xl border-2 transition-all ${
+      className={`w-full text-left flex justify-between items-center ${
+        compact ? "p-4" : "p-5"
+      } rounded-2xl border-2 transition-all ${
         disabled ? "hover:shadow-lg" : "cursor-pointer hover:shadow-glow hover:border-purple-400"
       } ${
         highlighted
