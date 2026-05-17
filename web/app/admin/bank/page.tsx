@@ -93,6 +93,18 @@ type SnapshotViewState = {
   snapshot: any;
 };
 
+type JsonEditState = {
+  task: BankTask;
+  versionNo: number;
+  value: string;
+  error: string | null;
+  saving: boolean;
+  canForceSave: boolean;
+};
+
+const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "input", "select", "factor_grid"];
+const JSON_EDIT_DIFFICULTIES: BankDifficulty[] = ["A", "B", "C"];
+
 const createEmptyForm = (): BankFormState => ({
   text: "",
   question_type: "mcq",
@@ -189,6 +201,45 @@ const formatDifficultyLabel = (difficulty: BankDifficulty): string => {
   return "C (қиын)";
 };
 
+const normalizeJsonEditQuestionType = (value: unknown): QuestionType => {
+  if (typeof value === "string" && JSON_EDIT_QUESTION_TYPES.includes(value as QuestionType)) {
+    return value as QuestionType;
+  }
+  throw new Error(`question_type жарамсыз: ${String(value || "")}`);
+};
+
+const normalizeJsonEditDifficulty = (value: unknown): BankDifficulty => {
+  if (typeof value === "string" && JSON_EDIT_DIFFICULTIES.includes(value as BankDifficulty)) {
+    return value as BankDifficulty;
+  }
+  return "B";
+};
+
+const normalizeJsonEditStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
+};
+
+const normalizeJsonEditArray = (value: unknown): any[] => {
+  return Array.isArray(value) ? value : [];
+};
+
+const buildJsonEditValue = (snapshot: any, task: BankTask): string => {
+  const payload = {
+    text: snapshot?.text ?? "",
+    answer: snapshot?.answer ?? "",
+    question_type: snapshot?.question_type ?? task.question_type ?? "input",
+    text_scale: normalizeTaskTextScale(snapshot?.text_scale ?? task.text_scale),
+    difficulty: snapshot?.difficulty ?? task.difficulty ?? "B",
+    topics: Array.isArray(snapshot?.topics) ? snapshot.topics : [],
+    options: Array.isArray(snapshot?.options) ? snapshot.options : [],
+    subquestions: Array.isArray(snapshot?.subquestions) ? snapshot.subquestions : [],
+    image_filename: snapshot?.image_filename ?? null,
+    solution_filename: snapshot?.solution_filename ?? null,
+  };
+  return JSON.stringify(payload, null, 2);
+};
+
 const getBankFormOptionValue = (form: BankFormState, label: McqOptionLabel): string => {
   switch (label) {
     case "A":
@@ -281,6 +332,7 @@ export default function AdminBankPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [snapshotView, setSnapshotView] = useState<SnapshotViewState | null>(null);
+  const [jsonEdit, setJsonEdit] = useState<JsonEditState | null>(null);
   const [rollbackLoading, setRollbackLoading] = useState(false);
   const [deleteVersionLoadingNo, setDeleteVersionLoadingNo] = useState<number | null>(null);
   const [usageTask, setUsageTask] = useState<BankTask | null>(null);
@@ -792,6 +844,7 @@ export default function AdminBankPage() {
     setHistoryItems([]);
     setHistoryError(null);
     setSnapshotView(null);
+    setJsonEdit(null);
     setHistoryLoading(true);
     const { data, error: err } = await getAdminBankTaskVersions(task.id, email, { limit: 100, offset: 0 });
     if (err) setHistoryError(err);
@@ -807,6 +860,108 @@ export default function AdminBankPage() {
       return;
     }
     setSnapshotView({ taskId, versionNo, snapshot: data.snapshot });
+  };
+
+  const openJsonEdit = async (task: BankTask, versionNo: number) => {
+    if (!email) return;
+    setHistoryError(null);
+    const { data, error: err } = await getAdminBankTaskVersion(task.id, versionNo, email);
+    if (err || !data) {
+      setHistoryError(err || "JSON өңдеу үшін нұсқаны жүктеу мүмкін болмады");
+      return;
+    }
+    setJsonEdit({
+      task,
+      versionNo,
+      value: buildJsonEditValue(data.snapshot, task),
+      error: null,
+      saving: false,
+      canForceSave: false,
+    });
+  };
+
+  const saveJsonEdit = async (dedupConfirmed: boolean = false) => {
+    if (!email || !jsonEdit) return;
+
+    try {
+      let parsed: Record<string, unknown>;
+      try {
+        const raw = JSON.parse(jsonEdit.value);
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          throw new Error("JSON object болуы керек");
+        }
+        parsed = raw as Record<string, unknown>;
+      } catch (err: any) {
+        setJsonEdit((prev) => (prev ? { ...prev, error: err?.message || "JSON форматы қате", canForceSave: false } : prev));
+        return;
+      }
+
+      const text = String(parsed.text ?? "").trim();
+      if (!text) {
+        setJsonEdit((prev) => (prev ? { ...prev, error: "text бос болмауы керек", canForceSave: false } : prev));
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("text", text);
+      formData.append("answer", String(parsed.answer ?? ""));
+      formData.append("question_type", normalizeJsonEditQuestionType(parsed.question_type ?? jsonEdit.task.question_type));
+      formData.append("text_scale", normalizeTaskTextScale(typeof parsed.text_scale === "string" ? parsed.text_scale : null));
+      formData.append("difficulty", normalizeJsonEditDifficulty(parsed.difficulty));
+      formData.append("topics", JSON.stringify(normalizeJsonEditStringArray(parsed.topics)));
+      formData.append("options", JSON.stringify(normalizeJsonEditArray(parsed.options)));
+      formData.append("subquestions", JSON.stringify(normalizeJsonEditArray(parsed.subquestions)));
+      if (dedupConfirmed) formData.append("dedup_confirmed", "true");
+      if (typeof jsonEdit.task.current_version === "number") {
+        formData.append("expected_current_version", String(jsonEdit.task.current_version));
+      }
+
+      setJsonEdit((prev) => (prev ? { ...prev, saving: true, error: null, canForceSave: false } : prev));
+
+      const { error: err, conflict } = await updateAdminBankTask(jsonEdit.task.id, formData, email);
+      if (conflict?.code === "SIMILAR_TASKS_FOUND") {
+        setJsonEdit((prev) =>
+          prev
+            ? {
+                ...prev,
+                saving: false,
+                error: conflict.message || "Ұқсас тапсырмалар табылды. Қажет болса, мәжбүрлеп сақтаңыз.",
+                canForceSave: true,
+              }
+            : prev
+        );
+        return;
+      }
+      if (conflict?.code === "VERSION_CONFLICT") {
+        setJsonEdit((prev) =>
+          prev
+            ? {
+                ...prev,
+                saving: false,
+                error: conflict.message || "Тапсырма нұсқасы ескірген. Тарихты қайта ашып көріңіз.",
+                canForceSave: false,
+              }
+            : prev
+        );
+        await fetchTasks();
+        return;
+      }
+      if (err) {
+        setJsonEdit((prev) => (prev ? { ...prev, saving: false, error: err, canForceSave: false } : prev));
+        return;
+      }
+
+      setJsonEdit(null);
+      setSnapshotView(null);
+      await fetchTasks();
+      if (historyTask && historyTask.id === jsonEdit.task.id) {
+        await openHistory(jsonEdit.task);
+      }
+    } catch (err: any) {
+      setJsonEdit((prev) =>
+        prev ? { ...prev, saving: false, error: err?.message || "JSON арқылы сақтау қатесі", canForceSave: false } : prev
+      );
+    }
   };
 
   const handleRollbackVersion = async (task: BankTask, versionNo: number) => {
@@ -1578,6 +1733,7 @@ export default function AdminBankPage() {
                       onClick={() => {
                         setHistoryTask(null);
                         setSnapshotView(null);
+                        setJsonEdit(null);
                       }}
                       className="bg-gray-200 hover:bg-gray-300 text-gray-900 px-3 py-1 rounded-lg"
                     >
@@ -1625,6 +1781,12 @@ export default function AdminBankPage() {
                               >
                                 Біржола жою
                               </button>
+                              <button
+                                onClick={() => openJsonEdit(historyTask, item.version_no)}
+                                className="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1 rounded-lg"
+                              >
+                                Өңдеу
+                              </button>
                             </div>
                           </div>
                         );
@@ -1650,6 +1812,73 @@ export default function AdminBankPage() {
                   <pre className="text-xs bg-gray-100 rounded-lg p-3 overflow-auto whitespace-pre-wrap break-words">
                     {JSON.stringify(snapshotView.snapshot, null, 2)}
                   </pre>
+                </div>
+              </div>
+            )}
+
+            {jsonEdit && (
+              <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+                <div className="w-full max-w-4xl bg-white rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h3 className="text-lg font-bold">JSON өңдеу #{jsonEdit.task.id}</h3>
+                      <div className="text-xs text-gray-500">v{jsonEdit.versionNo} нұсқасы бойынша</div>
+                    </div>
+                    <button
+                      onClick={() => setJsonEdit(null)}
+                      disabled={jsonEdit.saving}
+                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-60 text-gray-900 px-3 py-1 rounded-lg"
+                    >
+                      Жабу
+                    </button>
+                  </div>
+                  {jsonEdit.error && (
+                    <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                      {jsonEdit.error}
+                    </div>
+                  )}
+                  <label htmlFor="bank-json-edit" className="mb-2 block text-sm font-semibold text-gray-700">
+                    Тапсырма JSON
+                  </label>
+                  <textarea
+                    id="bank-json-edit"
+                    value={jsonEdit.value}
+                    onChange={(e) =>
+                      setJsonEdit((prev) =>
+                        prev ? { ...prev, value: e.target.value, error: null, canForceSave: false } : prev
+                      )
+                    }
+                    spellCheck={false}
+                    className="min-h-[420px] w-full rounded-lg border border-gray-300 bg-gray-950 p-3 font-mono text-xs leading-5 text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <div className="mt-2 text-xs text-gray-500">
+                    image_filename және solution_filename тек анықтама үшін көрсетіледі.
+                  </div>
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    <button
+                      onClick={() => setJsonEdit(null)}
+                      disabled={jsonEdit.saving}
+                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-60 text-gray-900 font-semibold py-2 px-4 rounded-lg"
+                    >
+                      Бас тарту
+                    </button>
+                    {jsonEdit.canForceSave && (
+                      <button
+                        onClick={() => saveJsonEdit(true)}
+                        disabled={jsonEdit.saving}
+                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
+                      >
+                        Сонда да сақтау
+                      </button>
+                    )}
+                    <button
+                      onClick={() => saveJsonEdit(false)}
+                      disabled={jsonEdit.saving}
+                      className="bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
+                    >
+                      {jsonEdit.saving ? "Сақталуда..." : "JSON сақтау"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
