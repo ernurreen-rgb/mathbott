@@ -902,15 +902,24 @@ export default function AdminBankPage() {
         return;
       }
 
+      const questionType = normalizeJsonEditQuestionType(parsed.question_type ?? jsonEdit.task.question_type);
       const formData = new FormData();
       formData.append("text", text);
       formData.append("answer", String(parsed.answer ?? ""));
-      formData.append("question_type", normalizeJsonEditQuestionType(parsed.question_type ?? jsonEdit.task.question_type));
+      formData.append("question_type", questionType);
       formData.append("text_scale", normalizeTaskTextScale(typeof parsed.text_scale === "string" ? parsed.text_scale : null));
       formData.append("difficulty", normalizeJsonEditDifficulty(parsed.difficulty));
       formData.append("topics", JSON.stringify(normalizeJsonEditStringArray(parsed.topics)));
-      formData.append("options", JSON.stringify(normalizeJsonEditArray(parsed.options)));
-      formData.append("subquestions", JSON.stringify(normalizeJsonEditArray(parsed.subquestions)));
+      if (isMcqQuestionType(questionType) || questionType === "select") {
+        formData.append("options", JSON.stringify(normalizeJsonEditArray(parsed.options)));
+      } else {
+        formData.append("options", "");
+      }
+      if (questionType === "select") {
+        formData.append("subquestions", JSON.stringify(normalizeJsonEditArray(parsed.subquestions)));
+      } else {
+        formData.append("subquestions", "");
+      }
       if (dedupConfirmed) formData.append("dedup_confirmed", "true");
       if (typeof jsonEdit.task.current_version === "number") {
         formData.append("expected_current_version", String(jsonEdit.task.current_version));
