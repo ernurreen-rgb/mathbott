@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Optional, Tuple
 
 from fastapi import Request
+from utils.request_path import get_scope_path
 
 
 PROXY_TS_HEADER = "X-Proxy-Request-Ts"
@@ -102,7 +103,7 @@ def _build_canonical_from_request(
         raw_query = request.url.query or ""
     return build_canonical_proxy_payload(
         method=request.method,
-        path=request.url.path,
+        path=get_scope_path(request),
         raw_query=raw_query,
         user_email=user_email,
         timestamp=timestamp,

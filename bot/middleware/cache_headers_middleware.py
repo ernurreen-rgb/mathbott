@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from utils.request_path import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class CacheHeadersMiddleware(BaseHTTPMiddleware):
         if request.method != "GET" or response.status_code != 200:
             return response
         
-        path = request.url.path
+        path = get_scope_path(request)
 
         if self._has_user_identity(request):
             self._set_no_store_headers(response)

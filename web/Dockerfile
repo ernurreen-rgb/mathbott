@@ -29,6 +29,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+RUN addgroup -S appuser && adduser -S appuser -G appuser
+
 # Copy package files
 COPY package*.json ./
 
@@ -40,12 +42,16 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./next.config.js
 
+RUN chown -R appuser:appuser /app
+
 # Expose port
 EXPOSE 3000
 
 # Set environment variables
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+USER appuser
 
 # Run the application
 CMD ["npm", "start"]

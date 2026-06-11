@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
+from utils.request_path import get_scope_path
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # Skip CSRF check for GET, HEAD, OPTIONS
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
+
+        path = get_scope_path(request)
         
         # Skip CSRF check for exempt paths
-        if any(request.url.path.startswith(path) for path in self.exempt_paths):
+        if any(path.startswith(exempt_path) for exempt_path in self.exempt_paths):
             return await call_next(request)
         
         # Skip CSRF check in development if disabled
@@ -41,7 +44,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if is_valid_proxy:
                 return await call_next(request)
 
-        logger.warning("Rejected unsigned write request for %s %s", request.method, request.url.path)
+        logger.warning("Rejected unsigned write request for %s %s", request.method, path)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Trusted proxy signature required for write requests",

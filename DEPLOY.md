@@ -63,6 +63,14 @@ cd /opt/mathbott
 ENV_FILE=.env.backend COMPOSE_FILE=docker-compose.backend.yml BACKUP_DIR=/opt/mathbot-backups ./deploy/scripts/backup-sqlite.sh
 ```
 
+Recommended cron entry for daily online SQLite backups:
+
+```cron
+0 3 * * * cd /opt/mathbott && ENV_FILE=.env.backend COMPOSE_FILE=docker-compose.backend.yml BACKUP_DIR=/opt/mathbot-backups ./deploy/scripts/backup-sqlite.sh >> /var/log/mathbot-backup.log 2>&1
+```
+
+The backup script runs SQLite's online backup API inside the backend container, compresses the backup, and removes old `mathbot-*.db.gz` files according to `RETENTION_DAYS`.
+
 Deploy backend:
 
 ```bash

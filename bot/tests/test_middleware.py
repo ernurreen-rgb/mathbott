@@ -153,6 +153,26 @@ def test_csrf_http_exception_from_middleware_returns_403_not_500(monkeypatch):
     assert isinstance(response.headers.get("X-Request-ID"), str)
 
 
+def test_csrf_uses_raw_scope_path_for_exemptions(monkeypatch):
+    monkeypatch.setenv("CSRF_ENABLED", "true")
+
+    app = FastAPI()
+    app.state.environment = "production"
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, general_exception_handler)
+    app.add_middleware(CSRFMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+
+    @app.put("/test-write")
+    async def test_write_endpoint():
+        return {"ok": True}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.put("/test-write", headers={"host": "example.com/api/health?x="})
+
+    assert response.status_code == 403
+
+
 def test_trusted_proxy_body_replay_allows_json_post_with_request_context(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
 

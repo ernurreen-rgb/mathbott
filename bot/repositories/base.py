@@ -80,11 +80,10 @@ class BaseRepository:
     async def _connection(self):
         """
         Async context manager to acquire and release a connection.
-        Always ensures connection is configured and released.
+        Always ensures connection is released.
         """
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             yield conn
         finally:
             await self._release_connection(conn)

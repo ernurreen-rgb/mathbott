@@ -4,8 +4,6 @@ Connection pool for SQLite database connections
 import aiosqlite
 import asyncio
 import logging
-from typing import Optional
-from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +35,7 @@ class ConnectionPool:
         self.timeout = timeout
         self.busy_timeout_ms = busy_timeout_ms
         
-        self._pool: deque = deque()
+        self._pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue(maxsize=max_size)
         self._created = 0
         self._lock = asyncio.Lock()
         self._closed = False
@@ -45,7 +43,11 @@ class ConnectionPool:
     async def _create_connection(self) -> aiosqlite.Connection:
         """Create a new database connection"""
         conn = await aiosqlite.connect(self.db_path, timeout=self.timeout)
-        await self._configure_connection(conn)
+        try:
+            await self._configure_connection(conn)
+        except Exception:
+            await conn.close()
+            raise
         self._created += 1
         logger.debug(f"Created new connection (total: {self._created})")
         return conn
@@ -72,30 +74,32 @@ class ConnectionPool:
         """
         if self._closed:
             raise RuntimeError("Connection pool is closed")
+
+        try:
+            conn = self._pool.get_nowait()
+        except asyncio.QueueEmpty:
+            conn = None
+        if conn is not None:
+            if self._closed:
+                await conn.close()
+                raise RuntimeError("Connection pool is closed")
+            return conn
         
         async with self._lock:
-            # Try to get connection from pool
-            if self._pool:
-                conn = self._pool.popleft()
-                # Check if connection is still valid
-                try:
-                    await conn.execute("SELECT 1")
-                    return conn
-                except Exception:
-                    # Connection is invalid, create new one
-                    logger.warning("Invalid connection in pool, creating new one")
-                    self._created -= 1
-            
             # Create new connection if under max_size
+            if self._closed:
+                raise RuntimeError("Connection pool is closed")
             if self._created < self.max_size:
                 return await self._create_connection()
-            
-            # Wait for connection to become available
-            # In practice, this should rarely happen with proper sizing
-        
-        # If we can't get a connection immediately, wait a bit and retry
-        await asyncio.sleep(0.01)
-        return await self.acquire()
+
+        try:
+            conn = await asyncio.wait_for(self._pool.get(), timeout=self.timeout)
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError("Timed out waiting for a database connection") from exc
+        if self._closed:
+            await conn.close()
+            raise RuntimeError("Connection pool is closed")
+        return conn
     
     async def release(self, conn: aiosqlite.Connection) -> None:
         """
@@ -107,38 +111,32 @@ class ConnectionPool:
         if self._closed:
             await conn.close()
             return
-        
-        async with self._lock:
-            # Check if connection is still valid
+
+        try:
+            self._pool.put_nowait(conn)
+        except asyncio.QueueFull:
             try:
-                await conn.execute("SELECT 1")
-                if len(self._pool) < self.max_size:
-                    self._pool.append(conn)
-                else:
-                    await conn.close()
-                    self._created -= 1
-            except Exception:
-                # Connection is invalid, close it
-                try:
-                    await conn.close()
-                except Exception:
-                    pass
-                self._created -= 1
+                await conn.close()
+            finally:
+                self._created = max(0, self._created - 1)
     
     async def initialize(self) -> None:
         """Initialize pool with minimum connections"""
         async with self._lock:
-            while len(self._pool) < self.min_size and self._created < self.max_size:
+            while self._pool.qsize() < self.min_size and self._created < self.max_size:
                 conn = await self._create_connection()
-                self._pool.append(conn)
-        logger.info(f"Connection pool initialized with {len(self._pool)} connections")
+                self._pool.put_nowait(conn)
+        logger.info(f"Connection pool initialized with {self._pool.qsize()} connections")
     
     async def close(self) -> None:
         """Close all connections in the pool"""
         async with self._lock:
             self._closed = True
-            while self._pool:
-                conn = self._pool.popleft()
+            while True:
+                try:
+                    conn = self._pool.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
                 try:
                     await conn.close()
                 except Exception:
@@ -159,7 +157,7 @@ class ConnectionPool:
     def get_stats(self) -> dict:
         """Get pool statistics"""
         return {
-            "pool_size": len(self._pool),
+            "pool_size": self._pool.qsize(),
             "created": self._created,
             "max_size": self.max_size,
             "min_size": self.min_size,

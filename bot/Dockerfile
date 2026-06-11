@@ -3,6 +3,8 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+ENV PYTHONUSERBASE=/install
+
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -20,16 +22,19 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy only installed packages from builder
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /install /usr/local
+
+# Create a non-root runtime user and writable runtime directories
+RUN groupadd --system appuser \
+    && useradd --system --gid appuser --home-dir /app --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/data /data /images \
+    && chown -R appuser:appuser /app /data /images
 
 # Copy application code
-COPY . .
+COPY --chown=appuser:appuser . .
 
-# Create directory for database
-RUN mkdir -p /app/data
-
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+# Make sure installed package scripts are usable
+ENV PATH=/usr/local/bin:$PATH
 
 # Expose port
 EXPOSE 8000
@@ -37,6 +42,8 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+
+USER appuser
 
 # Run the application
 CMD ["python", "main.py"]
