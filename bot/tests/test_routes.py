@@ -5,11 +5,14 @@ import hashlib
 import hmac
 import json
 import time
+import csv
+from io import StringIO
 
 import aiosqlite
 import pytest
 
 from models.db_models import LEAGUE_GROUP_SIZE, League
+from routes.presence import PresenceConnectionManager
 from utils.internal_proxy_auth import verify_presence_ws_token, verify_ws_token
 
 
@@ -648,6 +651,46 @@ async def test_presence_ws_sends_snapshot_and_pong(client, test_user):
         assert websocket.receive_json() == {"type": "pong"}
 
 
+class _FakePresenceWebSocket:
+    def __init__(self, *, fail_send: bool = False):
+        self.fail_send = fail_send
+        self.messages: list[dict] = []
+
+    async def accept(self):
+        return None
+
+    async def send_text(self, data: str):
+        if self.fail_send:
+            raise RuntimeError("stale websocket")
+        self.messages.append(json.loads(data))
+
+
+@pytest.mark.asyncio
+async def test_presence_broadcast_reports_stale_last_connection_offline():
+    manager = PresenceConnectionManager()
+    stale_ws = _FakePresenceWebSocket(fail_send=True)
+    peer_ws = _FakePresenceWebSocket()
+
+    await manager.connect({"id": 1, "nickname": "Stale"}, stale_ws)
+    await manager.connect({"id": 2, "nickname": "Peer"}, peer_ws)
+
+    await manager.broadcast(
+        {
+            "type": "presence_update",
+            "status": "online",
+            "user": {"id": 3, "nickname": "Other"},
+        }
+    )
+
+    assert 1 not in manager.active_connections
+    assert any(
+        message.get("type") == "presence_update"
+        and message.get("status") == "offline"
+        and message.get("user", {}).get("id") == 1
+        for message in peer_ws.messages
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_user_web(client, test_db):
     """Test getting user web stats"""
@@ -743,6 +786,40 @@ async def test_get_public_user_profile_rejects_email_identifier(client, test_use
     """Public profiles must not be addressable by email."""
     response = client.get(f"/api/user/public/{test_user['email']}")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_user_export_csv_quotes_and_neutralizes_formula_values(client, test_db, test_user):
+    await test_db.update_user_nickname(test_user["email"], "Nick, With Comma")
+    module = await test_db.create_module("Export Module", sort_order=1)
+    section = await test_db.create_section(module["id"], "Export Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Export task",
+        "42",
+        test_user["id"],
+    )
+    await test_db.record_solution(
+        test_user["id"],
+        task["id"],
+        "=2+2, with comma\nand newline",
+        False,
+    )
+
+    response = client.get(
+        f"/api/export/user/{test_user['email']}",
+        params={"format": "csv"},
+    )
+
+    assert response.status_code == 200
+    rows = list(csv.reader(StringIO(response.text)))
+    assert ["Nickname", "Nick, With Comma"] in rows
+    assert any(
+        row
+        and row[0] == str(task["id"])
+        and row[1] == "'=2+2, with comma\nand newline"
+        for row in rows
+    )
 
 
 def test_friend_invite_flow(client):

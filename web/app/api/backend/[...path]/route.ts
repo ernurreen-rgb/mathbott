@@ -405,15 +405,17 @@ async function proxyRequest(
         data.trim().startsWith("{") ||
         data.trim().startsWith("[");
 
-      nextResponse = isJson
-        ? NextResponse.json(JSON.parse(data), {
-            status: response.status,
-            statusText: response.statusText,
-          })
-        : new NextResponse(data, {
-            status: response.status,
-            statusText: response.statusText,
-          });
+      if (isJson && data.trim()) {
+        nextResponse = NextResponse.json(JSON.parse(data), {
+          status: response.status,
+          statusText: response.statusText,
+        });
+      } else {
+        nextResponse = new NextResponse(data || null, {
+          status: response.status,
+          statusText: response.statusText,
+        });
+      }
     }
 
     response.headers.forEach((value, key) => {

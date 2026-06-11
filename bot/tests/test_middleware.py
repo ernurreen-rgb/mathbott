@@ -12,6 +12,7 @@ from middleware.error_handler import (
 from middleware.csrf import CSRFMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
 from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
+from middleware.cache_headers_middleware import CacheHeadersMiddleware
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
@@ -169,4 +170,36 @@ def test_trusted_proxy_body_replay_allows_json_post_with_request_context(monkeyp
 
     assert response.status_code == 200
     assert response.json() == {"email": "user@example.com", "ok": True}
+
+
+def test_cache_headers_no_store_for_email_query():
+    app = FastAPI()
+    app.add_middleware(CacheHeadersMiddleware)
+
+    @app.get("/api/modules/map")
+    async def modules_map():
+        return {"ok": True}
+
+    client = TestClient(app)
+    response = client.get("/api/modules/map?email=user@example.com")
+
+    assert response.status_code == 200
+    assert "no-store" in response.headers["Cache-Control"]
+    assert response.headers["Pragma"] == "no-cache"
+    assert response.headers["Expires"] == "0"
+
+
+def test_cache_headers_keep_public_cache_for_anonymous_modules():
+    app = FastAPI()
+    app.add_middleware(CacheHeadersMiddleware)
+
+    @app.get("/api/modules/map")
+    async def modules_map():
+        return {"ok": True}
+
+    client = TestClient(app)
+    response = client.get("/api/modules/map")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"].startswith("public")
 

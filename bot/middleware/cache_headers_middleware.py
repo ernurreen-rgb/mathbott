@@ -3,7 +3,7 @@ Middleware for adding HTTP cache headers to responses
 """
 import hashlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -33,13 +33,15 @@ class CacheHeadersMiddleware(BaseHTTPMiddleware):
             return response
         
         path = request.url.path
+
+        if self._has_user_identity(request):
+            self._set_no_store_headers(response)
+            return response
         
         # Determine cache strategy based on endpoint
         if path.startswith("/api/health"):
             # Health check should not be cached
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
+            self._set_no_store_headers(response)
         elif path.startswith("/api/rating") or path.startswith("/api/user/web/"):
             # User-specific data: short cache with revalidation
             response.headers["Cache-Control"] = f"private, max-age=30, must-revalidate"
@@ -65,6 +67,17 @@ class CacheHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = f"public, max-age=60"
         
         return response
+
+    def _has_user_identity(self, request: Request) -> bool:
+        """Return true when a GET response can contain authenticated user data."""
+        if request.query_params.get("email"):
+            return True
+        return bool(request.headers.get("X-Proxy-User-Email"))
+
+    def _set_no_store_headers(self, response) -> None:
+        response.headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     
     def _generate_etag(self, response) -> str:
         """Generate ETag from response content"""

@@ -12,6 +12,29 @@ from fastapi.responses import Response, StreamingResponse
 from dependencies import require_admin_review_manage
 
 logger = logging.getLogger(__name__)
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_csv_value(value) -> str:
+    text = "" if value is None else str(value)
+    if text.startswith(CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
+
+
+def _csv_line(row) -> str:
+    output = StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([_safe_csv_value(value) for value in row])
+    return output.getvalue()
+
+
+def _row_value(row, key: str, default=""):
+    if hasattr(row, "keys") and key in row.keys():
+        return row[key]
+    if isinstance(row, dict):
+        return row.get(key, default)
+    return default
 
 
 def setup_export_routes(app, db):
@@ -93,34 +116,34 @@ def setup_export_routes(app, db):
                     conn.row_factory = aiosqlite.Row
                     
                     # Yield CSV header and user info
-                    yield "Field,Value\n"
-                    yield f"Email,{user['email']}\n"
-                    yield f"Nickname,{user.get('nickname', '')}\n"
-                    yield f"League,{user['league']}\n"
-                    yield f"Total Solved,{user['total_solved']}\n"
-                    yield f"Total Points,{user['total_points']}\n"
+                    yield _csv_line(["Field", "Value"])
+                    yield _csv_line(["Email", user["email"]])
+                    yield _csv_line(["Nickname", user.get("nickname", "")])
+                    yield _csv_line(["League", user["league"]])
+                    yield _csv_line(["Total Solved", user["total_solved"]])
+                    yield _csv_line(["Total Points", user["total_points"]])
                     yield "\n"
                     
                     # Stream progress
-                    yield "Progress\n"
-                    yield "Task ID,Status,Completed At\n"
+                    yield _csv_line(["Progress"])
+                    yield _csv_line(["Task ID", "Status", "Completed At"])
                     async with conn.execute(
                         "SELECT task_id, status, completed_at FROM user_progress WHERE user_id = ?",
                         (user["id"],)
                     ) as cursor:
                         async for row in cursor:
-                            yield f"{row['task_id']},{row['status']},{row.get('completed_at', '')}\n"
+                            yield _csv_line([row["task_id"], row["status"], _row_value(row, "completed_at")])
                     yield "\n"
                     
                     # Stream solutions
-                    yield "Solutions\n"
-                    yield "Task ID,Answer,Is Correct,Created At\n"
+                    yield _csv_line(["Solutions"])
+                    yield _csv_line(["Task ID", "Answer", "Is Correct", "Created At"])
                     async with conn.execute(
                         "SELECT task_id, answer, is_correct, created_at FROM solutions WHERE user_id = ? ORDER BY created_at DESC",
                         (user["id"],)
                     ) as cursor:
                         async for row in cursor:
-                            yield f"{row['task_id']},{row['answer']},{row['is_correct']},{row.get('created_at', '')}\n"
+                            yield _csv_line([row["task_id"], row["answer"], row["is_correct"], _row_value(row, "created_at")])
                 finally:
                     if use_pool and hasattr(db, '_release_connection'):
                         await db._release_connection(conn)

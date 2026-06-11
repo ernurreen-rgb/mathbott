@@ -3,6 +3,7 @@ Live user presence routes.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -20,6 +21,7 @@ from utils.internal_proxy_auth import (
 )
 
 logger = logging.getLogger(__name__)
+PRESENCE_CLIENT_TIMEOUT_SECONDS = 70
 
 
 class PresenceConnectionManager:
@@ -87,7 +89,15 @@ class PresenceConnectionManager:
                     stale_connections.append((user_id, connection_id))
 
         for user_id, connection_id in stale_connections:
-            self.disconnect(user_id, connection_id)
+            offline_user = self.disconnect(user_id, connection_id)
+            if offline_user:
+                await self.broadcast(
+                    {
+                        "type": "presence_update",
+                        "status": "offline",
+                        "user": offline_user,
+                    }
+                )
 
 
 def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -144,7 +154,10 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
 
             while True:
-                data = await websocket.receive_text()
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=PRESENCE_CLIENT_TIMEOUT_SECONDS,
+                )
                 try:
                     payload = json.loads(data)
                 except Exception:
@@ -154,6 +167,20 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
                     await websocket.send_text(json.dumps({"type": "pong"}))
                 elif payload.get("type") == "snapshot":
                     await manager.send_snapshot(websocket)
+        except asyncio.TimeoutError:
+            try:
+                await websocket.close(code=1001)
+            except Exception:
+                pass
+            offline_user = manager.disconnect(user_id, connection_id)
+            if offline_user:
+                await manager.broadcast(
+                    {
+                        "type": "presence_update",
+                        "status": "offline",
+                        "user": offline_user,
+                    }
+                )
         except WebSocketDisconnect:
             offline_user = manager.disconnect(user_id, connection_id)
             if offline_user:
