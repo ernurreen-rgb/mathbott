@@ -1,15 +1,16 @@
 """
 Pydantic models for API requests
 """
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class TaskCheckRequest(BaseModel):
     task_id: int = Field(..., gt=0, description="Task ID must be positive")
     answer: str = Field(..., min_length=1, max_length=10000, description="Answer must be between 1 and 10000 characters")
     email: EmailStr = Field(..., description="Valid email address required")
-    
-    @validator('answer')
+
+    @field_validator('answer')
+    @classmethod
     def validate_answer(cls, v):
         if not v or not v.strip():
             raise ValueError('Answer cannot be empty')
@@ -20,7 +21,8 @@ class NicknameUpdateRequest(BaseModel):
     email: EmailStr = Field(..., description="Valid email address required")
     nickname: str = Field(..., min_length=1, max_length=50, description="Nickname must be between 1 and 50 characters")
     
-    @validator('nickname')
+    @field_validator('nickname')
+    @classmethod
     def validate_nickname(cls, v):
         if not v or not v.strip():
             raise ValueError('Nickname cannot be empty')
@@ -33,8 +35,9 @@ class NicknameUpdateRequest(BaseModel):
 class ReportRequest(BaseModel):
     task_id: int = Field(..., gt=0, description="Task ID must be positive")
     message: str = Field(..., min_length=1, max_length=2000, description="Report message must be between 1 and 2000 characters")
-    
-    @validator('message')
+
+    @field_validator('message')
+    @classmethod
     def validate_message(cls, v):
         if not v or not v.strip():
             raise ValueError('Message cannot be empty')
@@ -54,7 +57,8 @@ class TrialTestReportRequest(BaseModel):
     task_id: int = Field(..., gt=0, description="Trial test task ID must be positive")
     message: str = Field(..., min_length=1, max_length=2000, description="Report message must be between 1 and 2000 characters")
 
-    @validator('message')
+    @field_validator('message')
+    @classmethod
     def validate_message(cls, v):
         if not v or not v.strip():
             raise ValueError('Message cannot be empty')

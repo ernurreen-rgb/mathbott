@@ -6,18 +6,19 @@ Import this module as early as possible in the application entry point.
 from __future__ import annotations
 
 import logging
-import os
 
 from config import load_environment
+from settings import get_settings
 from utils.logging_config import setup_logging
 from utils.sentry import init_sentry
 
 
 load_environment()
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+_settings = get_settings()
+ENVIRONMENT = _settings.environment
+LOG_LEVEL = _settings.log_level
+APP_VERSION = _settings.app_version
 
 setup_logging(environment=ENVIRONMENT, log_level=LOG_LEVEL)
 logger = logging.getLogger(__name__)

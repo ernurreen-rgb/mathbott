@@ -4,10 +4,11 @@ Sentry initialization helpers for backend.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
+
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
 _SENTRY_INIT_RESULT: Optional[bool] = None
@@ -57,7 +58,8 @@ def init_sentry(environment: str, release: str) -> bool:
     if _SENTRY_INIT_RESULT is not None:
         return _SENTRY_INIT_RESULT
 
-    dsn = (os.getenv("SENTRY_DSN") or "").strip()
+    settings = get_settings()
+    dsn = settings.sentry_dsn
     if not dsn:
         _SENTRY_INIT_RESULT = False
         return _SENTRY_INIT_RESULT
@@ -70,16 +72,12 @@ def init_sentry(environment: str, release: str) -> bool:
         _SENTRY_INIT_RESULT = False
         return _SENTRY_INIT_RESULT
 
-    traces_sample_rate_raw = os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
-    try:
-        traces_sample_rate = float(traces_sample_rate_raw)
-    except Exception:
-        traces_sample_rate = 0.1
+    traces_sample_rate = settings.sentry_traces_sample_rate
 
     sentry_sdk.init(
         dsn=dsn,
-        environment=(os.getenv("SENTRY_ENVIRONMENT") or environment or "production"),
-        release=(os.getenv("SENTRY_RELEASE") or release or "mathbot-backend@unknown"),
+        environment=(settings.sentry_environment or environment or "production"),
+        release=(settings.sentry_release or release or "mathbot-backend@unknown"),
         integrations=[FastApiIntegration()],
         traces_sample_rate=max(0.0, min(1.0, traces_sample_rate)),
         before_send=_before_send,

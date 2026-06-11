@@ -1,13 +1,13 @@
 """
 Onboarding роуты
 """
-import os
 import logging
 from fastapi import FastAPI, HTTPException, Query, Form, Request, Depends
 from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def setup_onboarding_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Save onboarding data"""
         user = await db.get_user_by_email(email)
         if not user:
-            admin_email = os.getenv("ADMIN_EMAIL")
+            admin_email = get_settings().admin_email
             user = await db.create_user_by_email(email, check_admin_email=admin_email)
         
         # Validate inputs

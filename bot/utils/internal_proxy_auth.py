@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import os
 import time
 from collections import OrderedDict
 from threading import Lock
 from typing import Optional, Tuple
 
 from fastapi import Request
+from settings import get_settings
 from utils.request_path import get_scope_path
 
 
@@ -29,11 +29,10 @@ _proxy_replay_lock = Lock()
 
 
 def _get_proxy_secret() -> str:
-    value = os.getenv("INTERNAL_PROXY_SHARED_SECRET", "")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    environment = os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
-    if environment != "production":
+    settings = get_settings()
+    if settings.internal_proxy_shared_secret:
+        return settings.internal_proxy_shared_secret
+    if not settings.is_production:
         return "dev-internal-proxy-secret-change-me"
     return ""
 

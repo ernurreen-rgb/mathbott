@@ -5,26 +5,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from database import Database
+from settings import get_settings
 from utils.alerts import TelegramAlerter
 from utils.metrics import metrics
 
 logger = logging.getLogger(__name__)
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = (os.getenv(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except Exception:
-        return default
 
 
 @dataclass(frozen=True)
@@ -263,8 +253,9 @@ class OpsMonitor:
             await asyncio.sleep(self.MONITOR_INTERVAL_SECONDS)
 
     async def run_cleanup(self) -> Dict[str, int]:
-        health_days = _env_int("OPS_HEALTH_SAMPLE_RETENTION_DAYS", 30)
-        incident_days = _env_int("OPS_INCIDENT_RETENTION_DAYS", 365)
+        settings = get_settings()
+        health_days = settings.ops_health_sample_retention_days
+        incident_days = settings.ops_incident_retention_days
         deleted_health = await self.db.cleanup_old_ops_health_samples(retention_days=health_days)
         deleted_incidents = await self.db.cleanup_old_ops_incidents(retention_days=incident_days)
         return {"deleted_health_samples": deleted_health, "deleted_incidents": deleted_incidents}

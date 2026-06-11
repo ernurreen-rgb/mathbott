@@ -1,7 +1,6 @@
 """
 Фабрика для создания FastAPI приложения
 """
-import os
 import logging
 import time
 from typing import Optional, Any
@@ -28,6 +27,7 @@ from middleware.request_context_middleware import RequestContextMiddleware
 from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
 from config import get_cors_origins
 from instrument import APP_VERSION, ENVIRONMENT, SENTRY_ENABLED
+from settings import get_settings
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 
 # Загрузить переменные окружения
@@ -63,8 +63,8 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     app = FastAPI(title="Mathbot API", version=APP_VERSION, lifespan=lifespan)
     
     # Инициализировать базу данных и лимитер
-    db_path = os.getenv("DB_PATH", "mathbot.db")
-    db = Database(db_path=db_path)
+    settings = get_settings()
+    db = Database(db_path=settings.db_path)
     limiter = Limiter(key_func=get_rate_limit_key)
     
     # Сохранить в app.state для доступа через dependencies
@@ -103,7 +103,7 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     )
     
     # CSRF middleware (опционально, можно отключить в development)
-    if os.getenv("CSRF_ENABLED", "false").lower() == "true" or environment == "production":
+    if settings.csrf_enabled or environment == "production":
         app.add_middleware(CSRFMiddleware)
 
     app.add_middleware(TrustedProxyIdentityMiddleware)

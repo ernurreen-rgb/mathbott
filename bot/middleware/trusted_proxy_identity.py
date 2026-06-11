@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Iterable, Optional
 from urllib.parse import parse_qs, unquote
 
@@ -14,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from settings import get_settings
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ MAX_IDENTITY_BODY_BYTES = 1024 * 1024
 
 
 def _get_environment() -> str:
-    return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
+    return get_settings().environment
 
 
 def _normalize_email(value: object) -> Optional[str]:

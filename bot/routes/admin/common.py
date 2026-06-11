@@ -33,6 +33,7 @@ from dependencies import (
 from database import Database
 from repositories.bank_task_repository import BankTaskVersionConflictError, BankTaskVersionDeleteError
 from repositories.user_repository import AdminRoleConflictError, LastSuperAdminError
+from settings import DEFAULT_ADMIN_SECRET, get_settings
 from utils.validation import (
     MAX_MCQ_CORRECT_OPTIONS,
     canonicalize_factor_grid_answer,
@@ -346,12 +347,11 @@ def _base64url_decode(value: str) -> bytes:
 
 
 def _get_import_preview_token_secret() -> str:
-    value = os.getenv("IMPORT_PREVIEW_TOKEN_SECRET")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    fallback = os.getenv("ADMIN_SECRET", "change-me-in-production")
-    if isinstance(fallback, str) and fallback.strip():
-        return fallback.strip()
+    settings = get_settings()
+    if settings.import_preview_token_secret and settings.import_preview_token_secret.strip():
+        return settings.import_preview_token_secret.strip()
+    if settings.admin_secret and settings.admin_secret.strip():
+        return settings.admin_secret.strip()
     raise HTTPException(
         status_code=500,
         detail={

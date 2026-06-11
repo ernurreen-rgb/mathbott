@@ -3,7 +3,6 @@ File storage helpers for uploaded images.
 """
 import logging
 import mimetypes
-import os
 import re
 import shutil
 import uuid
@@ -11,6 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import HTTPException, UploadFile
+
+from settings import get_settings
 
 
 _IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
@@ -29,14 +30,7 @@ STORED_IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
 
 def _get_max_upload_bytes() -> int:
-    raw_value = os.getenv("IMAGE_UPLOAD_MAX_BYTES", "").strip()
-    if not raw_value:
-        return DEFAULT_MAX_IMAGE_UPLOAD_BYTES
-    try:
-        return max(1, int(raw_value))
-    except ValueError:
-        logger.warning("Invalid IMAGE_UPLOAD_MAX_BYTES=%s; using default", raw_value)
-        return DEFAULT_MAX_IMAGE_UPLOAD_BYTES
+    return get_settings().image_upload_limit_bytes
 
 
 def _detect_image_type(content: bytes) -> tuple[Optional[str], Optional[str]]:

@@ -1,11 +1,11 @@
 """
 CSRF protection middleware
 """
-import os
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
+from settings import get_settings
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 from utils.request_path import get_scope_path
 
@@ -33,10 +33,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # Skip CSRF check in development if disabled
-        if os.getenv("ENVIRONMENT", "development").lower() == "development":
-            csrf_enabled = os.getenv("CSRF_ENABLED", "false").lower() == "true"
-            if not csrf_enabled:
-                return await call_next(request)
+        settings = get_settings()
+        if settings.environment == "development" and not settings.csrf_enabled:
+            return await call_next(request)
         
         # In production, writes must come through the trusted Next.js proxy.
         if has_proxy_signature_headers(request):

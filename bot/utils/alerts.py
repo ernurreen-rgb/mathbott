@@ -4,27 +4,22 @@ Alerting utilities (Telegram).
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 import aiohttp
 
+from settings import get_settings
+
 logger = logging.getLogger(__name__)
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = (os.getenv(name) or "").strip().lower()
-    if not value:
-        return default
-    return value in {"1", "true", "yes", "y", "on"}
 
 
 class TelegramAlerter:
     def __init__(self):
-        self.alerts_enabled = _env_bool("ALERTS_ENABLED", default=False)
-        self.telegram_enabled = _env_bool("ALERT_TELEGRAM_ENABLED", default=False)
-        self.bot_token = (os.getenv("ALERT_TELEGRAM_BOT_TOKEN") or "").strip()
-        self.chat_id = (os.getenv("ALERT_TELEGRAM_CHAT_ID") or "").strip()
+        settings = get_settings()
+        self.alerts_enabled = settings.alerts_enabled
+        self.telegram_enabled = settings.alert_telegram_enabled
+        self.bot_token = settings.alert_telegram_bot_token
+        self.chat_id = settings.alert_telegram_chat_id
 
     @property
     def enabled(self) -> bool:

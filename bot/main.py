@@ -2,7 +2,6 @@
 Mathbot - FastAPI backend
 Entry point для запуска приложения
 """
-import os
 import logging
 import asyncio
 import aiosqlite
@@ -16,6 +15,7 @@ import instrument  # noqa: F401  # Initialize env/logging/Sentry as early as pos
 from app import create_app
 from routes import register_routes
 from config import validate_configuration
+from settings import get_settings
 from utils.db_maintenance import DatabaseMaintenance
 from services.ops_monitor import OpsMonitor
 
@@ -23,7 +23,7 @@ from services.ops_monitor import OpsMonitor
 
 # Instrumentation bootstrap is done in instrument.py.
 logger = logging.getLogger(__name__)
-BANK_TRASH_RETENTION_DAYS = int(os.getenv("BANK_TRASH_RETENTION_DAYS", "30"))
+BANK_TRASH_RETENTION_DAYS = get_settings().bank_trash_retention_days
 
 
 @asynccontextmanager
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
     logger.info("Database maintenance started (runs daily at 03:00)")
     logger.info("Ops monitor started (runs every 60 seconds)")
 
-    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_email = get_settings().admin_email
     if admin_email:
         user = await db.get_user_by_email(admin_email)
         if user:
@@ -168,7 +168,7 @@ async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monito
 
 async def run_api():
     """Run FastAPI server"""
-    port = int(os.getenv("PORT", 8000))
+    port = get_settings().port
     # Compression is handled by FastAPI's GZipMiddleware (properly handles Content-Length)
     config = uvicorn.Config(
         app, 

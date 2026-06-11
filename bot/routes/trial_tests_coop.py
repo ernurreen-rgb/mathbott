@@ -3,7 +3,6 @@ Trial tests coop routes (private)
 """
 import json
 import logging
-import os
 from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends
@@ -11,6 +10,7 @@ from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from settings import get_settings
 from utils.cache import cache
 from utils.internal_proxy_auth import WEBSOCKET_TOKEN_TTL_SECONDS, build_ws_token, verify_ws_token
 from utils.scoring import build_reward_identity
@@ -68,7 +68,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = CoopConnectionManager()
 
     def _is_production() -> bool:
-        return os.getenv("ENVIRONMENT", "development").strip().lower() == "production"
+        return get_settings().is_production
 
     @app.post("/api/trial-tests/{test_id}/coop/session")
     async def create_coop_session(

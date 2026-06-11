@@ -4,7 +4,6 @@ Dependency injection helpers for FastAPI routes.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Dict, List, Optional
 
 import aiosqlite
@@ -12,6 +11,7 @@ from fastapi import Depends, HTTPException, Query, Request
 from slowapi import Limiter
 
 from database import Database
+from settings import get_settings
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 from utils.request_context import get_current_request
 
@@ -50,7 +50,7 @@ async def get_limiter(request: Request) -> Limiter:
 
 
 def _get_runtime_environment() -> str:
-    return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
+    return get_settings().environment
 
 
 def _resolve_request(request: Optional[Request]) -> Optional[Request]:

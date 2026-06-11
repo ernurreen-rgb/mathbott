@@ -5,8 +5,7 @@ from .common import *  # noqa: F401,F403
 
 
 def _legacy_role_bootstrap_enabled() -> bool:
-    environment = os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
-    return environment != "production"
+    return not get_settings().is_production
 
 
 def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -40,7 +39,7 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not user:
             if not set_admin:
                 raise HTTPException(status_code=404, detail="Target user not found")
-            admin_email_env = os.getenv("ADMIN_EMAIL")
+            admin_email_env = get_settings().admin_email
             await db.create_user_by_email(normalized_target_email, check_admin_email=admin_email_env)
 
         try:
@@ -76,8 +75,8 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
             db: Database = Depends(get_db),
         ):
             """Set RBAC admin role for user (development only)."""
-            admin_secret = os.getenv("ADMIN_SECRET", "change-me-in-production")
-            if not admin_secret or admin_secret == "change-me-in-production":
+            admin_secret = get_settings().admin_secret
+            if not admin_secret or admin_secret == DEFAULT_ADMIN_SECRET:
                 raise HTTPException(status_code=500, detail="ADMIN_SECRET not configured")
             if not hmac.compare_digest(secret, admin_secret):
                 logger.warning("Failed set-role attempt with invalid secret for %s", email)

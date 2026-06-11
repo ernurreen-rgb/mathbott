@@ -2,8 +2,9 @@
 Notification utilities for achievements and events
 """
 import logging
-import os
 from typing import Optional, Dict, Any
+
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ async def send_achievement_notification(user_email: str, achievement_name: str) 
         logger.info(f"Achievement unlocked: {user_email} - {achievement_name}")
         
         # Check if email notifications are enabled
-        email_enabled = os.getenv("EMAIL_NOTIFICATIONS_ENABLED", "false").lower() == "true"
+        email_enabled = get_settings().email_notifications_enabled
         
         if email_enabled:
             # In production, implement email sending here
@@ -32,7 +33,7 @@ async def send_achievement_notification(user_email: str, achievement_name: str) 
             logger.info(f"Email notification would be sent to {user_email} for achievement: {achievement_name}")
         
         # Check if push notifications are enabled
-        push_enabled = os.getenv("PUSH_NOTIFICATIONS_ENABLED", "false").lower() == "true"
+        push_enabled = get_settings().push_notifications_enabled
         
         if push_enabled:
             # In production, implement push notification here

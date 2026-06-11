@@ -1,12 +1,12 @@
 """
 Routes for users
 """
-import os
 import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from slowapi import Limiter
 from models.requests import NicknameUpdateRequest
+from settings import get_settings
 from utils.cache import cache
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ def setup_users_routes(app, db, limiter: Limiter):
         user = await db.get_user_by_email(email)
         if not user:
             # Auto-create user for web interface
-            admin_email = os.getenv("ADMIN_EMAIL")
+            admin_email = get_settings().admin_email
             user = await db.create_user_by_email(email, check_admin_email=admin_email)
             logger.info(f"Created new web user: {email}")
             if admin_email and email.lower() == admin_email.lower():
