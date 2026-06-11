@@ -4,7 +4,7 @@ Tests for repository classes
 import aiosqlite
 import pytest
 from models.db_models import LEAGUE_GROUP_SIZE
-from migrations.schema import create_schema
+from migrations.seeds import run_seeds
 from repositories.user_repository import (
     AdminRoleConflictError,
     LastSuperAdminError,
@@ -75,7 +75,7 @@ async def test_user_repository_assigns_new_league_group_after_twenty_users(test_
 
 
 @pytest.mark.asyncio
-async def test_schema_rebalances_oversized_league_groups(test_db):
+async def test_seeds_rebalance_oversized_league_groups(test_db):
     repo = UserRepository(db_path=test_db.db_path)
     for index in range(LEAGUE_GROUP_SIZE + 1):
         await repo.create_user_by_email(f"oversized-league-group-{index}@example.com")
@@ -83,7 +83,7 @@ async def test_schema_rebalances_oversized_league_groups(test_db):
     async with aiosqlite.connect(test_db.db_path) as db:
         await db.execute("UPDATE users SET league_group = 0")
         await db.commit()
-        await create_schema(db)
+        await run_seeds(db)
 
         async with db.execute(
             """

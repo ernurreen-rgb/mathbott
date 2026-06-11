@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from models.db_models import League, LEAGUE_ORDER
-from migrations.schema import create_schema
+from migrations.runner import run_migrations_async
+from migrations.seeds import run_seeds
 from repositories.user_repository import UserRepository
 from repositories.task_repository import TaskRepository
 from repositories.curriculum_repository import CurriculumRepository
@@ -81,12 +82,13 @@ class Database:
             pass
 
     async def init(self):
-        """Initialize database and create tables"""
+        """Initialize database: apply Alembic migrations, then idempotent seeds"""
+        await run_migrations_async(self.db_path)
+
         async with aiosqlite.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
             await self._configure_connection(db)
-            # Use schema creation from migrations module
-            await create_schema(db)
-        
+            await run_seeds(db)
+
         # Initialize connection pool if enabled
         if self.connection_pool:
             await self.connection_pool.initialize()
