@@ -71,10 +71,10 @@ def setup_users_routes(app, db, limiter: Limiter):
             return cached_rating
         
         # Get total count for pagination
-        total = await db.get_rating_count(league=league, group=group)
+        total = await db.rating.get_rating_count(league=league, group=group)
         
         # Get paginated rating
-        rating = await db.get_rating(limit=limit, offset=offset, league=league, group=group)
+        rating = await db.rating.get_rating(limit=limit, offset=offset, league=league, group=group)
         result = {
             "items": [
                 {
@@ -155,18 +155,18 @@ def setup_users_routes(app, db, limiter: Limiter):
             if cached_stats is not None:
                 return cached_stats
         
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             # Auto-create user for web interface
             admin_email = get_settings().admin_email
-            user = await db.create_user_by_email(email, check_admin_email=admin_email)
+            user = await db.users.create_user_by_email(email, check_admin_email=admin_email)
             logger.info(f"Created new web user: {email}")
             if admin_email and email.lower() == admin_email.lower():
                 logger.info(f"User {email} created as admin")
 
-        stats = await db.get_user_stats(user["id"])
-        global_position = await db.get_global_position(user["id"])
-        is_admin = await db.is_admin(email=email)
+        stats = await db.rating.get_user_stats(user["id"])
+        global_position = await db.rating.get_global_position(user["id"])
+        is_admin = await db.users.is_admin(email=email)
         
         # Check and update streak if needed (in case user hasn't solved today but streak needs checking)
         # Only check if last_streak_date exists and is not today
@@ -182,15 +182,15 @@ def setup_users_routes(app, db, limiter: Limiter):
                 pass
         
         # Get user achievements (optionally refresh; default off for speed)
-        achievements = await db.get_user_achievements(user["id"])
+        achievements = await db.achievements.get_user_achievements(user["id"])
         if refresh_achievements:
             try:
                 await db.check_and_unlock_achievements(user["id"])
-                achievements = await db.get_user_achievements(user["id"])
+                achievements = await db.achievements.get_user_achievements(user["id"])
             except Exception as e:
                 logger.error(f"Error checking achievements: {e}", exc_info=True)
 
-        recent_activity_timestamps = await db.get_recent_activity_timestamps(user["id"])
+        recent_activity_timestamps = await db.users.get_recent_activity_timestamps(user["id"])
         
         # Normalize last_streak_date for the frontend (string YYYY-MM-DD or null)
         last_streak_date_value = user.get("last_streak_date")
@@ -303,13 +303,13 @@ def setup_users_routes(app, db, limiter: Limiter):
         if cached_profile is not None:
             return cached_profile
 
-        user = await db.get_user_by_id(user_id)
+        user = await db.users.get_user_by_id(user_id)
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        stats = await db.get_user_stats(user["id"])
-        global_position = await db.get_global_position(user["id"])
+        stats = await db.rating.get_user_stats(user["id"])
+        global_position = await db.rating.get_global_position(user["id"])
         
         # Check and normalize streak (same logic as get_user_web)
         last_streak_date_value = user.get("last_streak_date")
@@ -337,8 +337,8 @@ def setup_users_routes(app, db, limiter: Limiter):
                 pass
         
         # Get user achievements
-        achievements = await db.get_user_achievements(user["id"])
-        recent_activity_timestamps = await db.get_recent_activity_timestamps(user["id"])
+        achievements = await db.achievements.get_user_achievements(user["id"])
+        recent_activity_timestamps = await db.users.get_recent_activity_timestamps(user["id"])
         
         # Return public profile data (WITHOUT email and is_admin)
         result = {
@@ -367,6 +367,6 @@ def setup_users_routes(app, db, limiter: Limiter):
     @limiter.limit("5/minute")
     async def update_nickname(request: Request, nickname_request: NicknameUpdateRequest):
         """Update user nickname"""
-        await db.update_user_nickname(nickname_request.email, nickname_request.nickname)
+        await db.users.update_user_nickname(nickname_request.email, nickname_request.nickname)
         return {"success": True}
 

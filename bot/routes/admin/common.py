@@ -442,7 +442,7 @@ async def _collect_import_dedup_conflicts(
 ) -> List[Dict[str, Any]]:
     conflicts: List[Dict[str, Any]] = []
     for idx, task in enumerate(normalized_tasks):
-        similar_tasks = await db.find_similar_bank_tasks(
+        similar_tasks = await db.bank_tasks.find_similar_tasks(
             text=task.get("text", ""),
             options=task.get("options"),
             question_type=task.get("question_type"),

@@ -46,10 +46,10 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get all trial tests, or only those the user has attempted when attempted_only=true and email is provided"""
         try:
             if attempted_only and email:
-                user = await db.get_user_by_email(email)
+                user = await db.users.get_user_by_email(email)
                 if not user:
                     raise HTTPException(status_code=404, detail="User not found")
-                results = await db.get_user_trial_test_results(user["id"], trial_test_id=None)
+                results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=None)
                 # Только тесты, которые пользователь прошёл (хотя бы одна попытка с процентом >= 50%)
                 PASS_PERCENT = 50.0
                 passed_ids = {
@@ -58,9 +58,9 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 }
                 if not passed_ids:
                     return []
-                all_tests = await db.get_trial_tests()
+                all_tests = await db.trial_tests.get_trial_tests()
                 return [t for t in all_tests if t.get("id") in passed_ids]
-            tests = await db.get_trial_tests()
+            tests = await db.trial_tests.get_trial_tests()
             return tests
         except HTTPException:
             raise
@@ -75,10 +75,10 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Return list of trial_test_id for which the user has a draft (for «Продолжить» on list page)."""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-            test_ids = await db.get_user_trial_test_draft_ids(user["id"])
+            test_ids = await db.trial_tests.get_user_trial_test_draft_ids(user["id"])
             return {"test_ids": test_ids}
         except HTTPException:
             raise
@@ -94,14 +94,14 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get trial test details with tasks (without correct answers)"""
         try:
-            test = await db.get_trial_test_by_id(test_id)
+            test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
             
             if not isinstance(test, dict):
                 test = dict(test) if hasattr(test, '__iter__') else {}
             
-            tasks = await db.get_trial_test_tasks(test_id)
+            tasks = await db.trial_tests.get_trial_test_tasks(test_id)
             if tasks is None:
                 tasks = []
             
@@ -182,15 +182,15 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not email:
                 raise HTTPException(status_code=400, detail="Email is required")
             
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            test = await db.get_trial_test_by_id(test_id)
+            test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
             
-            tasks = await db.get_trial_test_tasks(test_id)
+            tasks = await db.trial_tests.get_trial_test_tasks(test_id)
             if not tasks:
                 raise HTTPException(status_code=404, detail="No tasks found in trial test")
             
@@ -243,7 +243,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         }
                     )
 
-                submit_result = await db.submit_trial_test_attempt(
+                submit_result = await db.trial_tests.submit_trial_test_attempt(
                     user_id=user["id"],
                     trial_test_id=test_id,
                     score=score,
@@ -293,11 +293,11 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get user's draft (answers + current_task_index) for this trial test"""
         try:
             logger.info(f"[draft] GET draft test_id={test_id} email={email}")
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 logger.warning(f"[draft] GET draft user not found email={email}")
                 raise HTTPException(status_code=404, detail="User not found")
-            draft = await db.get_trial_test_draft(user["id"], test_id)
+            draft = await db.trial_tests.get_trial_test_draft(user["id"], test_id)
             if not draft:
                 logger.info(f"[draft] GET draft no draft for user_id={user['id']} test_id={test_id}")
                 return {"answers": {}, "current_task_index": 0}
@@ -328,7 +328,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not email:
                 logger.warning("[draft] PUT draft missing email")
                 raise HTTPException(status_code=400, detail="Email is required")
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 logger.warning(f"[draft] PUT draft user not found email={email}")
                 raise HTTPException(status_code=404, detail="User not found")
@@ -341,7 +341,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 except (TypeError, ValueError):
                     continue
             async with _get_trial_test_write_lock(user["id"], test_id):
-                await db.upsert_trial_test_draft(user["id"], test_id, answers_int, current_task_index)
+                await db.trial_tests.upsert_trial_test_draft(user["id"], test_id, answers_int, current_task_index)
             logger.info(f"[draft] PUT draft saved user_id={user['id']} test_id={test_id} answers_count={len(answers_int)}")
             return {"ok": True}
         except HTTPException:
@@ -358,11 +358,11 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get user's trial test results for a specific test"""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            results = await db.get_user_trial_test_results(user["id"], trial_test_id=test_id)
+            results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=test_id)
             
             for result in results:
                 if result.get("answers"):

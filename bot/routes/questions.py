@@ -25,14 +25,14 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get all questions for a task with user progress"""
         user_id = None
         if email:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
         
-        questions = await db.get_task_questions(task_id)
+        questions = await db.progress.get_task_questions(task_id)
         user_progress = {}
         if user_id:
-            user_progress = await db.get_user_task_question_progress(user_id, task_id)
+            user_progress = await db.progress.get_user_task_question_progress(user_id, task_id)
         
         result = []
         for i, question in enumerate(questions):
@@ -59,30 +59,30 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             logger.info(f"Received question check request: task_id={task_id}, question_index={question_index}, email={email}, answer_length={len(answer)}")
             
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 logger.warning(f"User not found: {email}")
                 raise HTTPException(status_code=404, detail="User not found")
             
-            task = await db.get_task_by_id(task_id)
+            task = await db.tasks.get_task_by_id(task_id)
             if not task:
                 logger.warning(f"Task not found: {task_id}")
                 raise HTTPException(status_code=404, detail="Task not found")
             
             logger.info(f"Checking question answer for task {task_id}, question {question_index}")
-            is_correct = await db.check_task_question_answer(task_id, question_index, answer)
+            is_correct = await db.progress.check_task_question_answer(task_id, question_index, answer)
             logger.info(f"Question answer check result: {is_correct}")
             
             # Record progress
-            await db.record_task_question_progress(user["id"], task_id, question_index, is_correct)
+            await db.progress.record_task_question_progress(user["id"], task_id, question_index, is_correct)
             
             # Check if all questions in the task are completed
-            all_completed = await db.check_if_task_all_questions_completed(user["id"], task_id)
+            all_completed = await db.progress.check_if_task_all_questions_completed(user["id"], task_id)
             logger.info(f"All questions completed: {all_completed}")
             
             if all_completed:
                 # Mark task as completed
-                await db.update_task_progress(user["id"], task_id, "completed")
+                await db.progress.update_task_progress(user["id"], task_id, "completed")
                 # Update user stats (similar to record_solution)
                 async with aiosqlite.connect(db.db_path) as db_conn:
                     await db_conn.execute(
@@ -98,7 +98,7 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                     await db_conn.commit()
                 # Update streak and achievements
                 try:
-                    await db.update_streak(user["id"])
+                    await db.users.update_streak(user["id"])
                 except Exception as e:
                     logger.error(f"Failed to update streak: {e}", exc_info=True)
                 try:
@@ -106,7 +106,7 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                 except Exception as e:
                     logger.error(f"Failed to check achievements: {e}", exc_info=True)
             
-            questions = await db.get_task_questions(task_id)
+            questions = await db.progress.get_task_questions(task_id)
             correct_answer = None
             if not is_correct and question_index < len(questions):
                 correct_answer = questions[question_index].get("answer")

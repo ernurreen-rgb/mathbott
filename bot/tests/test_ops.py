@@ -23,13 +23,13 @@ async def test_ops_monitor_creates_db_down_incident(test_db):
     async def fail_probe():
         return False
 
-    test_db.probe_database = fail_probe  # type: ignore[method-assign]
+    test_db.ops.probe_database = fail_probe  # type: ignore[method-assign]
     monitor = OpsMonitor(test_db)
 
     await monitor.run_cycle()
     await monitor.run_cycle()
 
-    incidents = await test_db.list_ops_incidents(status="open", severity="all", limit=20, offset=0)
+    incidents = await test_db.ops.list_incidents(status="open", severity="all", limit=20, offset=0)
     assert incidents["total"] >= 1
     assert any(item["kind"] == "db_down" for item in incidents["items"])
 
@@ -43,13 +43,13 @@ async def test_ops_monitor_opens_and_resolves_incident(test_db):
     async def probe():
         return state["ok"]
 
-    test_db.probe_database = probe  # type: ignore[method-assign]
+    test_db.ops.probe_database = probe  # type: ignore[method-assign]
     monitor = OpsMonitor(test_db)
 
     await monitor.run_cycle()
     await monitor.run_cycle()
 
-    open_incidents = await test_db.list_ops_incidents(status="open", severity="all", limit=20, offset=0)
+    open_incidents = await test_db.ops.list_incidents(status="open", severity="all", limit=20, offset=0)
     assert any(item["kind"] == "db_down" for item in open_incidents["items"])
 
     state["ok"] = True
@@ -57,8 +57,8 @@ async def test_ops_monitor_opens_and_resolves_incident(test_db):
     await monitor.run_cycle()
     await monitor.run_cycle()
 
-    open_after_recover = await test_db.list_ops_incidents(status="open", severity="all", limit=20, offset=0)
-    resolved_after_recover = await test_db.list_ops_incidents(status="resolved", severity="all", limit=20, offset=0)
+    open_after_recover = await test_db.ops.list_incidents(status="open", severity="all", limit=20, offset=0)
+    resolved_after_recover = await test_db.ops.list_incidents(status="resolved", severity="all", limit=20, offset=0)
     assert all(item["kind"] != "db_down" for item in open_after_recover["items"])
     assert any(item["kind"] == "db_down" for item in resolved_after_recover["items"])
 
@@ -84,7 +84,7 @@ async def test_ops_monitor_telegram_cooldown(test_db):
             self.resolve_calls += 1
             return True
 
-    test_db.probe_database = fail_probe  # type: ignore[method-assign]
+    test_db.ops.probe_database = fail_probe  # type: ignore[method-assign]
     monitor = OpsMonitor(test_db)
     monitor.alerter = FakeAlerter()  # type: ignore[assignment]
 
@@ -99,9 +99,9 @@ async def test_ops_monitor_telegram_cooldown(test_db):
 
 @pytest.mark.asyncio
 async def test_ops_health_summary_endpoint_admin_only(client, test_db):
-    admin_user = await test_db.create_user_by_email("ops.admin@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    regular_user = await test_db.create_user_by_email("ops.user@example.com")
+    admin_user = await test_db.users.create_user_by_email("ops.admin@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    regular_user = await test_db.users.create_user_by_email("ops.user@example.com")
 
     forbidden = client.get("/api/admin/ops/health/summary", params={"email": regular_user["email"]})
     assert forbidden.status_code == 403
@@ -116,8 +116,8 @@ async def test_ops_health_summary_endpoint_admin_only(client, test_db):
 
 @pytest.mark.asyncio
 async def test_ops_health_timeseries_validation(client, test_db):
-    admin_user = await test_db.create_user_by_email("ops.validation@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("ops.validation@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     invalid_range = client.get(
         "/api/admin/ops/health/timeseries",
@@ -136,10 +136,10 @@ async def test_ops_health_timeseries_validation(client, test_db):
 
 @pytest.mark.asyncio
 async def test_ops_incidents_pagination_filters(client, test_db):
-    admin_user = await test_db.create_user_by_email("ops.filters@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("ops.filters@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    await test_db.open_or_update_ops_incident(
+    await test_db.ops.open_or_update_incident(
         kind="high_5xx_rate",
         severity="high",
         fingerprint="high_5xx_rate",
@@ -147,7 +147,7 @@ async def test_ops_incidents_pagination_filters(client, test_db):
         message="spike",
         metadata={"requests_5m": 100},
     )
-    await test_db.open_or_update_ops_incident(
+    await test_db.ops.open_or_update_incident(
         kind="high_latency_p95",
         severity="medium",
         fingerprint="high_latency_p95",
@@ -155,7 +155,7 @@ async def test_ops_incidents_pagination_filters(client, test_db):
         message="slow",
         metadata={"p95_ms_5m": 3000},
     )
-    await test_db.resolve_ops_incident(fingerprint="high_latency_p95")
+    await test_db.ops.resolve_incident(fingerprint="high_latency_p95")
 
     open_high = client.get(
         "/api/admin/ops/incidents",

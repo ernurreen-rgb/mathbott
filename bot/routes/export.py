@@ -96,7 +96,7 @@ def setup_export_routes(app, db):
         - 404: User not found
         - 500: Internal server error
         """
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
@@ -211,11 +211,11 @@ def setup_export_routes(app, db):
                     yield '\n  ],\n'
                     
                     # Get achievements (small dataset, can load all)
-                    achievements = await db.get_user_achievements(user["id"])
+                    achievements = await db.achievements.get_user_achievements(user["id"])
                     yield '  "achievements": ' + json.dumps(achievements, default=str) + ',\n'
                     
                     # Get modules progress (stream if many modules)
-                    modules = await db.get_all_modules()
+                    modules = await db.curriculum.get_all_modules()
                     yield '  "modules_progress": [\n'
                     for i, module in enumerate(modules):
                         if i > 0:

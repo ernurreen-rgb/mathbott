@@ -18,7 +18,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
-        return await db.get_bank_tasks(
+        return await db.bank_tasks.list_tasks(
             include_deleted=False,
             search=search,
             difficulty=difficulty_value,
@@ -39,7 +39,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
-        return await db.get_bank_tasks(
+        return await db.bank_tasks.list_tasks(
             include_deleted=True,
             search=search,
             difficulty=difficulty_value,
@@ -53,7 +53,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_any_admin),
         db: Database = Depends(get_db),
     ):
-        items = await db.export_bank_tasks(include_deleted=False)
+        items = await db.bank_tasks.export_tasks(include_deleted=False)
         export_payload = [_serialize_bank_task_for_import_export(item) for item in items]
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         filename = f"bank_tasks_export_{timestamp}.json"
@@ -68,7 +68,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_review_manage),
         db: Database = Depends(get_db),
     ):
-        summary = await db.get_bank_quality_summary()
+        summary = await db.bank_tasks.get_quality_summary()
         summary["default_similarity_threshold"] = BANK_QUALITY_DUPLICATE_THRESHOLD_DEFAULT
         return summary
 
@@ -86,7 +86,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if offset < 0:
             raise HTTPException(status_code=400, detail="offset must be >= 0")
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
-        return await db.get_bank_quality_dead_tasks(
+        return await db.bank_tasks.list_quality_dead_tasks(
             search=search,
             difficulty=difficulty_value,
             limit=limit,
@@ -107,7 +107,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if offset < 0:
             raise HTTPException(status_code=400, detail="offset must be >= 0")
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
-        return await db.get_bank_quality_no_topics_tasks(
+        return await db.bank_tasks.list_quality_no_topics_tasks(
             search=search,
             difficulty=difficulty_value,
             limit=limit,
@@ -144,7 +144,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
             question_type_value = normalized_question_type
 
-        return await db.get_bank_quality_duplicate_clusters(
+        return await db.bank_tasks.list_quality_duplicate_clusters(
             threshold=threshold,
             search=search,
             difficulty=difficulty_value,
@@ -175,7 +175,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if offset < 0:
             raise HTTPException(status_code=400, detail="offset must be >= 0")
 
-        return await db.get_bank_audit_logs(
+        return await db.bank_tasks.list_admin_audit_logs(
             action=action,
             task_id=task_id,
             actor_email=actor_email,
@@ -226,7 +226,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         threshold = max(0.5, min(1.0, threshold))
         limit = max(1, min(50, limit))
 
-        items = await db.find_similar_bank_tasks(
+        items = await db.bank_tasks.find_similar_tasks(
             text=text,
             options=options,
             question_type=question_type,
@@ -244,10 +244,10 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ):
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
-        return await db.get_bank_task_versions(task_id=task_id, limit=limit, offset=offset)
+        return await db.bank_tasks.list_task_versions(task_id=task_id, limit=limit, offset=offset)
 
     @app.get("/api/admin/bank/tasks/{task_id}/versions/{version_no}")
     async def get_bank_task_version(
@@ -256,10 +256,10 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_any_admin),
         db: Database = Depends(get_db),
     ):
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
-        item = await db.get_bank_task_version(task_id=task_id, version_no=version_no)
+        item = await db.bank_tasks.get_task_version(task_id=task_id, version_no=version_no)
         if not item:
             raise HTTPException(status_code=404, detail="Version not found")
         return item
@@ -275,12 +275,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if version_no < 1:
             raise HTTPException(status_code=400, detail="version_no must be >= 1")
 
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
 
         try:
-            deleted = await db.delete_bank_task_version(
+            deleted = await db.bank_tasks.delete_task_version(
                 task_id=task_id,
                 version_no=version_no,
                 actor_user_id=admin_user["id"],
@@ -333,14 +333,14 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if reason is not None and not isinstance(reason, str):
             raise HTTPException(status_code=400, detail="reason must be string")
 
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
         if task.get("deleted_at"):
             raise HTTPException(status_code=400, detail="Cannot rollback a task from trash")
 
         try:
-            updated = await db.rollback_bank_task(
+            updated = await db.bank_tasks.rollback_task(
                 task_id=task_id,
                 target_version=target_version,
                 actor_user_id=admin_user["id"],
@@ -363,11 +363,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         scope: str = Query("active"),
     ):
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
         include_deleted = str(scope).strip().lower() == "all"
-        return await db.get_bank_task_usage(task_id=task_id, include_deleted=include_deleted)
+        return await db.bank_tasks.get_task_usage(task_id=task_id, include_deleted=include_deleted)
 
     @app.get("/api/admin/bank/tasks/{task_id}")
     async def get_bank_task(
@@ -375,7 +375,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_any_admin),
         db: Database = Depends(get_db),
     ):
-        task = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        task = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not task:
             raise HTTPException(status_code=404, detail="Bank task not found")
         return task
@@ -475,7 +475,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if conflicts and not dedup_flag:
             raise HTTPException(status_code=409, detail=_build_import_similar_conflict_detail(conflicts))
 
-        created_items = await db.create_bank_tasks_bulk_atomic(
+        created_items = await db.bank_tasks.create_tasks_bulk_atomic(
             tasks=normalized_tasks,
             created_by=admin_user["id"],
             actor_email=admin_user.get("email"),
@@ -525,7 +525,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         validated_topics = _validate_bank_topics(parsed_topics)
 
         dedup_flag = _parse_bool_flag(dedup_confirmed)
-        similar_tasks = await db.find_similar_bank_tasks(
+        similar_tasks = await db.bank_tasks.find_similar_tasks(
             text=text,
             options=options_list,
             question_type=question_type,
@@ -537,7 +537,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         image_filename = await save_image_upload(image) if image else None
 
-        task = await db.create_bank_task(
+        task = await db.bank_tasks.create_task(
             text=text,
             answer=answer,
             question_type=question_type,
@@ -572,7 +572,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
     ):
         admin_user = await require_admin(email=email, db=db)
-        existing = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Bank task not found")
 
@@ -628,7 +628,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         effective_text = text if text is not None else (existing.get("text") or "")
         effective_question_type = question_type if question_type is not None else (existing.get("question_type") or "input")
         effective_options_for_dedup = options_list if options_list is not None else existing.get("options")
-        similar_tasks = await db.find_similar_bank_tasks(
+        similar_tasks = await db.bank_tasks.find_similar_tasks(
             text=effective_text,
             options=effective_options_for_dedup if isinstance(effective_options_for_dedup, list) else None,
             question_type=effective_question_type,
@@ -640,7 +640,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=409, detail=_build_similar_conflict_payload(similar_tasks))
 
         try:
-            updated = await db.update_bank_task(
+            updated = await db.bank_tasks.update_task(
                 task_id=task_id,
                 text=text,
                 answer=answer,
@@ -669,12 +669,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
     ):
         admin_user = await require_admin(email=email, db=db)
-        existing = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Bank task not found")
         if existing.get("deleted_at"):
             raise HTTPException(status_code=400, detail="Bank task is already in trash")
-        await db.soft_delete_bank_task(
+        await db.bank_tasks.soft_delete_task(
             task_id,
             actor_user_id=admin_user["id"],
             source="admin_bank_soft_delete",
@@ -688,17 +688,17 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
     ):
         admin_user = await require_admin(email=email, db=db)
-        existing = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Bank task not found")
         if not existing.get("deleted_at"):
             raise HTTPException(status_code=400, detail="Bank task is not in trash")
-        await db.restore_bank_task(
+        await db.bank_tasks.restore_task(
             task_id,
             actor_user_id=admin_user["id"],
             source="admin_bank_restore",
         )
-        restored = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        restored = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         return restored
 
     @app.delete("/api/admin/bank/tasks/{task_id}/permanent")
@@ -708,7 +708,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
     ):
         admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
-        existing = await db.get_bank_task_by_id(task_id, include_deleted=True)
+        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Bank task not found")
         if not existing.get("deleted_at"):
@@ -716,7 +716,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         image_filename = existing.get("image_filename")
 
-        deleted = await db.hard_delete_bank_task(
+        deleted = await db.bank_tasks.hard_delete_task(
             task_id,
             actor_user_id=admin_user["id"],
             actor_email=admin_user.get("email"),
@@ -734,7 +734,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         q: Optional[str] = Query(None),
         limit: int = Query(20, ge=1, le=100),
     ):
-        items = await db.get_bank_topics(query=q, limit=limit)
+        items = await db.bank_tasks.list_topics(query=q, limit=limit)
         return {"items": items}
 
     # Trial test templates removed in bank-only mode.

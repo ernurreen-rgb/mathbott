@@ -47,8 +47,8 @@ async def test_put_draft_no_email(client_with_db):
 @pytest.mark.asyncio
 async def test_draft_get_put_get_flow(client_with_db, test_db, test_user):
     """GET empty -> PUT draft -> GET returns saved data"""
-    trial = await test_db.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
-    task = await test_db.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
+    trial = await test_db.trial_tests.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
+    task = await test_db.trial_tests.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
     task_id = task["id"]
 
     # GET empty
@@ -88,8 +88,8 @@ async def test_draft_get_put_get_flow(client_with_db, test_db, test_user):
 @pytest.mark.asyncio
 async def test_submit_deletes_draft(client_with_db, test_db, test_user):
     """After submit, draft is deleted"""
-    trial = await test_db.create_trial_test("Submit Test", sort_order=0, created_by=test_user["id"])
-    task = await test_db.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
+    trial = await test_db.trial_tests.create_trial_test("Submit Test", sort_order=0, created_by=test_user["id"])
+    task = await test_db.trial_tests.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
     task_id = task["id"]
 
     # Save draft
@@ -122,13 +122,14 @@ async def test_submit_deletes_draft(client_with_db, test_db, test_user):
 async def test_put_draft_requests_are_serialized_per_user_and_test():
     """Concurrent draft saves for one user/test should not overlap DB writes."""
 
-    class FakeDraftDb:
+    class FakeUsersRepo:
+        async def get_user_by_email(self, email):
+            return {"id": 123, "email": email}
+
+    class FakeTrialTestsRepo:
         def __init__(self):
             self.active_calls = 0
             self.max_active_calls = 0
-
-        async def get_user_by_email(self, email):
-            return {"id": 123, "email": email}
 
         async def upsert_trial_test_draft(self, user_id, trial_test_id, answers, current_task_index):
             self.active_calls += 1
@@ -137,6 +138,11 @@ async def test_put_draft_requests_are_serialized_per_user_and_test():
                 await asyncio.sleep(0.05)
             finally:
                 self.active_calls -= 1
+
+    class FakeDraftDb:
+        def __init__(self):
+            self.users = FakeUsersRepo()
+            self.trial_tests = FakeTrialTestsRepo()
 
     fake_db = FakeDraftDb()
 
@@ -159,6 +165,6 @@ async def test_put_draft_requests_are_serialized_per_user_and_test():
 
         assert response_1.status_code == 200
         assert response_2.status_code == 200
-        assert fake_db.max_active_calls == 1
+        assert fake_db.trial_tests.max_active_calls == 1
     finally:
         app.dependency_overrides.pop(get_db, None)

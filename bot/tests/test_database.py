@@ -8,7 +8,7 @@ from database import Database
 @pytest.mark.asyncio
 async def test_create_user(test_db):
     """Test user creation"""
-    user = await test_db.create_user_by_email("test@example.com")
+    user = await test_db.users.create_user_by_email("test@example.com")
     assert user is not None
     assert user["email"] == "test@example.com"
     assert user["league"] == "Қола"
@@ -17,7 +17,7 @@ async def test_create_user(test_db):
 @pytest.mark.asyncio
 async def test_get_user_by_email(test_db, test_user):
     """Test getting user by email"""
-    user = await test_db.get_user_by_email("test@example.com")
+    user = await test_db.users.get_user_by_email("test@example.com")
     assert user is not None
     assert user["email"] == "test@example.com"
 
@@ -25,7 +25,7 @@ async def test_get_user_by_email(test_db, test_user):
 @pytest.mark.asyncio
 async def test_create_module(test_db):
     """Test module creation"""
-    module = await test_db.create_module(
+    module = await test_db.curriculum.create_module(
         name="Test Module",
         description="Test Description",
         icon="📚",
@@ -40,9 +40,9 @@ async def test_create_module(test_db):
 async def test_get_all_modules(test_db):
     """Test getting all modules"""
     # Create a module first
-    await test_db.create_module("Test Module", sort_order=1)
+    await test_db.curriculum.create_module("Test Module", sort_order=1)
     
-    modules = await test_db.get_all_modules()
+    modules = await test_db.curriculum.get_all_modules()
     assert len(modules) > 0
     assert any(m["name"] == "Test Module" for m in modules)
 
@@ -50,8 +50,8 @@ async def test_get_all_modules(test_db):
 @pytest.mark.asyncio
 async def test_update_user_nickname(test_db, test_user):
     """Test updating user nickname"""
-    await test_db.update_user_nickname("test@example.com", "TestNick")
-    user = await test_db.get_user_by_email("test@example.com")
+    await test_db.users.update_user_nickname("test@example.com", "TestNick")
+    user = await test_db.users.get_user_by_email("test@example.com")
     assert user["nickname"] == "TestNick"
 
 
@@ -59,8 +59,8 @@ async def test_update_user_nickname(test_db, test_user):
 async def test_record_solution(test_db, test_user):
     """Test recording solution"""
     # Create a task first
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -69,7 +69,7 @@ async def test_record_solution(test_db, test_user):
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
     
     # Check user stats updated
-    user = await test_db.get_user_by_email("test@example.com")
+    user = await test_db.users.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
     assert user["total_points"] == 15
 
@@ -77,15 +77,15 @@ async def test_record_solution(test_db, test_user):
 @pytest.mark.asyncio
 async def test_update_task_progress(test_db, test_user):
     """Test updating task progress"""
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
     
-    await test_db.update_task_progress(test_user["id"], task["id"], "completed")
+    await test_db.progress.update_task_progress(test_user["id"], task["id"], "completed")
     
-    progress = await test_db.get_user_task_progress(test_user["id"], task["id"])
+    progress = await test_db.progress.get_user_task_progress(test_user["id"], task["id"])
     assert progress is not None
     assert progress["status"] == "completed"
 
@@ -93,8 +93,8 @@ async def test_update_task_progress(test_db, test_user):
 @pytest.mark.asyncio
 async def test_calculate_module_completion(test_db, test_user):
     """Test calculating module completion"""
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Initially should be 0% complete
     completion = await test_db.calculate_module_completion(test_user["id"], module["id"])
@@ -105,11 +105,11 @@ async def test_calculate_module_completion(test_db, test_user):
 @pytest.mark.asyncio
 async def test_calculate_section_completion(test_db, test_user):
     """Test calculating section completion"""
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Initially should be 0% complete
-    completion = await test_db.calculate_section_completion(test_user["id"], section["id"])
+    completion = await test_db.progress.calculate_section_completion(test_user["id"], section["id"])
     assert completion["progress"] == 0.0
     assert completion["completed"] is False
 
@@ -118,12 +118,12 @@ async def test_calculate_section_completion(test_db, test_user):
 async def test_get_rating(test_db):
     """Test getting rating"""
     # Create users with nicknames
-    user1 = await test_db.create_user_by_email("user1@example.com")
-    user2 = await test_db.create_user_by_email("user2@example.com")
-    await test_db.update_user_nickname("user1@example.com", "User1")
-    await test_db.update_user_nickname("user2@example.com", "User2")
+    user1 = await test_db.users.create_user_by_email("user1@example.com")
+    user2 = await test_db.users.create_user_by_email("user2@example.com")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
+    await test_db.users.update_user_nickname("user2@example.com", "User2")
     
-    rating = await test_db.get_rating(limit=10)
+    rating = await test_db.rating.get_rating(limit=10)
     assert len(rating) >= 2
     # Check that users with nicknames are in rating
     emails = [u["email"] for u in rating]
@@ -133,13 +133,13 @@ async def test_get_rating(test_db):
 @pytest.mark.asyncio
 async def test_get_task_by_id(test_db, test_user):
     """Test getting task by ID"""
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
     
-    retrieved = await test_db.get_task_by_id(task["id"])
+    retrieved = await test_db.tasks.get_task_by_id(task["id"])
     assert retrieved is not None
     assert retrieved["id"] == task["id"]
     assert retrieved["text"] == "Test task"
@@ -148,8 +148,8 @@ async def test_get_task_by_id(test_db, test_user):
 @pytest.mark.asyncio
 async def test_get_solved_task_ids(test_db, test_user):
     """Test getting solved task IDs"""
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -157,6 +157,6 @@ async def test_get_solved_task_ids(test_db, test_user):
     # Record correct solution
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
     
-    solved_ids = await test_db.get_solved_task_ids(test_user["id"])
+    solved_ids = await test_db.users.get_solved_task_ids(test_user["id"])
     assert task["id"] in solved_ids
 

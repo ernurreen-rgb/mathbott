@@ -126,8 +126,8 @@ async def test_trusted_proxy_identity_rejects_replayed_signature(client, test_db
     email = "replay.admin@example.com"
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
-    user = await test_db.create_user_by_email(email)
-    await test_db.set_admin_with_role(email=user["email"], is_admin=True, role="super_admin")
+    user = await test_db.users.create_user_by_email(email)
+    await test_db.users.set_admin_with_role(email=user["email"], is_admin=True, role="super_admin")
     headers = _proxy_headers("GET", "/api/admin/check", "", email, secret, nonce="fixed-replay-nonce")
 
     first_response = client.get("/api/admin/check", headers=headers)
@@ -160,7 +160,7 @@ async def test_trusted_proxy_identity_allows_nickname_endpoint(client, test_db, 
 
     assert response.status_code == 200
     assert response.json()["success"] is True
-    user = await test_db.get_user_by_email(test_user["email"])
+    user = await test_db.users.get_user_by_email(test_user["email"])
     assert user["nickname"] == "ProxyNick"
 
 
@@ -168,8 +168,8 @@ async def test_trusted_proxy_identity_allows_nickname_endpoint(client, test_db, 
 async def test_get_task_by_id(client, test_db, test_user):
     """Test getting task by ID"""
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "What is 2+2?", "4", test_user["id"]
     )
@@ -193,8 +193,8 @@ def test_get_task_by_id_not_found(client):
 async def test_check_task_answer_correct(client, test_db, test_user):
     """Test checking correct answer"""
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "What is 2+2?", "4", test_user["id"]
     )
@@ -218,8 +218,8 @@ async def test_check_task_answer_correct(client, test_db, test_user):
 async def test_check_task_answer_incorrect(client, test_db, test_user):
     """Test checking incorrect answer"""
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "What is 2+2?", "4", test_user["id"]
     )
@@ -242,8 +242,8 @@ async def test_check_task_answer_incorrect(client, test_db, test_user):
 @pytest.mark.asyncio
 async def test_check_task_answer_factor_grid_accepts_swapped_rows(client, test_db, test_user):
     """Factor-grid answers should accept row swaps but reject in-row swaps."""
-    module = await test_db.create_module("Factor Grid Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Factor Grid Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Factor Grid Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Factor Grid Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"],
         "2x^2 + 5x - 3 = 0",
@@ -290,8 +290,8 @@ async def test_check_task_answer_factor_grid_accepts_swapped_rows(client, test_d
 
 @pytest.mark.asyncio
 async def test_check_task_answer_awards_points_once_by_difficulty(client, test_db, test_user):
-    module = await test_db.create_module("Points Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Points Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Points Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Points Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"],
         "What is 2+2?",
@@ -307,7 +307,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
     assert first.status_code == 200
     assert first.json()["correct"] is True
 
-    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 10
     assert user_after_first["week_points"] == 10
     assert user_after_first["total_solved"] == 1
@@ -320,7 +320,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
     assert second.status_code == 200
     assert second.json()["correct"] is True
 
-    user_after_second = await test_db.get_user_by_email(test_user["email"])
+    user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 10
     assert user_after_second["week_points"] == 10
     assert user_after_second["total_solved"] == 1
@@ -331,8 +331,8 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
 async def test_check_task_answer_user_not_found(client, test_db, test_user):
     """Test checking answer with non-existent user"""
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "What is 2+2?", "4", test_user["id"]
     )
@@ -351,23 +351,23 @@ async def test_check_task_answer_user_not_found(client, test_db, test_user):
 
 @pytest.mark.asyncio
 async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(client, test_db, test_user):
-    trial_test = await test_db.create_trial_test("Points Trial", sort_order=0, created_by=test_user["id"])
+    trial_test = await test_db.trial_tests.create_trial_test("Points Trial", sort_order=0, created_by=test_user["id"])
 
-    bank_task_a = await test_db.create_bank_task(
+    bank_task_a = await test_db.bank_tasks.create_task(
         text="Task A",
         answer="A",
         question_type="input",
         difficulty="A",
         created_by=test_user["id"],
     )
-    bank_task_b = await test_db.create_bank_task(
+    bank_task_b = await test_db.bank_tasks.create_task(
         text="Task B",
         answer="B",
         question_type="input",
         difficulty="B",
         created_by=test_user["id"],
     )
-    bank_task_c = await test_db.create_bank_task(
+    bank_task_c = await test_db.bank_tasks.create_task(
         text="Task C",
         answer="C",
         question_type="input",
@@ -375,7 +375,7 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
         created_by=test_user["id"],
     )
 
-    task_a = await test_db.create_trial_test_task(
+    task_a = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Task A",
         answer="A",
@@ -383,7 +383,7 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
         sort_order=0,
         bank_task_id=bank_task_a["id"],
     )
-    task_b = await test_db.create_trial_test_task(
+    task_b = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Task B",
         answer="B",
@@ -391,7 +391,7 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
         sort_order=1,
         bank_task_id=bank_task_b["id"],
     )
-    task_c = await test_db.create_trial_test_task(
+    task_c = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Task C",
         answer="C",
@@ -415,7 +415,7 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
     assert first_json["total"] == 3
     assert first_json["percentage"] == 100.0
 
-    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 45
     assert user_after_first["week_points"] == 45
     assert user_after_first["total_solved"] == 3
@@ -428,7 +428,7 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
     assert second_json["total"] == 3
     assert second_json["percentage"] == 100.0
 
-    user_after_second = await test_db.get_user_by_email(test_user["email"])
+    user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 45
     assert user_after_second["week_points"] == 45
     assert user_after_second["total_solved"] == 3
@@ -437,11 +437,11 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
 
 @pytest.mark.asyncio
 async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_module(client, test_db, test_user):
-    module = await test_db.create_module("Shared Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Shared Section", sort_order=1)
-    trial_test = await test_db.create_trial_test("Shared Trial", sort_order=0, created_by=test_user["id"])
+    module = await test_db.curriculum.create_module("Shared Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Shared Section", sort_order=1)
+    trial_test = await test_db.trial_tests.create_trial_test("Shared Trial", sort_order=0, created_by=test_user["id"])
 
-    shared_bank_task = await test_db.create_bank_task(
+    shared_bank_task = await test_db.bank_tasks.create_task(
         text="Shared task",
         answer="42",
         question_type="input",
@@ -455,7 +455,7 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
         test_user["id"],
         bank_task_id=shared_bank_task["id"],
     )
-    trial_task = await test_db.create_trial_test_task(
+    trial_task = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Shared task",
         answer="42",
@@ -470,7 +470,7 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
     )
     assert module_response.status_code == 200
 
-    user_after_module = await test_db.get_user_by_email(test_user["email"])
+    user_after_module = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_module["total_points"] == 10
     assert user_after_module["total_solved"] == 1
 
@@ -481,7 +481,7 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
     assert trial_response.status_code == 200
     assert trial_response.json()["score"] == 1
 
-    user_after_trial = await test_db.get_user_by_email(test_user["email"])
+    user_after_trial = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_trial["total_points"] == 10
     assert user_after_trial["total_solved"] == 1
 
@@ -493,8 +493,8 @@ async def test_trial_test_submit_still_returns_200_when_achievement_check_fails(
     test_user,
     monkeypatch,
 ):
-    trial_test = await test_db.create_trial_test("Achievement Failure Trial", sort_order=0, created_by=test_user["id"])
-    trial_task = await test_db.create_trial_test_task(
+    trial_test = await test_db.trial_tests.create_trial_test("Achievement Failure Trial", sort_order=0, created_by=test_user["id"])
+    trial_task = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Task",
         answer="42",
@@ -515,22 +515,22 @@ async def test_trial_test_submit_still_returns_200_when_achievement_check_fails(
     assert response.status_code == 200
     assert response.json()["score"] == 1
 
-    user_after_submit = await test_db.get_user_by_email(test_user["email"])
+    user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_submit["total_points"] == 15
     assert user_after_submit["total_solved"] == 1
 
 
 @pytest.mark.asyncio
 async def test_coop_finish_awards_points_once(client, test_db, test_user):
-    trial_test = await test_db.create_trial_test("Coop Points Trial", sort_order=0, created_by=test_user["id"])
-    bank_task = await test_db.create_bank_task(
+    trial_test = await test_db.trial_tests.create_trial_test("Coop Points Trial", sort_order=0, created_by=test_user["id"])
+    bank_task = await test_db.bank_tasks.create_task(
         text="Coop task",
         answer="yes",
         question_type="input",
         difficulty="C",
         created_by=test_user["id"],
     )
-    trial_task = await test_db.create_trial_test_task(
+    trial_task = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Coop task",
         answer="yes",
@@ -539,8 +539,8 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
         bank_task_id=bank_task["id"],
     )
 
-    session = await test_db.create_trial_test_coop_session(trial_test["id"], test_user["id"])
-    await test_db.add_trial_test_coop_participant(session["id"], test_user["id"], "red")
+    session = await test_db.trial_test_coop.create_session(trial_test["id"], test_user["id"])
+    await test_db.trial_test_coop.add_participant(session["id"], test_user["id"], "red")
 
     response = client.post(
         f"/api/trial-tests/{trial_test['id']}/coop/finish",
@@ -556,7 +556,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
     assert payload["total"] == 1
     assert payload["percentage"] == 100.0
 
-    user_after_first = await test_db.get_user_by_email(test_user["email"])
+    user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 20
     assert user_after_first["week_points"] == 20
     assert user_after_first["total_solved"] == 1
@@ -572,7 +572,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
     )
     assert repeat.status_code == 200
 
-    user_after_repeat = await test_db.get_user_by_email(test_user["email"])
+    user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_repeat["total_points"] == 20
     assert user_after_repeat["week_points"] == 20
     assert user_after_repeat["total_solved"] == 1
@@ -581,9 +581,9 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
 
 @pytest.mark.asyncio
 async def test_coop_ws_token_requires_participant(client, test_db, test_user):
-    trial_test = await test_db.create_trial_test("Coop WS Token Trial", sort_order=0, created_by=test_user["id"])
-    session = await test_db.create_trial_test_coop_session(trial_test["id"], test_user["id"])
-    await test_db.add_trial_test_coop_participant(session["id"], test_user["id"], "red")
+    trial_test = await test_db.trial_tests.create_trial_test("Coop WS Token Trial", sort_order=0, created_by=test_user["id"])
+    session = await test_db.trial_test_coop.create_session(trial_test["id"], test_user["id"])
+    await test_db.trial_test_coop.add_participant(session["id"], test_user["id"], "red")
 
     response = client.get(
         f"/api/trial-tests/coop/session/{session['id']}/ws-token",
@@ -598,7 +598,7 @@ async def test_coop_ws_token_requires_participant(client, test_db, test_user):
         token=payload["token"],
     ) == (True, None)
 
-    outsider = await test_db.create_user_by_email("coop-token-outsider@example.com")
+    outsider = await test_db.users.create_user_by_email("coop-token-outsider@example.com")
     outsider_response = client.get(
         f"/api/trial-tests/coop/session/{session['id']}/ws-token",
         params={"email": outsider["email"]},
@@ -695,7 +695,7 @@ async def test_presence_broadcast_reports_stale_last_connection_offline():
 async def test_get_user_web(client, test_db):
     """Test getting user web stats"""
     # Create user
-    user = await test_db.create_user_by_email("testuser@example.com")
+    user = await test_db.users.create_user_by_email("testuser@example.com")
     
     # Get user stats
     response = client.get(f"/api/user/web/{user['email']}")
@@ -711,11 +711,11 @@ async def test_get_user_web(client, test_db):
 @pytest.mark.asyncio
 async def test_get_user_web_includes_global_position(client, test_db):
     users = [
-        await test_db.create_user_by_email("web-rank-1@example.com"),
-        await test_db.create_user_by_email("web-rank-2@example.com"),
+        await test_db.users.create_user_by_email("web-rank-1@example.com"),
+        await test_db.users.create_user_by_email("web-rank-2@example.com"),
     ]
-    await test_db.update_user_nickname(users[0]["email"], "WebRank1")
-    await test_db.update_user_nickname(users[1]["email"], "WebRank2")
+    await test_db.users.update_user_nickname(users[0]["email"], "WebRank1")
+    await test_db.users.update_user_nickname(users[1]["email"], "WebRank2")
 
     async with aiosqlite.connect(test_db.db_path) as db:
         await db.execute(
@@ -744,7 +744,7 @@ async def test_get_user_web_auto_create(client, test_db):
     assert data["email"] == "newuser@example.com"
     
     # Verify user was created
-    user = await test_db.get_user_by_email("newuser@example.com")
+    user = await test_db.users.get_user_by_email("newuser@example.com")
     assert user is not None
 
 
@@ -764,7 +764,7 @@ async def test_get_user_web_with_refresh_achievements(client, test_db, test_user
 async def test_get_public_user_profile(client, test_db, test_user):
     """Test getting public user profile"""
     # Set nickname
-    await test_db.update_user_nickname(test_user["email"], "TestUser")
+    await test_db.users.update_user_nickname(test_user["email"], "TestUser")
     
     # Get public profile
     response = client.get(f"/api/user/public/{test_user['id']}")
@@ -790,9 +790,9 @@ async def test_get_public_user_profile_rejects_email_identifier(client, test_use
 
 @pytest.mark.asyncio
 async def test_user_export_csv_quotes_and_neutralizes_formula_values(client, test_db, test_user):
-    await test_db.update_user_nickname(test_user["email"], "Nick, With Comma")
-    module = await test_db.create_module("Export Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Export Section", sort_order=1)
+    await test_db.users.update_user_nickname(test_user["email"], "Nick, With Comma")
+    module = await test_db.curriculum.create_module("Export Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Export Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"],
         "Export task",
@@ -921,7 +921,7 @@ async def test_update_nickname(client, test_db, test_user):
     assert data["success"] is True
     
     # Verify nickname was updated
-    user = await test_db.get_user_by_email(test_user["email"])
+    user = await test_db.users.get_user_by_email(test_user["email"])
     assert user["nickname"] == "NewNickname"
 
 
@@ -941,10 +941,10 @@ def test_update_nickname_invalid_email(client):
 async def test_get_rating(client, test_db):
     """Test getting rating"""
     # Create users with nicknames
-    user1 = await test_db.create_user_by_email("user1@example.com")
-    user2 = await test_db.create_user_by_email("user2@example.com")
-    await test_db.update_user_nickname("user1@example.com", "User1")
-    await test_db.update_user_nickname("user2@example.com", "User2")
+    user1 = await test_db.users.create_user_by_email("user1@example.com")
+    user2 = await test_db.users.create_user_by_email("user2@example.com")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
+    await test_db.users.update_user_nickname("user2@example.com", "User2")
     
     # Get rating
     response = client.get("/api/rating?limit=10")
@@ -964,8 +964,8 @@ async def test_get_rating_with_pagination(client, test_db):
     # Create multiple users
     for i in range(5):
         email = f"user{i}@example.com"
-        await test_db.create_user_by_email(email)
-        await test_db.update_user_nickname(email, f"User{i}")
+        await test_db.users.create_user_by_email(email)
+        await test_db.users.update_user_nickname(email, f"User{i}")
     
     # Get first page
     response1 = client.get("/api/rating?limit=2&offset=0")
@@ -985,8 +985,8 @@ async def test_get_rating_with_pagination(client, test_db):
 async def test_get_rating_with_league_filter(client, test_db):
     """Test getting rating filtered by league"""
     # Create users in different leagues
-    user1 = await test_db.create_user_by_email("user1@example.com")
-    await test_db.update_user_nickname("user1@example.com", "User1")
+    user1 = await test_db.users.create_user_by_email("user1@example.com")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
     
     # Get rating for specific league
     response = client.get("/api/rating?limit=10&league=Қола")
@@ -1003,8 +1003,8 @@ async def test_get_rating_with_league_filter(client, test_db):
 async def test_get_rating_with_league_group_filter(client, test_db):
     for index in range(LEAGUE_GROUP_SIZE + 1):
         email = f"group-rating-{index}@example.com"
-        await test_db.create_user_by_email(email)
-        await test_db.update_user_nickname(email, f"GroupUser{index}")
+        await test_db.users.create_user_by_email(email)
+        await test_db.users.update_user_nickname(email, f"GroupUser{index}")
 
     response = client.get(
         f"/api/rating?limit=20&league={League.KOLA.value}&group=1"
@@ -1024,8 +1024,8 @@ async def test_get_rating_with_league_group_filter(client, test_db):
 async def test_get_modules_map(client, test_db):
     """Test getting modules map"""
     # Create module
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Get modules map
     response = client.get("/api/modules/map")
@@ -1040,8 +1040,8 @@ async def test_get_modules_map(client, test_db):
 async def test_get_modules_map_with_email(client, test_db, test_user):
     """Test getting modules map with user email"""
     # Create module
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Get modules map with email
     response = client.get(f"/api/modules/map?email={test_user['email']}")
@@ -1057,8 +1057,8 @@ async def test_get_modules_map_with_email(client, test_db, test_user):
 async def test_get_module_details(client, test_db):
     """Test getting module details"""
     # Create module
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Get module details
     response = client.get(f"/api/modules/{module['id']}")
@@ -1079,9 +1079,9 @@ def test_get_module_details_not_found(client):
 async def test_get_lesson_details(client, test_db):
     """Test getting lesson details"""
     # Create module, section, lesson
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
-    lesson = await test_db.create_lesson(
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
+    lesson = await test_db.curriculum.create_lesson(
         section["id"], lesson_number=1, title="Test Lesson", sort_order=1
     )
     
@@ -1102,9 +1102,9 @@ def test_get_lesson_details_not_found(client):
 @pytest.mark.asyncio
 async def test_admin_trial_task_create_auto_links_bank_task(client, test_db):
     """Creating a trial-test task via admin endpoint should auto-create linked bank task."""
-    admin_user = await test_db.create_user_by_email("admin.autobank@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Auto Bank Test", sort_order=0, created_by=admin_user["id"])
+    admin_user = await test_db.users.create_user_by_email("admin.autobank@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Auto Bank Test", sort_order=0, created_by=admin_user["id"])
 
     response = client.post(
         f"/api/admin/trial-tests/{trial_test['id']}/tasks/create",
@@ -1122,7 +1122,7 @@ async def test_admin_trial_task_create_auto_links_bank_task(client, test_db):
     created_task = response.json()
     assert isinstance(created_task.get("bank_task_id"), int)
 
-    bank_task = await test_db.get_bank_task_by_id(created_task["bank_task_id"], include_deleted=True)
+    bank_task = await test_db.bank_tasks.get_task_by_id(created_task["bank_task_id"], include_deleted=True)
     assert bank_task is not None
     assert bank_task["text"] == "x^2 + 1 = 0"
     assert bank_task["answer"] == "i"
@@ -1147,10 +1147,10 @@ async def test_admin_trial_task_create_auto_links_bank_task(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_trial_task_update_syncs_linked_bank_task(client, test_db):
     """Updating linked trial task should sync values to bank task."""
-    admin_user = await test_db.create_user_by_email("admin.sync@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Sync Test", sort_order=0, created_by=admin_user["id"])
-    bank_task = await test_db.create_bank_task(
+    admin_user = await test_db.users.create_user_by_email("admin.sync@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Sync Test", sort_order=0, created_by=admin_user["id"])
+    bank_task = await test_db.bank_tasks.create_task(
         text="Old text",
         answer="A",
         question_type="input",
@@ -1162,7 +1162,7 @@ async def test_admin_trial_task_update_syncs_linked_bank_task(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    trial_task = await test_db.create_trial_test_task(
+    trial_task = await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Old text",
         answer="A",
@@ -1186,7 +1186,7 @@ async def test_admin_trial_task_update_syncs_linked_bank_task(client, test_db):
     assert response.status_code == 200
     assert response.json().get("success") is True
 
-    updated_bank_task = await test_db.get_bank_task_by_id(bank_task["id"], include_deleted=True)
+    updated_bank_task = await test_db.bank_tasks.get_task_by_id(bank_task["id"], include_deleted=True)
     assert updated_bank_task is not None
     assert updated_bank_task["text"] == "Updated text"
     assert updated_bank_task["answer"] == "Updated answer"
@@ -1197,10 +1197,10 @@ async def test_admin_trial_task_update_syncs_linked_bank_task(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_bank_list_order_survives_task_update(client, test_db):
     """Updating a bank task should not move it to the top of the active bank list."""
-    admin_user = await test_db.create_user_by_email("admin.bank.order@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.order@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    older_task = await test_db.create_bank_task(
+    older_task = await test_db.bank_tasks.create_task(
         text="Stable order older task",
         answer="A",
         question_type="input",
@@ -1212,7 +1212,7 @@ async def test_admin_bank_list_order_survives_task_update(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    newer_task = await test_db.create_bank_task(
+    newer_task = await test_db.bank_tasks.create_task(
         text="Stable order newer task",
         answer="B",
         question_type="input",
@@ -1259,9 +1259,9 @@ async def test_admin_bank_list_order_survives_task_update(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_trial_task_update_does_not_create_bank_for_legacy_unlinked(client, test_db):
     """Legacy unlinked trial task should not create new bank task on update."""
-    admin_user = await test_db.create_user_by_email("admin.legacy@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Legacy Test", sort_order=0, created_by=admin_user["id"])
+    admin_user = await test_db.users.create_user_by_email("admin.legacy@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Legacy Test", sort_order=0, created_by=admin_user["id"])
 
     # Create a true legacy unlinked placement row (bank_task_id=NULL) bypassing modern helper.
     async with aiosqlite.connect(test_db.db_path) as db:
@@ -1279,7 +1279,7 @@ async def test_admin_trial_task_update_does_not_create_bank_for_legacy_unlinked(
 
     assert trial_task_id is not None
 
-    before = await test_db.get_bank_tasks(limit=50, offset=0)
+    before = await test_db.bank_tasks.list_tasks(limit=50, offset=0)
     before_total = before["total"]
 
     response = client.post(
@@ -1296,19 +1296,19 @@ async def test_admin_trial_task_update_does_not_create_bank_for_legacy_unlinked(
     assert response.status_code == 200
     assert response.json().get("success") is True
 
-    after = await test_db.get_bank_tasks(limit=50, offset=0)
+    after = await test_db.bank_tasks.list_tasks(limit=50, offset=0)
     assert after["total"] == before_total
 
 
 @pytest.mark.asyncio
 async def test_admin_trial_slot_upsert_with_existing_bank_task(client, test_db):
     """Slot upsert with bank_task_id should create/update only one placement in that slot."""
-    admin_user = await test_db.create_user_by_email("admin.slot.bank@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    assert await test_db.is_admin(email=admin_user["email"]) is True
-    trial_test = await test_db.create_trial_test("Slot Test", sort_order=0, created_by=admin_user["id"])
+    admin_user = await test_db.users.create_user_by_email("admin.slot.bank@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    assert await test_db.users.is_admin(email=admin_user["email"]) is True
+    trial_test = await test_db.trial_tests.create_trial_test("Slot Test", sort_order=0, created_by=admin_user["id"])
 
-    bank_task_a = await test_db.create_bank_task(
+    bank_task_a = await test_db.bank_tasks.create_task(
         text="Bank A",
         answer="A",
         question_type="mcq",
@@ -1325,7 +1325,7 @@ async def test_admin_trial_slot_upsert_with_existing_bank_task(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    bank_task_b = await test_db.create_bank_task(
+    bank_task_b = await test_db.bank_tasks.create_task(
         text="Bank B",
         answer="B",
         question_type="mcq",
@@ -1378,11 +1378,11 @@ async def test_admin_trial_slot_upsert_with_existing_bank_task(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db):
     """Inline slot upsert should create bank task and link placement to it."""
-    admin_user = await test_db.create_user_by_email("admin.slot.inline@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Inline Slot Test", sort_order=0, created_by=admin_user["id"])
+    admin_user = await test_db.users.create_user_by_email("admin.slot.inline@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Inline Slot Test", sort_order=0, created_by=admin_user["id"])
 
-    before = await test_db.get_bank_tasks(limit=100, offset=0)
+    before = await test_db.bank_tasks.list_tasks(limit=100, offset=0)
 
     response = client.put(
         f"/api/admin/trial-tests/{trial_test['id']}/slots/1",
@@ -1409,9 +1409,9 @@ async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db)
     assert created["bank_difficulty"] == "A"
     assert created["bank_topics"] == ["InlineTopic", "SecondTopic"]
 
-    after = await test_db.get_bank_tasks(limit=100, offset=0)
+    after = await test_db.bank_tasks.list_tasks(limit=100, offset=0)
     assert after["total"] == before["total"] + 1
-    created_bank = await test_db.get_bank_task_by_id(created["bank_task_id"], include_deleted=True)
+    created_bank = await test_db.bank_tasks.get_task_by_id(created["bank_task_id"], include_deleted=True)
     assert created_bank is not None
     assert created_bank["text"] == "Inline slot text"
     assert created_bank["difficulty"] == "A"
@@ -1421,10 +1421,10 @@ async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db)
 @pytest.mark.asyncio
 async def test_admin_trial_slot_clear_soft_deletes_slot_placement(client, test_db):
     """Clearing slot should remove active placement from slot listing."""
-    admin_user = await test_db.create_user_by_email("admin.slot.clear@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Clear Slot Test", sort_order=0, created_by=admin_user["id"])
-    bank_task = await test_db.create_bank_task(
+    admin_user = await test_db.users.create_user_by_email("admin.slot.clear@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Clear Slot Test", sort_order=0, created_by=admin_user["id"])
+    bank_task = await test_db.bank_tasks.create_task(
         text="Clear me",
         answer="42",
         question_type="input",
@@ -1461,10 +1461,10 @@ async def test_admin_trial_slot_clear_soft_deletes_slot_placement(client, test_d
 @pytest.mark.asyncio
 async def test_admin_bank_permanent_delete_removes_trial_placements(client, test_db):
     """Permanent bank delete should remove linked trial placements from active content."""
-    admin_user = await test_db.create_user_by_email("admin.bank.delete@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    trial_test = await test_db.create_trial_test("Delete Cascade Test", sort_order=0, created_by=admin_user["id"])
-    bank_task = await test_db.create_bank_task(
+    admin_user = await test_db.users.create_user_by_email("admin.bank.delete@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    trial_test = await test_db.trial_tests.create_trial_test("Delete Cascade Test", sort_order=0, created_by=admin_user["id"])
+    bank_task = await test_db.bank_tasks.create_task(
         text="Cascade bank task",
         answer="1",
         question_type="input",
@@ -1504,15 +1504,15 @@ async def test_admin_bank_permanent_delete_removes_trial_placements(client, test
     assert list_response.status_code == 200
     assert list_response.json()["tasks"] == []
 
-    deleted_bank = await test_db.get_bank_task_by_id(bank_task["id"], include_deleted=True)
+    deleted_bank = await test_db.bank_tasks.get_task_by_id(bank_task["id"], include_deleted=True)
     assert deleted_bank is None
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_versions_update_and_rollback(client, test_db):
     """Bank task should track versions and support rollback."""
-    admin_user = await test_db.create_user_by_email("admin.bank.versions@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.versions@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -1589,8 +1589,8 @@ async def test_admin_bank_versions_update_and_rollback(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_bank_delete_non_current_version(client, test_db):
     """Admin can permanently remove a non-current version from history."""
-    admin_user = await test_db.create_user_by_email("admin.bank.versions.delete@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.versions.delete@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -1638,7 +1638,7 @@ async def test_admin_bank_delete_non_current_version(client, test_db):
     version_numbers = [int(item["version_no"]) for item in versions_response.json()["items"]]
     assert 1 not in version_numbers
 
-    task = await test_db.get_bank_task_by_id(task_id, include_deleted=True)
+    task = await test_db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
     assert task is not None
     assert int(task.get("current_version") or 0) == 2
 
@@ -1646,8 +1646,8 @@ async def test_admin_bank_delete_non_current_version(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_bank_delete_current_version_repoints_to_latest(client, test_db):
     """Deleting current version should move current_version to latest remaining history item."""
-    admin_user = await test_db.create_user_by_email("admin.bank.versions.current@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.versions.current@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -1681,7 +1681,7 @@ async def test_admin_bank_delete_current_version_repoints_to_latest(client, test
     assert delete_response.status_code == 200
     assert delete_response.json()["success"] is True
 
-    task = await test_db.get_bank_task_by_id(task_id, include_deleted=True)
+    task = await test_db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
     assert task is not None
     assert int(task.get("current_version") or 0) == 1
 
@@ -1701,8 +1701,8 @@ async def test_admin_bank_delete_current_version_repoints_to_latest(client, test
 @pytest.mark.asyncio
 async def test_admin_bank_delete_last_remaining_version_forbidden(client, test_db):
     """Deleting the last remaining version should be rejected."""
-    admin_user = await test_db.create_user_by_email("admin.bank.versions.last@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.versions.last@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -1735,8 +1735,8 @@ async def test_admin_bank_delete_last_remaining_version_forbidden(client, test_d
 @pytest.mark.asyncio
 async def test_admin_bank_delete_missing_version_returns_404(client, test_db):
     """Deleting unknown version should return not found."""
-    admin_user = await test_db.create_user_by_email("admin.bank.versions.missing@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.versions.missing@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -1761,14 +1761,14 @@ async def test_admin_bank_delete_missing_version_returns_404(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_bank_usage_endpoint_returns_module_and_trial_context(client, test_db):
     """Usage endpoint should include active placements from modules and trial tests."""
-    admin_user = await test_db.create_user_by_email("admin.bank.usage@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.usage@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Usage Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Usage Section", sort_order=1)
-    trial_test = await test_db.create_trial_test("Usage Trial", sort_order=1, created_by=admin_user["id"])
+    module = await test_db.curriculum.create_module("Usage Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Usage Section", sort_order=1)
+    trial_test = await test_db.trial_tests.create_trial_test("Usage Trial", sort_order=1, created_by=admin_user["id"])
 
-    bank_task = await test_db.create_bank_task(
+    bank_task = await test_db.bank_tasks.create_task(
         text="Usage linked task",
         answer="A",
         question_type="input",
@@ -1788,7 +1788,7 @@ async def test_admin_bank_usage_endpoint_returns_module_and_trial_context(client
         bank_task_id=bank_task["id"],
         sort_order=0,
     )
-    await test_db.create_trial_test_task(
+    await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Usage linked task",
         answer="A",
@@ -1814,8 +1814,8 @@ async def test_admin_bank_usage_endpoint_returns_module_and_trial_context(client
 @pytest.mark.asyncio
 async def test_admin_bank_dedup_warn_on_save(client, test_db):
     """Create/update should return dedup warning unless explicitly confirmed."""
-    admin_user = await test_db.create_user_by_email("admin.bank.dedup@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.dedup@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     first = client.post(
         "/api/admin/bank/tasks",
@@ -1866,8 +1866,8 @@ async def test_admin_bank_dedup_warn_on_save(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_mode_required(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.mode@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.mode@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     response = client.post(
         "/api/admin/bank/tasks/import",
@@ -1889,9 +1889,9 @@ async def test_admin_bank_import_mode_required(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_dry_run_single_select_task(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.dryrun.single@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.dryrun.single@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     task_payload = {
         "text": "Import select question",
@@ -1933,14 +1933,14 @@ async def test_admin_bank_import_dry_run_single_select_task(client, test_db):
     assert payload["validation_errors"] == []
     assert payload["duplicate_conflicts"] == []
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_dry_run_mcq_accepts_eight_options(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.mcq8@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.mcq8@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     response = client.post(
         "/api/admin/bank/tasks/import",
@@ -1970,9 +1970,9 @@ async def test_admin_bank_import_dry_run_mcq_accepts_eight_options(client, test_
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_dry_run_mixed_validation_errors(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.dryrun.validation@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.dryrun.validation@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     response = client.post(
         "/api/admin/bank/tasks/import",
@@ -2004,16 +2004,16 @@ async def test_admin_bank_import_dry_run_mixed_validation_errors(client, test_db
     assert isinstance(payload["validation_errors"], list)
     assert any(item.get("index") == 1 for item in payload["validation_errors"])
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_dry_run_dedup_all_conflicts(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.dryrun.conflicts@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.dryrun.conflicts@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="Dry-run duplicate one",
         answer="1",
         question_type="input",
@@ -2025,7 +2025,7 @@ async def test_admin_bank_import_dry_run_dedup_all_conflicts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="Dry-run duplicate two",
         answer="1",
         question_type="input",
@@ -2062,9 +2062,9 @@ async def test_admin_bank_import_dry_run_dedup_all_conflicts(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_success_after_dry_run(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.success@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.success@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     tasks_payload = {
         "text": "Confirm select question",
@@ -2108,19 +2108,19 @@ async def test_admin_bank_import_confirm_success_after_dry_run(client, test_db):
     assert confirm_payload["created_count"] == 1
     assert len(confirm_payload["created_ids"]) == 1
     task_id = int(confirm_payload["created_ids"][0])
-    created = await test_db.get_bank_task_by_id(task_id, include_deleted=True)
+    created = await test_db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
     assert created is not None
     assert created["question_type"] == "select"
     assert created["answer"] == json.dumps(["D", "B"], ensure_ascii=False)
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total + 1
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_create_factor_grid_canonicalizes_answer(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.factor.grid@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.factor.grid@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     response = client.post(
         "/api/admin/bank/tasks",
@@ -2140,8 +2140,8 @@ async def test_admin_bank_create_factor_grid_canonicalizes_answer(client, test_d
 
 @pytest.mark.asyncio
 async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.mcq8@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.mcq8@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
     options = [{"label": label, "text": f"Option {label}"} for label in ["A", "B", "C", "D", "E", "F", "G", "H"]]
 
     response = client.post(
@@ -2166,9 +2166,9 @@ async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_dedup_conflict(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.conflict@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    await test_db.create_bank_task(
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.conflict@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    await test_db.bank_tasks.create_task(
         text="Confirm duplicate anchor",
         answer="1",
         question_type="input",
@@ -2180,7 +2180,7 @@ async def test_admin_bank_import_confirm_dedup_conflict(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     tasks_payload = {
         "text": "Confirm duplicate anchor",
@@ -2218,15 +2218,15 @@ async def test_admin_bank_import_confirm_dedup_conflict(client, test_db):
     assert isinstance(detail.get("similar_tasks"), list)
     assert len(detail["similar_tasks"]) >= 1
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_dedup_force(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.force@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    await test_db.create_bank_task(
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.force@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    await test_db.bank_tasks.create_task(
         text="Confirm force duplicate",
         answer="1",
         question_type="input",
@@ -2238,7 +2238,7 @@ async def test_admin_bank_import_confirm_dedup_force(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     tasks_payload = {
         "text": "Confirm force duplicate",
@@ -2269,14 +2269,14 @@ async def test_admin_bank_import_confirm_dedup_force(client, test_db):
     assert payload["created_count"] == 1
     assert len(payload["created_ids"]) == 1
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total + 1
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_payload_mismatch(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.mismatch@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.mismatch@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     preview_response = client.post(
         "/api/admin/bank/tasks/import",
@@ -2311,8 +2311,8 @@ async def test_admin_bank_import_confirm_payload_mismatch(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_invalid_token(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.token@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.token@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     confirm_response = client.post(
         "/api/admin/bank/tasks/import",
@@ -2336,9 +2336,9 @@ async def test_admin_bank_import_confirm_invalid_token(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_import_confirm_validation_failure_atomic(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.import.confirm.validation@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    admin_user = await test_db.users.create_user_by_email("admin.bank.import.confirm.validation@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     tasks_payload = [
         {"text": "Atomic valid", "answer": "10", "question_type": "input", "difficulty": "B"},
@@ -2371,20 +2371,20 @@ async def test_admin_bank_import_confirm_validation_failure_atomic(client, test_
     assert isinstance(detail.get("errors"), list)
     assert any(item.get("index") == 1 for item in detail["errors"])
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total
 
 
 @pytest.mark.asyncio
 async def test_admin_bank_quality_summary_counts(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.quality.summary@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.quality.summary@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Quality Module", sort_order=0)
-    section = await test_db.create_section(module["id"], "Quality Section", sort_order=0)
-    trial_test = await test_db.create_trial_test("Quality Trial", sort_order=0, created_by=admin_user["id"])
+    module = await test_db.curriculum.create_module("Quality Module", sort_order=0)
+    section = await test_db.curriculum.create_section(module["id"], "Quality Section", sort_order=0)
+    trial_test = await test_db.trial_tests.create_trial_test("Quality Trial", sort_order=0, created_by=admin_user["id"])
 
-    dead_no_topics = await test_db.create_bank_task(
+    dead_no_topics = await test_db.bank_tasks.create_task(
         text="Quality dead no topics",
         answer="1",
         question_type="input",
@@ -2396,7 +2396,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    dead_with_topics = await test_db.create_bank_task(
+    dead_with_topics = await test_db.bank_tasks.create_task(
         text="Quality dead with topics",
         answer="2",
         question_type="input",
@@ -2408,7 +2408,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    used_in_module = await test_db.create_bank_task(
+    used_in_module = await test_db.bank_tasks.create_task(
         text="Quality used in module",
         answer="3",
         question_type="input",
@@ -2420,7 +2420,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    used_in_trial_no_topics = await test_db.create_bank_task(
+    used_in_trial_no_topics = await test_db.bank_tasks.create_task(
         text="Quality used in trial no topics",
         answer="4",
         question_type="input",
@@ -2432,7 +2432,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    deleted_task = await test_db.create_bank_task(
+    deleted_task = await test_db.bank_tasks.create_task(
         text="Quality deleted task",
         answer="5",
         question_type="input",
@@ -2444,7 +2444,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    await test_db.soft_delete_bank_task(deleted_task["id"], actor_user_id=admin_user["id"])
+    await test_db.bank_tasks.soft_delete_task(deleted_task["id"], actor_user_id=admin_user["id"])
 
     await test_db.create_task_in_section(
         section_id=section["id"],
@@ -2454,7 +2454,7 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
         bank_task_id=used_in_module["id"],
         sort_order=0,
     )
-    await test_db.create_trial_test_task(
+    await test_db.trial_tests.create_trial_test_task(
         trial_test_id=trial_test["id"],
         text="Placement trial",
         answer="4",
@@ -2480,13 +2480,13 @@ async def test_admin_bank_quality_summary_counts(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_quality_dead_list_filters_and_pagination(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.quality.dead@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.quality.dead@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Quality Dead Module", sort_order=0)
-    section = await test_db.create_section(module["id"], "Quality Dead Section", sort_order=0)
+    module = await test_db.curriculum.create_module("Quality Dead Module", sort_order=0)
+    section = await test_db.curriculum.create_section(module["id"], "Quality Dead Section", sort_order=0)
 
-    dead_a = await test_db.create_bank_task(
+    dead_a = await test_db.bank_tasks.create_task(
         text="Dead filter item A",
         answer="1",
         question_type="input",
@@ -2498,7 +2498,7 @@ async def test_admin_bank_quality_dead_list_filters_and_pagination(client, test_
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    dead_b = await test_db.create_bank_task(
+    dead_b = await test_db.bank_tasks.create_task(
         text="Dead filter item B",
         answer="2",
         question_type="input",
@@ -2510,7 +2510,7 @@ async def test_admin_bank_quality_dead_list_filters_and_pagination(client, test_
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    used_task = await test_db.create_bank_task(
+    used_task = await test_db.bank_tasks.create_task(
         text="Dead filter used item",
         answer="3",
         question_type="input",
@@ -2571,13 +2571,13 @@ async def test_admin_bank_quality_dead_list_filters_and_pagination(client, test_
 
 @pytest.mark.asyncio
 async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.quality.notopics@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.quality.notopics@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Quality NoTopics Module", sort_order=0)
-    section = await test_db.create_section(module["id"], "Quality NoTopics Section", sort_order=0)
+    module = await test_db.curriculum.create_module("Quality NoTopics Module", sort_order=0)
+    section = await test_db.curriculum.create_section(module["id"], "Quality NoTopics Section", sort_order=0)
 
-    no_topics_plain = await test_db.create_bank_task(
+    no_topics_plain = await test_db.bank_tasks.create_task(
         text="NoTopic plain item",
         answer="1",
         question_type="input",
@@ -2589,7 +2589,7 @@ async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    no_topics_used = await test_db.create_bank_task(
+    no_topics_used = await test_db.bank_tasks.create_task(
         text="NoTopic used item",
         answer="2",
         question_type="input",
@@ -2601,7 +2601,7 @@ async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    with_topics = await test_db.create_bank_task(
+    with_topics = await test_db.bank_tasks.create_task(
         text="NoTopic should be excluded",
         answer="3",
         question_type="input",
@@ -2613,7 +2613,7 @@ async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    deleted_no_topics = await test_db.create_bank_task(
+    deleted_no_topics = await test_db.bank_tasks.create_task(
         text="NoTopic deleted item",
         answer="4",
         question_type="input",
@@ -2625,7 +2625,7 @@ async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    await test_db.soft_delete_bank_task(deleted_no_topics["id"], actor_user_id=admin_user["id"])
+    await test_db.bank_tasks.soft_delete_task(deleted_no_topics["id"], actor_user_id=admin_user["id"])
 
     await test_db.create_task_in_section(
         section_id=section["id"],
@@ -2657,10 +2657,10 @@ async def test_admin_bank_quality_no_topics_only_tasks_without_topics(client, te
 
 @pytest.mark.asyncio
 async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.quality.duplicates@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.quality.duplicates@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    first_a = await test_db.create_bank_task(
+    first_a = await test_db.bank_tasks.create_task(
         text="Quality duplicate candidate 12345",
         answer="1",
         question_type="input",
@@ -2672,7 +2672,7 @@ async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    first_b = await test_db.create_bank_task(
+    first_b = await test_db.bank_tasks.create_task(
         text="Quality duplicate candidate 12346",
         answer="2",
         question_type="input",
@@ -2684,7 +2684,7 @@ async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    second_a = await test_db.create_bank_task(
+    second_a = await test_db.bank_tasks.create_task(
         text="Integral substitution check 2024-A",
         answer="3",
         question_type="input",
@@ -2696,7 +2696,7 @@ async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    second_b = await test_db.create_bank_task(
+    second_b = await test_db.bank_tasks.create_task(
         text="Integral substitution check 2024-B",
         answer="4",
         question_type="input",
@@ -2708,7 +2708,7 @@ async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, te
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="Totally unrelated item",
         answer="5",
         question_type="input",
@@ -2794,7 +2794,7 @@ async def test_admin_bank_quality_duplicates_threshold_and_pagination(client, te
 
 @pytest.mark.asyncio
 async def test_admin_bank_quality_requires_admin(client, test_db):
-    user = await test_db.create_user_by_email("admin.bank.quality.noadmin@example.com")
+    user = await test_db.users.create_user_by_email("admin.bank.quality.noadmin@example.com")
 
     response = client.get(
         "/api/admin/bank/quality/summary",
@@ -2805,8 +2805,8 @@ async def test_admin_bank_quality_requires_admin(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_import_confirm_logs_once(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.audit.import@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.audit.import@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     payload_task = {
         "text": "Audit import task",
@@ -2859,8 +2859,8 @@ async def test_admin_bank_audit_import_confirm_logs_once(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_version_delete_metadata(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.audit.version.delete@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.audit.version.delete@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -2916,8 +2916,8 @@ async def test_admin_bank_audit_version_delete_metadata(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_rollback_metadata(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.audit.rollback@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.audit.rollback@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -2973,8 +2973,8 @@ async def test_admin_bank_audit_rollback_metadata(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_hard_delete_persists_after_task_removal(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.audit.hard.delete@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.audit.hard.delete@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_response = client.post(
         "/api/admin/bank/tasks",
@@ -3001,7 +3001,7 @@ async def test_admin_bank_audit_hard_delete_persists_after_task_removal(client, 
     )
     assert permanent_response.status_code == 200
 
-    deleted_task = await test_db.get_bank_task_by_id(task_id, include_deleted=True)
+    deleted_task = await test_db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
     assert deleted_task is None
 
     logs_response = client.get(
@@ -3020,10 +3020,10 @@ async def test_admin_bank_audit_hard_delete_persists_after_task_removal(client, 
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_list_filters_and_pagination(client, test_db):
-    admin_a = await test_db.create_user_by_email("admin.bank.audit.filter.a@example.com")
-    admin_b = await test_db.create_user_by_email("admin.bank.audit.filter.b@example.com")
-    await test_db.set_admin(email=admin_a["email"], is_admin=True)
-    await test_db.set_admin(email=admin_b["email"], is_admin=True)
+    admin_a = await test_db.users.create_user_by_email("admin.bank.audit.filter.a@example.com")
+    admin_b = await test_db.users.create_user_by_email("admin.bank.audit.filter.b@example.com")
+    await test_db.users.set_admin(email=admin_a["email"], is_admin=True)
+    await test_db.users.set_admin(email=admin_b["email"], is_admin=True)
 
     import_task = {"text": "Audit filter import", "answer": "1", "question_type": "input", "difficulty": "B"}
     preview_response = client.post(
@@ -3150,7 +3150,7 @@ async def test_admin_bank_audit_list_filters_and_pagination(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_requires_admin(client, test_db):
-    user = await test_db.create_user_by_email("admin.bank.audit.nonadmin@example.com")
+    user = await test_db.users.create_user_by_email("admin.bank.audit.nonadmin@example.com")
 
     response = client.get(
         "/api/admin/bank/audit",
@@ -3161,13 +3161,13 @@ async def test_admin_bank_audit_requires_admin(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_export_json_returns_import_compatible_active_tasks(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.export@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.export@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     select_answer = '["A","C"]'
     factor_answer = '["2x","-1","x","3"]'
 
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="Select export task",
         answer=select_answer,
         question_type="select",
@@ -3188,7 +3188,7 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
         solution_filename="solution.png",
         created_by=admin_user["id"],
     )
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="Factor export task",
         answer=factor_answer,
         question_type="factor_grid",
@@ -3198,7 +3198,7 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
         subquestions=None,
         created_by=admin_user["id"],
     )
-    deleted_task = await test_db.create_bank_task(
+    deleted_task = await test_db.bank_tasks.create_task(
         text="Deleted export task",
         answer="42",
         question_type="input",
@@ -3206,7 +3206,7 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
         topics=["Hidden"],
         created_by=admin_user["id"],
     )
-    await test_db.soft_delete_bank_task(deleted_task["id"], actor_user_id=admin_user["id"])
+    await test_db.bank_tasks.soft_delete_task(deleted_task["id"], actor_user_id=admin_user["id"])
 
     response = client.get(
         "/api/admin/bank/tasks/export",
@@ -3265,7 +3265,7 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
 
 @pytest.mark.asyncio
 async def test_admin_bank_export_json_requires_admin(client, test_db):
-    user = await test_db.create_user_by_email("admin.bank.export.nonadmin@example.com")
+    user = await test_db.users.create_user_by_email("admin.bank.export.nonadmin@example.com")
 
     response = client.get(
         "/api/admin/bank/tasks/export",
@@ -3277,8 +3277,8 @@ async def test_admin_bank_export_json_requires_admin(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_bank_audit_not_written_for_failed_operations(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.bank.audit.failed.ops@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.audit.failed.ops@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     create_one = client.post(
         "/api/admin/bank/tasks",
@@ -3372,8 +3372,8 @@ async def test_admin_bank_audit_not_written_for_failed_operations(client, test_d
 @pytest.mark.asyncio
 async def test_admin_bank_update_version_conflict_returns_409(client, test_db):
     """Update endpoint should enforce optimistic lock when expected version mismatches."""
-    admin_user = await test_db.create_user_by_email("admin.bank.lock@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.bank.lock@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
     created = client.post(
         "/api/admin/bank/tasks",
         data={
@@ -3409,17 +3409,17 @@ async def test_admin_bank_update_version_conflict_returns_409(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_mini_lesson_task_create_with_existing_bank_task(client, test_db):
     """Creating mini-lesson task with bank_task_id should only create placement."""
-    admin_user = await test_db.create_user_by_email("admin.minilesson.bank@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.minilesson.bank@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Mini Module", sort_order=0)
-    section = await test_db.create_section(module["id"], "Mini Section", sort_order=0)
-    lesson = await test_db.create_lesson(section["id"], lesson_number=1, title="Mini Lesson", sort_order=0)
-    mini_lessons = await test_db.get_mini_lessons_by_lesson(lesson["id"])
+    module = await test_db.curriculum.create_module("Mini Module", sort_order=0)
+    section = await test_db.curriculum.create_section(module["id"], "Mini Section", sort_order=0)
+    lesson = await test_db.curriculum.create_lesson(section["id"], lesson_number=1, title="Mini Lesson", sort_order=0)
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
     assert len(mini_lessons) >= 1
     mini_lesson_id = mini_lessons[0]["id"]
 
-    bank_task = await test_db.create_bank_task(
+    bank_task = await test_db.bank_tasks.create_task(
         text="Bank linked task text",
         answer="B",
         question_type="mcq",
@@ -3436,7 +3436,7 @@ async def test_admin_mini_lesson_task_create_with_existing_bank_task(client, tes
         solution_filename=None,
         created_by=admin_user["id"],
     )
-    before_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    before_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
 
     response = client.post(
         f"/api/admin/mini-lessons/{mini_lesson_id}/tasks",
@@ -3455,7 +3455,7 @@ async def test_admin_mini_lesson_task_create_with_existing_bank_task(client, tes
     assert created["question_type"] == "mcq"
     assert isinstance(created.get("options"), list)
 
-    after_total = (await test_db.get_bank_tasks(limit=100, offset=0))["total"]
+    after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
     assert after_total == before_total
 
     list_response = client.get(
@@ -3472,17 +3472,17 @@ async def test_admin_mini_lesson_task_create_with_existing_bank_task(client, tes
 @pytest.mark.asyncio
 async def test_admin_mini_lesson_task_update_syncs_linked_bank_metadata(client, test_db):
     """Updating mini-lesson task should sync content + bank metadata to linked bank task."""
-    admin_user = await test_db.create_user_by_email("admin.minilesson.sync@example.com")
-    await test_db.set_admin(email=admin_user["email"], is_admin=True)
+    admin_user = await test_db.users.create_user_by_email("admin.minilesson.sync@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
-    module = await test_db.create_module("Mini Sync Module", sort_order=0)
-    section = await test_db.create_section(module["id"], "Mini Sync Section", sort_order=0)
-    lesson = await test_db.create_lesson(section["id"], lesson_number=1, title="Mini Sync Lesson", sort_order=0)
-    mini_lessons = await test_db.get_mini_lessons_by_lesson(lesson["id"])
+    module = await test_db.curriculum.create_module("Mini Sync Module", sort_order=0)
+    section = await test_db.curriculum.create_section(module["id"], "Mini Sync Section", sort_order=0)
+    lesson = await test_db.curriculum.create_lesson(section["id"], lesson_number=1, title="Mini Sync Lesson", sort_order=0)
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
     assert len(mini_lessons) >= 1
     mini_lesson_id = mini_lessons[0]["id"]
 
-    bank_task = await test_db.create_bank_task(
+    bank_task = await test_db.bank_tasks.create_task(
         text="Old mini text",
         answer="Old mini answer",
         question_type="input",
@@ -3518,7 +3518,7 @@ async def test_admin_mini_lesson_task_update_syncs_linked_bank_metadata(client, 
     assert response.status_code == 200
     assert response.json().get("success") is True
 
-    updated_bank = await test_db.get_bank_task_by_id(bank_task["id"], include_deleted=True)
+    updated_bank = await test_db.bank_tasks.get_task_by_id(bank_task["id"], include_deleted=True)
     assert updated_bank is not None
     assert updated_bank["text"] == "Updated mini text"
     assert updated_bank["answer"] == "Updated mini answer"
@@ -3601,8 +3601,8 @@ def test_legacy_admin_bootstrap_routes_disabled_in_production(test_db, monkeypat
 
 @pytest.mark.asyncio
 async def test_admin_statistics_route_returns_ok(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.statistics@example.com")
-    await test_db.set_admin_with_role(
+    admin_user = await test_db.users.create_user_by_email("admin.statistics@example.com")
+    await test_db.users.set_admin_with_role(
         email=admin_user["email"],
         is_admin=True,
         role="reviewer",
@@ -3620,16 +3620,16 @@ async def test_admin_statistics_route_returns_ok(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_leagues_routes_return_groups_and_participants(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.leagues@example.com")
-    await test_db.set_admin_with_role(
+    admin_user = await test_db.users.create_user_by_email("admin.leagues@example.com")
+    await test_db.users.set_admin_with_role(
         email=admin_user["email"],
         is_admin=True,
         role="reviewer",
     )
-    first_user = await test_db.create_user_by_email("league.one@example.com")
-    second_user = await test_db.create_user_by_email("league.two@example.com")
-    await test_db.update_user_nickname(first_user["email"], "League One")
-    await test_db.update_user_nickname(second_user["email"], "League Two")
+    first_user = await test_db.users.create_user_by_email("league.one@example.com")
+    second_user = await test_db.users.create_user_by_email("league.two@example.com")
+    await test_db.users.update_user_nickname(first_user["email"], "League One")
+    await test_db.users.update_user_nickname(second_user["email"], "League Two")
 
     league_name = "Test League"
     async with aiosqlite.connect(test_db.db_path) as db:
@@ -3679,8 +3679,8 @@ async def test_admin_leagues_routes_return_groups_and_participants(client, test_
 
 @pytest.mark.asyncio
 async def test_admin_check_returns_role_and_permissions(client, test_db):
-    admin_user = await test_db.create_user_by_email("admin.check.role@example.com")
-    await test_db.set_admin_with_role(
+    admin_user = await test_db.users.create_user_by_email("admin.check.role@example.com")
+    await test_db.users.set_admin_with_role(
         email=admin_user["email"],
         is_admin=True,
         role="reviewer",
@@ -3701,8 +3701,8 @@ async def test_admin_check_returns_role_and_permissions(client, test_db):
 @pytest.mark.asyncio
 async def test_admin_set_role_endpoint_success_and_invalid_role(client, test_db, monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET", "test-admin-secret-123456")
-    reviewer_admin = await test_db.create_user_by_email("role.audit.viewer@example.com")
-    await test_db.set_admin_with_role(
+    reviewer_admin = await test_db.users.create_user_by_email("role.audit.viewer@example.com")
+    await test_db.users.set_admin_with_role(
         email=reviewer_admin["email"],
         is_admin=True,
         role="reviewer",
@@ -3718,10 +3718,10 @@ async def test_admin_set_role_endpoint_success_and_invalid_role(client, test_db,
         },
     )
     assert ok_response.status_code == 200
-    created_user = await test_db.get_user_by_email(target_email)
+    created_user = await test_db.users.get_user_by_email(target_email)
     assert created_user is not None
-    assert await test_db.is_admin(email=target_email) is True
-    assert await test_db.get_admin_role(email=target_email) == "content_editor"
+    assert await test_db.users.is_admin(email=target_email) is True
+    assert await test_db.users.get_admin_role(email=target_email) == "content_editor"
 
     audit_response = client.get(
         "/api/admin/bank/audit",
@@ -3760,10 +3760,10 @@ async def test_admin_set_role_endpoint_success_and_invalid_role(client, test_db,
 
 @pytest.mark.asyncio
 async def test_admin_roles_list_requires_super_admin(client, test_db):
-    super_admin = await test_db.create_user_by_email("roles.super@example.com")
-    reviewer = await test_db.create_user_by_email("roles.reviewer@example.com")
-    await test_db.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
-    await test_db.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
+    super_admin = await test_db.users.create_user_by_email("roles.super@example.com")
+    reviewer = await test_db.users.create_user_by_email("roles.reviewer@example.com")
+    await test_db.users.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
+    await test_db.users.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
 
     allowed = client.get(
         "/api/admin/roles",
@@ -3799,11 +3799,11 @@ async def test_admin_roles_list_requires_super_admin(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_roles_post_change_noop_autocreate_and_audit(client, test_db):
-    super_admin = await test_db.create_user_by_email("roles.write.super@example.com")
-    await test_db.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
+    super_admin = await test_db.users.create_user_by_email("roles.write.super@example.com")
+    await test_db.users.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
 
-    target_existing = await test_db.create_user_by_email("roles.target.existing@example.com")
-    await test_db.set_admin_with_role(email=target_existing["email"], is_admin=True, role="content_editor")
+    target_existing = await test_db.users.create_user_by_email("roles.target.existing@example.com")
+    await test_db.users.set_admin_with_role(email=target_existing["email"], is_admin=True, role="content_editor")
 
     changed = client.post(
         "/api/admin/roles",
@@ -3817,7 +3817,7 @@ async def test_admin_roles_post_change_noop_autocreate_and_audit(client, test_db
     assert isinstance(changed_payload.get("audit_id"), int)
     assert changed_payload["target_user"]["previous_role"] == "content_editor"
     assert changed_payload["target_user"]["new_role"] == "reviewer"
-    assert await test_db.get_admin_role(email=target_existing["email"]) == "reviewer"
+    assert await test_db.users.get_admin_role(email=target_existing["email"]) == "reviewer"
 
     # no-op change should not create new audit row
     no_change = client.post(
@@ -3844,8 +3844,8 @@ async def test_admin_roles_post_change_noop_autocreate_and_audit(client, test_db
     assert auto_payload["changed"] is True
     assert auto_payload["target_user"]["previous_role"] is None
     assert auto_payload["target_user"]["new_role"] == "content_editor"
-    assert await test_db.is_admin(email=auto_target_email) is True
-    assert await test_db.get_admin_role(email=auto_target_email) == "content_editor"
+    assert await test_db.users.is_admin(email=auto_target_email) is True
+    assert await test_db.users.get_admin_role(email=auto_target_email) == "content_editor"
 
     audit = client.get(
         "/api/admin/bank/audit",
@@ -3871,8 +3871,8 @@ async def test_admin_roles_post_change_noop_autocreate_and_audit(client, test_db
     assert remove_payload["success"] is True
     assert remove_payload["changed"] is True
     assert remove_payload["target_user"]["new_role"] is None
-    assert await test_db.is_admin(email=target_existing["email"]) is False
-    assert await test_db.get_admin_role(email=target_existing["email"]) is None
+    assert await test_db.users.is_admin(email=target_existing["email"]) is False
+    assert await test_db.users.get_admin_role(email=target_existing["email"]) is None
 
     # cannot remove own admin access
     self_remove = client.post(
@@ -3885,15 +3885,15 @@ async def test_admin_roles_post_change_noop_autocreate_and_audit(client, test_db
 
 @pytest.mark.asyncio
 async def test_admin_tasks_put_supports_cms_and_report_legacy_modes(client, test_db):
-    owner_editor = await test_db.create_user_by_email("tasks.owner.editor@example.com")
-    other_editor = await test_db.create_user_by_email("tasks.other.editor@example.com")
-    reviewer = await test_db.create_user_by_email("tasks.reviewer@example.com")
-    await test_db.set_admin_with_role(email=owner_editor["email"], is_admin=True, role="content_editor")
-    await test_db.set_admin_with_role(email=other_editor["email"], is_admin=True, role="content_editor")
-    await test_db.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
+    owner_editor = await test_db.users.create_user_by_email("tasks.owner.editor@example.com")
+    other_editor = await test_db.users.create_user_by_email("tasks.other.editor@example.com")
+    reviewer = await test_db.users.create_user_by_email("tasks.reviewer@example.com")
+    await test_db.users.set_admin_with_role(email=owner_editor["email"], is_admin=True, role="content_editor")
+    await test_db.users.set_admin_with_role(email=other_editor["email"], is_admin=True, role="content_editor")
+    await test_db.users.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
 
-    module = await test_db.create_module("Update mode module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Update mode section", sort_order=1)
+    module = await test_db.curriculum.create_module("Update mode module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Update mode section", sort_order=1)
     task = await test_db.create_task_in_section(
         section_id=section["id"],
         text="before",
@@ -3943,13 +3943,13 @@ async def test_admin_tasks_put_supports_cms_and_report_legacy_modes(client, test
 
 @pytest.mark.asyncio
 async def test_admin_report_task_update_explicit_endpoint_permissions(client, test_db):
-    owner_editor = await test_db.create_user_by_email("reports.owner.editor@example.com")
-    reviewer = await test_db.create_user_by_email("reports.reviewer@example.com")
-    await test_db.set_admin_with_role(email=owner_editor["email"], is_admin=True, role="content_editor")
-    await test_db.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
+    owner_editor = await test_db.users.create_user_by_email("reports.owner.editor@example.com")
+    reviewer = await test_db.users.create_user_by_email("reports.reviewer@example.com")
+    await test_db.users.set_admin_with_role(email=owner_editor["email"], is_admin=True, role="content_editor")
+    await test_db.users.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
 
-    module = await test_db.create_module("Report update module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Report update section", sort_order=1)
+    module = await test_db.curriculum.create_module("Report update module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Report update section", sort_order=1)
     task = await test_db.create_task_in_section(
         section_id=section["id"],
         text="before",
@@ -3985,8 +3985,8 @@ async def test_admin_report_task_update_explicit_endpoint_permissions(client, te
 async def test_admin_roles_last_super_guard_on_demote_and_legacy_set_role(client, test_db, monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET", "legacy-guard-secret-123456")
 
-    lone_super = await test_db.create_user_by_email("roles.last.super@example.com")
-    await test_db.set_admin_with_role(email=lone_super["email"], is_admin=True, role="super_admin")
+    lone_super = await test_db.users.create_user_by_email("roles.last.super@example.com")
+    await test_db.users.set_admin_with_role(email=lone_super["email"], is_admin=True, role="super_admin")
 
     demote = client.post(
         "/api/admin/roles",
@@ -4009,8 +4009,8 @@ async def test_admin_roles_last_super_guard_on_demote_and_legacy_set_role(client
     legacy_detail = _extract_http_detail(legacy_demote.json())
     assert legacy_detail["code"] == "LAST_SUPER_ADMIN_REQUIRED"
 
-    backup_super = await test_db.create_user_by_email("roles.backup.super@example.com")
-    await test_db.set_admin_with_role(email=backup_super["email"], is_admin=True, role="super_admin")
+    backup_super = await test_db.users.create_user_by_email("roles.backup.super@example.com")
+    await test_db.users.set_admin_with_role(email=backup_super["email"], is_admin=True, role="super_admin")
 
     demote_after_backup = client.post(
         "/api/admin/roles",
@@ -4023,11 +4023,11 @@ async def test_admin_roles_last_super_guard_on_demote_and_legacy_set_role(client
 
 @pytest.mark.asyncio
 async def test_admin_roles_restore_from_audit_success(client, test_db):
-    super_admin = await test_db.create_user_by_email("roles.restore.super@example.com")
-    await test_db.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
+    super_admin = await test_db.users.create_user_by_email("roles.restore.super@example.com")
+    await test_db.users.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
 
-    target = await test_db.create_user_by_email("roles.restore.target@example.com")
-    await test_db.set_admin_with_role(email=target["email"], is_admin=True, role="reviewer")
+    target = await test_db.users.create_user_by_email("roles.restore.target@example.com")
+    await test_db.users.set_admin_with_role(email=target["email"], is_admin=True, role="reviewer")
 
     changed = client.post(
         "/api/admin/roles",
@@ -4066,16 +4066,16 @@ async def test_admin_roles_restore_from_audit_success(client, test_db):
     assert restored_payload["changed"] is True
     assert restored_payload["target_user"]["new_role"] == "reviewer"
     assert restored_payload["restored_from_audit_id"] == target_event["id"]
-    assert await test_db.get_admin_role(email=target["email"]) == "reviewer"
+    assert await test_db.users.get_admin_role(email=target["email"]) == "reviewer"
 
 
 @pytest.mark.asyncio
 async def test_admin_roles_restore_from_audit_conflict(client, test_db):
-    super_admin = await test_db.create_user_by_email("roles.restore.conflict.super@example.com")
-    await test_db.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
+    super_admin = await test_db.users.create_user_by_email("roles.restore.conflict.super@example.com")
+    await test_db.users.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
 
-    target = await test_db.create_user_by_email("roles.restore.conflict.target@example.com")
-    await test_db.set_admin_with_role(email=target["email"], is_admin=True, role="reviewer")
+    target = await test_db.users.create_user_by_email("roles.restore.conflict.target@example.com")
+    await test_db.users.set_admin_with_role(email=target["email"], is_admin=True, role="reviewer")
 
     first_change = client.post(
         "/api/admin/roles",
@@ -4123,10 +4123,10 @@ async def test_admin_roles_restore_from_audit_conflict(client, test_db):
 
 @pytest.mark.asyncio
 async def test_admin_roles_restore_non_super_invalid_id_and_invalid_event(client, test_db):
-    super_admin = await test_db.create_user_by_email("roles.restore.guard.super@example.com")
-    reviewer = await test_db.create_user_by_email("roles.restore.guard.reviewer@example.com")
-    await test_db.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
-    await test_db.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
+    super_admin = await test_db.users.create_user_by_email("roles.restore.guard.super@example.com")
+    reviewer = await test_db.users.create_user_by_email("roles.restore.guard.reviewer@example.com")
+    await test_db.users.set_admin_with_role(email=super_admin["email"], is_admin=True, role="super_admin")
+    await test_db.users.set_admin_with_role(email=reviewer["email"], is_admin=True, role="reviewer")
 
     forbidden = client.post(
         "/api/admin/roles/restore",
@@ -4181,14 +4181,14 @@ async def test_admin_roles_restore_non_super_invalid_id_and_invalid_event(client
 
 @pytest.mark.asyncio
 async def test_rbac_content_editor_and_reviewer_matrix(client, test_db):
-    content_editor = await test_db.create_user_by_email("rbac.editor@example.com")
-    reviewer = await test_db.create_user_by_email("rbac.reviewer@example.com")
-    await test_db.set_admin_with_role(
+    content_editor = await test_db.users.create_user_by_email("rbac.editor@example.com")
+    reviewer = await test_db.users.create_user_by_email("rbac.reviewer@example.com")
+    await test_db.users.set_admin_with_role(
         email=content_editor["email"],
         is_admin=True,
         role="content_editor",
     )
-    await test_db.set_admin_with_role(
+    await test_db.users.set_admin_with_role(
         email=reviewer["email"],
         is_admin=True,
         role="reviewer",
@@ -4225,8 +4225,8 @@ async def test_rbac_content_editor_and_reviewer_matrix(client, test_db):
 
 @pytest.mark.asyncio
 async def test_rbac_super_critical_requires_super_admin(client, test_db):
-    content_editor = await test_db.create_user_by_email("rbac.super.block@example.com")
-    await test_db.set_admin_with_role(
+    content_editor = await test_db.users.create_user_by_email("rbac.super.block@example.com")
+    await test_db.users.set_admin_with_role(
         email=content_editor["email"],
         is_admin=True,
         role="content_editor",
@@ -4239,8 +4239,8 @@ async def test_rbac_super_critical_requires_super_admin(client, test_db):
     )
     assert forbidden.status_code == 403
 
-    super_admin = await test_db.create_user_by_email("rbac.super.ok@example.com")
-    await test_db.set_admin_with_role(
+    super_admin = await test_db.users.create_user_by_email("rbac.super.ok@example.com")
+    await test_db.users.set_admin_with_role(
         email=super_admin["email"],
         is_admin=True,
         role="super_admin",
@@ -4256,8 +4256,8 @@ async def test_rbac_super_critical_requires_super_admin(client, test_db):
 @pytest.mark.asyncio
 async def test_legacy_set_admin_assigns_super_admin_role(client, test_db, monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET", "legacy-admin-secret-123456")
-    reviewer_admin = await test_db.create_user_by_email("legacy.audit.viewer@example.com")
-    await test_db.set_admin_with_role(
+    reviewer_admin = await test_db.users.create_user_by_email("legacy.audit.viewer@example.com")
+    await test_db.users.set_admin_with_role(
         email=reviewer_admin["email"],
         is_admin=True,
         role="reviewer",
@@ -4272,8 +4272,8 @@ async def test_legacy_set_admin_assigns_super_admin_role(client, test_db, monkey
         },
     )
     assert response.status_code == 200
-    assert await test_db.is_admin(email=target_email) is True
-    assert await test_db.get_admin_role(email=target_email) == "super_admin"
+    assert await test_db.users.is_admin(email=target_email) is True
+    assert await test_db.users.get_admin_role(email=target_email) == "super_admin"
 
     audit_response = client.get(
         "/api/admin/bank/audit",

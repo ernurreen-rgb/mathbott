@@ -19,7 +19,7 @@ async def _update_task_from_report_common(
 ) -> Dict[str, Any]:
     admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
 
-    task = await db.get_task_by_id(task_id)
+    task = await db.tasks.get_task_by_id(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -54,11 +54,11 @@ async def _update_task_from_report_common(
     text_scale_value = _normalize_text_scale(text_scale)
     image_filename = await save_image_upload(image) if image else None
 
-    await db.update_task(task_id=task_id, text_scale=text_scale_value)
+    await db.tasks.update_task(task_id=task_id, text_scale=text_scale_value)
 
     linked_bank_task_id = task.get("bank_task_id")
     if isinstance(linked_bank_task_id, int) and linked_bank_task_id > 0:
-        await db.update_bank_task(
+        await db.bank_tasks.update_task(
             task_id=linked_bank_task_id,
             text=text.strip() if text.strip() else None,
             answer=answer.strip() if answer.strip() else None,
@@ -87,7 +87,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get all reports (admin only)"""
         try:
             await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
-            reports = await db.get_all_reports(status_filter=status, limit=limit)
+            reports = await db.reports.get_all_reports(status_filter=status, limit=limit)
             return reports
         except HTTPException:
             raise
@@ -105,7 +105,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get all trial test reports (admin only)"""
         try:
             await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
-            reports = await db.get_all_trial_test_reports(status_filter=status, limit=limit)
+            reports = await db.trial_test_reports.get_all_trial_test_reports(status_filter=status, limit=limit)
             return reports
         except HTTPException:
             raise
@@ -124,12 +124,12 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
             
-            report = await db.get_report_by_id(report_id)
+            report = await db.reports.get_report_by_id(report_id)
             if not report:
                 raise HTTPException(status_code=404, detail="Report not found")
             
             resolved_by = admin_user["id"] if status == "resolved" else None
-            success = await db.update_report_status(report_id, status, resolved_by)
+            success = await db.reports.update_report_status(report_id, status, resolved_by)
             
             if success:
                 logger.info(f"Report {report_id} status updated to {status} by admin {email}")
@@ -153,12 +153,12 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
 
-            report = await db.get_trial_test_report_by_id(report_id)
+            report = await db.trial_test_reports.get_trial_test_report_by_id(report_id)
             if not report:
                 raise HTTPException(status_code=404, detail="Report not found")
 
             resolved_by = admin_user["id"] if status == "resolved" else None
-            success = await db.update_trial_test_report_status(report_id, status, resolved_by)
+            success = await db.trial_test_reports.update_trial_test_report_status(report_id, status, resolved_by)
 
             if success:
                 logger.info(f"Trial test report {report_id} status updated to {status} by admin {email}")
@@ -180,7 +180,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Delete trial test report (admin only)"""
         try:
             await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
-            success = await db.delete_trial_test_report(report_id)
+            success = await db.trial_test_reports.delete_trial_test_report(report_id)
             if success:
                 return {"success": True}
             raise HTTPException(status_code=404, detail="Report not found")
@@ -233,11 +233,11 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
             
-            report = await db.get_report_by_id(report_id)
+            report = await db.reports.get_report_by_id(report_id)
             if not report:
                 raise HTTPException(status_code=404, detail="Report not found")
             
-            success = await db.delete_report(report_id)
+            success = await db.reports.delete_report(report_id)
             
             if success:
                 logger.info(f"Report {report_id} deleted by admin {email}")

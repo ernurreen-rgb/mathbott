@@ -74,14 +74,14 @@ def setup_modules_routes(app, db, limiter):
         cached_modules = cache.get(cache_key_modules)
         
         if cached_modules is None:
-            modules = await db.get_all_modules()
+            modules = await db.curriculum.get_all_modules()
             cache.set(cache_key_modules, modules, ttl=300)
         else:
             modules = cached_modules
         
         user_id = None
         if email:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
         
@@ -89,7 +89,7 @@ def setup_modules_routes(app, db, limiter):
         # Group sections by module_id
         sections_by_module: Dict[int, List[Dict]] = {}
         for module in modules:
-            sections = await db.get_sections_by_module(module["id"])
+            sections = await db.curriculum.get_sections_by_module(module["id"])
             sections_by_module[module["id"]] = sections
         
         result = []
@@ -105,7 +105,7 @@ def setup_modules_routes(app, db, limiter):
             section_progress_map = {}
             for sections_list in sections_by_module.values():
                 for section in sections_list:
-                    section_progress_map[section["id"]] = await db.calculate_section_completion(user_id, section["id"])
+                    section_progress_map[section["id"]] = await db.progress.calculate_section_completion(user_id, section["id"])
         else:
             module_progress_map = {}
             section_progress_map = {}
@@ -151,31 +151,31 @@ def setup_modules_routes(app, db, limiter):
         fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,name,sections')")
     ):
         """Get module details with sections and tasks (Страница Модуля)"""
-        module = await db.get_module_by_id(module_id)
+        module = await db.curriculum.get_module_by_id(module_id)
         if not module:
             raise HTTPException(status_code=404, detail="Module not found")
         
         user_id = None
         if email:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
         
         # Get sections with lessons (new curriculum)
-        sections = await db.get_sections_by_module(module_id)
+        sections = await db.curriculum.get_sections_by_module(module_id)
         sections_data = []
         
         for section in sections:
-            section_progress = await db.calculate_section_completion(user_id, section["id"]) if user_id else None
+            section_progress = await db.progress.calculate_section_completion(user_id, section["id"]) if user_id else None
 
-            lessons = await db.get_lessons_by_section(section["id"])
+            lessons = await db.curriculum.get_lessons_by_section(section["id"])
             lessons_data = []
             for lesson in lessons:
                 lesson_progress = await db.calculate_lesson_completion(user_id, lesson["id"]) if user_id else None
-                mini_lessons = await db.get_mini_lessons_by_lesson(lesson["id"])
+                mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
                 mini_data = []
                 for ml in mini_lessons:
-                    ml_progress = await db.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
+                    ml_progress = await db.progress.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
                     mini_data.append({
                         "id": ml["id"],
                         "mini_index": ml["mini_index"],
@@ -228,29 +228,29 @@ def setup_modules_routes(app, db, limiter):
     @app.get("/api/lessons/{lesson_id}")
     async def get_lesson_details(lesson_id: int, email: Optional[str] = Query(None)):
         """Get lesson details with 4 mini-lessons and tasks + user progress."""
-        lesson = await db.get_lesson_by_id(lesson_id)
+        lesson = await db.curriculum.get_lesson_by_id(lesson_id)
         if not lesson:
             raise HTTPException(status_code=404, detail="Lesson not found")
 
-        section = await db.get_section_by_id(lesson["section_id"])
+        section = await db.curriculum.get_section_by_id(lesson["section_id"])
         module_id = section["module_id"] if section else None
 
         user_id = None
         if email:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
 
         # Ensure defaults exist
-        await db.ensure_default_mini_lessons(lesson_id)
-        mini_lessons = await db.get_mini_lessons_by_lesson(lesson_id)
+        await db.curriculum.ensure_default_mini_lessons(lesson_id)
+        mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson_id)
 
         lesson_progress = await db.calculate_lesson_completion(user_id, lesson_id) if user_id else None
 
         result_mini = []
         for ml in mini_lessons:
-            tasks = await db.get_tasks_by_mini_lesson(ml["id"])
-            task_progress = await db.get_user_progress_for_mini_lesson(user_id, ml["id"]) if user_id else {}
+            tasks = await db.tasks.get_tasks_by_mini_lesson(ml["id"])
+            task_progress = await db.progress.get_user_progress_for_mini_lesson(user_id, ml["id"]) if user_id else {}
 
             tasks_data = []
             for t in tasks:
@@ -284,7 +284,7 @@ def setup_modules_routes(app, db, limiter):
                     "status": task_progress.get(t["id"], "not_started")
                 })
 
-            ml_progress = await db.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
+            ml_progress = await db.progress.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
             result_mini.append({
                 "id": ml["id"],
                 "mini_index": ml["mini_index"],

@@ -27,7 +27,7 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
         """Проверка здоровья сервиса для мониторинга"""
         try:
             # Проверить подключение к БД
-            test_user = await db.get_user_by_email("health-check@test.com")
+            test_user = await db.users.get_user_by_email("health-check@test.com")
             db_status = "ok"
         except Exception as e:
             logger.error(f"Health check DB error: {e}")

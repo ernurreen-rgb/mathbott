@@ -49,6 +49,37 @@ async def get_limiter(request: Request) -> Limiter:
     return request.app.state.limiter
 
 
+# --- Per-repository providers ---
+# Prefer these over get_db when a route only needs one repository:
+#   users: UserRepository = Depends(get_user_repository)
+
+
+def _make_repo_provider(attr: str):
+    async def provider(request: Request):
+        return getattr(request.app.state.db, attr)
+
+    provider.__name__ = f"get_{attr}_repository"
+    return provider
+
+
+get_user_repository = _make_repo_provider("users")
+get_task_repository = _make_repo_provider("tasks")
+get_curriculum_repository = _make_repo_provider("curriculum")
+get_progress_repository = _make_repo_provider("progress")
+get_solution_repository = _make_repo_provider("solutions")
+get_rating_repository = _make_repo_provider("rating")
+get_achievement_repository = _make_repo_provider("achievements")
+get_trial_test_repository = _make_repo_provider("trial_tests")
+get_trial_test_coop_repository = _make_repo_provider("trial_test_coop")
+get_bank_task_repository = _make_repo_provider("bank_tasks")
+get_report_repository = _make_repo_provider("reports")
+get_trial_test_report_repository = _make_repo_provider("trial_test_reports")
+get_statistics_repository = _make_repo_provider("statistics")
+get_friends_repository = _make_repo_provider("friends")
+get_ops_repository = _make_repo_provider("ops")
+get_onboarding_repository = _make_repo_provider("onboarding")
+
+
 def _get_runtime_environment() -> str:
     return get_settings().environment
 
@@ -120,7 +151,7 @@ async def require_internal_identity(
     db: Database = Depends(get_db),
 ) -> dict:
     authenticated_email = await _resolve_authenticated_email(request=request, email=email)
-    user = await db.get_user_by_email(authenticated_email)
+    user = await db.users.get_user_by_email(authenticated_email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     enriched_user = dict(user)
@@ -136,11 +167,11 @@ async def require_admin(
 ) -> dict:
     authenticated_email = await _resolve_authenticated_email(request=request, email=email)
 
-    is_admin = await db.is_admin(email=authenticated_email)
+    is_admin = await db.users.is_admin(email=authenticated_email)
     if not is_admin:
         raise HTTPException(status_code=403, detail="Access denied. Admin rights required.")
 
-    user = await db.get_user_by_email(authenticated_email)
+    user = await db.users.get_user_by_email(authenticated_email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -216,7 +247,7 @@ async def get_current_user(
 ) -> Optional[dict]:
     if not email:
         return None
-    user = await db.get_user_by_email(email)
+    user = await db.users.get_user_by_email(email)
     return user
 
 

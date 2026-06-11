@@ -9,26 +9,26 @@ from database import Database
 async def test_complete_task_solving_flow(test_db, test_user):
     """Test complete flow: create task → solve → check progress"""
     # Create module, section, and task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "What is 2+2?", "4", test_user["id"]
     )
     
     # Initially no progress
-    progress = await test_db.get_user_task_progress(test_user["id"], task["id"])
+    progress = await test_db.progress.get_user_task_progress(test_user["id"], task["id"])
     assert progress is None
     
     # Solve task correctly
     await test_db.record_solution(test_user["id"], task["id"], "4", True)
     
     # Check progress updated
-    progress = await test_db.get_user_task_progress(test_user["id"], task["id"])
+    progress = await test_db.progress.get_user_task_progress(test_user["id"], task["id"])
     assert progress is not None
     assert progress["status"] == "completed"
     
     # Check user stats updated
-    user = await test_db.get_user_by_email("test@example.com")
+    user = await test_db.users.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
     assert user["total_points"] == 15
 
@@ -37,17 +37,17 @@ async def test_complete_task_solving_flow(test_db, test_user):
 async def test_module_progress_calculation_flow(test_db, test_user):
     """Test module progress calculation flow"""
     # Create module with section and lessons
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Create lesson
-    lesson = await test_db.create_lesson(
+    lesson = await test_db.curriculum.create_lesson(
         section["id"], lesson_number=1, title="Test Lesson", sort_order=1
     )
     
     # Ensure mini-lessons exist
-    await test_db.ensure_default_mini_lessons(lesson["id"])
-    mini_lessons = await test_db.get_mini_lessons_by_lesson(lesson["id"])
+    await test_db.curriculum.ensure_default_mini_lessons(lesson["id"])
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
     assert len(mini_lessons) >= 4
     
     # Initially progress should be 0 (no tasks yet)
@@ -78,18 +78,18 @@ async def test_module_progress_calculation_flow(test_db, test_user):
 async def test_rating_and_league_flow(test_db):
     """Test rating and league system flow"""
     # Create multiple users with different points
-    user1 = await test_db.create_user_by_email("user1@example.com")
-    user2 = await test_db.create_user_by_email("user2@example.com")
-    user3 = await test_db.create_user_by_email("user3@example.com")
+    user1 = await test_db.users.create_user_by_email("user1@example.com")
+    user2 = await test_db.users.create_user_by_email("user2@example.com")
+    user3 = await test_db.users.create_user_by_email("user3@example.com")
     
     # Set nicknames
-    await test_db.update_user_nickname("user1@example.com", "User1")
-    await test_db.update_user_nickname("user2@example.com", "User2")
-    await test_db.update_user_nickname("user3@example.com", "User3")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
+    await test_db.users.update_user_nickname("user2@example.com", "User2")
+    await test_db.users.update_user_nickname("user3@example.com", "User3")
     
     # Create tasks and solve them to give points
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # User1 solves 3 tasks
     for i in range(3):
@@ -106,7 +106,7 @@ async def test_rating_and_league_flow(test_db):
         await test_db.record_solution(user2["id"], task["id"], str(i+10), True)
     
     # Check rating
-    rating = await test_db.get_rating(limit=10)
+    rating = await test_db.rating.get_rating(limit=10)
     assert len(rating) >= 2
     
     # User1 should have more points than User2
@@ -121,22 +121,22 @@ async def test_rating_and_league_flow(test_db):
 async def test_admin_access_flow(test_db):
     """Test admin access flow"""
     # Create regular user
-    user = await test_db.create_user_by_email("user@example.com")
+    user = await test_db.users.create_user_by_email("user@example.com")
     assert user["is_admin"] == 0
     
     # Check admin status
-    is_admin = await test_db.is_admin(email="user@example.com")
+    is_admin = await test_db.users.is_admin(email="user@example.com")
     assert is_admin is False
     
     # Set as admin
-    await test_db.set_admin(email="user@example.com", is_admin=True)
+    await test_db.users.set_admin(email="user@example.com", is_admin=True)
     
     # Check admin status again
-    is_admin = await test_db.is_admin(email="user@example.com")
+    is_admin = await test_db.users.is_admin(email="user@example.com")
     assert is_admin is True
     
     # Verify in database
-    user = await test_db.get_user_by_email("user@example.com")
+    user = await test_db.users.get_user_by_email("user@example.com")
     assert user["is_admin"] == 1
 
 
@@ -144,8 +144,8 @@ async def test_admin_access_flow(test_db):
 async def test_weekly_reset_flow(test_db, test_user):
     """Test weekly reset flow"""
     # Create task and solve it
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -154,7 +154,7 @@ async def test_weekly_reset_flow(test_db, test_user):
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
     
     # Check week stats
-    user = await test_db.get_user_by_email("test@example.com")
+    user = await test_db.users.get_user_by_email("test@example.com")
     assert user["week_solved"] == 1
     assert user["week_points"] == 15
     
@@ -164,7 +164,7 @@ async def test_weekly_reset_flow(test_db, test_user):
     try:
         await test_db.reset_week()
         # After reset, week stats should be reset (but total stats remain)
-        user = await test_db.get_user_by_email("test@example.com")
+        user = await test_db.users.get_user_by_email("test@example.com")
         # Week stats might be reset to 0, but total should remain
         assert user["total_solved"] >= 1
     except Exception:

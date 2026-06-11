@@ -69,7 +69,7 @@ def test_db():
 def test_user(test_db):
     """Create a test user"""
     loop = asyncio.new_event_loop()
-    user = loop.run_until_complete(test_db.create_user_by_email("test@example.com"))
+    user = loop.run_until_complete(test_db.users.create_user_by_email("test@example.com"))
     loop.close()
     return user
 

@@ -470,3 +470,16 @@ class ProgressRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return {row[0]: bool(row[1]) for row in rows}
 
+
+    async def check_if_task_all_questions_completed(self, user_id: int, task_id: int) -> bool:
+        """Check if all questions in a task are completed correctly"""
+        questions = await self.get_task_questions(task_id)
+        if not questions:
+            return True
+        progress = await self.get_user_task_question_progress(user_id, task_id)
+        if len(progress) < len(questions):
+            return False
+        for i in range(len(questions)):
+            if i not in progress or not progress[i]:
+                return False
+        return True

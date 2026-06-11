@@ -16,10 +16,10 @@ def register_auth_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Check admin status for the authenticated proxy user."""
         email = str(current_user.get("email") or "").strip().lower()
-        is_admin = await db.is_admin(email=email)
+        is_admin = await db.users.is_admin(email=email)
         role: Optional[str] = None
         if is_admin:
-            role_raw = await db.get_admin_role(email=email)
+            role_raw = await db.users.get_admin_role(email=email)
             if role_raw and role_raw in ADMIN_ROLES:
                 role = role_raw
             elif role_raw:
@@ -60,13 +60,13 @@ def register_auth_routes(app: FastAPI, db: Database, limiter: Limiter):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        user = await db.get_user_by_email(normalized_email)
+        user = await db.users.get_user_by_email(normalized_email)
         if not user:
             admin_email_env = get_settings().admin_email
-            await db.create_user_by_email(normalized_email, check_admin_email=admin_email_env)
+            await db.users.create_user_by_email(normalized_email, check_admin_email=admin_email_env)
 
         try:
-            role_result = await db.change_admin_role_with_audit(
+            role_result = await db.users.change_admin_role_with_audit(
                 target_email=normalized_email,
                 role=ADMIN_ROLE_SUPER_ADMIN,
                 set_admin=True,

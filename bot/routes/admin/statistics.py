@@ -21,7 +21,7 @@ def register_statistics_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_onboarding_statistics(admin_user: dict = Depends(require_admin_review_manage), db: Database = Depends(get_db)):
         """Get onboarding statistics (admin only)"""
         try:
-            stats = await db.get_onboarding_statistics()
+            stats = await db.onboarding.get_onboarding_statistics()
             return stats
         except HTTPException:
             raise

@@ -18,11 +18,11 @@ def setup_tasks_routes(app, db, limiter: Limiter):
     @app.get("/api/tasks/{task_id}")
     async def get_task_by_id_api(task_id: int):
         """Get task by ID"""
-        task = await db.get_task_by_id(task_id)
+        task = await db.tasks.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
-        questions = await db.get_task_questions(task_id)
+        questions = await db.progress.get_task_questions(task_id)
         
         return {
             "id": task["id"],
@@ -79,8 +79,8 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             
             # Get user and task in parallel
             user_task, task_task = await asyncio.gather(
-                db.get_user_by_email(task_check_request.email),
-                db.get_task_by_id(task_check_request.task_id),
+                db.users.get_user_by_email(task_check_request.email),
+                db.tasks.get_task_by_id(task_check_request.task_id),
                 return_exceptions=True
             )
             

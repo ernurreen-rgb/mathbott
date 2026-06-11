@@ -81,16 +81,16 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not email:
                 raise HTTPException(status_code=400, detail="Email is required")
 
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            test = await db.get_trial_test_by_id(test_id)
+            test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
 
-            session = await db.create_trial_test_coop_session(test_id, user["id"])
-            await db.add_trial_test_coop_participant(session["id"], user["id"], "red")
+            session = await db.trial_test_coop.create_session(test_id, user["id"])
+            await db.trial_test_coop.add_participant(session["id"], user["id"], "red")
 
             return {
                 "session_id": session["id"],
@@ -111,39 +111,39 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            session = await db.get_trial_test_coop_session(session_id)
+            session = await db.trial_test_coop.get_session(session_id)
             if not session:
                 raise HTTPException(status_code=404, detail="Session not found")
 
             owner_id = session["owner_id"]
             if user["id"] != owner_id:
-                if await db.is_blocked_between(owner_id, user["id"]):
+                if await db.friends.is_blocked_between(owner_id, user["id"]):
                     raise HTTPException(status_code=403, detail="Friendship not allowed")
-                if not await db.are_friends(owner_id, user["id"]):
-                    await db.create_friendship(owner_id, user["id"])
-                    await db.create_friend_request(owner_id, user["id"], status="accepted")
+                if not await db.friends.are_friends(owner_id, user["id"]):
+                    await db.friends.create_friendship(owner_id, user["id"])
+                    await db.friends.create_friend_request(owner_id, user["id"], status="accepted")
 
-            participant = await db.get_trial_test_coop_participant(session_id, user["id"])
-            participants = await db.list_trial_test_coop_participants(session_id)
+            participant = await db.trial_test_coop.get_participant(session_id, user["id"])
+            participants = await db.trial_test_coop.list_participants(session_id)
             if not participant:
                 if len(participants) >= 2:
                     raise HTTPException(status_code=400, detail="Session is full")
                 color = "red" if user["id"] == owner_id else "blue"
-                participant = await db.add_trial_test_coop_participant(session_id, user["id"], color)
-                participants = await db.list_trial_test_coop_participants(session_id)
+                participant = await db.trial_test_coop.add_participant(session_id, user["id"], color)
+                participants = await db.trial_test_coop.list_participants(session_id)
 
-            user_answers_rows = await db.list_trial_test_coop_answers_for_user(session_id, user["id"])
+            user_answers_rows = await db.trial_test_coop.list_answers_for_user(session_id, user["id"])
             user_answers = _map_answers(user_answers_rows)
 
             other_answers = {}
             for p in participants:
                 if p["user_id"] == user["id"]:
                     continue
-                rows = await db.list_trial_test_coop_answers_for_user(session_id, p["user_id"])
+                rows = await db.trial_test_coop.list_answers_for_user(session_id, p["user_id"])
                 other_answers[p["user_id"]] = _map_answers(rows)
 
             return {
@@ -180,19 +180,19 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not email or not session_id:
                 raise HTTPException(status_code=400, detail="Email and session_id are required")
 
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            session = await db.get_trial_test_coop_session(session_id)
+            session = await db.trial_test_coop.get_session(session_id)
             if not session or session.get("trial_test_id") != test_id:
                 raise HTTPException(status_code=404, detail="Session not found")
 
-            participant = await db.get_trial_test_coop_participant(session_id, user["id"])
+            participant = await db.trial_test_coop.get_participant(session_id, user["id"])
             if not participant:
                 raise HTTPException(status_code=403, detail="Not a participant")
 
-            tasks = await db.get_trial_test_tasks(test_id)
+            tasks = await db.trial_tests.get_trial_test_tasks(test_id)
             if not tasks:
                 raise HTTPException(status_code=404, detail="No tasks found in trial test")
 
@@ -241,7 +241,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                     }
                 )
 
-            submit_result = await db.submit_trial_test_attempt(
+            submit_result = await db.trial_tests.submit_trial_test_attempt(
                 user_id=user["id"],
                 trial_test_id=test_id,
                 score=score,
@@ -266,14 +266,14 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 except Exception as e:
                     logger.error(f"Failed to unlock achievements after coop finish: {e}", exc_info=True)
 
-            await db.create_trial_test_coop_result_link(session_id, user["id"], submit_result["result"]["id"])
-            await db.set_trial_test_coop_participant_finished(session_id, user["id"], True)
+            await db.trial_test_coop.create_result_link(session_id, user["id"], submit_result["result"]["id"])
+            await db.trial_test_coop.set_participant_finished(session_id, user["id"], True)
             cache.invalidate_pattern(f"user:stats:{email}")
             cache.invalidate_pattern("rating:")
 
-            participants = await db.list_trial_test_coop_participants(session_id)
+            participants = await db.trial_test_coop.list_participants(session_id)
             if participants and all(p.get("is_finished") for p in participants):
-                await db.update_trial_test_coop_session_status(session_id, "completed")
+                await db.trial_test_coop.update_session_status(session_id, "completed")
                 session_status = "completed"
             else:
                 session_status = session.get("status", "active")
@@ -297,20 +297,20 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            session = await db.get_trial_test_coop_session(session_id)
+            session = await db.trial_test_coop.get_session(session_id)
             if not session:
                 raise HTTPException(status_code=404, detail="Session not found")
 
-            participant = await db.get_trial_test_coop_participant(session_id, user["id"])
+            participant = await db.trial_test_coop.get_participant(session_id, user["id"])
             if not participant:
                 raise HTTPException(status_code=403, detail="Not a participant")
 
-            results = await db.get_trial_test_coop_results(session_id)
-            participants = await db.list_trial_test_coop_participants(session_id)
+            results = await db.trial_test_coop.get_results_for_session(session_id)
+            participants = await db.trial_test_coop.list_participants(session_id)
             color_by_user = {p["user_id"]: p.get("color") for p in participants}
 
             for item in results:
@@ -344,26 +344,26 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not email or not friend_id:
                 raise HTTPException(status_code=400, detail="Email and friend_id are required")
 
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
             # Check if they are friends
-            if not await db.are_friends(user["id"], friend_id):
+            if not await db.friends.are_friends(user["id"], friend_id):
                 raise HTTPException(status_code=403, detail="Users are not friends")
 
             # Create or get existing session
-            test = await db.get_trial_test_by_id(test_id)
+            test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
 
             # Check if user already has an active session for this test
             # For simplicity, create a new session each time
-            session = await db.create_trial_test_coop_session(test_id, user["id"])
-            await db.add_trial_test_coop_participant(session["id"], user["id"], "red")
+            session = await db.trial_test_coop.create_session(test_id, user["id"])
+            await db.trial_test_coop.add_participant(session["id"], user["id"], "red")
 
             # Create invite
-            invite = await db.create_trial_test_coop_invite(session["id"], user["id"], friend_id)
+            invite = await db.trial_test_coop.create_invite(session["id"], user["id"], friend_id)
 
             return {
                 "success": True,
@@ -382,11 +382,11 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            invites = await db.list_trial_test_coop_incoming_invites(user["id"])
+            invites = await db.trial_test_coop.list_incoming_invites(user["id"])
             return {"items": invites}
         except Exception as e:
             logger.error(f"Error getting coop invites: {e}", exc_info=True)
@@ -399,18 +399,18 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
             # Get invite details
-            invites = await db.list_trial_test_coop_incoming_invites(user["id"])
+            invites = await db.trial_test_coop.list_incoming_invites(user["id"])
             invite = next((i for i in invites if i.get("id") == invite_id), None)
             if not invite:
                 raise HTTPException(status_code=404, detail="Invite not found")
 
             session_id = invite["session_id"]
-            session = await db.get_trial_test_coop_session(session_id)
+            session = await db.trial_test_coop.get_session(session_id)
             if not session:
                 raise HTTPException(status_code=404, detail="Session not found")
 
@@ -419,8 +419,8 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=400, detail="Session is not active")
 
             # Add participant with blue color
-            await db.add_trial_test_coop_participant(session_id, user["id"], "blue")
-            await db.update_trial_test_coop_invite_status(invite_id, "accepted")
+            await db.trial_test_coop.add_participant(session_id, user["id"], "blue")
+            await db.trial_test_coop.update_invite_status(invite_id, "accepted")
 
             return {
                 "success": True,
@@ -440,16 +440,16 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
-                user = await db.create_user_by_email(email)
+                user = await db.users.create_user_by_email(email)
 
-            invites = await db.list_trial_test_coop_incoming_invites(user["id"])
+            invites = await db.trial_test_coop.list_incoming_invites(user["id"])
             invite = next((i for i in invites if i.get("id") == invite_id), None)
             if not invite:
                 raise HTTPException(status_code=404, detail="Invite not found")
 
-            await db.update_trial_test_coop_invite_status(invite_id, "declined")
+            await db.trial_test_coop.update_invite_status(invite_id, "declined")
             return {"success": True}
         except HTTPException:
             raise
@@ -463,11 +463,11 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
         email: str = Query(...),
         db: Database = Depends(get_db),
     ):
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        participant = await db.get_trial_test_coop_participant(session_id, user["id"])
+        participant = await db.trial_test_coop.get_participant(session_id, user["id"])
         if not participant:
             raise HTTPException(status_code=403, detail="Not a participant")
 
@@ -500,14 +500,14 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 await websocket.close(code=1008)
                 return
 
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             if _is_production():
                 await websocket.close(code=1008)
                 return
-            user = await db.create_user_by_email(email)
+            user = await db.users.create_user_by_email(email)
 
-        participant = await db.get_trial_test_coop_participant(session_id, user["id"])
+        participant = await db.trial_test_coop.get_participant(session_id, user["id"])
         if not participant:
             await websocket.close(code=1008)
             return
@@ -531,7 +531,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                     answer = payload.get("answer", "")
                     if task_id is None:
                         continue
-                    await db.upsert_trial_test_coop_answer(session_id, user["id"], int(task_id), str(answer))
+                    await db.trial_test_coop.upsert_answer(session_id, user["id"], int(task_id), str(answer))
                     await manager.broadcast(
                         session_id,
                         {

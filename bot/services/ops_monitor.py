@@ -96,7 +96,7 @@ class OpsMonitor:
             return
         sent = await self.alerter.send_incident_open(incident)
         if sent and isinstance(incident.get("id"), int):
-            await self.db.mark_ops_incident_telegram_sent(int(incident["id"]))
+            await self.db.ops.touch_incident_telegram_sent(int(incident["id"]))
 
     async def _emit_resolved_alert(self, incident: Dict[str, Any]) -> None:
         if not self.alerter.enabled:
@@ -112,7 +112,7 @@ class OpsMonitor:
         metadata: Dict[str, Any],
     ) -> None:
         state = self.rule_state.setdefault(rule.kind, {"breach_streak": 0, "recover_streak": 0})
-        open_incident = await self.db.get_open_ops_incident_by_fingerprint(rule.kind)
+        open_incident = await self.db.ops.get_open_incident_by_fingerprint(rule.kind)
 
         if condition_met:
             state["breach_streak"] += 1
@@ -121,7 +121,7 @@ class OpsMonitor:
             if not should_open:
                 return
 
-            incident = await self.db.open_or_update_ops_incident(
+            incident = await self.db.ops.open_or_update_incident(
                 kind=rule.kind,
                 severity=rule.severity,
                 fingerprint=rule.kind,
@@ -150,7 +150,7 @@ class OpsMonitor:
         if state["recover_streak"] < int(rule.resolve_after):
             return
 
-        resolved = await self.db.resolve_ops_incident(
+        resolved = await self.db.ops.resolve_incident(
             fingerprint=rule.kind,
             metadata=metadata,
         )
@@ -168,7 +168,7 @@ class OpsMonitor:
             await self._emit_resolved_alert(resolved)
 
     async def run_cycle(self) -> Dict[str, Any]:
-        db_ok = await self.db.probe_database()
+        db_ok = await self.db.ops.probe_database()
         window = metrics.get_window_stats(window_seconds=300)
         requests_5m = int(window.get("requests", 0) or 0)
         errors_5m = int(window.get("errors", 0) or 0)
@@ -185,7 +185,7 @@ class OpsMonitor:
             high_latency=high_latency,
         )
         database_status = "ok" if db_ok else "error"
-        await self.db.add_ops_health_sample(
+        await self.db.ops.add_health_sample(
             service_status=service_status,
             database_status=database_status,
             requests_5m=requests_5m,
@@ -256,6 +256,6 @@ class OpsMonitor:
         settings = get_settings()
         health_days = settings.ops_health_sample_retention_days
         incident_days = settings.ops_incident_retention_days
-        deleted_health = await self.db.cleanup_old_ops_health_samples(retention_days=health_days)
-        deleted_incidents = await self.db.cleanup_old_ops_incidents(retention_days=incident_days)
+        deleted_health = await self.db.ops.cleanup_old_health_samples(retention_days=health_days)
+        deleted_incidents = await self.db.ops.cleanup_old_incidents(retention_days=incident_days)
         return {"deleted_health_samples": deleted_health, "deleted_incidents": deleted_incidents}

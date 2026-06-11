@@ -21,7 +21,7 @@ async def test_user_repository_get_user_by_email(test_db):
     repo = UserRepository(db_path=test_db.db_path)
     
     # Create user
-    user = await test_db.create_user_by_email("test@example.com")
+    user = await test_db.users.create_user_by_email("test@example.com")
     
     # Get user by email
     retrieved = await repo.get_user_by_email("test@example.com")
@@ -36,7 +36,7 @@ async def test_user_repository_get_user_by_id(test_db):
     repo = UserRepository(db_path=test_db.db_path)
     
     # Create user
-    user = await test_db.create_user_by_email("test@example.com")
+    user = await test_db.users.create_user_by_email("test@example.com")
     
     # Get user by ID
     retrieved = await repo.get_user_by_id(user["id"])
@@ -223,20 +223,20 @@ async def test_user_repository_admin_search_escapes_like_wildcards(test_db):
 @pytest.mark.asyncio
 async def test_bank_task_search_escapes_like_wildcards(test_db):
     """Bank search treats LIKE wildcards as literal input."""
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="100% literal task",
         answer="ok",
         question_type="input",
         difficulty="A",
     )
-    await test_db.create_bank_task(
+    await test_db.bank_tasks.create_task(
         text="plain task",
         answer="ok",
         question_type="input",
         difficulty="A",
     )
 
-    result = await test_db.get_bank_tasks(search="%", limit=20, offset=0)
+    result = await test_db.bank_tasks.list_tasks(search="%", limit=20, offset=0)
 
     assert result["total"] == 1
     assert len(result["items"]) == 1
@@ -425,8 +425,8 @@ async def test_user_repository_get_solved_task_ids(test_db, test_user):
     repo = UserRepository(db_path=test_db.db_path)
     
     # Create task and solve it
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -454,7 +454,7 @@ async def test_user_repository_award_task_reward_once_deduplicates(test_db, test
     )
     assert first == {"awarded": True, "points": 20}
 
-    user_after_first = await test_db.get_user_by_id(test_user["id"])
+    user_after_first = await test_db.users.get_user_by_id(test_user["id"])
     assert user_after_first["total_points"] == 20
     assert user_after_first["week_points"] == 20
     assert user_after_first["total_solved"] == 1
@@ -471,7 +471,7 @@ async def test_user_repository_award_task_reward_once_deduplicates(test_db, test
     )
     assert second == {"awarded": False, "points": 0}
 
-    user_after_second = await test_db.get_user_by_id(test_user["id"])
+    user_after_second = await test_db.users.get_user_by_id(test_user["id"])
     assert user_after_second["total_points"] == 20
     assert user_after_second["week_points"] == 20
     assert user_after_second["total_solved"] == 1
@@ -480,8 +480,8 @@ async def test_user_repository_award_task_reward_once_deduplicates(test_db, test
 
 @pytest.mark.asyncio
 async def test_record_solution_uses_difficulty_and_blocks_repeat_points(test_db, test_user):
-    module = await test_db.create_module("Scoring Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Scoring Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Scoring Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Scoring Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"],
         "Scoring task",
@@ -491,12 +491,12 @@ async def test_record_solution_uses_difficulty_and_blocks_repeat_points(test_db,
     )
 
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
-    after_first = await test_db.get_user_by_id(test_user["id"])
+    after_first = await test_db.users.get_user_by_id(test_user["id"])
     assert after_first["total_points"] == 10
     assert after_first["total_solved"] == 1
 
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
-    after_second = await test_db.get_user_by_id(test_user["id"])
+    after_second = await test_db.users.get_user_by_id(test_user["id"])
     assert after_second["total_points"] == 10
     assert after_second["total_solved"] == 1
 
@@ -507,8 +507,8 @@ async def test_task_repository_get_task_by_id(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -527,8 +527,8 @@ async def test_task_repository_get_random_task(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create multiple tasks
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task1 = await test_db.create_task_in_section(
         section["id"], "Task 1", "1", test_user["id"]
     )
@@ -553,8 +553,8 @@ async def test_task_repository_create_task(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create module and section
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Create task
     task = await repo.create_task(
@@ -577,8 +577,8 @@ async def test_task_repository_update_task(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -602,8 +602,8 @@ async def test_task_repository_soft_delete_task(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -624,8 +624,8 @@ async def test_task_repository_restore_task(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create and delete task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -647,8 +647,8 @@ async def test_task_repository_check_answer(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -668,8 +668,8 @@ async def test_task_repository_get_tasks_by_section(test_db, test_user):
     repo = TaskRepository(db_path=test_db.db_path)
     
     # Create module and section
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Create multiple tasks
     task1 = await test_db.create_task_in_section(
@@ -693,10 +693,10 @@ async def test_rating_repository_get_rating(test_db):
     repo = RatingRepository(db_path=test_db.db_path)
     
     # Create users with nicknames
-    user1 = await test_db.create_user_by_email("user1@example.com")
-    user2 = await test_db.create_user_by_email("user2@example.com")
-    await test_db.update_user_nickname("user1@example.com", "User1")
-    await test_db.update_user_nickname("user2@example.com", "User2")
+    user1 = await test_db.users.create_user_by_email("user1@example.com")
+    user2 = await test_db.users.create_user_by_email("user2@example.com")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
+    await test_db.users.update_user_nickname("user2@example.com", "User2")
     
     # Get rating
     rating = await repo.get_rating(limit=10)
@@ -716,10 +716,10 @@ async def test_rating_repository_get_rating_count(test_db):
     repo = RatingRepository(db_path=test_db.db_path)
     
     # Create users
-    await test_db.create_user_by_email("user1@example.com")
-    await test_db.create_user_by_email("user2@example.com")
-    await test_db.update_user_nickname("user1@example.com", "User1")
-    await test_db.update_user_nickname("user2@example.com", "User2")
+    await test_db.users.create_user_by_email("user1@example.com")
+    await test_db.users.create_user_by_email("user2@example.com")
+    await test_db.users.update_user_nickname("user1@example.com", "User1")
+    await test_db.users.update_user_nickname("user2@example.com", "User2")
     
     # Get count
     count = await repo.get_rating_count()
@@ -735,12 +735,12 @@ async def test_rating_repository_get_global_position(test_db):
     repo = RatingRepository(db_path=test_db.db_path)
 
     users = [
-        await test_db.create_user_by_email("rank-1@example.com"),
-        await test_db.create_user_by_email("rank-2@example.com"),
-        await test_db.create_user_by_email("rank-3@example.com"),
+        await test_db.users.create_user_by_email("rank-1@example.com"),
+        await test_db.users.create_user_by_email("rank-2@example.com"),
+        await test_db.users.create_user_by_email("rank-3@example.com"),
     ]
     for index, user in enumerate(users, start=1):
-        await test_db.update_user_nickname(user["email"], f"RankUser{index}")
+        await test_db.users.update_user_nickname(user["email"], f"RankUser{index}")
 
     async with aiosqlite.connect(test_db.db_path) as db:
         await db.execute(
@@ -781,8 +781,8 @@ async def test_progress_repository_update_task_progress(test_db, test_user):
     repo = ProgressRepository(db_path=test_db.db_path)
     
     # Create task
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     task = await test_db.create_task_in_section(
         section["id"], "Test task", "42", test_user["id"]
     )
@@ -802,8 +802,8 @@ async def test_progress_repository_get_user_progress_for_section(test_db, test_u
     repo = ProgressRepository(db_path=test_db.db_path)
     
     # Create module and section
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Create tasks
     task1 = await test_db.create_task_in_section(
@@ -828,8 +828,8 @@ async def test_progress_repository_calculate_section_completion(test_db, test_us
     repo = ProgressRepository(db_path=test_db.db_path)
     
     # Create module and section
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
     
     # Initially should be 0% complete
     completion = await repo.calculate_section_completion(test_user["id"], section["id"])
@@ -843,13 +843,13 @@ async def test_progress_repository_calculate_mini_lesson_completion(test_db, tes
     repo = ProgressRepository(db_path=test_db.db_path)
     
     # Create module, section, lesson, and mini-lesson
-    module = await test_db.create_module("Test Module", sort_order=1)
-    section = await test_db.create_section(module["id"], "Test Section", sort_order=1)
-    lesson = await test_db.create_lesson(
+    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
+    lesson = await test_db.curriculum.create_lesson(
         section["id"], lesson_number=1, title="Test Lesson", sort_order=1
     )
-    await test_db.ensure_default_mini_lessons(lesson["id"])
-    mini_lessons = await test_db.get_mini_lessons_by_lesson(lesson["id"])
+    await test_db.curriculum.ensure_default_mini_lessons(lesson["id"])
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
     
     # Initially should be 0% complete
     completion = await repo.calculate_mini_lesson_completion(test_user["id"], mini_lessons[0]["id"])
@@ -863,19 +863,19 @@ async def test_progress_repository_calculate_mini_lesson_completion(test_db, tes
 @pytest.mark.asyncio
 async def test_trial_test_draft_get_empty(test_db, test_user):
     """GET draft when none exists returns empty"""
-    trial = await test_db.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
-    draft = await test_db.get_trial_test_draft(test_user["id"], trial["id"])
+    trial = await test_db.trial_tests.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
+    draft = await test_db.trial_tests.get_trial_test_draft(test_user["id"], trial["id"])
     assert draft is None
 
 
 @pytest.mark.asyncio
 async def test_trial_test_draft_upsert_and_get(test_db, test_user):
     """Upsert draft then get returns same data"""
-    trial = await test_db.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
-    task = await test_db.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
+    trial = await test_db.trial_tests.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
+    task = await test_db.trial_tests.create_trial_test_task(trial["id"], "Q1", "42", "input", sort_order=0)
     answers = {task["id"]: "42"}
-    await test_db.upsert_trial_test_draft(test_user["id"], trial["id"], answers, current_task_index=0)
-    draft = await test_db.get_trial_test_draft(test_user["id"], trial["id"])
+    await test_db.trial_tests.upsert_trial_test_draft(test_user["id"], trial["id"], answers, current_task_index=0)
+    draft = await test_db.trial_tests.get_trial_test_draft(test_user["id"], trial["id"])
     assert draft is not None
     import json
     ans = draft.get("answers") or "{}"
@@ -888,8 +888,8 @@ async def test_trial_test_draft_upsert_and_get(test_db, test_user):
 @pytest.mark.asyncio
 async def test_trial_test_draft_delete(test_db, test_user):
     """After delete_draft, get returns None"""
-    trial = await test_db.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
-    await test_db.upsert_trial_test_draft(test_user["id"], trial["id"], {1: "x"}, current_task_index=0)
-    await test_db.delete_trial_test_draft(test_user["id"], trial["id"])
-    draft = await test_db.get_trial_test_draft(test_user["id"], trial["id"])
+    trial = await test_db.trial_tests.create_trial_test("Draft Test", sort_order=0, created_by=test_user["id"])
+    await test_db.trial_tests.upsert_trial_test_draft(test_user["id"], trial["id"], {1: "x"}, current_task_index=0)
+    await test_db.trial_tests.delete_trial_test_draft(test_user["id"], trial["id"])
+    draft = await test_db.trial_tests.get_trial_test_draft(test_user["id"], trial["id"])
     assert draft is None

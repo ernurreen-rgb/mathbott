@@ -47,14 +47,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error checking subtasks table: {e}")
 
     try:
-        deleted_count = await db.cleanup_old_deleted_tasks(days=10)
+        deleted_count = await db.tasks.cleanup_old_deleted_tasks(days=10)
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} old deleted tasks")
     except Exception as e:
         logger.error(f"Error cleaning up old tasks: {e}")
 
     try:
-        deleted_bank_count = await db.cleanup_old_deleted_bank_tasks(days=BANK_TRASH_RETENTION_DAYS)
+        deleted_bank_count = await db.bank_tasks.cleanup_old_deleted_tasks(days=BANK_TRASH_RETENTION_DAYS)
         if deleted_bank_count > 0:
             logger.info(
                 f"Cleaned up {deleted_bank_count} bank tasks older than {BANK_TRASH_RETENTION_DAYS} days"
@@ -78,14 +78,14 @@ async def lifespan(app: FastAPI):
 
     admin_email = get_settings().admin_email
     if admin_email:
-        user = await db.get_user_by_email(admin_email)
+        user = await db.users.get_user_by_email(admin_email)
         if user:
-            await db.set_admin_with_role(email=admin_email, is_admin=True, role="super_admin")
+            await db.users.set_admin_with_role(email=admin_email, is_admin=True, role="super_admin")
             logger.info(f"Admin set by email: {admin_email}")
         else:
             try:
-                await db.create_user_by_email(admin_email, check_admin_email=admin_email)
-                await db.set_admin_with_role(email=admin_email, is_admin=True, role="super_admin")
+                await db.users.create_user_by_email(admin_email, check_admin_email=admin_email)
+                await db.users.set_admin_with_role(email=admin_email, is_admin=True, role="super_admin")
                 logger.info(f"Admin user created and set by email: {admin_email}")
             except Exception as e:
                 logger.warning(f"Failed to create admin user {admin_email}: {e}")
@@ -146,7 +146,7 @@ async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monito
             now = dt.now()
             if now.hour == 3 and now.minute < 5:
                 await maintenance.analyze()
-                deleted_bank_count = await db.cleanup_old_deleted_bank_tasks(days=bank_trash_retention_days)
+                deleted_bank_count = await db.bank_tasks.cleanup_old_deleted_tasks(days=bank_trash_retention_days)
                 if deleted_bank_count > 0:
                     logger.info(
                         f"Cleaned up {deleted_bank_count} bank tasks older than {bank_trash_retention_days} days"

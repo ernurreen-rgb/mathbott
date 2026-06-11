@@ -134,7 +134,7 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
             await websocket.close(code=1008)
             return
 
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             await websocket.close(code=1008)
             return

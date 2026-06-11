@@ -35,15 +35,15 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
                     detail="role must be one of content_editor, reviewer, super_admin",
                 )
 
-        user = await db.get_user_by_email(normalized_target_email)
+        user = await db.users.get_user_by_email(normalized_target_email)
         if not user:
             if not set_admin:
                 raise HTTPException(status_code=404, detail="Target user not found")
             admin_email_env = get_settings().admin_email
-            await db.create_user_by_email(normalized_target_email, check_admin_email=admin_email_env)
+            await db.users.create_user_by_email(normalized_target_email, check_admin_email=admin_email_env)
 
         try:
-            return await db.change_admin_role_with_audit(
+            return await db.users.change_admin_role_with_audit(
                 target_email=normalized_target_email,
                 role=normalized_role,
                 set_admin=set_admin,
@@ -120,7 +120,7 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
                     status_code=400,
                     detail="role must be one of content_editor, reviewer, super_admin",
                 )
-        return await db.list_admin_users(
+        return await db.users.list_admin_users(
             search=search,
             role=normalized_role,
             limit=limit,
@@ -191,7 +191,7 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
         if audit_id < 1:
             raise HTTPException(status_code=400, detail="audit_id must be >= 1")
 
-        audit_item = await db.get_admin_audit_log_by_id(audit_id)
+        audit_item = await db.users.get_admin_audit_log_by_id(audit_id)
         if not audit_item:
             raise HTTPException(
                 status_code=404,

@@ -431,3 +431,14 @@ class OpsRepository(BaseRepository):
                 return int(cursor.rowcount or 0)
 
         return await self._run_with_lock_retry(operation)
+
+    async def probe_database(self) -> bool:
+        """Lightweight DB liveness probe (always opens a fresh connection)."""
+        try:
+            async with aiosqlite.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
+                await self._configure_connection(db)
+                async with db.execute("SELECT 1") as cursor:
+                    row = await cursor.fetchone()
+                    return bool(row and int(row[0]) == 1)
+        except Exception:
+            return False

@@ -9,7 +9,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_admin_trial_tests(admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
         """Get all trial tests (admin only)"""
         try:
-            tests = await db.get_trial_tests()
+            tests = await db.trial_tests.get_trial_tests()
             return tests
         except Exception as e:
             logger.error(f"Error getting trial tests: {e}", exc_info=True)
@@ -28,7 +28,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user = await require_admin(email=email, db=db)
         
         try:
-            test = await db.create_trial_test(
+            test = await db.trial_tests.create_trial_test(
                 title=title,
                 description=description if description and description.strip() else None,
                 sort_order=sort_order,
@@ -56,7 +56,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         await require_admin(email=email, db=db)
         
         try:
-            test = await db.update_trial_test(
+            test = await db.trial_tests.update_trial_test(
                 test_id=test_id,
                 title=title,
                 description=description if description and description.strip() else None,
@@ -82,7 +82,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         await require_admin(email=email, db=db)
         
         try:
-            await db.delete_trial_test(test_id)
+            await db.trial_tests.delete_trial_test(test_id)
             return {"success": True}
         except Exception as e:
             logger.error(f"Error deleting trial test: {e}", exc_info=True)
@@ -97,11 +97,11 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get trial test tasks for admin editing, including answers and bank metadata."""
         await require_admin(email=email, db=db)
 
-        test = await db.get_trial_test_by_id(test_id)
+        test = await db.trial_tests.get_trial_test_by_id(test_id)
         if not test:
             raise HTTPException(status_code=404, detail="Trial test not found")
 
-        tasks = await db.get_trial_test_tasks(test_id)
+        tasks = await db.trial_tests.get_trial_test_tasks(test_id)
         serialized_tasks = [_serialize_bank_placement_task(task) for task in tasks]
 
         # Enrich topics for linked bank tasks.
@@ -113,7 +113,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         unique_bank_ids = sorted(set(bank_ids))
         topics_map: dict[int, List[str]] = {}
         for bank_id in unique_bank_ids:
-            bank_task = await db.get_bank_task_by_id(bank_id, include_deleted=True)
+            bank_task = await db.bank_tasks.get_task_by_id(bank_id, include_deleted=True)
             if not bank_task:
                 continue
             topics_map[bank_id] = bank_task.get("topics") if isinstance(bank_task.get("topics"), list) else []
@@ -144,7 +144,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=400, detail="email is required")
         admin_user = await require_admin(email=email, db=db)
 
-        test = await db.get_trial_test_by_id(test_id)
+        test = await db.trial_tests.get_trial_test_by_id(test_id)
         if not test:
             raise HTTPException(status_code=404, detail="Trial test not found")
         if slot_index < 1:
@@ -159,7 +159,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=400, detail="bank_task_id must be integer")
 
         if bank_task_id:
-            existing_bank = await db.get_bank_task_by_id(bank_task_id, include_deleted=False)
+            existing_bank = await db.bank_tasks.get_task_by_id(bank_task_id, include_deleted=False)
             if not existing_bank:
                 raise HTTPException(status_code=404, detail="Bank task not found")
         else:
@@ -194,7 +194,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 topics_list = raw_topics if isinstance(raw_topics, list) else []
             topics_value = _validate_bank_topics(topics_list)
 
-            created_bank = await db.create_bank_task(
+            created_bank = await db.bank_tasks.create_task(
                 text=text,
                 answer=answer,
                 question_type=question_type,
@@ -209,14 +209,14 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
             bank_task_id = int(created_bank["id"])
 
-        placement = await db.upsert_trial_test_slot(
+        placement = await db.trial_tests.upsert_trial_test_slot(
             trial_test_id=test_id,
             slot_index=slot_index,
             bank_task_id=bank_task_id,
             created_by=admin_user["id"],
         )
         serialized = _serialize_bank_placement_task(placement)
-        linked_bank = await db.get_bank_task_by_id(bank_task_id, include_deleted=True)
+        linked_bank = await db.bank_tasks.get_task_by_id(bank_task_id, include_deleted=True)
         if linked_bank:
             serialized["bank_topics"] = linked_bank.get("topics") if isinstance(linked_bank.get("topics"), list) else []
             if isinstance(serialized.get("bank_task"), dict):
@@ -233,12 +233,12 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Clear trial-test slot placement by slot index (1-based)."""
         await require_admin(email=email, db=db)
-        test = await db.get_trial_test_by_id(test_id)
+        test = await db.trial_tests.get_trial_test_by_id(test_id)
         if not test:
             raise HTTPException(status_code=404, detail="Trial test not found")
         if slot_index < 1:
             raise HTTPException(status_code=400, detail="slot_index must be >= 1")
-        cleared = await db.clear_trial_test_slot(test_id, slot_index)
+        cleared = await db.trial_tests.clear_trial_test_slot(test_id, slot_index)
         return {"success": True, "cleared": cleared}
 
     @app.post("/api/admin/trial-tests/{test_id}/tasks/create")
@@ -260,7 +260,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Create a new task for a trial test (admin only)"""
         admin_user = await require_admin(email=email, db=db)
         
-        test = await db.get_trial_test_by_id(test_id)
+        test = await db.trial_tests.get_trial_test_by_id(test_id)
         if not test:
             raise HTTPException(status_code=404, detail="Trial test not found")
         
@@ -301,7 +301,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         bank_image_filename = await save_image_upload(image) if image else None
 
-        bank_task = await db.create_bank_task(
+        bank_task = await db.bank_tasks.create_task(
             text=text,
             answer=answer,
             question_type=question_type,
@@ -319,7 +319,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=500, detail="Failed to create bank task")
 
         try:
-            task = await db.create_trial_test_task(
+            task = await db.trial_tests.create_trial_test_task(
                 trial_test_id=test_id,
                 text=text,
                 answer=answer,
@@ -336,7 +336,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         except Exception:
             # Best effort rollback to avoid leaving orphaned active bank tasks.
             try:
-                await db.soft_delete_bank_task(bank_task_id)
+                await db.bank_tasks.soft_delete_task(bank_task_id)
             except Exception:
                 pass
             raise
@@ -365,7 +365,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user = await require_admin(email=email, db=db)
         remove_image_flag = str(remove_image).lower() in ("true", "1", "yes") if remove_image else False
 
-        task = await db.get_trial_test_task(task_id)
+        task = await db.trial_tests.get_trial_test_task(task_id)
         if not task or task.get("trial_test_id") != test_id:
             raise HTTPException(status_code=404, detail="Trial test task not found")
 
@@ -421,7 +421,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         else:
             image_filename = None
 
-        await db.update_trial_test_task(
+        await db.trial_tests.update_trial_test_task(
             task_id=task_id,
             sort_order=sort_order,
             text_scale=text_scale_value,
@@ -429,9 +429,9 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         bank_task_id = task.get("bank_task_id")
         if isinstance(bank_task_id, int) and bank_task_id > 0:
-            bank_task = await db.get_bank_task_by_id(bank_task_id, include_deleted=True)
+            bank_task = await db.bank_tasks.get_task_by_id(bank_task_id, include_deleted=True)
             if bank_task:
-                await db.update_bank_task(
+                await db.bank_tasks.update_task(
                     task_id=bank_task_id,
                     text=text if text else None,
                     answer=answer if answer else None,
@@ -536,7 +536,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         await require_admin(email=email, db=db)
         
         try:
-            await db.remove_task_from_trial_test(test_id, task_id)
+            await db.trial_tests.remove_task_from_trial_test(test_id, task_id)
             return {"success": True}
         except Exception as e:
             logger.error(f"Error removing task from trial test: {e}", exc_info=True)
@@ -560,11 +560,11 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=400, detail="Too many bank_task_ids (max 200)")
 
         admin_user = await require_admin(email=email, db=db)
-        test = await db.get_trial_test_by_id(test_id)
+        test = await db.trial_tests.get_trial_test_by_id(test_id)
         if not test:
             raise HTTPException(status_code=404, detail="Trial test not found")
 
-        result = await db.copy_bank_tasks_to_trial_test(
+        result = await db.bank_tasks.copy_tasks_to_trial_test(
             trial_test_id=test_id,
             bank_task_ids=bank_task_ids,
             created_by=admin_user["id"],

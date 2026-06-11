@@ -24,27 +24,27 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Create a new report about a task"""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
             # Check if user has attempted this task
-            if not await db.can_user_report_task(user["id"], request.task_id):
+            if not await db.reports.can_user_report_task(user["id"], request.task_id):
                 raise HTTPException(status_code=403, detail="You can only report tasks you have attempted")
 
             # Check if task exists
-            task = await db.get_task_by_id(request.task_id)
+            task = await db.tasks.get_task_by_id(request.task_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
 
             # Check if user already reported this task
-            user_reports = await db.get_user_reports(user["id"])
+            user_reports = await db.reports.get_user_reports(user["id"])
             existing_report = next((r for r in user_reports if r["task_id"] == request.task_id), None)
             if existing_report:
                 raise HTTPException(status_code=400, detail="Сіз бұл есепті бұрын жібергенсіз")
 
             # Create report
-            report = await db.create_report(user["id"], request.task_id, request.message)
+            report = await db.reports.create_report(user["id"], request.task_id, request.message)
             logger.info(f"Report created: user_id={user['id']}, task_id={request.task_id}")
 
             return {
@@ -66,11 +66,11 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get user's own reports"""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            reports = await db.get_user_reports(user["id"])
+            reports = await db.reports.get_user_reports(user["id"])
             return reports
         except HTTPException:
             raise
@@ -86,23 +86,23 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Create a new report about a trial test task"""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            trial_test = await db.get_trial_test_by_id(request.trial_test_id)
+            trial_test = await db.trial_tests.get_trial_test_by_id(request.trial_test_id)
             if not trial_test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
 
-            task = await db.get_trial_test_task(request.task_id)
+            task = await db.trial_tests.get_trial_test_task(request.task_id)
             if not task or task.get("trial_test_id") != request.trial_test_id:
                 raise HTTPException(status_code=404, detail="Trial test task not found")
 
             # Check if user already reported this trial test task
-            if await db.has_user_reported_trial_test_task(user["id"], request.task_id):
+            if await db.trial_test_reports.has_user_reported_trial_test_task(user["id"], request.task_id):
                 raise HTTPException(status_code=400, detail="Сіз бұл есепті бұрын жібергенсіз")
 
-            report = await db.create_trial_test_report(
+            report = await db.trial_test_reports.create_trial_test_report(
                 user["id"], request.trial_test_id, request.task_id, request.message
             )
             logger.info(
@@ -129,11 +129,11 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get user's own trial test reports"""
         try:
-            user = await db.get_user_by_email(email)
+            user = await db.users.get_user_by_email(email)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            reports = await db.get_user_trial_test_reports(user["id"])
+            reports = await db.trial_test_reports.get_user_trial_test_reports(user["id"])
             return reports
         except HTTPException:
             raise

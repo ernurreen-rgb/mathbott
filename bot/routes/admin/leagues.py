@@ -12,7 +12,7 @@ def register_league_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """List all league groups with participant counts."""
         try:
-            groups = await db.get_league_groups()
+            groups = await db.rating.get_league_groups()
             return {"items": groups}
         except HTTPException:
             raise
@@ -31,7 +31,7 @@ def register_league_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """List participants inside one league group."""
         try:
-            return await db.get_league_group_participants(
+            return await db.rating.get_league_group_participants(
                 league=league,
                 group=group,
                 limit=limit,

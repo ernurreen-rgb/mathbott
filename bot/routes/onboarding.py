@@ -21,11 +21,11 @@ def setup_onboarding_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         """Check if user has completed onboarding"""
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             return {"completed": False}
         
-        is_completed = await db.is_onboarding_completed(user["id"])
+        is_completed = await db.onboarding.is_onboarding_completed(user["id"])
         return {"completed": is_completed}
 
     @app.post("/api/user/onboarding")
@@ -39,10 +39,10 @@ def setup_onboarding_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db)
     ):
         """Save onboarding data"""
-        user = await db.get_user_by_email(email)
+        user = await db.users.get_user_by_email(email)
         if not user:
             admin_email = get_settings().admin_email
-            user = await db.create_user_by_email(email, check_admin_email=admin_email)
+            user = await db.users.create_user_by_email(email, check_admin_email=admin_email)
         
         # Validate inputs
         if not nickname or not nickname.strip():
@@ -54,7 +54,7 @@ def setup_onboarding_routes(app: FastAPI, db: Database, limiter: Limiter):
         if len(nickname.strip()) > 50:
             raise HTTPException(status_code=400, detail="Nickname must be less than 50 characters")
         
-        await db.save_onboarding(
+        await db.onboarding.save_onboarding(
             user["id"],
             how_did_you_hear.strip(),
             math_level.strip(),

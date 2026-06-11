@@ -13,8 +13,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         offset: int = Query(0, ge=0)
     ):
         """Get all tasks created by admin (with pagination)"""
-        tasks = await db.get_tasks_by_creator(admin_user["id"], limit=limit, offset=offset)
-        total = await db.get_tasks_count_by_creator(admin_user["id"])
+        tasks = await db.tasks.get_tasks_by_creator(admin_user["id"], limit=limit, offset=offset)
+        total = await db.tasks.get_tasks_count_by_creator(admin_user["id"])
         return {
             "items": [
                 {
@@ -56,7 +56,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         
         admin_user = await require_admin(email=email, db=db)
         
-        task = await db.create_task(
+        task = await db.tasks.create_task(
             text=text,
             answer=answer,
             created_by=admin_user["id"],
@@ -86,7 +86,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ) -> Dict[str, Any]:
         admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
 
-        task = await db.get_task_by_id(task_id)
+        task = await db.tasks.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
@@ -122,11 +122,11 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         image_filename = await save_image_upload(image) if image else None
 
-        await db.update_task(task_id=task_id, text_scale=text_scale_value)
+        await db.tasks.update_task(task_id=task_id, text_scale=text_scale_value)
 
         linked_bank_task_id = task.get("bank_task_id")
         if isinstance(linked_bank_task_id, int) and linked_bank_task_id > 0:
-            await db.update_bank_task(
+            await db.bank_tasks.update_task(
                 task_id=linked_bank_task_id,
                 text=text.strip() if text.strip() else None,
                 answer=answer.strip() if answer.strip() else None,
@@ -184,7 +184,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         admin_user = await require_admin(email=effective_email, db=db)
 
-        task = await db.get_task_by_id(task_id)
+        task = await db.tasks.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
@@ -217,7 +217,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
         topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=None)
 
-        await db.update_task(
+        await db.tasks.update_task(
             task_id=task_id,
             task_type=task_type,
             sort_order=sort_order,
@@ -226,7 +226,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         linked_bank_task_id = task.get("bank_task_id")
         if isinstance(linked_bank_task_id, int) and linked_bank_task_id > 0:
-            await db.update_bank_task(
+            await db.bank_tasks.update_task(
                 task_id=linked_bank_task_id,
                 text=text if text else None,
                 answer=answer if answer else None,
@@ -251,7 +251,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             admin_user = await require_admin(email=email, db=db)
             
-            task = await db.get_task_by_id(task_id)
+            task = await db.tasks.get_task_by_id(task_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
             
@@ -262,7 +262,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=403, detail="You can only delete your own tasks")
             
             try:
-                await db.soft_delete_task(task_id)
+                await db.tasks.soft_delete_task(task_id)
             except Exception as e:
                 logger.error(f"Error in soft_delete_task: {e}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Internal server error")
@@ -277,7 +277,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_trash_tasks(admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
         """Get deleted tasks (trash)"""
         try:
-            tasks = await db.get_deleted_tasks_by_creator(admin_user["id"])
+            tasks = await db.tasks.get_deleted_tasks_by_creator(admin_user["id"])
             
             result = []
             for task in tasks:
@@ -310,7 +310,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Restore task from trash"""
         admin_user = await require_admin(email=email, db=db)
         
-        task = await db.get_task_by_id(task_id)
+        task = await db.tasks.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -320,7 +320,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not task.get("deleted_at"):
             raise HTTPException(status_code=400, detail="Task is not in trash")
         
-        await db.restore_task(task_id)
+        await db.tasks.restore_task(task_id)
         return {"success": True, "message": "Task restored successfully"}
     @app.post("/api/admin/tasks/trash/empty")
     async def empty_trash_web(
@@ -331,8 +331,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
             
-            deleted_count = await db.empty_trash(creator_id=admin_user["id"])
-            id_reset = await db.reset_task_id_counter()
+            deleted_count = await db.tasks.empty_trash(creator_id=admin_user["id"])
+            id_reset = await db.tasks.reset_task_id_counter()
             
             logger.info(f"User {email} emptied trash: {deleted_count} tasks deleted. ID counter reset: {id_reset}")
             
@@ -366,7 +366,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                     row = await cursor.fetchone()
                     task_count = row[0] if row else 0
             
-            success = await db.reset_task_id_counter()
+            success = await db.tasks.reset_task_id_counter()
             
             if success:
                 logger.info(f"User {email} reset task ID counter")
@@ -389,7 +389,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.get("/api/admin/modules")
     async def get_admin_modules(admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
         """Get all modules for CMS"""
-        modules = await db.get_all_modules()
+        modules = await db.curriculum.get_all_modules()
         return modules
 
     @app.post("/api/admin/modules")
@@ -422,7 +422,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         icon = icon if icon and icon.strip() else None
         
         try:
-            module = await db.create_module(name, description, icon, sort_order)
+            module = await db.curriculum.create_module(name, description, icon, sort_order)
             return module
         except Exception as e:
             logger.error(f"Error creating module: {e}", exc_info=True)
@@ -441,8 +441,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Update module via CMS"""
         await require_admin(email=email, db=db)
         
-        await db.update_module(module_id, name, description, icon, sort_order)
-        module = await db.get_module_by_id(module_id)
+        await db.curriculum.update_module(module_id, name, description, icon, sort_order)
+        module = await db.curriculum.get_module_by_id(module_id)
         if not module:
             raise HTTPException(status_code=404, detail="Module not found")
         return module
@@ -455,7 +455,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Delete module via CMS"""
         await require_admin(email=email, db=db)
-        await db.delete_module(module_id)
+        await db.curriculum.delete_module(module_id)
         return {"success": True}
 
     # Sections CMS
@@ -467,7 +467,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all sections for a module"""
         await require_admin(email=email, db=db)
-        sections = await db.get_sections_by_module(module_id)
+        sections = await db.curriculum.get_sections_by_module(module_id)
         return sections
 
     @app.post("/api/admin/modules/{module_id}/sections")
@@ -481,7 +481,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Create section via CMS"""
         await require_admin(email=email, db=db)
-        section = await db.create_section(module_id, name, sort_order, description)
+        section = await db.curriculum.create_section(module_id, name, sort_order, description)
         return section
 
     @app.put("/api/admin/sections/{section_id}")
@@ -496,8 +496,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update section via CMS"""
         await require_admin(email=email, db=db)
-        await db.update_section(section_id, name, sort_order, description, guide)
-        section = await db.get_section_by_id(section_id)
+        await db.curriculum.update_section(section_id, name, sort_order, description, guide)
+        section = await db.curriculum.get_section_by_id(section_id)
         if not section:
             raise HTTPException(status_code=404, detail="Section not found")
         return section
@@ -510,7 +510,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Delete section via CMS"""
         await require_admin(email=email, db=db)
-        await db.delete_section(section_id)
+        await db.curriculum.delete_section(section_id)
         return {"success": True}
 
     # Tasks CMS (for sections)
@@ -522,7 +522,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all tasks for a section"""
         await require_admin(email=email, db=db)
-        tasks = await db.get_tasks_by_section(section_id)
+        tasks = await db.tasks.get_tasks_by_section(section_id)
         return [_serialize_bank_placement_task(task) for task in tasks]
 
     @app.post("/api/admin/sections/{section_id}/tasks")
@@ -565,7 +565,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 options_list = questions_list
 
             if bank_task_id:
-                bank_task = await db.get_bank_task_by_id(int(bank_task_id), include_deleted=False)
+                bank_task = await db.bank_tasks.get_task_by_id(int(bank_task_id), include_deleted=False)
                 if not bank_task:
                     raise HTTPException(status_code=404, detail="Bank task not found")
                 linked_bank_task_id = int(bank_task_id)
@@ -579,7 +579,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=[]) or []
                 image_filename = await save_image_upload(image) if image else None
 
-                bank_task = await db.create_bank_task(
+                bank_task = await db.bank_tasks.create_task(
                     text=text,
                     answer=answer,
                     question_type=effective_qt,
@@ -617,7 +617,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
 
             logger.info(f"Task created successfully: id={task.get('id')}")
-            created_task = await db.get_task_by_id(task.get("id"))
+            created_task = await db.tasks.get_task_by_id(task.get("id"))
             return _serialize_bank_placement_task(created_task or task)
         except HTTPException:
             raise
@@ -634,7 +634,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all lessons for a section"""
         await require_admin(email=email, db=db)
-        return await db.get_lessons_by_section(section_id)
+        return await db.curriculum.get_lessons_by_section(section_id)
 
     @app.post("/api/admin/sections/{section_id}/lessons")
     async def create_lesson_cms(
@@ -647,7 +647,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Create lesson via CMS"""
         await require_admin(email=email, db=db)
-        lesson = await db.create_lesson(section_id, lesson_number, title, sort_order)
+        lesson = await db.curriculum.create_lesson(section_id, lesson_number, title, sort_order)
         return lesson
 
     @app.put("/api/admin/lessons/{lesson_id}")
@@ -661,8 +661,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update lesson via CMS"""
         await require_admin(email=email, db=db)
-        await db.update_lesson(lesson_id, lesson_number=lesson_number, title=title, sort_order=sort_order)
-        lesson = await db.get_lesson_by_id(lesson_id)
+        await db.curriculum.update_lesson(lesson_id, lesson_number=lesson_number, title=title, sort_order=sort_order)
+        lesson = await db.curriculum.get_lesson_by_id(lesson_id)
         if not lesson:
             raise HTTPException(status_code=404, detail="Lesson not found")
         return lesson
@@ -675,7 +675,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Delete lesson via CMS"""
         await require_admin(email=email, db=db)
-        await db.delete_lesson(lesson_id)
+        await db.curriculum.delete_lesson(lesson_id)
         return {"success": True}
 
     # Mini-lessons CMS
@@ -687,8 +687,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all mini-lessons for a lesson"""
         await require_admin(email=email, db=db)
-        await db.ensure_default_mini_lessons(lesson_id)
-        return await db.get_mini_lessons_by_lesson(lesson_id)
+        await db.curriculum.ensure_default_mini_lessons(lesson_id)
+        return await db.curriculum.get_mini_lessons_by_lesson(lesson_id)
 
     @app.put("/api/admin/mini-lessons/{mini_lesson_id}")
     async def update_mini_lesson_cms(
@@ -700,8 +700,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update mini-lesson via CMS"""
         await require_admin(email=email, db=db)
-        await db.update_mini_lesson(mini_lesson_id, title=title, sort_order=sort_order)
-        ml = await db.get_mini_lesson_by_id(mini_lesson_id)
+        await db.curriculum.update_mini_lesson(mini_lesson_id, title=title, sort_order=sort_order)
+        ml = await db.curriculum.get_mini_lesson_by_id(mini_lesson_id)
         if not ml:
             raise HTTPException(status_code=404, detail="Mini-lesson not found")
         return ml
@@ -715,7 +715,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all tasks for a mini-lesson"""
         await require_admin(email=email, db=db)
-        tasks = await db.get_tasks_by_mini_lesson(mini_lesson_id)
+        tasks = await db.tasks.get_tasks_by_mini_lesson(mini_lesson_id)
         return [_serialize_bank_placement_task(task) for task in tasks]
 
     @app.post("/api/admin/mini-lessons/{mini_lesson_id}/tasks")
@@ -751,7 +751,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         logger.info("Parsed subquestions (mini-lesson): %s", subquestions_list)
 
         if bank_task_id:
-            bank_task = await db.get_bank_task_by_id(int(bank_task_id), include_deleted=False)
+            bank_task = await db.bank_tasks.get_task_by_id(int(bank_task_id), include_deleted=False)
             if not bank_task:
                 raise HTTPException(status_code=404, detail="Bank task not found")
             linked_bank_task_id = int(bank_task_id)
@@ -764,7 +764,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=[]) or []
             image_filename = await save_image_upload(image) if image else None
 
-            bank_task = await db.create_bank_task(
+            bank_task = await db.bank_tasks.create_task(
                 text=text,
                 answer=answer,
                 question_type=question_type,
@@ -794,6 +794,6 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             bank_task_id=linked_bank_task_id,
             text_scale=_normalize_text_scale(text_scale),
         )
-        created_task = await db.get_task_by_id(task.get("id"))
+        created_task = await db.tasks.get_task_by_id(task.get("id"))
         return _serialize_bank_placement_task(created_task or task)
 

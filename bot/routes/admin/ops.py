@@ -10,9 +10,9 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_review_manage),
         db: Database = Depends(get_db),
     ):
-        sample = await db.get_latest_ops_health_sample()
+        sample = await db.ops.get_latest_health_sample()
         if sample is None:
-            db_ok = await db.probe_database()
+            db_ok = await db.ops.probe_database()
             window = metrics.get_window_stats(window_seconds=300)
             sample = {
                 "service_status": "healthy" if db_ok else "down",
@@ -25,7 +25,7 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
                 "collected_at": datetime.utcnow().isoformat(),
             }
 
-        open_incidents = await db.get_open_ops_incidents_count()
+        open_incidents = await db.ops.count_open_incidents()
         return {
             "service_status": sample.get("service_status") or "healthy",
             "database_status": sample.get("database_status") or "ok",
@@ -54,7 +54,7 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
         if normalized_step not in OPS_TIMESERIES_STEPS:
             raise HTTPException(status_code=400, detail="step must be one of 1m, 5m, 1h")
 
-        items = await db.get_ops_health_timeseries(
+        items = await db.ops.list_health_timeseries(
             range_sql=OPS_TIMESERIES_RANGES[normalized_range],
             step_seconds=OPS_TIMESERIES_STEPS[normalized_step],
         )
@@ -85,7 +85,7 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
         if offset < 0:
             raise HTTPException(status_code=400, detail="offset must be >= 0")
 
-        return await db.list_ops_incidents(
+        return await db.ops.list_incidents(
             status=normalized_status,
             severity=normalized_severity,
             limit=limit,
