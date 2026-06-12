@@ -122,4 +122,4 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error checking question answer: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")

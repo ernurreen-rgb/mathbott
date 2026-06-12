@@ -256,10 +256,11 @@ def setup_users_routes(app, db, limiter: Limiter):
         return result
 
     @app.get("/api/user/public/{identifier}")
-    async def get_public_user_profile(identifier: str):
+    @limiter.limit("30/minute")
+    async def get_public_user_profile(request: Request, identifier: str):
         """
         Get public user profile by ID (statistics and achievements)
-        Does not require authentication
+        Does not require authentication; rate limited to slow down profile enumeration
         Returns public data without email and is_admin
         
         **Example Request:**

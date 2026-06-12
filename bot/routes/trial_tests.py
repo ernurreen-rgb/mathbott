@@ -66,7 +66,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting trial tests: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/drafts")
     async def get_trial_test_draft_ids(
@@ -84,7 +84,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting trial test draft ids: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/{test_id}")
     async def get_trial_test_details(
@@ -166,7 +166,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             logger.error(f"Error getting trial test details: {e}", exc_info=True)
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
     
     @app.post("/api/trial-tests/{test_id}/submit")
     async def submit_trial_test(
@@ -282,7 +282,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error submitting trial test: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
     
     @app.get("/api/trial-tests/{test_id}/draft")
     async def get_trial_test_draft(
@@ -311,7 +311,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting trial test draft: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.put("/api/trial-tests/{test_id}/draft")
     async def save_trial_test_draft(
@@ -348,7 +348,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error saving trial test draft: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/{test_id}/results")
     async def get_trial_test_results(
@@ -376,4 +376,4 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting trial test results: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")

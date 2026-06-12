@@ -57,7 +57,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error creating report: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/reports")
     async def get_user_reports(
@@ -76,7 +76,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting user reports: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-test-reports")
     async def create_trial_test_report(
@@ -120,7 +120,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error creating trial test report: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-test-reports")
     async def get_user_trial_test_reports(
@@ -139,4 +139,4 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting user trial test reports: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")

@@ -102,7 +102,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error creating coop session: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/coop/session/{session_id}")
     async def get_coop_session(
@@ -164,7 +164,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting coop session: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-tests/{test_id}/coop/finish")
     async def finish_coop_session(
@@ -288,7 +288,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error finishing coop session: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/coop/session/{session_id}/results")
     async def get_coop_results(
@@ -330,7 +330,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error getting coop results: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-tests/{test_id}/coop/invite")
     async def invite_friend_to_coop(
@@ -374,7 +374,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error inviting friend to coop: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/coop/invites")
     async def get_coop_invites(
@@ -390,7 +390,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             return {"items": invites}
         except Exception as e:
             logger.error(f"Error getting coop invites: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-tests/coop/invites/{invite_id}/accept")
     async def accept_coop_invite(
@@ -431,7 +431,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error accepting coop invite: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-tests/coop/invites/{invite_id}/decline")
     async def decline_coop_invite(
@@ -455,7 +455,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error declining coop invite: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/coop/session/{session_id}/ws-token")
     async def get_coop_ws_token(
