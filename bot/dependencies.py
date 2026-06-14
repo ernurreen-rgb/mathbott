@@ -6,7 +6,6 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-import aiosqlite
 from fastapi import Depends, HTTPException, Query, Request
 from slowapi import Limiter
 
@@ -249,21 +248,3 @@ async def get_current_user(
         return None
     user = await db.users.get_user_by_email(email)
     return user
-
-
-async def get_db_connection(request: Request) -> aiosqlite.Connection:
-    db: Database = request.app.state.db
-
-    if db.connection_pool:
-        conn = await db.connection_pool.acquire()
-        if not hasattr(request.state, "db_connections"):
-            request.state.db_connections = []
-        request.state.db_connections.append(conn)
-        return conn
-
-    conn = await aiosqlite.connect(
-        db.db_path,
-        timeout=db.sqlite_timeout_seconds,
-    )
-    await db._configure_connection(conn)
-    return conn

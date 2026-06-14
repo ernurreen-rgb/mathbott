@@ -3,7 +3,6 @@ import "./globals.css";
 import "mathlive/static.css";
 import { Providers } from "./providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-// import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   title: "QazMath - математикаға дайындық платформасы",
@@ -21,8 +20,6 @@ export default function RootLayout({
         <ErrorBoundary>
           <Providers>
             {children}
-            {/* Temporarily disabled for debugging */}
-            {/* <ServiceWorkerRegistration /> */}
           </Providers>
         </ErrorBoundary>
       </body>

@@ -178,7 +178,7 @@ def setup_users_routes(app, db, limiter: Limiter):
                 if (today - last_streak_date).days > 1:
                     # Streak might need reset, but don't update here - let it update on next solve
                     pass
-            except:
+            except (ValueError, TypeError):
                 pass
         
         # Get user achievements (optionally refresh; default off for speed)

@@ -112,6 +112,17 @@ class ConnectionPool:
             await conn.close()
             return
 
+        # Roll back any transaction left open by a handler that errored before
+        # commit, so the connection is not reused with uncommitted state.
+        try:
+            await conn.rollback()
+        except Exception:
+            try:
+                await conn.close()
+            finally:
+                self._created = max(0, self._created - 1)
+            return
+
         try:
             self._pool.put_nowait(conn)
         except asyncio.QueueFull:
@@ -143,17 +154,7 @@ class ConnectionPool:
                     pass
             self._created = 0
         logger.info("Connection pool closed")
-    
-    async def __aenter__(self):
-        """Async context manager entry"""
-        return await self.acquire()
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
-        # Note: This won't work as expected since we need the connection
-        # This is just for interface compatibility
-        pass
-    
+
     def get_stats(self) -> dict:
         """Get pool statistics"""
         return {
