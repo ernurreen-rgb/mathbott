@@ -112,6 +112,18 @@ GOOGLE_CLIENT_SECRET=<google client secret>
 NEXT_PUBLIC_API_URL=/api/backend
 ```
 
+Optional build-time variable that controls the Content-Security-Policy
+`connect-src` allow-list (space-separated backend HTTP/WS origins). If unset
+it defaults to the current production topology in `next.config.js`:
+
+```env
+CSP_CONNECT_SRC=http://35.225.92.22 ws://35.225.92.22 https://qazmath.vercel.app wss://qazmath.vercel.app
+```
+
+`'unsafe-eval'` is excluded from the production CSP (only the Next.js dev
+server needs it). If a new client dependency requires it at runtime, prefer
+replacing the dependency over re-adding `'unsafe-eval'`.
+
 ## WebSocket Backend TLS
 
 Browser WebSocket traffic from the HTTPS frontend needs WSS, not plain WS. If live WebSocket features are enabled in production, expose the backend through TLS, for example:
