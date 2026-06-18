@@ -10,10 +10,11 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from migrations.runner import BASELINE_REVISION, run_migrations
+from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
+HEAD_REVISION = "0002_solo_trial_test_result_unique"
 
 
 def _load_baseline_ddl():
@@ -46,6 +47,11 @@ def _columns(path: str, table: str) -> set:
         return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _indexes(path: str) -> set:
+    with sqlite3.connect(path) as conn:
+        return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+
+
 def _stamped_revision(path: str) -> str:
     with sqlite3.connect(path) as conn:
         return conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
@@ -64,6 +70,9 @@ def test_fresh_database_gets_full_schema(tmp_path):
     assert "users" in tables
     assert "bank_tasks" in tables
     assert "alembic_version" in tables
+    assert "submit_mode" in _columns(path, "trial_test_results")
+    assert "uq_trial_test_results_solo_user_test" in _indexes(path)
+    assert _stamped_revision(path) == HEAD_REVISION
 
 
 @pytest.mark.asyncio
@@ -74,7 +83,7 @@ async def test_legacy_complete_database_is_stamped(tmp_path):
 
     run_migrations(path)
 
-    assert _stamped_revision(path) == BASELINE_REVISION
+    assert _stamped_revision(path) == HEAD_REVISION
     await _run_seeds_on(path)
 
 
@@ -96,7 +105,7 @@ async def test_legacy_database_missing_table_is_repaired(tmp_path):
     assert "bank_tasks" in tables
     assert "bank_task_versions" in tables
     assert "bank_task_topic_map" in tables
-    assert _stamped_revision(path) == BASELINE_REVISION
+    assert _stamped_revision(path) == HEAD_REVISION
 
     # startup data fix-ups must work on the repaired schema
     await _run_seeds_on(path)
@@ -122,7 +131,7 @@ async def test_legacy_database_missing_column_is_repaired(tmp_path):
     cols = _columns(path, "users")
     assert "admin_role" in cols
     assert "onboarding_completed" in cols
-    assert _stamped_revision(path) == BASELINE_REVISION
+    assert _stamped_revision(path) == HEAD_REVISION
     with sqlite3.connect(path) as conn:
         idx = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_users_admin_role'"
@@ -147,4 +156,4 @@ def test_migrated_database_upgrade_is_noop(tmp_path):
     run_migrations(path)
 
     assert _tables(path) == before
-    assert _stamped_revision(path) == BASELINE_REVISION
+    assert _stamped_revision(path) == HEAD_REVISION

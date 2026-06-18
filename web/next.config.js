@@ -2,13 +2,11 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 const isProduction = process.env.NODE_ENV === "production";
 
-// Extra connect-src origins (backend HTTP/WS, etc.) are environment-specific
+// Extra connect-src origins (backend HTTPS/WSS, etc.) are environment-specific
 // and must not be hard-coded. Provide them as a space-separated list via
-// CSP_CONNECT_SRC at build time. The defaults below match the current
-// production topology so existing deployments keep working if the env var
-// is unset; override it per environment.
+// CSP_CONNECT_SRC at build time.
 const defaultConnectSrc =
-  "http://35.225.92.22 ws://35.225.92.22 https://qazmath.vercel.app wss://qazmath.vercel.app";
+  "https://qazmath.vercel.app wss://qazmath.vercel.app";
 const extraConnectSrc = (process.env.CSP_CONNECT_SRC || defaultConnectSrc).trim();
 
 const connectSrc = [

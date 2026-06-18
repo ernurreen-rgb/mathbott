@@ -17,7 +17,7 @@ describe("trial-test-answer helpers", () => {
   it("counts progress from completed answers, not the current task position", () => {
     const tasks = [
       task(1, "input"),
-      task(2, "mcq", { answer: "[\"A\", \"C\"]" }),
+      task(2, "mcq", { correct_count: 2 }),
       task(3, "input"),
       task(4, "input"),
     ];
@@ -32,7 +32,7 @@ describe("trial-test-answer helpers", () => {
   });
 
   it("does not complete multi-answer MCQ until all required answers are selected", () => {
-    const multiAnswerTask = task(10, "mcq", { answer: "[\"B\", \"D\"]" });
+    const multiAnswerTask = task(10, "mcq", { correct_count: 2 });
 
     expect(isTrialTaskAnswerComplete(multiAnswerTask, JSON.stringify(["B"]))).toBe(false);
     expect(isTrialTaskAnswerComplete(multiAnswerTask, JSON.stringify(["B", "D"]))).toBe(true);

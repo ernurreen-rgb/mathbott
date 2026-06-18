@@ -13,6 +13,10 @@ from .bank_task_repository import BankTaskRepository
 logger = logging.getLogger(__name__)
 
 
+class TrialTestAlreadySubmitted(Exception):
+    """Raised when a solo trial test already has a saved result for the user."""
+
+
 class TrialTestRepository(BaseRepository):
     """Repository for trial test operations."""
 
@@ -448,13 +452,17 @@ class TrialTestRepository(BaseRepository):
             async with self._connection() as db:
                 db.row_factory = aiosqlite.Row
                 answers_json = json.dumps(answers)
-                await db.execute(
-                    """
-                    INSERT INTO trial_test_results (user_id, trial_test_id, score, total, percentage, answers)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (user_id, trial_test_id, score, total, percentage, answers_json),
-                )
+                try:
+                    await db.execute(
+                        """
+                        INSERT INTO trial_test_results
+                        (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
+                        VALUES (?, ?, ?, ?, ?, ?, 'solo')
+                        """,
+                        (user_id, trial_test_id, score, total, percentage, answers_json),
+                    )
+                except aiosqlite.IntegrityError as exc:
+                    raise TrialTestAlreadySubmitted() from exc
                 await db.commit()
                 async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
                     row = await cursor.fetchone()
@@ -474,6 +482,7 @@ class TrialTestRepository(BaseRepository):
         rewards: List[Dict[str, Any]],
         should_update_streak: bool,
         delete_draft: bool = True,
+        submit_mode: str = "solo",
     ) -> Dict[str, Any]:
         """Persist a trial-test submit in one transaction to minimize SQLite lock windows."""
 
@@ -484,13 +493,28 @@ class TrialTestRepository(BaseRepository):
                     await db.execute("BEGIN IMMEDIATE")
 
                     answers_json = json.dumps(answers)
-                    cursor = await db.execute(
-                        """
-                        INSERT INTO trial_test_results (user_id, trial_test_id, score, total, percentage, answers)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        (user_id, trial_test_id, score, total, percentage, answers_json),
-                    )
+                    normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
+                    try:
+                        cursor = await db.execute(
+                            """
+                            INSERT INTO trial_test_results
+                            (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                user_id,
+                                trial_test_id,
+                                score,
+                                total,
+                                percentage,
+                                answers_json,
+                                normalized_submit_mode,
+                            ),
+                        )
+                    except aiosqlite.IntegrityError as exc:
+                        if normalized_submit_mode == "solo":
+                            raise TrialTestAlreadySubmitted() from exc
+                        raise
                     result_id = int(cursor.lastrowid)
 
                     awarded_any = False

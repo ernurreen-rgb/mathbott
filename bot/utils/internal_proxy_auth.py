@@ -20,6 +20,8 @@ PROXY_NONCE_HEADER = "X-Proxy-Request-Nonce"
 PROXY_SIGNATURE_HEADER = "X-Proxy-Request-Signature"
 PROXY_SIGNATURE_V2_HEADER = "X-Proxy-Request-Signature-V2"
 PROXY_EMAIL_HEADER = "X-Proxy-User-Email"
+PROXY_BODY_SHA256_HEADER = "X-Proxy-Body-Sha256"
+PROXY_CONTENT_TYPE_HEADER = "X-Proxy-Content-Type"
 PROXY_SIGNATURE_TTL_SECONDS = 60
 WEBSOCKET_TOKEN_TTL_SECONDS = 120
 PRESENCE_WEBSOCKET_TOKEN_TTL_SECONDS = 120
@@ -45,6 +47,8 @@ def build_canonical_proxy_payload(
     user_email: str,
     timestamp: str,
     nonce: Optional[str] = None,
+    body_sha256: Optional[str] = None,
+    content_type: Optional[str] = None,
 ) -> bytes:
     parts = [
         str(method or "").upper(),
@@ -55,6 +59,9 @@ def build_canonical_proxy_payload(
     ]
     if nonce is not None:
         parts.append(str(nonce or ""))
+    if body_sha256 is not None:
+        parts.append(str(body_sha256 or ""))
+        parts.append(str(content_type or ""))
     return "\n".join(parts).encode("utf-8")
 
 
@@ -94,6 +101,8 @@ def _build_canonical_from_request(
     user_email: str,
     timestamp: str,
     nonce: Optional[str],
+    body_sha256: Optional[str],
+    content_type: Optional[str],
 ) -> bytes:
     raw_query = ""
     try:
@@ -107,7 +116,13 @@ def _build_canonical_from_request(
         user_email=user_email,
         timestamp=timestamp,
         nonce=nonce,
+        body_sha256=body_sha256,
+        content_type=content_type,
     )
+
+
+def _is_mutating_method(method: str) -> bool:
+    return str(method or "").upper() in {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def get_proxy_email(request: Request) -> Optional[str]:
@@ -191,8 +206,12 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     nonce = nonce_header or None
     legacy_signature = (request.headers.get(PROXY_SIGNATURE_HEADER) or "").strip()
     signature_v2 = (request.headers.get(PROXY_SIGNATURE_V2_HEADER) or "").strip()
+    body_sha256_header = (request.headers.get(PROXY_BODY_SHA256_HEADER) or "").strip().lower()
+    signed_content_type = (request.headers.get(PROXY_CONTENT_TYPE_HEADER) or "").strip().lower()
     signature = signature_v2 if nonce and signature_v2 else legacy_signature
     payload_nonce = nonce if nonce and signature_v2 else None
+    payload_body_sha256 = body_sha256_header if payload_nonce and body_sha256_header else None
+    payload_content_type = signed_content_type if payload_body_sha256 is not None else None
     if not timestamp or not signature:
         return False, None, "missing_headers"
 
@@ -218,8 +237,33 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     if abs(now - timestamp_int) > PROXY_SIGNATURE_TTL_SECONDS:
         return False, None, "timestamp_out_of_range"
 
+    settings = get_settings()
+    if settings.is_production and _is_mutating_method(request.method):
+        if not payload_nonce or not signature_v2:
+            return False, None, "v2_signature_required"
+        if not payload_body_sha256:
+            return False, None, "body_hash_required"
+
+    actual_body_sha256 = getattr(request.state, "_trusted_proxy_body_sha256", None)
+    if settings.is_production and _is_mutating_method(request.method) and actual_body_sha256 is None:
+        return False, None, "body_hash_unverified"
+    if payload_body_sha256 is not None and actual_body_sha256 is not None:
+        if not hmac.compare_digest(payload_body_sha256, str(actual_body_sha256).lower()):
+            return False, None, "invalid_body_hash"
+
+    actual_content_type = (request.headers.get("content-type") or "").strip().lower()
+    if payload_content_type is not None and not hmac.compare_digest(payload_content_type, actual_content_type):
+        return False, None, "invalid_content_type"
+
     user_email = get_proxy_email(request) or ""
-    payload = _build_canonical_from_request(request, user_email, timestamp, payload_nonce)
+    payload = _build_canonical_from_request(
+        request,
+        user_email,
+        timestamp,
+        payload_nonce,
+        payload_body_sha256,
+        payload_content_type,
+    )
     expected_signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_signature):
         return False, None, "invalid_signature"

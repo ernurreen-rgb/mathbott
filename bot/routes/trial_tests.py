@@ -10,7 +10,9 @@ from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.cache import cache
+from utils.public_payload import public_subquestions
 from utils.scoring import build_reward_identity
 from utils.validation import get_mcq_answer_count, normalize_task_answer_for_compare
 
@@ -144,7 +146,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         ),
                         "text_scale": t.get("text_scale", "md"),
                         "options": options,
-                        "subquestions": subquestions,
+                        "subquestions": public_subquestions(subquestions),
                         "image_filename": t.get("image_filename"),
                         "sort_order": t.get("sort_order", 0),
                     })
@@ -189,12 +191,19 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
-            
+
             tasks = await db.trial_tests.get_trial_test_tasks(test_id)
             if not tasks:
                 raise HTTPException(status_code=404, detail="No tasks found in trial test")
             
             async with _get_trial_test_write_lock(user["id"], test_id):
+                previous_results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=test_id)
+                if previous_results:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Trial test has already been submitted. Review the saved result instead.",
+                    )
+
                 results = {}
                 score = 0
                 total = len(tasks)
@@ -243,17 +252,24 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         }
                     )
 
-                submit_result = await db.trial_tests.submit_trial_test_attempt(
-                    user_id=user["id"],
-                    trial_test_id=test_id,
-                    score=score,
-                    total=total,
-                    percentage=percentage,
-                    answers=answers_for_db,
-                    rewards=rewards,
-                    should_update_streak=had_any_correct,
-                    delete_draft=True,
-                )
+                try:
+                    submit_result = await db.trial_tests.submit_trial_test_attempt(
+                        user_id=user["id"],
+                        trial_test_id=test_id,
+                        score=score,
+                        total=total,
+                        percentage=percentage,
+                        answers=answers_for_db,
+                        rewards=rewards,
+                        should_update_streak=had_any_correct,
+                        delete_draft=True,
+                        submit_mode="solo",
+                    )
+                except TrialTestAlreadySubmitted:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Trial test has already been submitted. Review the saved result instead.",
+                    )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
 
                 if submit_result.get("streak_milestone") and user.get("email"):

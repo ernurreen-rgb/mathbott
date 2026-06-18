@@ -120,20 +120,15 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=404, detail="Session not found")
 
             owner_id = session["owner_id"]
-            if user["id"] != owner_id:
-                if await db.friends.is_blocked_between(owner_id, user["id"]):
-                    raise HTTPException(status_code=403, detail="Friendship not allowed")
-                if not await db.friends.are_friends(owner_id, user["id"]):
-                    await db.friends.create_friendship(owner_id, user["id"])
-                    await db.friends.create_friend_request(owner_id, user["id"], status="accepted")
-
             participant = await db.trial_test_coop.get_participant(session_id, user["id"])
             participants = await db.trial_test_coop.list_participants(session_id)
+            if not participant and user["id"] != owner_id:
+                raise HTTPException(status_code=403, detail="Not a participant")
+
             if not participant:
                 if len(participants) >= 2:
                     raise HTTPException(status_code=400, detail="Session is full")
-                color = "red" if user["id"] == owner_id else "blue"
-                participant = await db.trial_test_coop.add_participant(session_id, user["id"], color)
+                participant = await db.trial_test_coop.add_participant(session_id, user["id"], "red")
                 participants = await db.trial_test_coop.list_participants(session_id)
 
             user_answers_rows = await db.trial_test_coop.list_answers_for_user(session_id, user["id"])
@@ -251,6 +246,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 rewards=rewards,
                 should_update_streak=had_any_correct,
                 delete_draft=False,
+                submit_mode="coop",
             )
 
             if submit_result.get("streak_milestone") and user.get("email"):
@@ -417,6 +413,10 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             # Check if session is still active
             if session.get("status") != "active":
                 raise HTTPException(status_code=400, detail="Session is not active")
+
+            participants = await db.trial_test_coop.list_participants(session_id)
+            if not await db.trial_test_coop.get_participant(session_id, user["id"]) and len(participants) >= 2:
+                raise HTTPException(status_code=400, detail="Session is full")
 
             # Add participant with blue color
             await db.trial_test_coop.add_participant(session_id, user["id"], "blue")

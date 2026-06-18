@@ -18,7 +18,98 @@ async def test_get_task_by_id(client, test_db, test_user):
     data = response.json()
     assert data["id"] == task["id"]
     assert data["text"] == "What is 2+2?"
-    assert "answer" in data
+    assert "answer" not in data
+
+
+@pytest.mark.asyncio
+async def test_get_task_by_id_strips_question_solution_fields(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Question Leak Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Question Leak Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Composite task",
+        "unused",
+        test_user["id"],
+        questions=[
+            {
+                "text": "Part 1",
+                "answer": "4",
+                "correct": "4",
+                "solution": "Add two and two.",
+                "choices": [{"text": "4", "correct": True}],
+            }
+        ],
+    )
+
+    response = client.get(f"/api/tasks/{task['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["questions"] == [
+        {
+            "text": "Part 1",
+            "choices": [{"text": "4"}],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_task_questions_hide_answers_and_award_once(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Question Flow Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Question Flow Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Two-part task",
+        "unused",
+        test_user["id"],
+        questions=[
+            {"text": "First part", "answer": "alpha"},
+            {"text": "Second part", "answer": "beta"},
+        ],
+        bank_difficulty="A",
+    )
+
+    list_response = client.get(
+        f"/api/tasks/{task['id']}/questions",
+        params={"email": test_user["email"]},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {"index": 0, "text": "First part", "completed": False},
+        {"index": 1, "text": "Second part", "completed": False},
+    ]
+
+    first = client.post(
+        f"/api/tasks/{task['id']}/questions/check",
+        data={"question_index": 0, "answer": "alpha", "email": test_user["email"]},
+    )
+    assert first.status_code == 200
+    assert first.json()["all_completed"] is False
+
+    second = client.post(
+        f"/api/tasks/{task['id']}/questions/check",
+        data={"question_index": 1, "answer": "beta", "email": test_user["email"]},
+    )
+    assert second.status_code == 200
+    assert second.json()["all_completed"] is True
+
+    user_after_completion = await test_db.users.get_user_by_email(test_user["email"])
+    assert user_after_completion["total_points"] == 10
+    assert user_after_completion["week_points"] == 10
+    assert user_after_completion["total_solved"] == 1
+    assert user_after_completion["week_solved"] == 1
+
+    repeat = client.post(
+        f"/api/tasks/{task['id']}/questions/check",
+        data={"question_index": 1, "answer": "beta", "email": test_user["email"]},
+    )
+    assert repeat.status_code == 200
+    assert repeat.json()["all_completed"] is True
+
+    user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
+    assert user_after_repeat["total_points"] == 10
+    assert user_after_repeat["week_points"] == 10
+    assert user_after_repeat["total_solved"] == 1
+    assert user_after_repeat["week_solved"] == 1
 
 
 def test_get_task_by_id_not_found(client):

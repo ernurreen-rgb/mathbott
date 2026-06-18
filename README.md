@@ -112,12 +112,12 @@ APP_DOMAIN=your-domain.example
 FRONTEND_BIND_PORT=3001
 
 NEXTAUTH_URL=https://your-domain.example
-NEXTAUTH_SECRET=replace-with-a-random-secret
+NEXTAUTH_SECRET=<strong random secret, at least 32 chars>
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-INTERNAL_PROXY_SHARED_SECRET=replace-with-a-random-secret
+INTERNAL_PROXY_SHARED_SECRET=<strong random secret, at least 32 chars>
 ADMIN_EMAIL=admin@example.com
 
 ALLOWED_ORIGINS=https://your-domain.example

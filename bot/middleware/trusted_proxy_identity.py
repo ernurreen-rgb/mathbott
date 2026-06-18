@@ -4,6 +4,7 @@ Production guard for user identity forwarded by the trusted Next.js proxy.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 from typing import Iterable, Optional
 from urllib.parse import parse_qs, unquote
@@ -14,11 +15,17 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from settings import get_settings
-from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
+from utils.internal_proxy_auth import (
+    PROXY_BODY_SHA256_HEADER,
+    has_proxy_signature_headers,
+    verify_proxy_signature,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_IDENTITY_BODY_BYTES = 1024 * 1024
+MAX_SIGNED_BODY_BYTES = 10 * 1024 * 1024
+_MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def _get_environment() -> str:
@@ -139,33 +146,9 @@ class TrustedProxyIdentityMiddleware:
         is_valid_proxy = False
         proxy_email: Optional[str] = None
 
-        if has_signature:
-            is_valid_proxy, proxy_email, error_code = verify_proxy_signature(request)
-            if not is_valid_proxy:
-                logger.warning("Invalid trusted proxy signature: %s %s %s", path, error_code, proxy_email)
-                response = JSONResponse(
-                    {"detail": "Invalid trusted proxy signature."},
-                    status_code=401,
-                )
-                await response(scope, receive, send)
-                return
-
         environment = _get_environment()
         explicit_query_email = _extract_query_email(scope)
         explicit_path_email = _private_email_from_path(path)
-
-        if environment == "production" and (
-            _is_sensitive_identity_path(path)
-            or explicit_query_email is not None
-            or explicit_path_email is not None
-        ):
-            if not is_valid_proxy or not proxy_email:
-                response = JSONResponse(
-                    {"detail": "Trusted proxy authentication required."},
-                    status_code=401,
-                )
-                await response(scope, receive, send)
-                return
 
         should_inspect_body = (
             "application/json" in content_type
@@ -173,11 +156,21 @@ class TrustedProxyIdentityMiddleware:
         )
         # In production, signed proxy requests already passed the trusted identity boundary.
         # Avoid buffering large bodies on hot paths such as admin imports.
-        should_inspect_body = should_inspect_body and not (environment == "production" and is_valid_proxy)
+        should_inspect_body = should_inspect_body and not (
+            environment == "production"
+            and has_signature
+            and headers.get(PROXY_BODY_SHA256_HEADER)
+        )
+        should_verify_signed_body = bool(
+            has_signature
+            and request.method.upper() in _MUTATING_METHODS
+            and headers.get(PROXY_BODY_SHA256_HEADER)
+        )
 
         body = b""
         replay_receive = receive
-        if should_inspect_body:
+        if should_inspect_body or should_verify_signed_body:
+            max_body_bytes = MAX_SIGNED_BODY_BYTES if should_verify_signed_body else MAX_IDENTITY_BODY_BYTES
             body_messages: list[Message] = []
             more_body = True
             while more_body:
@@ -186,7 +179,7 @@ class TrustedProxyIdentityMiddleware:
                 if message["type"] != "http.request":
                     break
                 body += message.get("body", b"")
-                if len(body) > MAX_IDENTITY_BODY_BYTES:
+                if len(body) > max_body_bytes:
                     response = JSONResponse(
                         {"detail": "Request body is too large for identity validation."},
                         status_code=413,
@@ -201,6 +194,19 @@ class TrustedProxyIdentityMiddleware:
                 return {"type": "http.disconnect"}
 
             replay_receive = _replay_receive
+
+            request.state._trusted_proxy_body_sha256 = hashlib.sha256(body).hexdigest()
+
+        if has_signature:
+            is_valid_proxy, proxy_email, error_code = verify_proxy_signature(request)
+            if not is_valid_proxy:
+                logger.warning("Invalid trusted proxy signature: %s %s %s", path, error_code, proxy_email)
+                response = JSONResponse(
+                    {"detail": "Invalid trusted proxy signature."},
+                    status_code=401,
+                )
+                await response(scope, replay_receive, send)
+                return
 
         explicit_emails = [
             explicit_query_email,

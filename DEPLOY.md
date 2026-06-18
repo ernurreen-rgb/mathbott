@@ -6,8 +6,8 @@ Current production topology:
 - Production frontend: `https://qazmath.vercel.app`
 - Backend: FastAPI + SQLite in `bot`, deployed manually on the Google Cloud VPS with Docker Compose.
 - Backend VPS path: `/opt/mathbott`
-- Public backend HTTP endpoint: `http://35.225.92.22`
-- Health endpoint: `http://35.225.92.22/api/health`
+- Public backend HTTPS endpoint: `https://<backend-domain>`
+- Health endpoint: `https://<backend-domain>/api/health`
 
 The Vercel frontend calls backend HTTP APIs through the same-origin proxy:
 
@@ -18,7 +18,7 @@ https://qazmath.vercel.app/api/backend/...
 The proxy forwards to:
 
 ```text
-http://35.225.92.22/api/...
+https://<backend-domain>/api/...
 ```
 
 ## Frontend Deploy
@@ -103,7 +103,7 @@ ADMIN_EMAIL=<admin email>
 Vercel production environment should include:
 
 ```env
-BACKEND_URL=http://35.225.92.22
+BACKEND_URL=https://<backend-domain>
 INTERNAL_PROXY_SHARED_SECRET=<same strong secret as backend>
 NEXTAUTH_URL=https://qazmath.vercel.app
 NEXTAUTH_SECRET=<strong random secret>
@@ -113,11 +113,11 @@ NEXT_PUBLIC_API_URL=/api/backend
 ```
 
 Optional build-time variable that controls the Content-Security-Policy
-`connect-src` allow-list (space-separated backend HTTP/WS origins). If unset
-it defaults to the current production topology in `next.config.js`:
+`connect-src` allow-list (space-separated backend HTTPS/WSS origins). If unset,
+it defaults to the same-origin frontend entries in `next.config.js`:
 
 ```env
-CSP_CONNECT_SRC=http://35.225.92.22 ws://35.225.92.22 https://qazmath.vercel.app wss://qazmath.vercel.app
+CSP_CONNECT_SRC=https://<backend-domain> wss://<backend-domain> https://qazmath.vercel.app wss://qazmath.vercel.app
 ```
 
 `'unsafe-eval'` is excluded from the production CSP (only the Next.js dev

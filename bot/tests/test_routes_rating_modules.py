@@ -159,6 +159,42 @@ async def test_get_lesson_details(client, test_db):
     assert "mini_lessons" in data
 
 
+@pytest.mark.asyncio
+async def test_get_lesson_details_strips_subquestion_answers(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Lesson Leak Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Lesson Leak Section", sort_order=1)
+    lesson = await test_db.curriculum.create_lesson(
+        section["id"], lesson_number=1, title="Lesson Leak", sort_order=1
+    )
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
+    await test_db.create_task_in_mini_lesson(
+        mini_lessons[0]["id"],
+        "Composite lesson task",
+        "unused",
+        test_user["id"],
+        subquestions=[
+            {
+                "text": "Subquestion",
+                "answer": "secret",
+                "correct": "secret",
+                "solution": "Hidden solution",
+                "choices": [{"text": "secret", "correct": True}],
+            }
+        ],
+    )
+
+    response = client.get(f"/api/lessons/{lesson['id']}")
+
+    assert response.status_code == 200
+    task = response.json()["mini_lessons"][0]["tasks"][0]
+    assert task["subquestions"] == [
+        {
+            "text": "Subquestion",
+            "choices": [{"text": "secret"}],
+        }
+    ]
+
+
 def test_get_lesson_details_not_found(client):
     """Test getting non-existent lesson"""
     response = client.get("/api/lessons/99999")

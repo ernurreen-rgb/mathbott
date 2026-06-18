@@ -6,6 +6,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from models.requests import TaskCheckRequest
+from utils.public_payload import strip_solution_fields
 from utils.validation import normalize_task_answer_for_compare
 from utils.cache import cache
 
@@ -28,8 +29,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             "id": task["id"],
             "text": task["text"],
             "text_scale": task.get("text_scale", "md"),
-            "answer": task.get("answer"),
-            "questions": questions,
+            "questions": strip_solution_fields(questions),
             "task_type": task.get("task_type", "standard"),
             "section_id": task.get("section_id")
         }
@@ -148,4 +148,3 @@ def setup_tasks_routes(app, db, limiter: Limiter):
         except Exception as e:
             logger.error(f"Error checking task answer: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
-

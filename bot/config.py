@@ -8,6 +8,11 @@ from dotenv import load_dotenv
 from settings import DEFAULT_ADMIN_SECRET, get_settings
 
 logger = logging.getLogger(__name__)
+KNOWN_PLACEHOLDER_SECRETS = {
+    "replace-with-a-random-32-char-secret",
+    "dev-internal-proxy-secret-change-me",
+    "dev-secret-key-change-in-production",
+}
 
 
 def load_environment():
@@ -37,6 +42,8 @@ def validate_configuration():
     if settings.is_production:
         if not settings.internal_proxy_shared_secret or len(settings.internal_proxy_shared_secret) < 32:
             errors.append("INTERNAL_PROXY_SHARED_SECRET must be set in production (minimum 32 characters)")
+        elif settings.internal_proxy_shared_secret in KNOWN_PLACEHOLDER_SECRETS:
+            errors.append("INTERNAL_PROXY_SHARED_SECRET must not use a documented placeholder value")
         else:
             logger.info("INTERNAL_PROXY_SHARED_SECRET is configured (production mode)")
     else:

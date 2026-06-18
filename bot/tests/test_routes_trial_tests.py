@@ -1,5 +1,11 @@
 """Route tests: trial tests."""
+import asyncio
+
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from dependencies import get_db
+from main import app
 from routes.presence import PresenceConnectionManager
 from utils.internal_proxy_auth import verify_presence_ws_token, verify_ws_token
 from tests.route_helpers import _FakePresenceWebSocket
@@ -78,17 +84,83 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
     assert user_after_first["week_solved"] == 3
 
     second = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
-    assert second.status_code == 200
-    second_json = second.json()
-    assert second_json["score"] == 3
-    assert second_json["total"] == 3
-    assert second_json["percentage"] == 100.0
+    assert second.status_code == 409
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 45
     assert user_after_second["week_points"] == 45
     assert user_after_second["total_solved"] == 3
     assert user_after_second["week_solved"] == 3
+
+
+@pytest.mark.asyncio
+async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test_user):
+    trial_test = await test_db.trial_tests.create_trial_test("Concurrent Trial", sort_order=0, created_by=test_user["id"])
+    trial_task = await test_db.trial_tests.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Task",
+        answer="42",
+        created_by=test_user["id"],
+        sort_order=0,
+    )
+
+    async def override_get_db():
+        return test_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+            payload = {"email": test_user["email"], "answers": {str(trial_task["id"]): "42"}}
+            first, second = await asyncio.gather(
+                async_client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload),
+                async_client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload),
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    statuses = sorted([first.status_code, second.status_code])
+    assert statuses == [200, 409]
+
+    results = await test_db.trial_tests.get_user_trial_test_results(test_user["id"], trial_test_id=trial_test["id"])
+    assert len(results) == 1
+
+    user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
+    assert user_after_submit["total_points"] == 15
+    assert user_after_submit["week_points"] == 15
+    assert user_after_submit["total_solved"] == 1
+    assert user_after_submit["week_solved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trial_test_details_strip_subquestion_answers(client, test_db, test_user):
+    trial_test = await test_db.trial_tests.create_trial_test("Leak Trial", sort_order=0, created_by=test_user["id"])
+    await test_db.trial_tests.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Composite trial task",
+        answer="unused",
+        created_by=test_user["id"],
+        sort_order=0,
+        subquestions=[
+            {
+                "text": "Subquestion",
+                "answer": "42",
+                "correct": "42",
+                "solution": "Hidden solution",
+                "choices": [{"text": "42", "correct": True}],
+            }
+        ],
+    )
+
+    response = client.get(f"/api/trial-tests/{trial_test['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["tasks"][0]["subquestions"] == [
+        {
+            "text": "Subquestion",
+            "choices": [{"text": "42"}],
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -260,6 +332,23 @@ async def test_coop_ws_token_requires_participant(client, test_db, test_user):
         params={"email": outsider["email"]},
     )
     assert outsider_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_coop_session_get_requires_existing_participant(client, test_db, test_user):
+    trial_test = await test_db.trial_tests.create_trial_test("Coop Direct Join Trial", sort_order=0, created_by=test_user["id"])
+    session = await test_db.trial_test_coop.create_session(trial_test["id"], test_user["id"])
+    await test_db.trial_test_coop.add_participant(session["id"], test_user["id"], "red")
+    outsider = await test_db.users.create_user_by_email("coop-direct-outsider@example.com")
+
+    response = client.get(
+        f"/api/trial-tests/coop/session/{session['id']}",
+        params={"email": outsider["email"]},
+    )
+
+    assert response.status_code == 403
+    assert await test_db.trial_test_coop.get_participant(session["id"], outsider["id"]) is None
+    assert await test_db.friends.are_friends(test_user["id"], outsider["id"]) is False
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import logging
 from typing import Optional, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from utils.cache import cache
+from utils.public_payload import public_subquestions
 from utils.validation import get_mcq_answer_count
 
 logger = logging.getLogger(__name__)
@@ -279,7 +280,7 @@ def setup_modules_routes(app, db, limiter):
                     ),
                     "text_scale": t.get("text_scale", "md"),
                     "options": options,
-                    "subquestions": subquestions,
+                    "subquestions": public_subquestions(subquestions),
                     "sort_order": t.get("sort_order", 0),
                     "status": task_progress.get(t["id"], "not_started")
                 })
@@ -303,4 +304,3 @@ def setup_modules_routes(app, db, limiter):
             "progress": lesson_progress,
             "mini_lessons": result_mini
         }
-

@@ -2,13 +2,14 @@
 Task questions роуты
 """
 import logging
-import aiosqlite
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Form, Request, Depends
 from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from utils.cache import cache
+from utils.scoring import build_reward_identity
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,6 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             result.append({
                 "index": i,
                 "text": question.get("text", ""),
-                "answer": question.get("answer", ""),
                 "completed": user_progress.get(i, False)
             })
         
@@ -83,28 +83,28 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             if all_completed:
                 # Mark task as completed
                 await db.progress.update_task_progress(user["id"], task_id, "completed")
-                # Update user stats (similar to record_solution)
-                async with aiosqlite.connect(db.db_path) as db_conn:
-                    await db_conn.execute(
-                        """UPDATE users SET
-                           total_solved = total_solved + 1,
-                           week_solved = week_solved + 1,
-                           week_points = week_points + 10,
-                           total_points = total_points + 10,
-                           last_active = CURRENT_TIMESTAMP
-                           WHERE id = ?""",
-                        (user["id"],)
-                    )
-                    await db_conn.commit()
-                # Update streak and achievements
-                try:
-                    await db.users.update_streak(user["id"])
-                except Exception as e:
-                    logger.error(f"Failed to update streak: {e}", exc_info=True)
-                try:
-                    await db.check_and_unlock_achievements(user["id"])
-                except Exception as e:
-                    logger.error(f"Failed to check achievements: {e}", exc_info=True)
+                reward = build_reward_identity(task, surface="module")
+                award_result = await db.users.award_task_reward_once(
+                    user_id=user["id"],
+                    reward_key=reward["reward_key"],
+                    bank_task_id=reward["bank_task_id"],
+                    difficulty=reward["difficulty"],
+                    points=reward["points"],
+                    source="module",
+                    source_ref_id=task_id,
+                )
+                cache.invalidate_pattern(f"user:stats:{email}")
+                cache.invalidate_pattern(f"modules:map:{email}")
+                cache.invalidate_pattern("rating:")
+                if award_result.get("awarded"):
+                    try:
+                        await db.users.update_streak(user["id"])
+                    except Exception as e:
+                        logger.error(f"Failed to update streak: {e}", exc_info=True)
+                    try:
+                        await db.check_and_unlock_achievements(user["id"])
+                    except Exception as e:
+                        logger.error(f"Failed to check achievements: {e}", exc_info=True)
             
             questions = await db.progress.get_task_questions(task_id)
             correct_answer = None

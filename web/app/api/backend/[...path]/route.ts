@@ -2,7 +2,7 @@
  * Next.js API route that proxies requests to the FastAPI backend.
  * It is the trusted boundary for backend admin access in production.
  */
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
@@ -12,6 +12,10 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const INTERNAL_PROXY_SHARED_SECRET =
   process.env.INTERNAL_PROXY_SHARED_SECRET?.trim() ||
   (IS_PRODUCTION ? "" : "dev-internal-proxy-secret-change-me");
+const KNOWN_PROXY_PLACEHOLDER_SECRETS = new Set([
+  "replace-with-a-random-32-char-secret",
+  "dev-internal-proxy-secret-change-me",
+]);
 
 const STRIP_REQUEST_HEADERS = new Set([
   "authorization",
@@ -22,6 +26,8 @@ const STRIP_REQUEST_HEADERS = new Set([
   "x-proxy-request-ts",
   "x-proxy-request-signature",
   "x-proxy-user-email",
+  "x-proxy-body-sha256",
+  "x-proxy-content-type",
 ]);
 
 export async function GET(
@@ -89,6 +95,8 @@ function buildProxySignature({
   userEmail,
   timestamp,
   nonce,
+  bodySha256,
+  contentType,
 }: {
   method: string;
   path: string;
@@ -96,6 +104,8 @@ function buildProxySignature({
   userEmail: string;
   timestamp: string;
   nonce?: string;
+  bodySha256?: string;
+  contentType?: string;
 }): string {
   const canonicalPayloadParts = [
     method.toUpperCase(),
@@ -107,10 +117,53 @@ function buildProxySignature({
   if (nonce !== undefined) {
     canonicalPayloadParts.push(nonce);
   }
+  if (bodySha256 !== undefined) {
+    canonicalPayloadParts.push(bodySha256);
+    canonicalPayloadParts.push(contentType || "");
+  }
   const canonicalPayload = canonicalPayloadParts.join("\n");
   return createHmac("sha256", INTERNAL_PROXY_SHARED_SECRET)
     .update(canonicalPayload, "utf8")
     .digest("hex");
+}
+
+async function prepareBodyForProxy(
+  body: BodyInit | undefined,
+  contentType: string,
+  method: string
+): Promise<{ body: BodyInit | undefined; bodySha256?: string; contentType: string }> {
+  if (!isMutatingMethod(method)) {
+    return { body, contentType };
+  }
+
+  if (body instanceof FormData) {
+    const serialized = new Request("http://internal.local", {
+      method,
+      body,
+    });
+    const buffer = Buffer.from(await serialized.arrayBuffer());
+    const serializedContentType = serialized.headers.get("content-type") || contentType;
+    return {
+      body: buffer,
+      bodySha256: createHash("sha256").update(buffer).digest("hex"),
+      contentType: serializedContentType,
+    };
+  }
+
+  const bodyBytes =
+    typeof body === "string"
+      ? Buffer.from(body, "utf8")
+      : body instanceof Buffer
+        ? body
+        : body
+          ? Buffer.from(await new Response(body).arrayBuffer())
+          : Buffer.alloc(0);
+
+  return {
+    body,
+    bodySha256: createHash("sha256").update(bodyBytes).digest("hex"),
+    contentType,
+  };
 }
 
 async function getProxyUserEmail(request: NextRequest): Promise<string | null> {
@@ -221,6 +274,12 @@ async function proxyRequest(
     if (IS_PRODUCTION && !INTERNAL_PROXY_SHARED_SECRET) {
       return NextResponse.json(
         { detail: "INTERNAL_PROXY_SHARED_SECRET is not configured" },
+        { status: 500 }
+      );
+    }
+    if (IS_PRODUCTION && KNOWN_PROXY_PLACEHOLDER_SECRETS.has(INTERNAL_PROXY_SHARED_SECRET)) {
+      return NextResponse.json(
+        { detail: "INTERNAL_PROXY_SHARED_SECRET must not use a documented placeholder value" },
         { status: 500 }
       );
     }
@@ -343,7 +402,14 @@ async function proxyRequest(
       headers.set(key, value);
     });
 
-    if (contentType.includes("application/json") && body) {
+    const preparedBody = await prepareBodyForProxy(body, contentType, request.method);
+    body = preparedBody.body;
+    const signedBodySha256 = preparedBody.bodySha256;
+    const signedContentType = (preparedBody.contentType || "").toLowerCase();
+
+    if (signedContentType) {
+      headers.set("Content-Type", signedContentType);
+    } else if (contentType.includes("application/json") && body) {
       headers.set("Content-Type", "application/json");
     }
 
@@ -364,11 +430,17 @@ async function proxyRequest(
         userEmail: proxyUserEmail,
         timestamp,
         nonce,
+        bodySha256: signedBodySha256,
+        contentType: signedBodySha256 ? signedContentType : undefined,
       });
       headers.set("X-Proxy-Request-Ts", timestamp);
       headers.set("X-Proxy-Request-Nonce", nonce);
       headers.set("X-Proxy-Request-Signature", legacySignature);
       headers.set("X-Proxy-Request-Signature-V2", signatureV2);
+      if (signedBodySha256) {
+        headers.set("X-Proxy-Body-Sha256", signedBodySha256);
+        headers.set("X-Proxy-Content-Type", signedContentType);
+      }
       if (proxyUserEmail) {
         headers.set("X-Proxy-User-Email", proxyUserEmail);
       }

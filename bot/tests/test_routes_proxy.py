@@ -1,4 +1,6 @@
 """Route tests: proxy."""
+import json
+
 import pytest
 from tests.route_helpers import _extract_http_detail, _legacy_proxy_headers, _proxy_headers
 
@@ -85,23 +87,124 @@ async def test_trusted_proxy_identity_allows_nickname_endpoint(client, test_db, 
     secret = "test-shared-secret"
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
-
-    response = client.post(
-        "/api/user/web/nickname",
-        headers=_proxy_headers(
-            "POST",
-            "/api/user/web/nickname",
-            "",
-            test_user["email"],
-            secret,
-        ),
-        json={
+    body = json.dumps(
+        {
             "email": test_user["email"],
             "nickname": "ProxyNick",
         },
+        separators=(",", ":"),
+    )
+
+    response = client.post(
+        "/api/user/web/nickname",
+        headers={
+            **_proxy_headers(
+                "POST",
+                "/api/user/web/nickname",
+                "",
+                test_user["email"],
+                secret,
+                body=body,
+                content_type="application/json",
+            ),
+            "Content-Type": "application/json",
+        },
+        content=body,
     )
 
     assert response.status_code == 200
     assert response.json()["success"] is True
     user = await test_db.users.get_user_by_email(test_user["email"])
     assert user["nickname"] == "ProxyNick"
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_identity_rejects_body_tampering(client, test_db, test_user, monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    signed_body = json.dumps(
+        {"email": test_user["email"], "nickname": "SignedNick"},
+        separators=(",", ":"),
+    )
+    tampered_body = json.dumps(
+        {"email": test_user["email"], "nickname": "TamperedNick"},
+        separators=(",", ":"),
+    )
+
+    response = client.post(
+        "/api/user/web/nickname",
+        headers={
+            **_proxy_headers(
+                "POST",
+                "/api/user/web/nickname",
+                "",
+                test_user["email"],
+                secret,
+                body=signed_body,
+                content_type="application/json",
+            ),
+            "Content-Type": "application/json",
+        },
+        content=tampered_body,
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_identity_rejects_legacy_mutating_signature(client, test_user, monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    body = json.dumps(
+        {"email": test_user["email"], "nickname": "LegacyNick"},
+        separators=(",", ":"),
+    )
+
+    response = client.post(
+        "/api/user/web/nickname",
+        headers={
+            **_legacy_proxy_headers(
+                "POST",
+                "/api/user/web/nickname",
+                "",
+                test_user["email"],
+                secret,
+            ),
+            "Content-Type": "application/json",
+        },
+        content=body,
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_identity_rejects_content_type_tampering(client, test_user, monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    body = json.dumps(
+        {"email": test_user["email"], "nickname": "ContentTypeNick"},
+        separators=(",", ":"),
+    )
+
+    response = client.post(
+        "/api/user/web/nickname",
+        headers={
+            **_proxy_headers(
+                "POST",
+                "/api/user/web/nickname",
+                "",
+                test_user["email"],
+                secret,
+                body=body,
+                content_type="application/json",
+            ),
+            "Content-Type": "text/plain",
+        },
+        content=body,
+    )
+
+    assert response.status_code == 401
