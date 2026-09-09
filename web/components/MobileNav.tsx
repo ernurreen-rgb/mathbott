@@ -115,7 +115,11 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     });
   }
 
-  const gridCols = navItems.length === 4 ? "grid-cols-4" : "grid-cols-5";
+  const gridCols = navItems.length >= 6
+    ? "grid-cols-6"
+    : navItems.length === 4
+      ? "grid-cols-4"
+      : "grid-cols-5";
 
   return (
     <nav 

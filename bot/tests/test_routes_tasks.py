@@ -144,6 +144,146 @@ async def test_check_task_answer_correct(client, test_db, test_user):
 
 
 @pytest.mark.asyncio
+async def test_check_task_accepts_equivalent_written_numeric_answer(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Numeric Answer Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Numeric Answer Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"], "Write one half", r"\frac{1}{2}", test_user["id"]
+    )
+
+    response = client.post(
+        "/api/task/check",
+        json={
+            "task_id": task["id"],
+            "answer": "0,5",
+            "email": test_user["email"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["correct"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_task_accepts_equivalent_written_algebraic_answer(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Algebraic Answer Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Algebraic Answer Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"], "Factor the expression", "x^2-1", test_user["id"]
+    )
+
+    response = client.post(
+        "/api/task/check",
+        json={
+            "task_id": task["id"],
+            "answer": "(x-1)(x+1)",
+            "email": test_user["email"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["correct"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_task_accepts_equivalent_written_solution_set(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Solution Set Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Solution Set Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Write the solution set",
+        r"x\in\mathbb{R},x\ne1",
+        test_user["id"],
+    )
+
+    response = client.post(
+        "/api/task/check",
+        json={
+            "task_id": task["id"],
+            "answer": "x≠1; x∈ℝ",
+            "email": test_user["email"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["correct"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_task_accepts_configured_alternative_without_exposing_it(client, test_db, test_user):
+    module = await test_db.curriculum.create_module("Alternative Answer Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Alternative Answer Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Write the answer",
+        "x=1",
+        test_user["id"],
+        question_type="input",
+        accepted_answers=["бір"],
+    )
+
+    public_task = client.get(f"/api/tasks/{task['id']}")
+    response = client.post(
+        "/api/task/check",
+        json={"task_id": task["id"], "answer": "Бір", "email": test_user["email"]},
+    )
+
+    assert public_task.status_code == 200
+    assert "accepted_answers" not in public_task.json()
+    assert response.status_code == 200
+    assert response.json()["correct"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_mcq_accepts_written_option_value(client, test_db, test_user):
+    """Students can write the answer while legacy MCQ labels remain compatible."""
+    module = await test_db.curriculum.create_module("Written MCQ Module", sort_order=1)
+    section = await test_db.curriculum.create_section(module["id"], "Written MCQ Section", sort_order=1)
+    task = await test_db.create_task_in_section(
+        section["id"],
+        "Find the value",
+        "A",
+        test_user["id"],
+        question_type="mcq",
+        options=[
+            {"label": "A", "text": r"\text{-}\frac{16}{25}"},
+            {"label": "B", "text": r"\frac{16}{25}"},
+            {"label": "C", "text": "1"},
+            {"label": "D", "text": "2"},
+        ],
+    )
+
+    written = client.post(
+        "/api/task/check",
+        json={
+            "task_id": task["id"],
+            "answer": r"-\frac{16}{25}",
+            "email": test_user["email"],
+        },
+    )
+    assert written.status_code == 200
+    assert written.json()["correct"] is True
+
+    equivalent_decimal = client.post(
+        "/api/task/check",
+        json={
+            "task_id": task["id"],
+            "answer": "-0.64",
+            "email": test_user["email"],
+        },
+    )
+    assert equivalent_decimal.status_code == 200
+    assert equivalent_decimal.json()["correct"] is True
+
+    legacy_label = client.post(
+        "/api/task/check",
+        json={"task_id": task["id"], "answer": "A", "email": test_user["email"]},
+    )
+    assert legacy_label.status_code == 200
+    assert legacy_label.json()["correct"] is True
+
+
+@pytest.mark.asyncio
 async def test_check_task_answer_incorrect(client, test_db, test_user):
     """Test checking incorrect answer"""
     # Create task

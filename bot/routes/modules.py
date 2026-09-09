@@ -6,7 +6,7 @@ from typing import Optional, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from utils.cache import cache
 from utils.public_payload import public_subquestions
-from utils.validation import get_mcq_answer_count
+from utils.validation import get_mcq_answer_count, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +273,7 @@ def setup_modules_routes(app, db, limiter):
                     "id": t["id"],
                     "text": t.get("text", ""),
                     "question_type": t.get("question_type", "input"),
+                    "answer_mode": normalize_answer_mode(t.get("answer_mode"), t.get("question_type")),
                     "correct_count": (
                         get_mcq_answer_count(t.get("answer"))
                         if (t.get("question_type") or "input") in {"mcq", "mcq6"}

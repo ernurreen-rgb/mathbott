@@ -107,7 +107,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "extra_fields": {
                 "event": "error",
                 "error_type": "validation_exception",
-                "status_code": status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "status_code": status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "error_code": "VALIDATION_ERROR",
                 "detail": detail,
                 "method": request.method,
@@ -118,7 +118,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=f"Validation error: {detail}",
         error_code="VALIDATION_ERROR",
         request=request,

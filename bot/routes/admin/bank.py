@@ -3,6 +3,7 @@ Admin bank routes.
 """
 from .common import *  # noqa: F401,F403
 from fastapi import Response
+from utils.validation import MAX_ACCEPTED_ANSWERS
 
 def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Bank tasks admin
@@ -182,6 +183,77 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             limit=limit,
             offset=offset,
         )
+
+    @app.get("/api/admin/bank/unrecognized-answers")
+    async def get_bank_unrecognized_answers(
+        admin_user: dict = Depends(require_admin_any_admin),
+        db: Database = Depends(get_db),
+        min_count: int = Query(2, ge=1, le=100),
+        limit: int = Query(100, ge=1, le=200),
+    ):
+        return await db.bank_tasks.list_unrecognized_answers(
+            min_count=min_count,
+            limit=limit,
+        )
+
+    @app.post("/api/admin/bank/tasks/{task_id}/accepted-answers")
+    async def accept_bank_unrecognized_answer(
+        task_id: int,
+        payload: dict = Body(...),
+        db: Database = Depends(get_db),
+    ):
+        email = payload.get("email")
+        if not isinstance(email, str) or not email.strip():
+            raise HTTPException(status_code=400, detail="email is required")
+        admin_user = await require_admin(email=email, db=db)
+
+        raw_answer = payload.get("answer")
+        if not isinstance(raw_answer, str):
+            raise HTTPException(status_code=400, detail="answer must be a string")
+        answer = raw_answer.strip()
+        if not answer:
+            raise HTTPException(status_code=400, detail="answer is required")
+        if len(answer) > 10000:
+            raise HTTPException(status_code=400, detail="answer must be at most 10000 characters")
+
+        expected_current_version = payload.get("expected_current_version")
+        if expected_current_version is not None:
+            try:
+                expected_current_version = int(expected_current_version)
+            except Exception:
+                raise HTTPException(status_code=400, detail="expected_current_version must be an integer")
+
+        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=False)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Bank task not found")
+        if normalize_answer_mode(existing.get("answer_mode"), existing.get("question_type")) != "written":
+            raise HTTPException(status_code=400, detail="Only written-answer tasks can accept response aliases")
+
+        if is_task_answer_correct(existing, answer):
+            return {"task": existing, "added": False}
+
+        accepted_answers = normalize_accepted_answers(existing.get("accepted_answers"))
+        if len(accepted_answers) >= MAX_ACCEPTED_ANSWERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"accepted_answers must contain at most {MAX_ACCEPTED_ANSWERS} items",
+            )
+        accepted_answers.append(answer)
+
+        try:
+            updated = await db.bank_tasks.update_task(
+                task_id=task_id,
+                accepted_answers=accepted_answers,
+                actor_user_id=admin_user["id"],
+                source="admin_unrecognized_answer_accept",
+                reason="Accepted from repeated student answers",
+                expected_current_version=expected_current_version,
+            )
+        except BankTaskVersionConflictError as exc:
+            raise _raise_version_conflict_from_exception(exc)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Bank task not found")
+        return {"task": updated, "added": True}
 
     @app.post("/api/admin/bank/tasks/similar")
     async def find_similar_bank_tasks(
@@ -497,6 +569,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         difficulty: str = Form("B"),
         topics: Optional[str] = Form(None),
@@ -514,6 +588,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         options_list = _parse_options_json(options)
         subquestions_list = _parse_subquestions_json(subquestions)
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, question_type)
+        accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         parsed_topics = []
@@ -541,6 +617,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             text=text,
             answer=answer,
             question_type=question_type,
+            answer_mode=answer_mode_value,
+            accepted_answers=accepted_answers_value,
             text_scale=text_scale_value,
             difficulty=difficulty_value,
             topics=validated_topics,
@@ -559,6 +637,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: Optional[str] = Form(None),
         answer: Optional[str] = Form(None),
         question_type: Optional[str] = Form(None),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: Optional[str] = Form(None),
         difficulty: Optional[str] = Form(None),
         topics: Optional[str] = Form(None),
@@ -579,6 +659,15 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         options_list = _parse_options_json(options) if options is not None else None
         subquestions_list = _parse_subquestions_json(subquestions) if subquestions is not None else None
         effective_question_type = question_type or existing.get("question_type", "input")
+        effective_answer_mode = _normalize_answer_mode_or_raise(
+            answer_mode if answer_mode is not None else existing.get("answer_mode"),
+            effective_question_type,
+        )
+        accepted_answers_value = (
+            _normalize_accepted_answers_or_raise(accepted_answers)
+            if accepted_answers is not None
+            else None
+        )
         effective_options = options_list if options_list is not None else existing.get("options")
         effective_subquestions = (
             subquestions_list if subquestions_list is not None else existing.get("subquestions")
@@ -645,6 +734,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text=text,
                 answer=answer,
                 question_type=question_type,
+                answer_mode=effective_answer_mode,
+                accepted_answers=accepted_answers_value,
                 text_scale=text_scale_value,
                 difficulty=difficulty_value,
                 topics=topics_value,
@@ -738,4 +829,3 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {"items": items}
 
     # Trial test templates removed in bank-only mode.
-

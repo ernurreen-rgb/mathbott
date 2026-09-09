@@ -8,11 +8,18 @@ import MobileNav from "@/components/MobileNav";
 import { getLessonDetails } from "@/lib/api";
 import { API_URL } from "@/lib/constants";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { formatMcqAnswerLabels, getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
+import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } from "@/lib/question-options";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
+import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
+import { isWrittenAnswerComplete } from "@/lib/written-answer";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
 import { showToast } from "@/lib/toast";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
+import MathRender from "@/components/ui/MathRender";
+import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
+import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
+import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 
 type CheckResult = { correct: boolean; correct_answer?: string | null };
 
@@ -34,7 +41,9 @@ export default function LessonPage() {
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [checking, setChecking] = useState<Record<number, boolean>>({});
-  const [feedback, setFeedback] = useState<Record<number, { ok: boolean; text: string }>>({});
+  const [feedback, setFeedback] = useState<
+    Record<number, { ok: boolean; text: string; correctMath?: string[] }>
+  >({});
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
   const [showCongrats, setShowCongrats] = useState(false);
@@ -221,9 +230,20 @@ export default function LessonPage() {
         void fetchLesson({ silent: true });
       } else {
         const isMcqTask = task.question_type === "mcq" || task.question_type === "mcq6";
-        const formattedCorrectAnswer = isMcqTask ? formatMcqAnswerLabels(data.correct_answer || "") : data.correct_answer;
-        const correctText = formattedCorrectAnswer ? `Дұрыс жауап: ${formattedCorrectAnswer}` : "Қате";
-        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: correctText } }));
+        const correctMath = isMcqTask
+          ? parseMcqAnswerLabels(data.correct_answer || "")
+              .map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || "")
+              .filter(Boolean)
+          : [];
+        const correctText = correctMath.length
+          ? "Дұрыс жауап:"
+          : data.correct_answer
+            ? `Дұрыс жауап: ${data.correct_answer}`
+            : "Қате";
+        setFeedback((m) => ({
+          ...m,
+          [task.id]: { ok: false, text: correctText, correctMath },
+        }));
         // Save correct answer even if wrong
         if (data.correct_answer) {
           setCorrectAnswers((m) => ({ ...m, [task.id]: data.correct_answer! }));
@@ -352,143 +372,95 @@ export default function LessonPage() {
     }
 
     if (qt === "select") {
-      const opts = task.options || [];
-      const rawAnswer = selectedAnswers[task.id] || "";
-      let selected: string[] = ["", ""];
-      if (rawAnswer) {
-        try {
-          const parsed = JSON.parse(rawAnswer);
-          if (Array.isArray(parsed)) {
-            selected = [parsed[0] || "", parsed[1] || ""];
-          }
-        } catch {
-          // ignore parse errors
-        }
-      }
       const subquestions = task.subquestions || [];
-      const labels = ["A", "B"];
-      const correctAnswer = correctAnswers[task.id];
-      let correctList: string[] = [];
-      if (correctAnswer) {
-        try {
-          const parsed = JSON.parse(correctAnswer);
-          if (Array.isArray(parsed)) {
-            correctList = parsed.map((v) => String(v));
-          }
-        } catch {
-          // ignore
-        }
-      }
-      const allSelected = selected.every((v) => v);
       const isCompleted = task.status === "completed";
-      const isCorrect =
-        allSelected &&
-        correctList.length === 2 &&
-        selected[0] === correctList[0] &&
-        selected[1] === correctList[1];
-      const borderClass = !allSelected
-        ? "border-gray-300"
-        : isCorrect
-        ? "border-green-500"
-        : "border-red-500";
+      const currentAnswer = answers[task.id] || "";
+
+      if (getTaskAnswerMode(task) === "choices") {
+        return (
+          <div className="space-y-3">
+            <StudentChoiceAnswerFields
+              task={task}
+              value={currentAnswer}
+              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+              disabled={isCompleted}
+            />
+            <button
+              onClick={() => submitCheck(task, currentAnswer)}
+              disabled={!!checking[task.id] || isCompleted || !isSelectAnswerComplete(currentAnswer)}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              Тексеру
+            </button>
+          </div>
+        );
+      }
 
       return (
         <div className="space-y-3">
-          {[0, 1].map((idx) => {
-            const subText = subquestions[idx]?.text || `Қосымша сұрақ ${idx + 1}`;
-            return (
-              <div key={idx} className="flex items-center gap-3">
-                <div className="w-6 text-gray-700 font-semibold">{labels[idx]})</div>
-                <div className="flex-1">
-                  <div className="text-gray-900 mb-2">{subText}</div>
-                  <select
-                    value={selected[idx]}
-                    onChange={(e) => {
-                      const next = [...selected];
-                      next[idx] = e.target.value;
-                      setSelectedAnswers((m) => ({
-                        ...m,
-                        [task.id]: JSON.stringify(next),
-                      }));
-                      if (next.every((v) => v)) {
-                        submitCheck(task, JSON.stringify(next));
-                      }
-                    }}
-                    disabled={!!checking[task.id] || isCompleted}
-                    className={`w-full border ${borderClass} rounded-lg px-3 py-2 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-400`}
-                  >
-                    <option value="" disabled>
-                      Жауап таңдаңыз
-                    </option>
-                    {opts.map((o) => (
-                      <option key={o.label} value={o.label}>
-                        {o.label}. {o.text}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            );
-          })}
+          <StudentWrittenAnswerFields
+            value={currentAnswer}
+            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+            count={2}
+            disabled={isCompleted}
+            labels={[0, 1].map((index) =>
+              `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
+            )}
+          />
+          <button
+            onClick={() => submitCheck(task, currentAnswer)}
+            disabled={!!checking[task.id] || isCompleted || !isWrittenAnswerComplete(currentAnswer, 2)}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+          >
+            Тексеру
+          </button>
         </div>
       );
     }
 
     if (qt === "mcq" || qt === "mcq6") {
-      const opts = task.options || [];
-      const selectedAnswer = selectedAnswers[task.id];
-      const currentAnswer = selectedAnswer ?? answers[task.id];
-      const correctAnswer = correctAnswers[task.id];
       const requiredCount = getTaskMcqCorrectCount(task);
-      const selectedLabels = parseMcqAnswerLabels(currentAnswer);
-      const correctLabels = parseMcqAnswerLabels(correctAnswer);
-      const isAnswered = selectedAnswer !== undefined;
+      const currentAnswer = answers[task.id] || "";
       const isCompleted = task.status === "completed";
 
-      return (
-        <div className="space-y-2">
-          <div className="grid grid-cols-1 gap-2">
-            {opts.map((o) => {
-              const label = o.label as any;
-              const isSelected = selectedLabels.includes(label);
-              const isCorrect = correctLabels.includes(label);
-              const isWrong = isAnswered && isSelected && !isCorrect;
-
-              return (
-                <button
-                  key={o.label}
-                  onClick={() => {
-                    const nextAnswer = toggleMcqAnswerLabel(currentAnswer, label, requiredCount);
-                    setAnswers((m) => ({ ...m, [task.id]: nextAnswer }));
-                    if (isMcqAnswerComplete(nextAnswer, requiredCount)) {
-                      submitCheck(task, nextAnswer);
-                    }
-                  }}
-                  disabled={!!checking[task.id] || isCompleted}
-                  className={`text-left border rounded-lg p-3 transition-colors ${
-                    isAnswered && isSelected && isCorrect
-                      ? "bg-green-600 border-green-700 text-white"
-                      : isWrong
-                      ? "bg-red-600 border-red-700 text-white"
-                      : isAnswered && isCorrect
-                      ? "bg-green-600 border-green-700 text-white"
-                      : isSelected
-                      ? "bg-purple-600 border-purple-700 text-white"
-                      : isCompleted
-                      ? "border-gray-200 bg-gray-100"
-                      : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
-                  }`}
-                >
-                  <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected || (isAnswered && isCorrect) ? "text-white" : "text-gray-700"}`}>
-                    <span className={`font-bold shrink-0 ${isSelected || (isAnswered && isCorrect) ? "text-white" : "text-gray-900"}`}>
-                      {o.label}
-                    </span>
-                    <span className="min-w-0 break-words whitespace-normal">{o.text}</span>
-                  </div>
-                </button>
-              );
-            })}
+      if (getTaskAnswerMode(task) === "choices") {
+        return (
+          <div className="space-y-3">
+            <StudentChoiceAnswerFields
+              task={task}
+              value={currentAnswer}
+              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+              disabled={isCompleted}
+            />
+            <button
+              onClick={() => submitCheck(task, currentAnswer)}
+              disabled={!!checking[task.id] || isCompleted || !isMcqAnswerComplete(currentAnswer, requiredCount)}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              Тексеру
+            </button>
           </div>
+        );
+      }
+
+      return (
+        <div className="space-y-3">
+          {requiredCount > 1 && (
+            <p className="text-sm text-gray-600">{requiredCount} жауап жазыңыз</p>
+          )}
+          <StudentWrittenAnswerFields
+            value={currentAnswer}
+            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+            count={requiredCount}
+            disabled={isCompleted}
+          />
+          <button
+            onClick={() => submitCheck(task, currentAnswer)}
+            disabled={!!checking[task.id] || isCompleted || !isWrittenAnswerComplete(currentAnswer, requiredCount)}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+          >
+            Тексеру
+          </button>
         </div>
       );
     }
@@ -497,22 +469,20 @@ export default function LessonPage() {
       const cells = parseFactorGridAnswer(answers[task.id]);
       const isCompleted = task.status === "completed";
       const renderFactorInput = (idx: number) => (
-        <input
-          type="text"
+        <StudentMathAnswerInput
           value={cells[idx]}
-          onChange={(e) => {
+          onChange={(value) => {
             const next = [...cells] as typeof cells;
-            next[idx] = e.target.value;
+            next[idx] = value;
             setAnswers((m) => ({
               ...m,
               [task.id]: serializeFactorGridAnswer(next),
             }));
           }}
           disabled={isCompleted}
-          inputMode="text"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-full min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-2 text-center text-sm text-gray-900"
+          compact
+          className="w-full min-w-0 text-sm"
+          ariaLabel={`Жауап ${idx + 1}`}
           placeholder={"\u0416\u0430\u0443\u0430\u043F"}
         />
       );
@@ -542,18 +512,17 @@ export default function LessonPage() {
     }
 
     return (
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
+      <div className="flex flex-col gap-3">
+        <StudentMathAnswerInput
           value={answers[task.id] || ""}
-          onChange={(e) => setAnswers((m) => ({ ...m, [task.id]: e.target.value }))}
+          onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
           disabled={task.status === "completed"}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400"
-          placeholder="Жауап"
+          placeholder="Жауапты жазыңыз"
         />
         <button
           onClick={() => submitCheck(task, answers[task.id] || "")}
-          disabled={!!checking[task.id] || task.status === "completed"}
-          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
+          disabled={!!checking[task.id] || task.status === "completed" || !(answers[task.id] || "").trim()}
+          className="self-stretch sm:self-end bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
         >
           Тексеру
         </button>
@@ -739,7 +708,12 @@ export default function LessonPage() {
                           feedback[activeTask.id]?.ok ? "text-green-700" : "text-red-700"
                         }`}
                       >
-                        {feedback[activeTask.id]?.text}
+                        <span>{feedback[activeTask.id]?.text}</span>
+                        {feedback[activeTask.id]?.correctMath?.map((answer, index) => (
+                          <span key={`${activeTask.id}-correct-${index}`} className="ml-2 inline-block font-semibold">
+                            <MathRender inline latex={answer} />
+                          </span>
+                        ))}
                       </div>
                     )}
                     </div>

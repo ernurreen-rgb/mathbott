@@ -14,7 +14,7 @@ from settings import get_settings
 from utils.cache import cache
 from utils.internal_proxy_auth import WEBSOCKET_TOKEN_TTL_SECONDS, build_ws_token, verify_ws_token
 from utils.scoring import build_reward_identity
-from utils.validation import normalize_task_answer_for_compare
+from utils.validation import is_task_answer_correct
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +203,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 ).strip()
 
                 correct_answer = _answer_to_string(task.get("answer", "")).strip()
-                user_normalized = normalize_task_answer_for_compare(task, user_answer)
-                correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
-                is_correct = user_normalized == correct_normalized
+                is_correct = is_task_answer_correct(task, user_answer)
 
                 if is_correct:
                     score += 1

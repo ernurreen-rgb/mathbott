@@ -7,6 +7,9 @@ import Image from "next/image";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import MathRender from "@/components/ui/MathRender";
+import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
+import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
+import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 import {
   finishTrialTestCoopSession,
   getTrialTestCoopSession,
@@ -17,7 +20,8 @@ import {
 import { showToast } from "@/lib/toast";
 import { API_URL } from "@/lib/constants";
 import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
-import { getTaskMcqCorrectCount, parseMcqAnswerLabels, toggleMcqAnswerLabel } from "@/lib/question-options";
+import { getTaskMcqCorrectCount } from "@/lib/question-options";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { LessonTask, QuestionType, TrialTestCoopSession, TrialTestDetails } from "@/types";
@@ -265,6 +269,7 @@ export default function TrialTestCoopPage() {
           <button
             onClick={() => {
               setAnswers((m) => ({ ...m, [task.id]: "true" }));
+              sendAnswerUpdate(task.id, "true");
             }}
             className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${
               isTrueSelected ? "bg-purple-600 text-white" : "bg-green-600 hover:bg-green-700 text-white"
@@ -275,6 +280,7 @@ export default function TrialTestCoopPage() {
           <button
             onClick={() => {
               setAnswers((m) => ({ ...m, [task.id]: "false" }));
+              sendAnswerUpdate(task.id, "false");
             }}
             className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${
               isFalseSelected ? "bg-purple-600 text-white" : "bg-red-600 hover:bg-red-700 text-white"
@@ -287,117 +293,77 @@ export default function TrialTestCoopPage() {
     }
 
     if (qt === "select") {
-      const opts = task.options || [];
-      const rawAnswer = answers[task.id];
-      let selected: string[] = ["", ""];
-      if (rawAnswer) {
-        try {
-          const parsed = JSON.parse(rawAnswer);
-          if (Array.isArray(parsed)) {
-            selected = [parsed[0] || "", parsed[1] || ""];
-          }
-        } catch {
-          // ignore parse errors
-        }
-      }
       const subquestions = task.subquestions || [];
-      const labels = ["A", "B"];
+      if (getTaskAnswerMode(task) === "choices") {
+        return (
+          <StudentChoiceAnswerFields
+            task={task}
+            value={answers[task.id]}
+            onChange={(value) => {
+              setAnswers((m) => ({ ...m, [task.id]: value }));
+              sendAnswerUpdate(task.id, value);
+            }}
+          />
+        );
+      }
       return (
         <div className="space-y-3">
-          {[0, 1].map((idx) => {
-            const subText = subquestions[idx]?.text || `Қосымша сұрақ ${idx + 1}`;
-            return (
-              <div key={`${task.id}-sub-${idx}`} className="flex items-center gap-3">
-                <div className="w-6 text-gray-700 font-semibold">{labels[idx]})</div>
-                <div className="flex-1">
-                  <div className="text-gray-900 mb-2">
-                    <MathRender latex={subText} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                    {opts.map((o) => {
-                      const isSelected = selected[idx] === o.label;
-                      return (
-                        <button
-                          key={`${task.id}-${idx}-${o.label}`}
-                          type="button"
-                          onClick={() => {
-                            const next = [...selected];
-                            next[idx] = o.label;
-                            const allSelected = next.every((v) => v);
-                            const payload = allSelected ? JSON.stringify(next) : "";
-                            setAnswers((m) => ({ ...m, [task.id]: payload }));
-                            sendAnswerUpdate(task.id, payload);
-                          }}
-                          className={`text-left border rounded-lg px-3 py-2 transition-colors ${
-                            isSelected
-                              ? "bg-purple-600 border-purple-700 text-white"
-                              : "bg-white border-gray-300 text-gray-900 hover:border-purple-300 hover:bg-purple-50"
-                          }`}
-                        >
-                          <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
-                            <span className="font-bold shrink-0">{o.label}</span>
-                            <div className="min-w-0 break-words whitespace-normal">
-                              <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <StudentWrittenAnswerFields
+            value={answers[task.id]}
+            onChange={(value) => {
+              setAnswers((m) => ({ ...m, [task.id]: value }));
+              sendAnswerUpdate(task.id, value);
+            }}
+            count={2}
+            labels={[0, 1].map((index) =>
+              `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
+            )}
+          />
         </div>
       );
     }
 
     if (qt === "mcq" || qt === "mcq6") {
-      const opts = task.options || [];
       const currentAnswer = answers[task.id];
       const otherAnswer = otherUserId ? otherAnswers[otherUserId]?.[task.id] : undefined;
       const requiredCount = getTaskMcqCorrectCount(task);
-      const selectedLabels = parseMcqAnswerLabels(currentAnswer);
-      const otherSelectedLabels = parseMcqAnswerLabels(otherAnswer);
 
-      const localSelectedClass =
-        currentColor === "red"
-          ? "bg-red-500 border-red-600 text-white"
-          : "bg-blue-500 border-blue-600 text-white";
-      const otherSelectedClass =
-        otherColor === "red" ? "ring-2 ring-red-400" : "ring-2 ring-blue-400";
+      if (getTaskAnswerMode(task) === "choices") {
+        return (
+          <div className="space-y-3">
+            <StudentChoiceAnswerFields
+              task={task}
+              value={currentAnswer}
+              onChange={(value) => {
+                setAnswers((m) => ({ ...m, [task.id]: value }));
+                sendAnswerUpdate(task.id, value);
+              }}
+            />
+            {otherAnswer && (
+              <p className={`text-xs font-semibold ${otherColor === "red" ? "text-red-600" : "text-blue-600"}`}>
+                Серіктес жауап берді
+              </p>
+            )}
+          </div>
+        );
+      }
 
       return (
-        <div className="space-y-2">
-          <div className="grid grid-cols-1 gap-2">
-            {opts.map((o) => {
-              const label = o.label as any;
-              const isSelected = selectedLabels.includes(label);
-              const isOtherSelected = otherSelectedLabels.includes(label);
-              return (
-                <button
-                  key={`${task.id}-${o.label}`}
-                  onClick={() => {
-                    const nextAnswer = toggleMcqAnswerLabel(currentAnswer, label, requiredCount);
-                    setAnswers((m) => ({ ...m, [task.id]: nextAnswer }));
-                    sendAnswerUpdate(task.id, nextAnswer);
-                  }}
-                  className={`text-left border rounded-lg p-3 transition-colors ${
-                    isSelected
-                      ? localSelectedClass
-                      : "border-gray-200 hover:border-purple-300 hover:bg-purple-50"
-                  } ${isOtherSelected ? otherSelectedClass : ""}`}
-                >
-                  <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isSelected ? "text-white" : "text-gray-700"}`}>
-                    <span className={`font-bold shrink-0 ${isSelected ? "text-white" : "text-gray-900"}`}>{o.label}</span>
-                    <div className="min-w-0 break-words whitespace-normal">
-                      <MathRender inline latex={o.text} className={isSelected ? "text-white" : "text-gray-700"} />
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+        <div className="space-y-3">
+          {requiredCount > 1 && <p className="text-sm text-gray-600">{requiredCount} жауап жазыңыз</p>}
+          <StudentWrittenAnswerFields
+            value={currentAnswer}
+            onChange={(value) => {
+              setAnswers((m) => ({ ...m, [task.id]: value }));
+              sendAnswerUpdate(task.id, value);
+            }}
+            count={requiredCount}
+          />
+          {otherAnswer && (
+            <p className={`text-xs font-semibold ${otherColor === "red" ? "text-red-600" : "text-blue-600"}`}>
+              Серіктес жауап берді
+            </p>
+          )}
         </div>
       );
     }
@@ -405,20 +371,18 @@ export default function TrialTestCoopPage() {
     if (qt === "factor_grid") {
       const cells = parseFactorGridAnswer(answers[task.id]);
       const renderFactorInput = (idx: number) => (
-        <input
-          type="text"
+        <StudentMathAnswerInput
           value={cells[idx]}
-          onChange={(e) => {
+          onChange={(value) => {
             const next = [...cells] as typeof cells;
-            next[idx] = e.target.value;
+            next[idx] = value;
             const payload = serializeFactorGridAnswer(next);
             setAnswers((m) => ({ ...m, [task.id]: payload }));
             sendAnswerUpdate(task.id, payload);
           }}
-          inputMode="text"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-full min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-2 text-center text-sm text-gray-900"
+          compact
+          className="w-full min-w-0 text-sm"
+          ariaLabel={`Жауап ${idx + 1}`}
           placeholder={"\u0416\u0430\u0443\u0430\u043F"}
         />
       );
@@ -439,11 +403,13 @@ export default function TrialTestCoopPage() {
     }
 
     return (
-      <input
+      <StudentMathAnswerInput
         value={answers[task.id] || ""}
-        onChange={(e) => setAnswers((m) => ({ ...m, [task.id]: e.target.value }))}
-        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400"
-        placeholder="Жауап"
+        onChange={(value) => {
+          setAnswers((m) => ({ ...m, [task.id]: value }));
+          sendAnswerUpdate(task.id, value);
+        }}
+        placeholder="Жауапты жазыңыз"
       />
     );
   };

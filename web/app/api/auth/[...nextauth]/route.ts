@@ -9,6 +9,15 @@ const isProduction = process.env.NODE_ENV === "production";
 const nextAuthSecret = configuredNextAuthSecret || "dev-secret-key-change-in-production";
 const resolvedGoogleClientId = googleClientId || "dev-missing-google-client-id";
 const resolvedGoogleClientSecret = googleClientSecret || "dev-missing-google-client-secret";
+const isLoopbackAuthUrl = (() => {
+  if (!configuredNextAuthUrl) return false;
+  try {
+    const hostname = new URL(configuredNextAuthUrl).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+})();
 const knownPlaceholderSecrets = new Set([
   "replace-with-a-random-32-char-secret",
   "dev-secret-key-change-in-production",
@@ -18,7 +27,12 @@ function assertProductionAuthConfig() {
   if (isProduction && !configuredNextAuthUrl) {
     throw new Error("Missing NEXTAUTH_URL in production.");
   }
-  if (isProduction && configuredNextAuthUrl && !configuredNextAuthUrl.startsWith("https://")) {
+  if (
+    isProduction &&
+    configuredNextAuthUrl &&
+    !configuredNextAuthUrl.startsWith("https://") &&
+    !isLoopbackAuthUrl
+  ) {
     throw new Error("NEXTAUTH_URL must use HTTPS in production.");
   }
   if (isProduction && !configuredNextAuthSecret) {

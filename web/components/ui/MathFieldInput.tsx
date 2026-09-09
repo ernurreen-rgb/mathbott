@@ -6,6 +6,11 @@ import {
   normalizeLatexForMathDisplay,
   normalizeMathFieldValueForStorage,
 } from "@/lib/math-normalize";
+import {
+  getMathVirtualKeyboardLayouts,
+  type MathVirtualKeyboardLayout,
+  type MathVirtualKeyboardPreset,
+} from "@/lib/student-math-keyboard";
 
 type MathFieldElement = HTMLElement & {
   value: string;
@@ -34,12 +39,19 @@ interface MathFieldInputProps {
   readOnly?: boolean;
   virtualKeyboardPolicy?: "auto" | "manual";
   openVirtualKeyboardOnFocus?: boolean;
+  virtualKeyboardPreset?: MathVirtualKeyboardPreset;
+  defaultMode?: "math" | "text";
+  smartMode?: boolean;
+  ariaLabel?: string;
 }
 
 type MathVirtualKeyboard = {
   show?: () => void;
   hide?: () => void;
+  layouts: readonly ("default" | MathVirtualKeyboardLayout)[];
 };
+
+let initializedVirtualKeyboard: MathVirtualKeyboard | undefined;
 
 type InternalMathfield = {
   ariaLiveText?: { textContent: string };
@@ -70,7 +82,22 @@ type MathfieldElementStaticConfig = {
 };
 
 const getVirtualKeyboard = (): MathVirtualKeyboard | undefined =>
-  (globalThis as { mathVirtualKeyboard?: MathVirtualKeyboard }).mathVirtualKeyboard;
+  (globalThis as { mathVirtualKeyboard?: MathVirtualKeyboard }).mathVirtualKeyboard ??
+  initializedVirtualKeyboard;
+
+let configuredKeyboard: MathVirtualKeyboard | undefined;
+let configuredKeyboardPreset: MathVirtualKeyboardPreset | undefined;
+
+const configureVirtualKeyboard = (
+  keyboard: MathVirtualKeyboard | undefined,
+  preset: MathVirtualKeyboardPreset
+) => {
+  if (!keyboard) return;
+  if (keyboard === configuredKeyboard && preset === configuredKeyboardPreset) return;
+  keyboard.layouts = getMathVirtualKeyboardLayouts(preset);
+  configuredKeyboard = keyboard;
+  configuredKeyboardPreset = preset;
+};
 
 const getInternalMathfield = (el: MathFieldElement | null): InternalMathfield | undefined =>
   (el as unknown as { _mathfield?: InternalMathfield } | null)?._mathfield;
@@ -237,19 +264,31 @@ export default function MathFieldInput({
   readOnly = false,
   virtualKeyboardPolicy = "manual",
   openVirtualKeyboardOnFocus = true,
+  virtualKeyboardPreset = "default",
+  defaultMode = "text",
+  smartMode = true,
+  ariaLabel,
 }: MathFieldInputProps) {
   const fieldRef = useRef<MathFieldElement | null>(null);
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
+  const virtualKeyboardPresetRef = useRef(virtualKeyboardPreset);
 
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+  virtualKeyboardPresetRef.current = virtualKeyboardPreset;
 
   useEffect(() => {
     let disposed = false;
 
     void import("mathlive").then((mod) => {
       if (disposed) return;
+      const initializeVirtualKeyboard = (
+        mod as unknown as {
+          initVirtualKeyboardInCurrentBrowsingContext?: () => MathVirtualKeyboard | undefined;
+        }
+      ).initVirtualKeyboardInCurrentBrowsingContext;
+      initializedVirtualKeyboard = initializeVirtualKeyboard?.() ?? initializedVirtualKeyboard;
       const mfe = (
         ((mod as unknown as { MathfieldElement?: MathfieldElementStaticConfig }).MathfieldElement ??
           (globalThis as unknown as { MathfieldElement?: MathfieldElementStaticConfig }).MathfieldElement)
@@ -263,6 +302,10 @@ export default function MathFieldInput({
       mfe.keypressSound = null;
       mfe.plonkSound = null;
       mfe.keypressVibration = false;
+
+      if (document.activeElement === fieldRef.current) {
+        configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPresetRef.current);
+      }
     });
 
     return () => {
@@ -274,8 +317,8 @@ export default function MathFieldInput({
     const el = fieldRef.current;
     if (!el) return;
 
-    el.setAttribute("default-mode", "text");
-    el.setAttribute("smart-mode", "on");
+    el.setAttribute("default-mode", defaultMode);
+    el.setAttribute("smart-mode", smartMode ? "on" : "off");
     // In math mode, Space navigates by default.
     // Use a regular text-like space so natural-language text is editable.
     el.setAttribute("math-mode-space", "\\text{ }");
@@ -304,7 +347,13 @@ export default function MathFieldInput({
     } else {
       el.removeAttribute("read-only");
     }
-  }, [placeholder, readOnly, virtualKeyboardPolicy]);
+
+    if (ariaLabel) {
+      el.setAttribute("aria-label", ariaLabel);
+    } else {
+      el.removeAttribute("aria-label");
+    }
+  }, [ariaLabel, defaultMode, placeholder, readOnly, smartMode, virtualKeyboardPolicy]);
 
   useEffect(() => {
     const el = fieldRef.current;
@@ -396,8 +445,23 @@ export default function MathFieldInput({
     };
 
     const showVirtualKeyboard = () => {
-      if (!openVirtualKeyboardOnFocus || readOnly) return;
-      getVirtualKeyboard()?.show?.();
+      if (readOnly) return;
+      const keyboard = getVirtualKeyboard();
+      configureVirtualKeyboard(keyboard, virtualKeyboardPreset);
+      if (!openVirtualKeyboardOnFocus) return;
+      if (keyboard) {
+        keyboard.show?.();
+        return;
+      }
+      // MathLive may keep its singleton outside the page global in bundled apps.
+      // The field command reaches that singleton directly.
+      el.executeCommand?.("showVirtualKeyboard");
+      requestAnimationFrame(() => {
+        configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPreset);
+        if (document.querySelector(".ML__keyboard.is-visible")) return;
+        const toggle = el.shadowRoot?.querySelector<HTMLElement>(".ML__virtual-keyboard-toggle");
+        toggle?.click();
+      });
     };
 
     const emitValueChange = () => {
@@ -408,13 +472,19 @@ export default function MathFieldInput({
       emitValueChange();
     };
 
+    const handleFieldPointerDown = () => {
+      configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPreset);
+      showVirtualKeyboard();
+    };
+
     const handleFocus = () => {
       patchMathfieldFocusDisposeGuards(el);
       clearStaleGlobalMathfield(el);
-      // New fields should start in text mode for normal typing (including spaces).
+      // Start empty fields in the mode selected by the caller.
       if (!getMathValue(el)) {
-        el.mode = "text";
+        el.mode = defaultMode;
       }
+      configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPreset);
       showVirtualKeyboard();
       addPointerDownListener();
     };
@@ -464,6 +534,7 @@ export default function MathFieldInput({
     };
 
     el.addEventListener("input", handleInput);
+    el.addEventListener("pointerdown", handleFieldPointerDown);
     el.addEventListener("focus", handleFocus);
     el.addEventListener("blur", handleBlur);
     el.addEventListener("keydown", handleKeyDown);
@@ -484,6 +555,7 @@ export default function MathFieldInput({
       return () => {
         timers.forEach(clearTimeout);
         el.removeEventListener("input", handleInput);
+        el.removeEventListener("pointerdown", handleFieldPointerDown);
         el.removeEventListener("focus", handleFocus);
         el.removeEventListener("blur", handleBlur);
         el.removeEventListener("keydown", handleKeyDown);
@@ -494,13 +566,14 @@ export default function MathFieldInput({
 
     return () => {
       el.removeEventListener("input", handleInput);
+      el.removeEventListener("pointerdown", handleFieldPointerDown);
       el.removeEventListener("focus", handleFocus);
       el.removeEventListener("blur", handleBlur);
       el.removeEventListener("keydown", handleKeyDown);
       el.removeEventListener("beforeinput", handleBeforeInput);
       removePointerDownListener();
     };
-  }, [autoFocus, openVirtualKeyboardOnFocus, readOnly]);
+  }, [autoFocus, defaultMode, openVirtualKeyboardOnFocus, readOnly, virtualKeyboardPreset]);
 
   useEffect(() => {
     const el = fieldRef.current;

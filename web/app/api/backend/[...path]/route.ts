@@ -7,6 +7,8 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
+import { normalizeProxyRequestBody } from "@/lib/proxy-request-body";
+
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const INTERNAL_PROXY_SHARED_SECRET =
@@ -135,6 +137,8 @@ async function prepareBodyForProxy(
   if (!isMutatingMethod(method)) {
     return { body, contentType };
   }
+
+  body = normalizeProxyRequestBody(body, contentType);
 
   if (body instanceof FormData) {
     const serialized = new Request("http://internal.local", {

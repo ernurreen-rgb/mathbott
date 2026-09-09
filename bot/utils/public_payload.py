@@ -4,7 +4,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 
-_SOLUTION_KEYS = {"answer", "correct", "correct_answer", "solution", "solution_filename"}
+_SOLUTION_KEYS = {
+    "answer",
+    "accepted_answers",
+    "correct",
+    "correct_answer",
+    "solution",
+    "solution_filename",
+}
 
 
 def strip_solution_fields(value: Any) -> Any:
@@ -24,4 +31,3 @@ def public_subquestions(value: Any) -> Optional[List[Dict[str, Any]]]:
     if not isinstance(value, list):
         return None
     return strip_solution_fields(value)
-

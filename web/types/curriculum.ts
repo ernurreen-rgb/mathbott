@@ -17,6 +17,7 @@ export interface SectionProgress extends Progress {
 
 
 export type QuestionType = "tf" | "mcq" | "mcq6" | "input" | "select" | "factor_grid";
+export type AnswerMode = "choices" | "written";
 
 
 export interface LessonProgress {
@@ -103,7 +104,9 @@ export interface LessonTask {
   id: number;
   text: string;
   answer?: string;
+  accepted_answers?: string[] | null;
   question_type: QuestionType;
+  answer_mode?: AnswerMode | null;
   correct_count?: number | null;
   text_scale?: TaskTextScale | null;
   options?: LessonTaskOption[] | null;

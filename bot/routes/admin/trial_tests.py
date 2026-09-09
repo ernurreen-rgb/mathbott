@@ -166,6 +166,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             text = str(payload.get("text") or "")
             answer = str(payload.get("answer") or "")
             question_type = str(payload.get("question_type") or "input")
+            answer_mode = _normalize_answer_mode_or_raise(payload.get("answer_mode"), question_type)
+            accepted_answers = _normalize_accepted_answers_or_raise(payload.get("accepted_answers"))
             text_scale = _normalize_text_scale(payload.get("text_scale"))
 
             raw_options = payload.get("options")
@@ -198,6 +200,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text=text,
                 answer=answer,
                 question_type=question_type,
+                answer_mode=answer_mode,
+                accepted_answers=accepted_answers,
                 text_scale=text_scale,
                 difficulty=difficulty_value,
                 topics=topics_value,
@@ -247,6 +251,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -293,6 +299,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         logger.info("Parsed subquestions (trial test create): %s", subquestions_list)
 
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, question_type)
+        accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty else "B"
@@ -305,6 +313,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             text=text,
             answer=answer,
             question_type=question_type,
+            answer_mode=answer_mode_value,
+            accepted_answers=accepted_answers_value,
             text_scale=text_scale_value,
             difficulty=difficulty_value,
             topics=topics_value,
@@ -350,6 +360,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str,
         answer: str,
         question_type: str,
+        answer_mode: Optional[str],
+        accepted_answers: Optional[str],
         text_scale: str,
         options: Optional[str],
         subquestions: Optional[str],
@@ -403,6 +415,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         logger.info("Parsed subquestions (trial test %s): %s", source_label, subquestions_list)
 
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, question_type)
+        accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
@@ -436,6 +450,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     text=text if text else None,
                     answer=answer if answer else None,
                     question_type=question_type,
+                    answer_mode=answer_mode_value,
+                    accepted_answers=accepted_answers_value,
                     text_scale=text_scale_value,
                     options=options_list if options is not None else None,
                     subquestions=subquestions_list if subquestions is not None else None,
@@ -456,6 +472,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -474,6 +492,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             text=text,
             answer=answer,
             question_type=question_type,
+            answer_mode=answer_mode,
+            accepted_answers=accepted_answers,
             text_scale=text_scale,
             options=options,
             subquestions=subquestions,
@@ -494,6 +514,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -512,6 +534,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             text=text,
             answer=answer,
             question_type=question_type,
+            answer_mode=answer_mode,
+            accepted_answers=accepted_answers,
             text_scale=text_scale,
             options=options,
             subquestions=subquestions,
@@ -570,4 +594,3 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             created_by=admin_user["id"],
         )
         return result
-

@@ -296,6 +296,7 @@ async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db)
             "text": "Inline slot text",
             "answer": "C",
             "question_type": "mcq",
+            "answer_mode": "written",
             "options": [
                 {"label": "A", "text": "a"},
                 {"label": "B", "text": "b"},
@@ -311,6 +312,7 @@ async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db)
     assert isinstance(created.get("bank_task_id"), int)
     assert created["sort_order"] == 0
     assert created["text"] == "Inline slot text"
+    assert created["answer_mode"] == "written"
     assert created["bank_difficulty"] == "A"
     assert created["bank_topics"] == ["InlineTopic", "SecondTopic"]
 
@@ -319,6 +321,7 @@ async def test_admin_trial_slot_upsert_inline_creates_bank_task(client, test_db)
     created_bank = await test_db.bank_tasks.get_task_by_id(created["bank_task_id"], include_deleted=True)
     assert created_bank is not None
     assert created_bank["text"] == "Inline slot text"
+    assert created_bank["answer_mode"] == "written"
     assert created_bank["difficulty"] == "A"
     assert created_bank["topics"] == ["InlineTopic", "SecondTopic"]
 

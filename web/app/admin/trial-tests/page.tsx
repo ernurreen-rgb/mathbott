@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
+import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
+import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
@@ -30,14 +32,17 @@ import {
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
-import { BankDifficulty, BankPlacementTask, BankTask, QuestionType, TaskTextScale, TrialTest } from "@/types";
+import { AnswerMode, BankDifficulty, BankPlacementTask, BankTask, LessonTask, QuestionType, TaskTextScale, TrialTest } from "@/types";
 
 type SlotForm = {
   text: string;
   question_type: QuestionType;
+  answer_mode: AnswerMode;
   text_scale: TaskTextScale;
   answer: string;
+  acceptedAnswers: string[];
   difficulty: BankDifficulty;
   optionA: string;
   optionB: string;
@@ -63,8 +68,10 @@ type SlotForm = {
 const emptySlotForm = (): SlotForm => ({
   text: "",
   question_type: "mcq",
+  answer_mode: "choices",
   text_scale: "md",
   answer: "",
+  acceptedAnswers: [],
   difficulty: "B",
   optionA: "",
   optionB: "",
@@ -151,6 +158,8 @@ const buildSlotPayload = (form: SlotForm) => {
   const payload: Record<string, any> = {
     text: form.text,
     question_type: form.question_type,
+    answer_mode: form.answer_mode,
+    accepted_answers: normalizeAcceptedAnswers(form.acceptedAnswers),
     text_scale: form.text_scale,
     bank_difficulty: form.difficulty,
     bank_topics: parseTopics(form.topicsRaw),
@@ -192,6 +201,12 @@ const buildSlotPayload = (form: SlotForm) => {
   ];
   return payload;
 };
+
+const buildSlotPreviewTask = (form: SlotForm): LessonTask => ({
+  id: -1,
+  sort_order: 0,
+  ...(buildSlotPayload(form) as Omit<LessonTask, "id" | "sort_order">),
+});
 
 const getPlacementQuestionType = (placement: BankPlacementTask | null): QuestionType => {
   const raw = placement?.question_type || placement?.bank_task?.question_type || "input";
@@ -280,6 +295,7 @@ export default function AdminTrialTestsPage() {
 
   const [showInlineCreate, setShowInlineCreate] = useState(false);
   const [slotForm, setSlotForm] = useState<SlotForm>(emptySlotForm());
+  const slotPreviewTask = useMemo(() => buildSlotPreviewTask(slotForm), [slotForm]);
 
   const [currentSlotIndex, setCurrentSlotIndex] = useState(1);
   const [previewAnswers, setPreviewAnswers] = useState<Record<number, string>>({});
@@ -1217,7 +1233,10 @@ export default function AdminTrialTestsPage() {
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => setSlotForm((p) => ({ ...p, question_type: e.target.value as QuestionType }))}>
+                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
+                  const questionType = e.target.value as QuestionType;
+                  setSlotForm((p) => ({ ...p, question_type: questionType, answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
+                }}>
                   <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option><option value="factor_grid">Factor Grid</option>
                 </select>
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
@@ -1225,6 +1244,20 @@ export default function AdminTrialTestsPage() {
                 </select>
                 <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Тақырыптар (үтір арқылы)" value={slotForm.topicsRaw} onChange={(e) => setSlotForm((p) => ({ ...p, topicsRaw: e.target.value }))} />
               </div>
+
+              {supportsAnswerModeSwitch(slotForm.question_type) && (
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Оқушының жауап беру тәсілі</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    value={slotForm.answer_mode}
+                    onChange={(e) => setSlotForm((p) => ({ ...p, answer_mode: e.target.value as AnswerMode }))}
+                  >
+                    <option value="choices">Дайын нұсқаларды таңдайды</option>
+                    <option value="written">Жауапты өзі жазады</option>
+                  </select>
+                </div>
+              )}
 
               {(isMcqQuestionType(slotForm.question_type) || slotForm.question_type === "select") && (
                 <div className="grid grid-cols-2 gap-2">
@@ -1240,6 +1273,12 @@ export default function AdminTrialTestsPage() {
               )}
 
               {slotForm.question_type === "input" && <MathFieldInput value={slotForm.answer} onChange={(v) => setSlotForm((p) => ({ ...p, answer: v }))} placeholder="Дұрыс жауап" />}
+              {slotForm.question_type === "input" && (
+                <AcceptedAnswersEditor
+                  value={slotForm.acceptedAnswers}
+                  onChange={(acceptedAnswers) => setSlotForm((previous) => ({ ...previous, acceptedAnswers }))}
+                />
+              )}
               {slotForm.question_type === "factor_grid" && (
                 <div className="grid grid-cols-2 gap-2">
                   <MathFieldInput value={slotForm.factorTopLeft} onChange={(v) => setSlotForm((p) => ({ ...p, factorTopLeft: v }))} placeholder="ax² #1" />
@@ -1299,6 +1338,7 @@ export default function AdminTrialTestsPage() {
                   <MathFieldInput value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
                 </div>
               )}
+              <StudentTaskPreview task={slotPreviewTask} />
               <button className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm">Сақтау</button>
             </form>
           </div>

@@ -14,7 +14,7 @@ from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.cache import cache
 from utils.public_payload import public_subquestions
 from utils.scoring import build_reward_identity
-from utils.validation import get_mcq_answer_count, normalize_task_answer_for_compare
+from utils.validation import get_mcq_answer_count, is_task_answer_correct, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
 _trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
@@ -139,6 +139,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         "id": t.get("id"),
                         "text": t.get("text", ""),
                         "question_type": t.get("question_type", "input"),
+                        "answer_mode": normalize_answer_mode(t.get("answer_mode"), t.get("question_type")),
                         "correct_count": (
                             get_mcq_answer_count(t.get("answer"))
                             if (t.get("question_type") or "input") in {"mcq", "mcq6"}
@@ -217,10 +218,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
                     correct_answer = _answer_to_string(task.get("answer", "")).strip()
 
-                    user_normalized = normalize_task_answer_for_compare(task, user_answer)
-                    correct_normalized = normalize_task_answer_for_compare(task, correct_answer)
-
-                    is_correct = user_normalized == correct_normalized
+                    is_correct = is_task_answer_correct(task, user_answer)
 
                     if is_correct:
                         score += 1

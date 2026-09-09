@@ -6,6 +6,9 @@ import Link from "next/link";
 
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
+import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
+import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
+import UnrecognizedAnswersPanel from "@/components/admin/UnrecognizedAnswersPanel";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
@@ -35,14 +38,17 @@ import {
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import {
+  AnswerMode,
   BankDifficulty,
   BankImportPreviewResponse,
   BankTask,
   BankTaskSimilarCandidate,
   BankTaskUsageItem,
   BankTaskVersionItem,
+  LessonTask,
   QuestionType,
   TaskTextScale,
 } from "@/types";
@@ -50,8 +56,10 @@ import {
 type BankFormState = {
   text: string;
   question_type: QuestionType;
+  answer_mode: AnswerMode;
   text_scale: TaskTextScale;
   answer: string;
+  acceptedAnswers: string[];
   difficulty: BankDifficulty;
   currentVersion: number | null;
   imageFile: File | null;
@@ -108,8 +116,10 @@ const JSON_EDIT_DIFFICULTIES: BankDifficulty[] = ["A", "B", "C"];
 const createEmptyForm = (): BankFormState => ({
   text: "",
   question_type: "mcq",
+  answer_mode: "choices",
   text_scale: "md",
   answer: "",
+  acceptedAnswers: [],
   difficulty: "B",
   currentVersion: null,
   imageFile: null,
@@ -140,8 +150,10 @@ const parseTaskToForm = (task: BankTask): BankFormState => {
   const form = createEmptyForm();
   form.text = task.text || "";
   form.question_type = (task.question_type || "input") as QuestionType;
+  form.answer_mode = getTaskAnswerMode(task);
   form.text_scale = normalizeTaskTextScale(task.text_scale);
   form.answer = task.answer || "";
+  form.acceptedAnswers = normalizeAcceptedAnswers(task.accepted_answers);
   form.difficulty = (task.difficulty || "B") as BankDifficulty;
   form.currentVersion = typeof task.current_version === "number" ? task.current_version : null;
   form.existingImageFilename = task.image_filename || null;
@@ -229,6 +241,13 @@ const buildJsonEditValue = (snapshot: any, task: BankTask): string => {
     text: snapshot?.text ?? "",
     answer: snapshot?.answer ?? "",
     question_type: snapshot?.question_type ?? task.question_type ?? "input",
+    answer_mode: getTaskAnswerMode({
+      question_type: snapshot?.question_type ?? task.question_type,
+      answer_mode: snapshot?.answer_mode ?? task.answer_mode,
+    }),
+    accepted_answers: normalizeAcceptedAnswers(
+      Array.isArray(snapshot?.accepted_answers) ? snapshot.accepted_answers : task.accepted_answers
+    ),
     text_scale: normalizeTaskTextScale(snapshot?.text_scale ?? task.text_scale),
     difficulty: snapshot?.difficulty ?? task.difficulty ?? "B",
     topics: Array.isArray(snapshot?.topics) ? snapshot.topics : [],
@@ -297,12 +316,56 @@ const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string
   }));
 };
 
+const buildBankFormPreviewTask = (form: BankFormState): LessonTask => {
+  let answer = form.answer;
+  let options: LessonTask["options"] = [];
+  let subquestions: LessonTask["subquestions"] = [];
+
+  if (isMcqQuestionType(form.question_type)) {
+    answer = serializeMcqAnswerLabels(form.correctOptions);
+    options = buildMcqOptionsFromBankForm(form);
+  } else if (form.question_type === "select") {
+    answer = JSON.stringify([form.correctSub1, form.correctSub2]);
+    options = MCQ_OPTION_LABELS.slice(0, 4).map((label) => ({
+      label,
+      text: getBankFormOptionValue(form, label),
+    }));
+    subquestions = [
+      { text: form.subQuestion1, correct: form.correctSub1 },
+      { text: form.subQuestion2, correct: form.correctSub2 },
+    ];
+  } else if (form.question_type === "tf") {
+    answer = form.correctTf;
+  } else if (form.question_type === "factor_grid") {
+    answer = serializeFactorGridAnswer([
+      form.factorTopLeft,
+      form.factorTopRight,
+      form.factorBottomLeft,
+      form.factorBottomRight,
+    ]);
+  }
+
+  return {
+    id: -1,
+    text: form.text,
+    question_type: form.question_type,
+    answer_mode: form.answer_mode,
+    answer,
+    accepted_answers: normalizeAcceptedAnswers(form.acceptedAnswers),
+    text_scale: form.text_scale,
+    options,
+    subquestions,
+    image_filename: form.existingImageFilename,
+    sort_order: 0,
+  };
+};
+
 export default function AdminBankPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
   const { loading: accessLoading } = useAdminPageAccess("content", status, email);
 
-  const [tab, setTab] = useState<"active" | "trash">("active");
+  const [tab, setTab] = useState<"active" | "trash" | "answers">("active");
   const [tasks, setTasks] = useState<BankTask[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -316,6 +379,7 @@ export default function AdminBankPage() {
   const [topicFilterSuggestions, setTopicFilterSuggestions] = useState<string[]>([]);
 
   const [form, setForm] = useState<BankFormState>(createEmptyForm());
+  const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
   const [formTopicInput, setFormTopicInput] = useState("");
   const [formTopicSuggestions, setFormTopicSuggestions] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -344,6 +408,10 @@ export default function AdminBankPage() {
   const LIMIT = 20;
   const page = useMemo(() => Math.floor(offset / LIMIT) + 1, [offset]);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / LIMIT)), [total]);
+  const formPreviewTask = useMemo(
+    () => ({ ...buildBankFormPreviewTask(form), id: editingTaskId ?? -1 }),
+    [editingTaskId, form]
+  );
   const paginationPages = useMemo(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -366,8 +434,18 @@ export default function AdminBankPage() {
     setOffset((nextPage - 1) * LIMIT);
   };
 
+  useEffect(() => {
+    if (!form.imageFile) {
+      setFormImagePreview(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(form.imageFile);
+    setFormImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [form.imageFile]);
+
   const fetchTasks = useCallback(async () => {
-    if (!email) return;
+    if (!email || tab === "answers") return;
     setLoading(true);
     setError(null);
 
@@ -745,8 +823,10 @@ export default function AdminBankPage() {
       const formData = new FormData();
       formData.append("text", form.text);
       formData.append("question_type", form.question_type);
+      formData.append("answer_mode", form.answer_mode);
       formData.append("text_scale", form.text_scale);
       formData.append("answer", answer);
+      formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(form.acceptedAnswers)));
       formData.append("difficulty", form.difficulty);
       formData.append("topics", JSON.stringify(form.topics));
       if (options) formData.append("options", JSON.stringify(options));
@@ -903,10 +983,19 @@ export default function AdminBankPage() {
       }
 
       const questionType = normalizeJsonEditQuestionType(parsed.question_type ?? jsonEdit.task.question_type);
+      const answerMode = getTaskAnswerMode({
+        question_type: questionType,
+        answer_mode: typeof parsed.answer_mode === "string" ? parsed.answer_mode : jsonEdit.task.answer_mode,
+      });
       const formData = new FormData();
       formData.append("text", text);
       formData.append("answer", String(parsed.answer ?? ""));
       formData.append("question_type", questionType);
+      formData.append("answer_mode", answerMode);
+      formData.append(
+        "accepted_answers",
+        JSON.stringify(normalizeAcceptedAnswers(normalizeJsonEditStringArray(parsed.accepted_answers)))
+      );
       formData.append("text_scale", normalizeTaskTextScale(typeof parsed.text_scale === "string" ? parsed.text_scale : null));
       formData.append("difficulty", normalizeJsonEditDifficulty(parsed.difficulty));
       formData.append("topics", JSON.stringify(normalizeJsonEditStringArray(parsed.topics)));
@@ -1098,6 +1187,16 @@ export default function AdminBankPage() {
               >
                 Себет
               </button>
+              <button
+                onClick={() => {
+                  setTab("answers");
+                  setOffset(0);
+                  resetAndHideForm();
+                }}
+                className={`px-4 py-2 rounded-lg font-semibold ${tab === "answers" ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+              >
+                Оқушы жауаптары
+              </button>
             </div>
 
             {tab === "trash" && (
@@ -1106,7 +1205,9 @@ export default function AdminBankPage() {
               </div>
             )}
 
-            <div className="bg-white/70 rounded-2xl p-4 border border-white/40 mb-4 space-y-3">
+            {tab === "answers" && email && <UnrecognizedAnswersPanel email={email} />}
+
+            <div className={`bg-white/70 rounded-2xl p-4 border border-white/40 mb-4 space-y-3 ${tab === "answers" ? "hidden" : ""}`}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <input
                   type="text"
@@ -1280,7 +1381,14 @@ export default function AdminBankPage() {
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Түрі</label>
                       <select
                         value={form.question_type}
-                        onChange={(e) => setForm((prev) => ({ ...prev, question_type: e.target.value as QuestionType }))}
+                        onChange={(e) => {
+                          const questionType = e.target.value as QuestionType;
+                          setForm((prev) => ({
+                            ...prev,
+                            question_type: questionType,
+                            answer_mode: getTaskAnswerMode({ question_type: questionType }),
+                          }));
+                        }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2"
                       >
                         <option value="input">Енгізу</option>
@@ -1304,6 +1412,30 @@ export default function AdminBankPage() {
                       </select>
                     </div>
                   </div>
+                  {supportsAnswerModeSwitch(form.question_type) && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Оқушының жауап беру тәсілі</label>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {[
+                          { value: "choices", label: "Нұсқаларды таңдайды" },
+                          { value: "written", label: "Жауапты өзі жазады" },
+                        ].map((mode) => (
+                          <button
+                            key={mode.value}
+                            type="button"
+                            onClick={() => setForm((prev) => ({ ...prev, answer_mode: mode.value as AnswerMode }))}
+                            className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                              form.answer_mode === mode.value
+                                ? "border-purple-600 bg-purple-50 text-purple-800"
+                                : "border-gray-300 bg-white text-gray-700"
+                            }`}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Тақырыптар</label>
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -1349,6 +1481,13 @@ export default function AdminBankPage() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-2"
                       />
                     </div>
+                  )}
+
+                  {form.question_type === "input" && (
+                    <AcceptedAnswersEditor
+                      value={form.acceptedAnswers}
+                      onChange={(acceptedAnswers) => setForm((prev) => ({ ...prev, acceptedAnswers }))}
+                    />
                   )}
 
                   {form.question_type === "factor_grid" && (
@@ -1496,6 +1635,11 @@ export default function AdminBankPage() {
                     </label>
                   )}
 
+                  <StudentTaskPreview
+                    task={formPreviewTask}
+                    imageSrc={form.removeImage ? null : formImagePreview || undefined}
+                  />
+
                   <div className="flex gap-2">
                     <button type="submit" disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
                       {saving ? "Сақталуда..." : editingTaskId ? "Сақтау" : "Құру"}
@@ -1508,13 +1652,15 @@ export default function AdminBankPage() {
               </div>
             )}
 
-            {loading ? (
-              <div className="text-center py-8 text-gray-600">Жүктелуде...</div>
-            ) : tasks.length === 0 ? (
-              <div className="text-center py-8 text-gray-600">Тапсырмалар табылмады</div>
-            ) : (
-              <div className="space-y-3">
-                {tasks.map((task, idx) => (
+            {tab !== "answers" && (
+              <>
+                {loading ? (
+                  <div className="text-center py-8 text-gray-600">Жүктелуде...</div>
+                ) : tasks.length === 0 ? (
+                  <div className="text-center py-8 text-gray-600">Тапсырмалар табылмады</div>
+                ) : (
+                  <div className="space-y-3">
+                    {tasks.map((task, idx) => (
                   <div key={task.id} className="bg-white/70 rounded-2xl p-4 border border-white/40">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -1566,13 +1712,13 @@ export default function AdminBankPage() {
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                    ))}
+                  </div>
+                )}
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm text-gray-600">Бет {page} / {totalPages} · Барлығы: {total}</div>
-              <div className="flex flex-wrap items-center gap-2">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-gray-600">Бет {page} / {totalPages} · Барлығы: {total}</div>
+                  <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setOffset((prev) => Math.max(0, prev - LIMIT))}
                   disabled={offset === 0}
@@ -1607,8 +1753,10 @@ export default function AdminBankPage() {
                 >
                   Алға →
                 </button>
-              </div>
-            </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {pendingDedup && (
               <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

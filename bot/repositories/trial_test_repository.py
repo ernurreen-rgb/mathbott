@@ -33,6 +33,8 @@ class TrialTestRepository(BaseRepository):
             bt.text AS text,
             bt.answer AS answer,
             bt.question_type AS question_type,
+            bt.answer_mode AS answer_mode,
+            bt.accepted_answers AS accepted_answers,
             bt.text_scale AS text_scale,
             bt.options AS options,
             bt.subquestions AS subquestions,
@@ -88,6 +90,7 @@ class TrialTestRepository(BaseRepository):
         text: str,
         answer: str,
         question_type: str,
+        accepted_answers: Optional[List[str]],
         text_scale: str,
         options: Optional[List[Dict[str, Any]]],
         subquestions: Optional[List[Dict[str, Any]]],
@@ -99,13 +102,14 @@ class TrialTestRepository(BaseRepository):
         cursor = await db.execute(
             """
             INSERT INTO bank_tasks
-            (text, answer, question_type, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (text, answer, question_type, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 text or "",
                 answer or "",
                 (question_type or "input").strip() or "input",
+                json.dumps(accepted_answers or [], ensure_ascii=False),
                 text_scale or "md",
                 self._to_json_or_none(options),
                 self._to_json_or_none(subquestions),
@@ -207,6 +211,7 @@ class TrialTestRepository(BaseRepository):
         text: str,
         answer: str,
         question_type: str = "input",
+        accepted_answers: Optional[List[str]] = None,
         text_scale: str = "md",
         options: Optional[List[Dict[str, str]]] = None,
         subquestions: Optional[List[Dict[str, Any]]] = None,
@@ -229,6 +234,7 @@ class TrialTestRepository(BaseRepository):
                     text=text,
                     answer=answer,
                     question_type=question_type,
+                    accepted_answers=accepted_answers,
                     text_scale=text_scale,
                     options=options,
                     subquestions=subquestions,

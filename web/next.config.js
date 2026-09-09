@@ -1,5 +1,3 @@
-const { withSentryConfig } = require("@sentry/nextjs");
-
 const isProduction = process.env.NODE_ENV === "production";
 
 // Extra connect-src origins (backend HTTPS/WSS, etc.) are environment-specific
@@ -79,20 +77,28 @@ const nextConfig = {
   },
 };
 
-module.exports = withSentryConfig(
-  nextConfig,
-  {
-    silent: true,
-    webpack: {
-      treeshake: {
-        removeDebugLogging: true,
+if (isProduction) {
+  const { withSentryConfig } = require("@sentry/nextjs");
+
+  module.exports = withSentryConfig(
+    nextConfig,
+    {
+      silent: true,
+      webpack: {
+        treeshake: {
+          removeDebugLogging: true,
+        },
+      },
+      sourcemaps: {
+        deleteSourcemapsAfterUpload: true,
       },
     },
-    sourcemaps: {
-      deleteSourcemapsAfterUpload: true,
-    },
-  },
-  {
-    hideSourceMaps: true,
-  }
-);
+    {
+      hideSourceMaps: true,
+    }
+  );
+} else {
+  // Keep the development compiler lean. Runtime Sentry instrumentation is
+  // disabled in development as well; production keeps the full integration.
+  module.exports = nextConfig;
+}

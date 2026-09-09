@@ -4,6 +4,7 @@ Shared constants, normalisation and row/snapshot helpers.
 from typing import Optional, List, Dict, Any
 import json
 import aiosqlite
+from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
 
 class BankTaskHelpersMixin:
@@ -11,6 +12,8 @@ class BankTaskHelpersMixin:
         "text",
         "answer",
         "question_type",
+        "answer_mode",
+        "accepted_answers",
         "text_scale",
         "options",
         "subquestions",
@@ -83,6 +86,8 @@ class BankTaskHelpersMixin:
             "text": row.get("text") or "",
             "answer": row.get("answer") or "",
             "question_type": row.get("question_type") or "input",
+            "answer_mode": normalize_answer_mode(row.get("answer_mode"), row.get("question_type")),
+            "accepted_answers": normalize_accepted_answers(row.get("accepted_answers")),
             "text_scale": row.get("text_scale") or "md",
             "options": cls._parse_json_field(row.get("options")),
             "subquestions": cls._parse_json_field(row.get("subquestions")),
@@ -104,7 +109,9 @@ class BankTaskHelpersMixin:
         item = dict(row)
         item["options"] = self._parse_json_field(item.get("options"))
         item["subquestions"] = self._parse_json_field(item.get("subquestions"))
+        item["accepted_answers"] = normalize_accepted_answers(item.get("accepted_answers"))
         item["text_scale"] = item.get("text_scale") or "md"
+        item["answer_mode"] = normalize_answer_mode(item.get("answer_mode"), item.get("question_type"))
         item["topics"] = topics or []
         return item
 

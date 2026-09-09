@@ -35,6 +35,26 @@ math-field.math-field-input:focus-within {
   box-shadow: 0 0 0 1px #9333ea;
 }
 
+math-field.student-math-answer-input {
+  min-height: 56px;
+  padding: 12px 14px;
+  border-color: #ddd6fe;
+  border-radius: 0.75rem;
+  font-size: 1.25rem;
+}
+
+math-field.student-math-answer-input--compact {
+  min-height: 44px;
+  padding: 8px;
+  border-color: #ddd6fe;
+  text-align: center;
+}
+
+math-field.student-math-answer-input[read-only] {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

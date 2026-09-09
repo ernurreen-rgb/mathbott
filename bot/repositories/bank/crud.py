@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 import json
 import aiosqlite
 from utils.file_storage import delete_image_file
+from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
 from .versions import BankTaskVersionConflictError
 
@@ -148,6 +149,8 @@ class BankTaskCrudMixin:
         answer: str,
         question_type: str,
         difficulty: str,
+        answer_mode: str = "choices",
+        accepted_answers: Optional[List[str]] = None,
         text_scale: str = "md",
         topics: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]] = None,
@@ -160,16 +163,19 @@ class BankTaskCrudMixin:
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = aiosqlite.Row
+            answer_mode = normalize_answer_mode(answer_mode, question_type)
             cursor = await db.execute(
                 """
                 INSERT INTO bank_tasks
-                (text, answer, question_type, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                (text, answer, question_type, answer_mode, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 """,
                 (
                     text,
                     answer,
                     question_type,
+                    answer_mode,
+                    json.dumps(normalize_accepted_answers(accepted_answers), ensure_ascii=False),
                     text_scale or "md",
                     json.dumps(options, ensure_ascii=False) if options is not None else None,
                     json.dumps(subquestions, ensure_ascii=False) if subquestions is not None else None,
@@ -215,7 +221,7 @@ class BankTaskCrudMixin:
         Create many bank tasks atomically in a single transaction.
 
         Expected task payload keys:
-        text, answer, question_type, text_scale, difficulty, topics, options, subquestions,
+        text, answer, question_type, answer_mode, accepted_answers, text_scale, difficulty, topics, options, subquestions,
         image_filename, solution_filename.
         """
         if not tasks:
@@ -226,16 +232,19 @@ class BankTaskCrudMixin:
             db.row_factory = aiosqlite.Row
             try:
                 for payload in tasks:
+                    question_type = payload.get("question_type", "input")
                     cursor = await db.execute(
                         """
                         INSERT INTO bank_tasks
-                        (text, answer, question_type, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                        (text, answer, question_type, answer_mode, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                         """,
                         (
                             payload.get("text", ""),
                             payload.get("answer", ""),
-                            payload.get("question_type", "input"),
+                            question_type,
+                            normalize_answer_mode(payload.get("answer_mode"), question_type),
+                            json.dumps(normalize_accepted_answers(payload.get("accepted_answers")), ensure_ascii=False),
                             payload.get("text_scale") or "md",
                             json.dumps(payload.get("options"), ensure_ascii=False)
                             if payload.get("options") is not None
@@ -302,6 +311,8 @@ class BankTaskCrudMixin:
         text: Optional[str] = None,
         answer: Optional[str] = None,
         question_type: Optional[str] = None,
+        answer_mode: Optional[str] = None,
+        accepted_answers: Optional[List[str]] = None,
         text_scale: Optional[str] = None,
         difficulty: Optional[str] = None,
         topics: Optional[List[str]] = None,
@@ -330,6 +341,13 @@ class BankTaskCrudMixin:
             next_text = existing.get("text") if text is None else text
             next_answer = existing.get("answer") if answer is None else answer
             next_question_type = existing.get("question_type") if question_type is None else question_type
+            next_answer_mode = normalize_answer_mode(
+                existing.get("answer_mode") if answer_mode is None else answer_mode,
+                next_question_type,
+            )
+            next_accepted_answers_raw = existing.get("accepted_answers") if accepted_answers is None else json.dumps(
+                normalize_accepted_answers(accepted_answers), ensure_ascii=False
+            )
             next_text_scale = existing.get("text_scale") if text_scale is None else (text_scale or "md")
             next_difficulty = existing.get("difficulty") if difficulty is None else difficulty
             next_options_raw = existing.get("options") if options is None else (
@@ -348,6 +366,8 @@ class BankTaskCrudMixin:
                 "text": next_text or "",
                 "answer": next_answer or "",
                 "question_type": next_question_type or "input",
+                "answer_mode": next_answer_mode or "choices",
+                "accepted_answers": normalize_accepted_answers(next_accepted_answers_raw),
                 "text_scale": next_text_scale or "md",
                 "options": self._parse_json_field(next_options_raw),
                 "subquestions": self._parse_json_field(next_subquestions_raw),
@@ -372,6 +392,12 @@ class BankTaskCrudMixin:
             if next_question_type != existing.get("question_type"):
                 updates.append("question_type = ?")
                 params.append(next_question_type)
+            if next_answer_mode != existing.get("answer_mode"):
+                updates.append("answer_mode = ?")
+                params.append(next_answer_mode)
+            if next_accepted_answers_raw != existing.get("accepted_answers"):
+                updates.append("accepted_answers = ?")
+                params.append(next_accepted_answers_raw)
             if (next_text_scale or "md") != (existing.get("text_scale") or "md"):
                 updates.append("text_scale = ?")
                 params.append(next_text_scale or "md")

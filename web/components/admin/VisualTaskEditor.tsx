@@ -12,10 +12,13 @@ import {
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { LessonTask, QuestionType } from "@/types";
 import { createCroppedImageFile } from "@/lib/imageCrop";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
+import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
+import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 
 type CropPercent = { left: number; top: number; width: number; height: number };
 const MIN_CROP_PCT = 5;
@@ -172,6 +175,8 @@ export default function VisualTaskEditor({
     setEditingTaskId(task.id);
     setTempTaskData({
       ...task,
+      accepted_answers: normalizeAcceptedAnswers(task.accepted_answers),
+      answer_mode: getTaskAnswerMode(task),
       options: task.options ? [...task.options] : undefined,
       subquestions: task.subquestions ? [...task.subquestions] : undefined,
       bank_topics: Array.isArray(task.bank_topics) ? [...task.bank_topics] : [],
@@ -189,8 +194,10 @@ export default function VisualTaskEditor({
     setTempTaskData({
       text: "",
       question_type: "mcq",
+      answer_mode: "choices",
       text_scale: "md",
       answer: "A",
+      accepted_answers: [],
       sort_order: tasks.length,
       options: undefined,
       subquestions: undefined,
@@ -211,6 +218,7 @@ export default function VisualTaskEditor({
     
     // Prepare data for saving
     const taskToSave: Partial<LessonTask> & { imageFile?: File | null; removeImage?: boolean } = { ...tempTaskData };
+    taskToSave.accepted_answers = normalizeAcceptedAnswers(taskToSave.accepted_answers);
     if (tempImageFile) {
       taskToSave.imageFile = tempImageFile;
       taskToSave.removeImage = false;
@@ -784,6 +792,13 @@ export default function VisualTaskEditor({
             </div>
           )}
 
+          {qt === "input" && isEditing && (
+            <AcceptedAnswersEditor
+              value={taskData.accepted_answers}
+              onChange={(acceptedAnswers) => updateTempTask({ accepted_answers: acceptedAnswers })}
+            />
+          )}
+
           {qt === "factor_grid" && (
             <div className="grid grid-cols-2 gap-3">
               {parseFactorGridAnswer(String(taskData.answer || "")).map((cell, idx) => {
@@ -1125,7 +1140,13 @@ export default function VisualTaskEditor({
           </label>
           <select
             value={tempTaskData.question_type || "input"}
-            onChange={(e) => updateTempTask({ question_type: e.target.value as QuestionType })}
+            onChange={(e) => {
+              const questionType = e.target.value as QuestionType;
+              updateTempTask({
+                question_type: questionType,
+                answer_mode: getTaskAnswerMode({ question_type: questionType }),
+              });
+            }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2"
           >
             <option value="input">Енгізу</option>
@@ -1135,7 +1156,45 @@ export default function VisualTaskEditor({
             <option value="select">Сәйкестендіру</option>
             <option value="factor_grid">Factor Grid</option>
           </select>
+          {supportsAnswerModeSwitch(tempTaskData.question_type) && (
+            <div className="mt-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Оқушы қалай жауап береді
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  { value: "choices", title: "Нұсқаны таңдайды", hint: "Дайын жауаптарды батырма арқылы таңдайды" },
+                  { value: "written", title: "Жауапты өзі жазады", hint: "Математикалық пернетақтамен жауап енгізеді" },
+                ].map((mode) => {
+                  const isActive = getTaskAnswerMode(tempTaskData) === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => updateTempTask({ answer_mode: mode.value as "choices" | "written" })}
+                      className={`rounded-xl border p-3 text-left transition-colors ${
+                        isActive
+                          ? "border-purple-600 bg-purple-50 ring-2 ring-purple-200"
+                          : "border-gray-300 bg-white hover:border-purple-300"
+                      }`}
+                    >
+                      <div className="font-semibold text-gray-900">{mode.title}</div>
+                      <div className="mt-1 text-xs text-gray-600">{mode.hint}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
+      )}
+
+      {isEditing && (
+        <StudentTaskPreview
+          task={{ ...tempTaskData, id: editingTaskId ?? -1, sort_order: tempTaskData.sort_order ?? tasks.length }}
+          imageSrc={removeImage ? null : tempImagePreview || undefined}
+          className="mt-4"
+        />
       )}
 
     </div>

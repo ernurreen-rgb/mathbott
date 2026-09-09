@@ -26,7 +26,7 @@ The repository already includes:
 
 ### Frontend
 
-- `Next.js 14`
+- `Next.js 15`
 - `React 18`
 - `TypeScript`
 - `Tailwind CSS`
@@ -81,6 +81,27 @@ cd web
 npm install
 npm run dev
 ```
+
+The default development command uses Turbopack. If a Webpack-specific issue
+needs to be reproduced, run `npm run dev:webpack` instead.
+
+### Local Production Demo
+
+To preview the optimized production frontend on `http://localhost:3000` while
+keeping the local backend and database, run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+```
+
+Switch back to the hot-reloading development frontend with:
+
+```bash
+docker compose up -d --build frontend
+```
+
+The demo override removes development source mounts, disables the frontend
+Sentry client, and serves the compiled Next.js build.
 
 ## Local Environment Files
 

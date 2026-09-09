@@ -21,6 +21,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                     "id": task["id"],
                     "text": task["text"],
                     "answer": task["answer"],
+                    "accepted_answers": _normalize_accepted_answers_or_raise(task.get("accepted_answers")),
                     "question_type": task.get("question_type", "input"),
                     "text_scale": task.get("text_scale", "md"),
                     "created_at": task.get("created_at"),
@@ -33,6 +34,92 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             "limit": limit,
             "offset": offset,
             "has_more": (offset + limit) < total
+        }
+
+    @app.post("/api/admin/task-answer/preview-check")
+    async def preview_task_answer_check(
+        payload: dict = Body(...),
+        admin_user: dict = Depends(require_admin_any_admin),
+    ):
+        """Check an unsaved task answer without recording progress or rewards."""
+        task_payload = payload.get("task")
+        if not isinstance(task_payload, dict):
+            raise HTTPException(status_code=400, detail="task must be an object")
+
+        user_answer = payload.get("user_answer")
+        if not isinstance(user_answer, str) or not user_answer.strip():
+            raise HTTPException(status_code=400, detail="user_answer is required")
+        if len(user_answer) > 10000:
+            raise HTTPException(status_code=400, detail="user_answer must be at most 10000 characters")
+
+        question_type_raw = task_payload.get("question_type", "input")
+        if not isinstance(question_type_raw, str):
+            raise HTTPException(status_code=400, detail="question_type must be a string")
+        question_type = question_type_raw.strip().lower() or "input"
+
+        raw_options = task_payload.get("options")
+        if raw_options is not None and not isinstance(raw_options, list):
+            raise HTTPException(status_code=400, detail="options must be an array")
+        options_list = raw_options if isinstance(raw_options, list) else None
+        for option in options_list or []:
+            if not isinstance(option, dict):
+                raise HTTPException(status_code=400, detail="Each option must be an object")
+            if not isinstance(option.get("label"), str) or not isinstance(option.get("text", ""), str):
+                raise HTTPException(status_code=400, detail="Each option must contain string label and text")
+            if len(option.get("text", "")) > 10000:
+                raise HTTPException(status_code=400, detail="Option text must be at most 10000 characters")
+
+        raw_subquestions = task_payload.get("subquestions")
+        if raw_subquestions is not None and not isinstance(raw_subquestions, list):
+            raise HTTPException(status_code=400, detail="subquestions must be an array")
+        subquestions_list = raw_subquestions if isinstance(raw_subquestions, list) else None
+        for subquestion in subquestions_list or []:
+            if not isinstance(subquestion, dict) or not isinstance(subquestion.get("text", ""), str):
+                raise HTTPException(status_code=400, detail="Each subquestion must contain string text")
+            if len(subquestion.get("text", "")) > 10000:
+                raise HTTPException(status_code=400, detail="Subquestion text must be at most 10000 characters")
+
+        _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        answer_mode = _normalize_answer_mode_or_raise(task_payload.get("answer_mode"), question_type)
+
+        correct_answer = task_payload.get("answer")
+        if not isinstance(correct_answer, str) or not correct_answer.strip():
+            raise HTTPException(status_code=400, detail="Correct answer is required")
+        if len(correct_answer) > 10000:
+            raise HTTPException(status_code=400, detail="Correct answer must be at most 10000 characters")
+        if question_type == "tf" and correct_answer.strip().lower() not in {"true", "false"}:
+            raise HTTPException(status_code=400, detail="tf answer must be true or false")
+        if question_type == "select":
+            try:
+                select_answers = json.loads(correct_answer)
+            except Exception:
+                select_answers = None
+            allowed_labels = set(_get_allowed_mcq_answer_labels(options_list))
+            if (
+                not isinstance(select_answers, list)
+                or len(select_answers) != 2
+                or any(str(value or "").strip().upper() not in allowed_labels for value in select_answers)
+            ):
+                raise HTTPException(status_code=400, detail="select answer must contain exactly 2 option labels")
+
+        normalized_correct_answer = _normalize_trial_like_answer_or_raise(
+            question_type,
+            correct_answer,
+            options_list,
+        )
+        accepted_answers = _normalize_accepted_answers_or_raise(task_payload.get("accepted_answers"))
+        task_for_compare = {
+            "question_type": question_type,
+            "answer_mode": answer_mode,
+            "answer": normalized_correct_answer,
+            "accepted_answers": accepted_answers,
+            "options": options_list,
+            "subquestions": subquestions_list,
+        }
+        return {
+            "correct": is_task_answer_correct(task_for_compare, user_answer),
+            "question_type": question_type,
+            "answer_mode": answer_mode,
         }
 
     @app.post("/api/admin/tasks")
@@ -148,6 +235,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: Optional[str] = Form(None),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: Optional[str] = Form(None),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -197,6 +286,15 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         subquestions_list = _parse_subquestions_json(subquestions) if subquestions is not None else None
 
         effective_question_type = question_type or task.get("question_type", "input")
+        effective_answer_mode = _normalize_answer_mode_or_raise(
+            answer_mode if answer_mode is not None else task.get("answer_mode"),
+            effective_question_type,
+        )
+        accepted_answers_value = (
+            _normalize_accepted_answers_or_raise(accepted_answers)
+            if accepted_answers is not None
+            else None
+        )
         effective_options = options_list if options_list is not None else task.get("options")
         effective_subquestions = subquestions_list if subquestions_list is not None else task.get("subquestions")
         _validate_trial_like_payload(
@@ -231,6 +329,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text=text if text else None,
                 answer=answer if answer else None,
                 question_type=question_type,
+                answer_mode=effective_answer_mode,
+                accepted_answers=accepted_answers_value,
                 text_scale=text_scale_value,
                 options=options_list if options is not None else None,
                 subquestions=subquestions_list if subquestions is not None else None,
@@ -531,6 +631,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -572,6 +674,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 image_filename = None
             else:
                 effective_qt = question_type or "input"
+                answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, effective_qt)
+                accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
                 _validate_trial_like_payload(effective_qt, options_list, subquestions_list)
                 answer = _normalize_trial_like_answer_or_raise(effective_qt, answer, options_list)
                 text_scale_value = _normalize_text_scale(text_scale)
@@ -583,6 +687,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                     text=text,
                     answer=answer,
                     question_type=effective_qt,
+                    answer_mode=answer_mode_value,
+                    accepted_answers=accepted_answers_value,
                     text_scale=text_scale_value,
                     difficulty=difficulty_value,
                     topics=topics_value,
@@ -724,6 +830,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         text: str = Form(""),
         answer: str = Form(""),
         question_type: str = Form("input"),
+        answer_mode: Optional[str] = Form(None),
+        accepted_answers: Optional[str] = Form(None),
         text_scale: str = Form("md"),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
@@ -757,6 +865,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             linked_bank_task_id = int(bank_task_id)
             image_filename = None
         else:
+            answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, question_type)
+            accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
             _validate_trial_like_payload(question_type, options_list, subquestions_list)
             answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
             text_scale_value = _normalize_text_scale(text_scale)
@@ -768,6 +878,8 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text=text,
                 answer=answer,
                 question_type=question_type,
+                answer_mode=answer_mode_value,
+                accepted_answers=accepted_answers_value,
                 text_scale=text_scale_value,
                 difficulty=difficulty_value,
                 topics=topics_value,
@@ -796,4 +908,3 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         )
         created_task = await db.tasks.get_task_by_id(task.get("id"))
         return _serialize_bank_placement_task(created_task or task)
-

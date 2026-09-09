@@ -209,6 +209,8 @@ async def test_admin_bank_import_confirm_success_after_dry_run(client, test_db):
         "text": "Confirm select question",
         "answer": ["D", "B"],
         "question_type": "select",
+        "answer_mode": "written",
+        "accepted_answers": ["17, 15"],
         "options": [
             {"label": "A", "text": "14"},
             {"label": "B", "text": "15"},
@@ -250,6 +252,8 @@ async def test_admin_bank_import_confirm_success_after_dry_run(client, test_db):
     created = await test_db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
     assert created is not None
     assert created["question_type"] == "select"
+    assert created["answer_mode"] == "written"
+    assert created["accepted_answers"] == ["17, 15"]
     assert created["answer"] == json.dumps(["D", "B"], ensure_ascii=False)
 
     after_total = (await test_db.bank_tasks.list_tasks(limit=100, offset=0))["total"]
@@ -289,6 +293,7 @@ async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
             "text": "Eight option MCQ",
             "answer": "H",
             "question_type": "mcq",
+            "answer_mode": "written",
             "difficulty": "B",
             "options": json.dumps(options),
             "email": admin_user["email"],
@@ -299,8 +304,31 @@ async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
     payload = response.json()
     assert payload["question_type"] == "mcq"
     assert payload["answer"] == "H"
+    assert payload["answer_mode"] == "written"
     assert len(payload["options"]) == 8
     assert payload["options"][-1]["label"] == "H"
+
+
+@pytest.mark.asyncio
+async def test_admin_bank_rejects_invalid_answer_mode(client, test_db):
+    admin_user = await test_db.users.create_user_by_email("admin.bank.answer.mode@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+    options = [{"label": label, "text": label} for label in ["A", "B", "C", "D"]]
+
+    response = client.post(
+        "/api/admin/bank/tasks",
+        data={
+            "text": "Invalid answer mode",
+            "answer": "A",
+            "question_type": "mcq",
+            "answer_mode": "voice",
+            "difficulty": "B",
+            "options": json.dumps(options),
+            "email": admin_user["email"],
+        },
+    )
+
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio

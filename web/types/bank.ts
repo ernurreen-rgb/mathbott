@@ -1,4 +1,4 @@
-import type { LessonTaskOption, LessonTaskSubquestion, QuestionType } from "./curriculum";
+import type { AnswerMode, LessonTaskOption, LessonTaskSubquestion, QuestionType } from "./curriculum";
 
 
 // Bank tasks (admin pool for trial tests)
@@ -11,7 +11,9 @@ export interface BankTask {
   id: number;
   text: string;
   answer: string;
+  accepted_answers?: string[] | null;
   question_type: QuestionType;
+  answer_mode?: AnswerMode | null;
   text_scale?: TaskTextScale | null;
   options?: LessonTaskOption[] | null;
   subquestions?: LessonTaskSubquestion[] | null;
@@ -34,6 +36,39 @@ export interface BankTaskListResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+}
+
+
+export type BankAnswerSource = "lesson" | "trial_test" | "trial_test_coop";
+
+
+export interface BankUnrecognizedAnswerItem {
+  bank_task_id: number;
+  task_text: string;
+  student_answer: string;
+  primary_answer: string;
+  accepted_answers: string[];
+  question_type: QuestionType;
+  current_version: number;
+  occurrences: number;
+  students_count: number;
+  last_seen_at: string;
+  sources: BankAnswerSource[];
+}
+
+
+export interface BankUnrecognizedAnswersResponse {
+  items: BankUnrecognizedAnswerItem[];
+  total: number;
+  limit: number;
+  min_count: number;
+  sample_limit_per_source: number;
+}
+
+
+export interface BankAcceptAnswerResponse {
+  task: BankTask;
+  added: boolean;
 }
 
 
@@ -158,7 +193,9 @@ export interface BankTaskVersionDetail extends BankTaskVersionItem {
   snapshot: {
     text: string;
     answer: string;
+    accepted_answers?: string[] | null;
     question_type: QuestionType;
+    answer_mode?: AnswerMode | null;
     text_scale?: TaskTextScale | null;
     options?: LessonTaskOption[] | null;
     subquestions?: LessonTaskSubquestion[] | null;
@@ -289,7 +326,9 @@ export interface BankPlacementTask {
   bank_task?: Partial<BankTask> | null;
   text?: string;
   answer?: string;
+  accepted_answers?: string[] | null;
   question_type?: QuestionType;
+  answer_mode?: AnswerMode | null;
   text_scale?: TaskTextScale | null;
   options?: LessonTaskOption[] | null;
   subquestions?: LessonTaskSubquestion[] | null;

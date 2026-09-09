@@ -5,13 +5,14 @@ import AdminOpsPage from "../page";
 
 const mockUseSession = jest.fn();
 const mockPush = jest.fn();
+const mockRouter = { push: mockPush };
 
 jest.mock("next-auth/react", () => ({
   useSession: () => mockUseSession(),
 }));
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => mockRouter,
 }));
 
 jest.mock("@/components/DesktopNav", () => {

@@ -37,4 +37,11 @@ describe("trial-test-answer helpers", () => {
     expect(isTrialTaskAnswerComplete(multiAnswerTask, JSON.stringify(["B"]))).toBe(false);
     expect(isTrialTaskAnswerComplete(multiAnswerTask, JSON.stringify(["B", "D"]))).toBe(true);
   });
+
+  it("uses written completeness when an option task is configured for writing", () => {
+    const writtenTask = task(11, "mcq", { answer_mode: "written", correct_count: 2 });
+
+    expect(isTrialTaskAnswerComplete(writtenTask, JSON.stringify(["x", ""]))).toBe(false);
+    expect(isTrialTaskAnswerComplete(writtenTask, JSON.stringify(["x", "y"]))).toBe(true);
+  });
 });

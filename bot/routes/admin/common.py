@@ -37,6 +37,10 @@ from settings import DEFAULT_ADMIN_SECRET, get_settings
 from utils.validation import (
     MAX_MCQ_CORRECT_OPTIONS,
     canonicalize_factor_grid_answer,
+    is_task_answer_correct,
+    normalize_accepted_answers,
+    normalize_answer_mode,
+    normalize_task_answer_for_compare,
     parse_mcq_answer_labels,
     serialize_mcq_answer_labels,
     validate_email,
@@ -124,6 +128,22 @@ def _normalize_text_scale(value: Any) -> str:
     if normalized not in {"sm", "md", "lg"}:
         raise HTTPException(status_code=400, detail="text_scale must be one of sm, md, lg")
     return normalized
+
+
+def _normalize_answer_mode_or_raise(value: Any, question_type: str) -> str:
+    if value is not None and not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="answer_mode must be choices or written")
+    raw = str(value or "").strip().lower()
+    if question_type in {"mcq", "mcq6", "select"} and raw and raw not in {"choices", "written"}:
+        raise HTTPException(status_code=400, detail="answer_mode must be choices or written")
+    return normalize_answer_mode(raw, question_type)
+
+
+def _normalize_accepted_answers_or_raise(value: Any) -> List[str]:
+    try:
+        return normalize_accepted_answers(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _parse_options_json(options: Optional[str]) -> Optional[List[dict]]:
@@ -650,6 +670,16 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     except HTTPException as exc:
         raise ImportTaskValidationError("question_type", _http_detail_to_message(exc.detail))
 
+    try:
+        answer_mode = _normalize_answer_mode_or_raise(raw_task.get("answer_mode"), question_type)
+    except HTTPException as exc:
+        raise ImportTaskValidationError("answer_mode", _http_detail_to_message(exc.detail))
+
+    try:
+        accepted_answers = normalize_accepted_answers(raw_task.get("accepted_answers"))
+    except ValueError as exc:
+        raise ImportTaskValidationError("accepted_answers", str(exc)) from exc
+
     raw_difficulty = raw_task.get("difficulty", "B")
     if raw_difficulty is None:
         raw_difficulty = "B"
@@ -714,6 +744,8 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
         "text": text,
         "answer": answer,
         "question_type": question_type,
+        "answer_mode": answer_mode,
+        "accepted_answers": accepted_answers,
         "text_scale": text_scale,
         "difficulty": difficulty,
         "topics": topics,
@@ -739,6 +771,10 @@ def _serialize_bank_task_for_import_export(task: dict) -> Dict[str, Any]:
 
     subquestions = _parse_json_safe(task.get("subquestions"))
     subquestions_value = subquestions if isinstance(subquestions, list) else None
+    try:
+        accepted_answers = normalize_accepted_answers(task.get("accepted_answers"))
+    except ValueError:
+        accepted_answers = []
 
     image_filename_raw = task.get("image_filename")
     image_filename = (
@@ -758,6 +794,8 @@ def _serialize_bank_task_for_import_export(task: dict) -> Dict[str, Any]:
         "text": str(task.get("text") or ""),
         "answer": str(task.get("answer") or ""),
         "question_type": str(task.get("question_type") or "input"),
+        "answer_mode": normalize_answer_mode(task.get("answer_mode"), task.get("question_type")),
+        "accepted_answers": accepted_answers,
         "text_scale": text_scale,
         "difficulty": difficulty,
         "topics": topics_value,
@@ -772,11 +810,17 @@ def _serialize_bank_placement_task(task: dict) -> dict:
     options = _parse_json_safe(task.get("options"))
     subquestions = _parse_json_safe(task.get("subquestions"))
     text_scale = task.get("text_scale") or "md"
+    try:
+        accepted_answers = normalize_accepted_answers(task.get("accepted_answers"))
+    except ValueError:
+        accepted_answers = []
     bank_task = {
         "id": task.get("bank_task_id"),
         "text": task.get("text", ""),
         "answer": task.get("answer", ""),
         "question_type": task.get("question_type", "input"),
+        "answer_mode": normalize_answer_mode(task.get("answer_mode"), task.get("question_type")),
+        "accepted_answers": accepted_answers,
         "text_scale": text_scale,
         "options": options if isinstance(options, list) else None,
         "subquestions": subquestions if isinstance(subquestions, list) else None,
@@ -796,6 +840,8 @@ def _serialize_bank_placement_task(task: dict) -> dict:
         "text": bank_task["text"],
         "answer": bank_task["answer"],
         "question_type": bank_task["question_type"],
+        "answer_mode": bank_task["answer_mode"],
+        "accepted_answers": bank_task["accepted_answers"],
         "text_scale": text_scale,
         "options": bank_task["options"],
         "subquestions": bank_task["subquestions"],

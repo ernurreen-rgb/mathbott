@@ -1,6 +1,8 @@
 import { isFactorGridComplete, parseFactorGridAnswer } from "./factor-grid";
 import { getTaskMcqCorrectCount, isMcqAnswerComplete } from "./question-options";
 import type { LessonTask } from "@/types";
+import { isWrittenAnswerComplete } from "./written-answer";
+import { getTaskAnswerMode } from "./answer-mode";
 
 export type TrialAnswersMap = Record<number, string>;
 
@@ -16,13 +18,18 @@ export const isSelectAnswerComplete = (value?: string): boolean => {
 
 export const isTrialTaskAnswerComplete = (task: LessonTask, value?: string): boolean => {
   if (task.question_type === "select") {
-    return isSelectAnswerComplete(value);
+    return getTaskAnswerMode(task) === "written"
+      ? isWrittenAnswerComplete(value, 2)
+      : isSelectAnswerComplete(value);
   }
   if (task.question_type === "factor_grid") {
     return isFactorGridComplete(parseFactorGridAnswer(value));
   }
   if (task.question_type === "mcq" || task.question_type === "mcq6") {
-    return isMcqAnswerComplete(value, getTaskMcqCorrectCount(task));
+    const requiredCount = getTaskMcqCorrectCount(task);
+    return getTaskAnswerMode(task) === "written"
+      ? isWrittenAnswerComplete(value, requiredCount)
+      : isMcqAnswerComplete(value, requiredCount);
   }
   return typeof value === "string" && value.trim().length > 0;
 };

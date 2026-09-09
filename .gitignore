@@ -69,6 +69,14 @@ bot/solutions/*
 # Local exports
 csv_export/
 
+# Local browser and generated artifacts
+.playwright-cli/
+output/
+tmp/
+
+# Downloaded reference books (large binary files)
+books/
+
 # Keep source code under web/lib tracked
 !web/lib/
 !web/lib/**

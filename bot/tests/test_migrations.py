@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0002_solo_trial_test_result_unique"
+HEAD_REVISION = "0004_task_accepted_answers"
 
 
 def _load_baseline_ddl():
@@ -71,19 +71,45 @@ def test_fresh_database_gets_full_schema(tmp_path):
     assert "bank_tasks" in tables
     assert "alembic_version" in tables
     assert "submit_mode" in _columns(path, "trial_test_results")
+    assert "answer_mode" in _columns(path, "bank_tasks")
+    assert "accepted_answers" in _columns(path, "bank_tasks")
     assert "uq_trial_test_results_solo_user_test" in _indexes(path)
     assert _stamped_revision(path) == HEAD_REVISION
+
+
+def test_answer_mode_column_defaults_to_choices_for_new_rows(tmp_path):
+    path = str(tmp_path / "answer_mode.db")
+    run_migrations(path)
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO bank_tasks (text, answer, question_type) VALUES ('input', '1', 'input')"
+        )
+        conn.execute(
+            "INSERT INTO bank_tasks (text, answer, question_type) VALUES ('mcq', 'A', 'mcq')"
+        )
+        rows = conn.execute(
+            "SELECT question_type, answer_mode, accepted_answers FROM bank_tasks ORDER BY id"
+        ).fetchall()
+
+    assert rows == [("input", "choices", "[]"), ("mcq", "choices", "[]")]
 
 
 @pytest.mark.asyncio
 async def test_legacy_complete_database_is_stamped(tmp_path):
     path = str(tmp_path / "legacy_full.db")
     _make_legacy_db(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO bank_tasks (text, answer, question_type) VALUES ('input', '1', 'input')")
+        conn.execute("INSERT INTO bank_tasks (text, answer, question_type) VALUES ('mcq', 'A', 'mcq')")
     assert "alembic_version" not in _tables(path)
 
     run_migrations(path)
 
     assert _stamped_revision(path) == HEAD_REVISION
+    with sqlite3.connect(path) as conn:
+        modes = conn.execute("SELECT question_type, answer_mode FROM bank_tasks ORDER BY id").fetchall()
+    assert modes == [("input", "written"), ("mcq", "choices")]
     await _run_seeds_on(path)
 
 

@@ -1,260 +1,312 @@
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { getModuleDetails } from "@/lib/api";
-import { ModuleDetails } from "@/types";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import Link from "next/link";
+import ModuleLessonJourney, {
+  getLessonDisplayProgress,
+  isLessonJourneyCompleted,
+  sortJourneyLessons,
+  sortJourneySections,
+} from "@/components/modules/ModuleLessonJourney";
+import { getModuleHeaderCollapsedState } from "@/components/modules/moduleHeaderState";
+import { getModuleDetails } from "@/lib/api";
+import type { ModuleDetails, Section } from "@/types";
 
-function clamp01(n: number) {
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(1, n));
-}
-
-function DuolingoProgressRing({
-  progress,
-  size = 120,
-  stroke = 14,
-  color = "#58CC02", // Duolingo green-ish
-  track = "#E5E5E5",
-}: {
-  progress: number;
-  size?: number;
-  stroke?: number;
-  color?: string;
-  track?: string;
-}) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const p = clamp01(progress);
-  const dash = c * (1 - p);
+function OrnamentRail({ side }: { side: "left" | "right" }) {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block pointer-events-none">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        strokeWidth={stroke}
-        stroke={track}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        stroke={color}
-        strokeDasharray={`${c} ${c}`}
-        strokeDashoffset={dash}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-    </svg>
-  );
-}
-
-function DuolingoStartBubble() {
-  return (
-    <div className="absolute -top-14 left-1/2 -translate-x-1/2 pointer-events-none">
-      <div
-        className="relative bg-white rounded-[18px] px-5 py-2.5 font-extrabold tracking-wide shadow-sm"
-        style={{ border: "3px solid #E5E5E5", color: "#58CC02", fontSize: 22, lineHeight: "22px" }}
-      >
-        БАСТАУ
-        <div
-          className="absolute left-1/2 -translate-x-1/2 -bottom-[12px] w-0 h-0"
-          style={{
-            borderLeft: "12px solid transparent",
-            borderRight: "12px solid transparent",
-            borderTop: "12px solid #E5E5E5",
-          }}
-        />
-        <div
-          className="absolute left-1/2 -translate-x-1/2 -bottom-[8px] w-0 h-0"
-          style={{
-            borderLeft: "9px solid transparent",
-            borderRight: "9px solid transparent",
-            borderTop: "9px solid white",
-          }}
-        />
-      </div>
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute top-24 hidden h-[calc(100%-10rem)] w-16 flex-col items-center justify-around opacity-25 sm:flex lg:w-24 ${
+        side === "left" ? "left-0" : "right-0 scale-x-[-1]"
+      }`}
+    >
+      {[0, 1, 2, 3, 4, 5, 6].map((item) => (
+        <svg
+          key={item}
+          viewBox="0 0 64 92"
+          className="h-24 w-14 text-rose-300 lg:w-16"
+        >
+          <path
+            d="M32 7c-17 0-22 18-11 27 8 7 19 1 14-8-3-5-11-2-9 4M32 7c17 0 22 18 11 27-8 7-19 1-14-8 3-5 11-2 9 4M32 84c-17 0-22-18-11-27 8-7 19-1 14 8-3 5-11 2-9-4M32 84c17 0 22-18 11-27-8-7-19-1-14 8 3 5 11 2 9-4M32 7v77"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+      ))}
     </div>
   );
 }
 
-function DuolingoStar({ size = 48 }: { size?: number }) {
+function MountainBackdrop() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 1200 360"
+      preserveAspectRatio="none"
+      className="pointer-events-none fixed inset-x-0 bottom-0 h-72 w-full text-purple-300/20"
+    >
       <path
-        d="M12 2.5l2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.9l-5.88 3.11 1.12-6.55L2.48 9.42l6.58-.96L12 2.5z"
-        fill="white"
+        d="M0 315 135 195l70 58 125-145 104 126 104-88 89 96 135-186 126 189 76-66 136 136"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+      />
+      <path
+        d="m0 342 174-90 86 42 152-99 102 70 104-39 112 56 155-115 110 104 79-29 126 100"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
       />
     </svg>
   );
 }
 
+function PageLoader({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100"
+    >
+      <div className="h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
+    </div>
+  );
+}
+
 export default function ModuleDetailPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const params = useParams();
-  const router = useRouter();
-  const moduleId = parseInt(params.id as string);
+  const rawModuleId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const moduleId = Number(rawModuleId);
+  const isValidModuleId = Number.isInteger(moduleId) && moduleId > 0;
   const sessionEmail = session?.user?.email || null;
-  
+
   const [module, setModule] = useState<ModuleDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<number | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [activeSectionId, setActiveSectionId] = useState<number | null>(null);
+  const [guideSectionId, setGuideSectionId] = useState<number | null>(null);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const didScrollToHashRef = useRef(false);
-
-  useEffect(() => {
-    // allow hash scroll when module id changes (new page)
-    didScrollToHashRef.current = false;
-  }, [moduleId]);
+  const guideButtonRef = useRef<HTMLButtonElement>(null);
+  const guideCloseButtonRef = useRef<HTMLButtonElement>(null);
 
   const fetchModule = useCallback(async () => {
-    if (!sessionEmail || !moduleId) return;
-    
+    if (!sessionEmail || !isValidModuleId) return;
+
     setLoading(true);
     setError(null);
-    const { data, error: err } = await getModuleDetails(moduleId, sessionEmail);
-    
-    if (err) {
-      setError(err);
-    } else if (data) {
-      setModule(data);
+    try {
+      const { data, error: requestError } = await getModuleDetails(
+        moduleId,
+        sessionEmail,
+      );
+      if (requestError) {
+        setError(requestError);
+        setModule(null);
+      } else {
+        setModule(data);
+      }
+    } catch (requestError) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("Failed to load module:", requestError);
+      }
+      setError("Модульді жүктеу мүмкін болмады");
+      setModule(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [moduleId, sessionEmail]);
+  }, [isValidModuleId, moduleId, sessionEmail]);
 
   useEffect(() => {
-    if (sessionEmail && moduleId) {
-      void fetchModule();
-    }
-  }, [sessionEmail, moduleId, fetchModule]);
+    didScrollToHashRef.current = false;
+    setActiveSectionId(null);
+  }, [moduleId]);
 
-  // All hooks must be called before any conditional returns
-  const sortedSections = useMemo(() => {
-    if (!module) return [];
-    return module.sections
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
-  }, [module]);
-
-  // Global next lesson for the whole module (only one БАСТАУ bubble)
-  const nextLessonId = useMemo(() => {
-    if (sortedSections.length === 0) return null;
-
-    for (const section of sortedSections) {
-      const lessons = (section.lessons || [])
-        .slice()
-        .sort(
-          (a, b) =>
-            a.sort_order - b.sort_order ||
-            (a.lesson_number ?? 0) - (b.lesson_number ?? 0) ||
-            a.id - b.id
-        );
-
-      const candidate = lessons.find((l) => !l.progress?.completed);
-      if (candidate) return candidate.id;
-    }
-
-    return null;
-  }, [sortedSections]);
-
-  // Scroll to section if URL contains #section-{id}
   useEffect(() => {
-    if (didScrollToHashRef.current) return;
-    if (sortedSections.length === 0) return;
-    if (typeof window === "undefined") return;
-
-    const hash = window.location.hash || "";
-    const m = hash.match(/^#section-(\d+)$/);
-    if (!m) return;
-
-    const sectionId = Number(m[1]);
-    if (!sortedSections.some((s) => s.id === sectionId)) return;
-
-    didScrollToHashRef.current = true;
-    setActiveSection(sectionId);
-
-    // wait for layout after render
-    setTimeout(() => {
-      document.getElementById(`section-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  }, [sortedSections]);
-
-  // Track active section based on scroll position
-  useEffect(() => {
-    if (sortedSections.length === 0) {
-      setActiveSection(null);
+    if (sessionStatus === "loading") return;
+    if (!isValidModuleId) {
+      setError("Модуль нөмірі қате");
+      setLoading(false);
       return;
     }
+    if (!sessionEmail) {
+      setLoading(false);
+      return;
+    }
+    void fetchModule();
+  }, [fetchModule, isValidModuleId, sessionEmail, sessionStatus]);
 
+  const sortedSections = useMemo(
+    () => sortJourneySections(module?.sections || []),
+    [module?.sections],
+  );
+
+  useEffect(() => {
+    if (sortedSections.length === 0) {
+      setActiveSectionId(null);
+      return;
+    }
+    if (!sortedSections.some((section) => section.id === activeSectionId)) {
+      setActiveSectionId(sortedSections[0].id);
+    }
+  }, [activeSectionId, sortedSections]);
+
+  useEffect(() => {
+    if (didScrollToHashRef.current || sortedSections.length === 0) return;
+    const match = window.location.hash.match(/^#section-(\d+)$/);
+    if (!match) return;
+
+    const sectionId = Number(match[1]);
+    if (!sortedSections.some((section) => section.id === sectionId)) return;
+
+    didScrollToHashRef.current = true;
+    setActiveSectionId(sectionId);
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById(`section-${sectionId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [sortedSections]);
+
+  useEffect(() => {
+    if (sortedSections.length === 0) return;
+
+    let animationFrameId: number | null = null;
     const updateActiveSection = () => {
-      if (typeof window === "undefined") return;
+      animationFrameId = null;
+      const activationLine = 190;
+      let nextSectionId = sortedSections[0].id;
 
-      const scrollY = window.scrollY || window.pageYOffset || 0;
-
-      // When we are near the very top of the page - always show the first section
-      if (scrollY < 50) {
-        setActiveSection(sortedSections[0].id);
-        return;
+      for (const section of sortedSections) {
+        const element = document.getElementById(`section-${section.id}`);
+        if (!element) continue;
+        if (element.getBoundingClientRect().top <= activationLine) {
+          nextSectionId = section.id;
+        } else {
+          break;
+        }
       }
 
-      const headerOffset = 120; // approximate sticky header height
-      const viewportHeight = window.innerHeight;
-
-      let bestSectionId = sortedSections[0].id;
-      let bestDistance = Infinity;
-
-      sortedSections.forEach((section) => {
-        const el = document.getElementById(`section-${section.id}`);
-        if (!el) return;
-
-        const rect = el.getBoundingClientRect();
-
-        // Ignore sections completely out of viewport
-        if (rect.bottom < 0 || rect.top > viewportHeight) {
-          return;
-        }
-
-        const distance = Math.abs(rect.top - headerOffset);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestSectionId = section.id;
-        }
-      });
-
-      setActiveSection(bestSectionId);
+      setActiveSectionId((current) =>
+        current === nextSectionId ? current : nextSectionId,
+      );
     };
 
-    // Initial calculation
-    updateActiveSection();
+    const scheduleUpdate = () => {
+      if (animationFrameId !== null) return;
+      animationFrameId = window.requestAnimationFrame(updateActiveSection);
+    };
 
-    // Listen to scroll events
-    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    scheduleUpdate();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
 
     return () => {
-      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (animationFrameId !== null)
+        window.cancelAnimationFrame(animationFrameId);
     };
   }, [sortedSections]);
 
-  const currentSection = sortedSections.length > 0
-    ? (sortedSections.find((s) => s.id === activeSection) || sortedSections[0])
-    : null;
+  useLayoutEffect(() => {
+    let animationFrameId: number | null = null;
 
+    const updateHeaderState = () => {
+      animationFrameId = null;
+      const scrollY = window.scrollY || window.pageYOffset;
+      setIsHeaderCollapsed((current) =>
+        getModuleHeaderCollapsedState(scrollY, current),
+      );
+    };
 
-  // Conditional returns AFTER all hooks
+    const scheduleUpdate = () => {
+      if (animationFrameId !== null) return;
+      animationFrameId = window.requestAnimationFrame(updateHeaderState);
+    };
+
+    updateHeaderState();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      if (animationFrameId !== null)
+        window.cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  const currentSection = useMemo(
+    () =>
+      sortedSections.find((section) => section.id === activeSectionId) ||
+      sortedSections[0] ||
+      null,
+    [activeSectionId, sortedSections],
+  );
+
+  const guideSection = useMemo(
+    () =>
+      sortedSections.find((section) => section.id === guideSectionId) || null,
+    [guideSectionId, sortedSections],
+  );
+
+  const closeGuide = useCallback(() => {
+    setGuideSectionId(null);
+    window.requestAnimationFrame(() => guideButtonRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!guideSection) return;
+    guideCloseButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeGuide();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeGuide, guideSection]);
+
+  const sectionSummary = useMemo(() => {
+    const lessons = sortJourneyLessons(currentSection?.lessons);
+    const completed = lessons.filter(isLessonJourneyCompleted).length;
+    const progress = lessons.length
+      ? Math.round(
+          (lessons.reduce(
+            (total, lesson) => total + getLessonDisplayProgress(lesson),
+            0,
+          ) /
+            lessons.length) *
+            100,
+        )
+      : 0;
+    return { completed, progress, total: lessons.length };
+  }, [currentSection]);
+
+  if (sessionStatus === "loading")
+    return <PageLoader label="Сессия жүктелуде" />;
+
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100 px-4">
+        <div className="w-full max-w-md rounded-3xl border border-white/80 bg-white/85 p-8 text-center shadow-2xl">
+          <div className="text-5xl">🔐</div>
+          <h1 className="mt-4 text-2xl font-black text-slate-900">
             Модульді көру үшін кіріңіз
           </h1>
         </div>
@@ -262,99 +314,266 @@ export default function ModuleDetailPage() {
     );
   }
 
-  if (loading) {
+  if (loading) return <PageLoader label="Модуль жүктелуде" />;
+
+  if (error || !module) {
     return (
-      <div className="md:ml-64 flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-spin">⏳</div>
-          <div className="text-gray-600">Модуль жүктелуде...</div>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100 px-4">
+        <div
+          role="alert"
+          className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-7 text-center shadow-xl"
+        >
+          <div className="text-4xl">⚠️</div>
+          <div className="mt-3 font-bold text-red-700">
+            {error || "Модуль табылмады"}
+          </div>
+          {isValidModuleId && sessionEmail && (
+            <button
+              type="button"
+              onClick={() => void fetchModule()}
+              className="mt-5 rounded-xl bg-red-600 px-5 py-2.5 font-bold text-white hover:bg-red-700"
+            >
+              Қайта жүктеу
+            </button>
+          )}
+          <Link
+            href="/modules"
+            className="mt-4 block text-sm font-bold text-purple-700 hover:underline"
+          >
+            ← Модульдерге қайту
+          </Link>
         </div>
       </div>
     );
   }
-
-  if (error) {
-    return (
-      <div className="md:ml-64 flex items-center justify-center min-h-screen px-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error}
-        </div>
-      </div>
-    );
-  }
-
-  if (!module) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
-      <div className="absolute inset-0 bg-black/5"></div>
+    <div className="relative min-h-screen overflow-x-clip bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-[#ebe9ff] pb-24 md:pb-12">
+      <div
+        aria-hidden="true"
+        className="fixed -left-32 top-12 h-96 w-96 rounded-full bg-fuchsia-200/30 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="fixed -right-28 top-72 h-[28rem] w-[28rem] rounded-full bg-blue-200/35 blur-3xl"
+      />
+      <MountainBackdrop />
       <DesktopNav />
-      
-      {/* Fixed sticky header */}
-      {currentSection && (
-        <div className="fixed top-0 left-0 right-0 md:left-64 z-50 bg-purple-500 rounded-b-2xl shadow-lg">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-white text-sm font-bold">
-                  <div className="flex flex-col leading-tight">
-                    <span className="uppercase tracking-wide opacity-90">
-                      МОДУЛЬ {moduleId}
-                    </span>
-                    <span className="opacity-90 text-sm sm:text-base">
-                      {currentSection.name}
-                    </span>
-                    {currentSection.description && currentSection.description.trim().length > 0 && (
-                      <span className="opacity-90 text-[11px] sm:text-xs font-normal mt-1 line-clamp-2">
-                        {currentSection.description}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 shadow-md transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                АНЫҚТАМАЛЫҚ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Guide modal */}
-      {guideOpen && currentSection && (
+      <header className="pointer-events-none sticky top-0 z-40 h-[132px] px-3 pt-3 sm:h-[144px] sm:px-6 md:ml-64">
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
-          onClick={() => setGuideOpen(false)}
+          data-header-state={isHeaderCollapsed ? "collapsed" : "expanded"}
+          className={`pointer-events-auto mx-auto overflow-hidden border border-white/90 bg-white/90 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl transition-[max-width,padding,border-radius,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+            isHeaderCollapsed
+              ? "max-w-2xl rounded-2xl p-2.5 shadow-[0_12px_35px_rgba(88,28,135,0.14)]"
+              : "max-w-4xl rounded-[1.75rem] p-4 sm:p-5"
+          }`}
         >
           <div
-            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+            className={`flex items-center transition-[gap] duration-300 motion-reduce:transition-none ${
+              isHeaderCollapsed ? "gap-2" : "gap-3 sm:gap-4"
+            }`}
           >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <div className="font-bold text-gray-800 text-sm sm:text-base">
-                Анықтамалық: {currentSection.name}
+            <Link
+              href="/modules"
+              aria-label="Модульдерге қайту"
+              className={`flex shrink-0 items-center justify-center bg-purple-50 font-black text-purple-700 transition hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 ${
+                isHeaderCollapsed
+                  ? "h-10 w-10 rounded-xl text-lg"
+                  : "h-11 w-11 rounded-2xl text-xl"
+              }`}
+            >
+              ←
+            </Link>
+
+            <h1 className="sr-only">{module.name}</h1>
+            <div
+              className={`relative min-w-0 flex-1 transition-[height] duration-300 ease-out motion-reduce:transition-none ${
+                isHeaderCollapsed ? "h-9" : "h-[3.75rem]"
+              }`}
+            >
+              <div
+                aria-hidden="true"
+                className={`absolute inset-0 flex flex-col justify-center transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
+                  isHeaderCollapsed
+                    ? "pointer-events-none -translate-y-1 opacity-0"
+                    : "translate-y-0 opacity-100 delay-100"
+                }`}
+              >
+                  <div className="truncate text-xl font-black text-slate-900 sm:text-2xl">
+                    {module.icon || "📚"} {module.name}
+                  </div>
+                {currentSection && (
+                  <div className="truncate text-xs font-semibold text-slate-500 sm:text-sm">
+                    {currentSection.name}
+                  </div>
+                )}
+              </div>
+
+              <div
+                aria-hidden="true"
+                className={`absolute inset-0 flex flex-col justify-center transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
+                  isHeaderCollapsed
+                    ? "translate-y-0 opacity-100 delay-100"
+                    : "pointer-events-none translate-y-1 opacity-0"
+                }`}
+              >
+                <div className="truncate text-sm font-black text-slate-900 sm:text-base">
+                  {module.icon || "📚"} {currentSection?.name || module.name}
+                </div>
+              </div>
+            </div>
+
+            <div
+              aria-hidden="true"
+              className={`shrink-0 overflow-hidden text-right transition-[max-width,opacity] duration-300 motion-reduce:transition-none ${
+                isHeaderCollapsed
+                  ? "max-w-16 opacity-100"
+                  : "max-w-0 opacity-0 sm:max-w-[9rem] sm:opacity-100"
+              }`}
+            >
+              <div
+                className={`overflow-hidden text-[10px] font-bold uppercase tracking-wide text-purple-500 transition-[max-height,opacity] duration-200 motion-reduce:transition-none ${
+                  isHeaderCollapsed
+                    ? "max-h-0 opacity-0"
+                    : "max-h-4 opacity-100"
+                }`}
+              >
+                Прогресс
+              </div>
+              <div className="whitespace-nowrap text-sm font-black text-slate-800 sm:text-lg">
+                {sectionSummary.completed}/{sectionSummary.total}
+                <span
+                  className={`inline-block overflow-hidden align-bottom transition-[max-width,opacity] duration-200 motion-reduce:transition-none ${
+                    isHeaderCollapsed
+                      ? "max-w-0 opacity-0"
+                      : "max-w-16 opacity-100"
+                  }`}
+                >
+                  &nbsp;сабақ
+                </span>
+              </div>
+            </div>
+
+            {currentSection && (
+              <button
+                ref={guideButtonRef}
+                type="button"
+                onClick={() => setGuideSectionId(currentSection.id)}
+                aria-label={`Анықтамалық: ${currentSection.name}`}
+                title={isHeaderCollapsed ? "Анықтамалық" : undefined}
+                className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-gradient-to-r from-fuchsia-600 to-purple-700 font-black text-white shadow-lg transition-[height,padding,border-radius,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 motion-reduce:transition-none ${
+                  isHeaderCollapsed
+                    ? "h-10 w-10 rounded-xl p-0"
+                    : "h-11 gap-2 rounded-2xl px-3.5 py-2 text-xs sm:px-4 sm:text-sm"
+                }`}
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6a1 1 0 0 1 .7.3l5.4 5.4a1 1 0 0 1 .3.7V19a2 2 0 0 1-2 2Z"
+                  />
+                </svg>
+                <span
+                  className={`hidden overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 motion-reduce:transition-none min-[350px]:inline-block ${
+                    isHeaderCollapsed
+                      ? "max-w-0 opacity-0"
+                      : "max-w-32 opacity-100"
+                  }`}
+                >
+                  Анықтамалық
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div
+            role="progressbar"
+            aria-label="Бөлім прогресі"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={sectionSummary.progress}
+            className={`overflow-hidden rounded-full bg-purple-100 transition-[height,margin] duration-300 motion-reduce:transition-none ${
+              isHeaderCollapsed ? "mt-1.5 h-1" : "mt-4 h-2"
+            }`}
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-purple-600 to-blue-500 transition-[width] duration-700"
+              style={{ width: `${sectionSummary.progress}%` }}
+            />
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 px-3 pb-8 pt-5 sm:px-6 md:ml-64 lg:px-10">
+        <OrnamentRail side="left" />
+        <OrnamentRail side="right" />
+        <div className="relative z-10 mx-auto w-full max-w-4xl">
+          {module.description?.trim() && (
+            <div className="mb-5 rounded-2xl border border-white/80 bg-white/65 px-5 py-4 text-sm leading-relaxed text-slate-600 shadow-sm backdrop-blur-sm">
+              {module.description}
+            </div>
+          )}
+
+          {sortedSections.length === 0 ? (
+            <div className="rounded-[2rem] border border-white/90 bg-white/80 px-6 py-16 text-center shadow-xl">
+              <div className="text-5xl">📦</div>
+              <div className="mt-3 font-bold text-slate-600">
+                Бұл модульде бөлімдер әлі қосылмаған.
+              </div>
+            </div>
+          ) : (
+            <ModuleLessonJourney sections={sortedSections} />
+          )}
+        </div>
+      </main>
+
+      {guideSection && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeGuide();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="module-guide-title"
+            className="w-full max-w-2xl overflow-hidden rounded-[2rem] border border-white/80 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-rose-50 to-violet-50 px-5 py-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-600">
+                  Анықтамалық
+                </div>
+                <h2
+                  id="module-guide-title"
+                  className="mt-1 font-black text-slate-900"
+                >
+                  {guideSection.name}
+                </h2>
               </div>
               <button
+                ref={guideCloseButtonRef}
                 type="button"
-                onClick={() => setGuideOpen(false)}
-                className="text-gray-500 hover:text-gray-800 text-xl leading-none px-2"
+                onClick={closeGuide}
                 aria-label="Жабу"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-2xl text-slate-500 shadow-sm hover:text-slate-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
               >
                 ×
               </button>
             </div>
-            <div className="px-5 py-4 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap">
-              {currentSection.guide && currentSection.guide.trim().length > 0 ? (
-                currentSection.guide
-              ) : (
-                <span className="text-gray-500">
+            <div className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-5 py-5 text-sm leading-relaxed text-slate-700 sm:px-7">
+              {guideSection.guide?.trim() || (
+                <span className="text-slate-500">
                   Бұл бөлім үшін анықтамалық әлі жазылмаған.
                 </span>
               )}
@@ -362,116 +581,6 @@ export default function ModuleDetailPage() {
           </div>
         </div>
       )}
-
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 pt-24 pb-8 relative z-10">
-        <div className="w-full max-w-3xl pb-28">
-          <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
-
-            {/* All sections on one page */}
-            <div className="mt-8 space-y-10">
-              {sortedSections.length === 0 ? (
-                <div className="text-gray-600">Бұл модульде әлі бөлімдер жоқ.</div>
-              ) : (
-                sortedSections.map((section, sectionIndex) => {
-                  const lessons = (section.lessons || [])
-                    .slice()
-                    .sort(
-                      (a, b) =>
-                        a.sort_order - b.sort_order ||
-                        (a.lesson_number ?? 0) - (b.lesson_number ?? 0) ||
-                        a.id - b.id
-                    );
-                  const displayedLessons = lessons.slice(0, 5);
-                  const isActiveSection = currentSection && currentSection.id === section.id;
-
-                  return (
-                    <section key={section.id} id={`section-${section.id}`} className="scroll-mt-24">
-                      {/* Описание раздела (через CMS) с линиями слева и справа — для разделов, кроме первого */}
-                      {sectionIndex > 0 &&
-                        section.description &&
-                        section.description.trim().length > 0 && (
-                          <div className="mt-8 mb-4 flex items-center gap-3 text-gray-400 text-xs sm:text-sm font-semibold">
-                            <div className="flex-1 h-px bg-gray-200" />
-                            <div className="px-3 text-center whitespace-normal">
-                              {section.description}
-                            </div>
-                            <div className="flex-1 h-px bg-gray-200" />
-                          </div>
-                        )}
-
-                      <div className="mt-6 relative min-h-[520px]">
-                        <div className="flex flex-col items-center gap-10">
-                          {displayedLessons.length === 0 ? (
-                            <div className="text-gray-700 mt-10">Бұл бөлімде әлі сабақтар жоқ.</div>
-                          ) : (
-                            displayedLessons.map((lesson, idx) => {
-                              const isCompleted = !!lesson.progress?.completed;
-                              const isCurrent = nextLessonId !== null && lesson.id === nextLessonId;
-                              const p = lesson.progress ? clamp01(lesson.progress.progress) : 0;
-                              const offset = idx % 2 === 0 ? "-translate-x-16" : "translate-x-16";
-                              const icon = idx === 2 ? "🧰" : idx === 4 ? "🏆" : "⭐";
-
-                              return (
-                                <div key={lesson.id} className={`relative ${offset}`}>
-                                {isCurrent ? (
-                                  <div className="relative">
-                                    <DuolingoStartBubble />
-                                    <div className="relative w-[90px] h-[90px]">
-                                      {/* ring */}
-                                      <div className="absolute inset-0 pointer-events-none">
-                                        <DuolingoProgressRing progress={p} size={90} stroke={10} />
-                                      </div>
-
-                                      {/* inner disc */}
-                                      <Link
-                                        href={`/lessons/${lesson.id}`}
-                                        title={lesson.title || `Сабақ ${lesson.lesson_number ?? lesson.id}`}
-                                        className="absolute inset-0 flex items-center justify-center"
-                                      >
-                                        <div
-                                          className="w-[64px] h-[64px] rounded-full flex items-center justify-center shadow-md"
-                                          style={{
-                                            background: "linear-gradient(180deg, #63E200 0%, #58CC02 55%, #43A301 100%)",
-                                          }}
-                                        >
-                                          <DuolingoStar size={32} />
-                                        </div>
-                                      </Link>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="relative">
-                                    <Link
-                                      href={`/lessons/${lesson.id}`}
-                                      className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl select-none transition-transform hover:scale-105 shadow-md ${
-                                        isCompleted ? "bg-green-600 text-white" : "bg-gray-200 text-gray-500 hover:bg-gray-300"
-                                      }`}
-                                      title={lesson.title || `Сабақ ${lesson.lesson_number ?? lesson.id}`}
-                                    >
-                                      {icon}
-                                    </Link>
-                                  </div>
-                                )}
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-
-                        {lessons.length > 5 && (
-                          <div className="text-xs text-gray-600 mt-4 text-center">
-                            {lessons.length} сабақтан 5-і көрсетілді.
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
 
       <MobileNav currentPage="modules" />
     </div>

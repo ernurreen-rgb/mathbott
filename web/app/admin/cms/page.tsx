@@ -2,10 +2,11 @@
 
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
-import { apiPath } from "@/lib/api";
+import { apiPath, fetchWithErrorHandling } from "@/lib/api";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import VisualTaskEditor from "@/components/admin/VisualTaskEditor";
+import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import MathRender from "@/components/ui/MathRender";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
@@ -16,8 +17,9 @@ import {
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
-import { TaskTextScale } from "@/types";
+import { AnswerMode, TaskTextScale } from "@/types";
 
 interface Module {
   id: number;
@@ -56,7 +58,9 @@ interface MiniLessonTask {
   id: number;
   text: string;
   answer: string;
+  accepted_answers?: string[] | null;
   question_type?: "tf" | "mcq" | "mcq6" | "input" | "select" | "factor_grid";
+  answer_mode?: AnswerMode | null;
   options?: string | any[] | null;
   subquestions?: string | any[] | null;
   sort_order: number;
@@ -151,6 +155,8 @@ export default function CMSPage() {
   const [trashTasks, setTrashTasks] = useState<TrashTask[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [useVisualEditor, setUseVisualEditor] = useState(false);
+  const [taskAnswerMode, setTaskAnswerMode] = useState<AnswerMode>("choices");
+  const [editTaskAnswerMode, setEditTaskAnswerMode] = useState<AnswerMode>("choices");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +170,7 @@ export default function CMSPage() {
     question_type: "mcq" as "tf" | "mcq" | "mcq6" | "input" | "select",
     text_scale: "md" as TaskTextScale,
     answer: "",
+    accepted_answers: [] as string[],
     sort_order: 0,
     bankTaskId: "",
     bank_difficulty: "B" as "A" | "B" | "C",
@@ -194,6 +201,7 @@ export default function CMSPage() {
     question_type: "mcq" as "tf" | "mcq" | "mcq6" | "input" | "select",
     text_scale: "md" as TaskTextScale,
     answer: "",
+    accepted_answers: [] as string[],
     sort_order: 0,
     bank_task_id: null as number | null,
     bank_difficulty: "B" as "A" | "B" | "C",
@@ -541,6 +549,7 @@ export default function CMSPage() {
     const formData = new FormData();
     formData.append("sort_order", taskForm.sort_order.toString());
     formData.append("question_type", taskForm.question_type);
+    formData.append("answer_mode", taskAnswerMode);
     formData.append("text_scale", taskForm.text_scale);
     formData.append("email", session.user.email);
     formData.append("bank_difficulty", taskForm.bank_difficulty);
@@ -550,6 +559,7 @@ export default function CMSPage() {
       formData.append("bank_task_id", String(linkedBankTaskId));
     } else {
       formData.append("text", taskForm.text || "");
+      formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(taskForm.accepted_answers)));
       if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") {
         const options = [
           { label: "A", text: taskForm.optionA },
@@ -606,6 +616,7 @@ export default function CMSPage() {
         question_type: "mcq",
         text_scale: "md",
         answer: "",
+        accepted_answers: [],
         sort_order: 0,
         bankTaskId: "",
         bank_difficulty: "B",
@@ -624,6 +635,7 @@ export default function CMSPage() {
         correctSub1: "A",
         correctSub2: "A",
       });
+      setTaskAnswerMode("choices");
     } catch (err: any) {
       setError(err.message);
     }
@@ -790,6 +802,13 @@ export default function CMSPage() {
       question_type: (task.question_type || "input") as any,
       text_scale: fallbackTextScale,
       answer: task.answer || "",
+      accepted_answers: normalizeAcceptedAnswers(
+        Array.isArray(task.accepted_answers)
+          ? task.accepted_answers
+          : Array.isArray((task as any)?.bank_task?.accepted_answers)
+          ? (task as any).bank_task.accepted_answers
+          : []
+      ),
       sort_order: task.sort_order || 0,
       bank_task_id: parseBankTaskId(task.bank_task_id),
       bank_difficulty: ((task.bank_difficulty || fallbackDifficulty || "B") as "A" | "B" | "C"),
@@ -808,6 +827,7 @@ export default function CMSPage() {
       correctSub1,
       correctSub2,
     });
+    setEditTaskAnswerMode(getTaskAnswerMode(task));
   };
 
   const cancelEditMiniLessonTask = () => {
@@ -817,6 +837,7 @@ export default function CMSPage() {
       question_type: "mcq",
       text_scale: "md",
       answer: "",
+      accepted_answers: [],
       sort_order: 0,
       bank_task_id: null,
       bank_difficulty: "B",
@@ -835,6 +856,7 @@ export default function CMSPage() {
       correctSub1: "A",
       correctSub2: "A",
     });
+    setEditTaskAnswerMode("choices");
   };
 
   const updateMiniLessonTask = async (e: React.FormEvent) => {
@@ -845,8 +867,10 @@ export default function CMSPage() {
     formData.append("text", editTaskForm.text || "");
     formData.append("sort_order", editTaskForm.sort_order.toString());
     formData.append("question_type", editTaskForm.question_type);
+    formData.append("answer_mode", editTaskAnswerMode);
     formData.append("text_scale", editTaskForm.text_scale);
     formData.append("email", session.user.email);
+    formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(editTaskForm.accepted_answers)));
     if (editTaskForm.bank_difficulty) {
       formData.append("bank_difficulty", editTaskForm.bank_difficulty);
     }
@@ -913,10 +937,12 @@ export default function CMSPage() {
   const deleteModule = async (id: number) => {
     if (!session?.user?.email || !confirm("Модульді жою керек пе? Барлық бөлімдер мен тапсырмалар жойылады.")) return;
     try {
-      const response = await fetch(`${apiPath(`admin/modules/${id}`)}?email=${encodeURIComponent(session.user.email)}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Модульді жою мүмкін болмады");
+      const { error: deleteError } = await fetchWithErrorHandling<{ success: boolean }>(
+        `${apiPath(`admin/modules/${id}`)}?email=${encodeURIComponent(session.user.email)}`,
+        { method: "DELETE" }
+      );
+      if (deleteError) throw new Error(deleteError);
+      setError(null);
       await fetchModules();
       if (selectedModule === id) {
         setSelectedModule(null);
@@ -1703,12 +1729,18 @@ export default function CMSPage() {
                               id: task.id,
                               text: task.text || "",
                               question_type: (task.question_type || "input") as any,
+                              answer_mode: task.answer_mode || task.bank_task?.answer_mode || undefined,
                               text_scale: normalizeTaskTextScale(
                                 task.text_scale || (task.bank_task?.text_scale as string | null | undefined)
                               ),
                               options: options,
                               subquestions: subquestions,
                               answer: task.answer || "",
+                              accepted_answers: Array.isArray(task.accepted_answers)
+                                ? task.accepted_answers
+                                : Array.isArray(task.bank_task?.accepted_answers)
+                                ? task.bank_task.accepted_answers
+                                : [],
                               image_filename: task.image_filename || null,
                               bank_task_id: parseBankTaskId(task.bank_task_id),
                               bank_difficulty: task.bank_difficulty || task.bank_task?.difficulty || "B",
@@ -1724,6 +1756,7 @@ export default function CMSPage() {
                             if (!session?.user?.email || !selectedMiniLesson) return;
                             const formData = new FormData();
                             formData.append("question_type", taskData.question_type || "input");
+                            formData.append("answer_mode", taskData.answer_mode || "choices");
                             formData.append("text_scale", normalizeTaskTextScale(taskData.text_scale));
                             formData.append("email", session.user.email);
                             formData.append("sort_order", (taskData.sort_order || 0).toString());
@@ -1763,6 +1796,10 @@ export default function CMSPage() {
                               formData.append("options", "");
                             }
                             formData.append("answer", answer);
+                            formData.append(
+                              "accepted_answers",
+                              JSON.stringify(Array.isArray(taskData.accepted_answers) ? taskData.accepted_answers : [])
+                            );
                             if (taskData.imageFile) {
                               formData.append("image", taskData.imageFile);
                             }
@@ -1871,7 +1908,11 @@ export default function CMSPage() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                 <select
                                   value={taskForm.question_type}
-                                  onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any })}
+                                  onChange={(e) => {
+                                    const questionType = e.target.value as any;
+                                    setTaskForm({ ...taskForm, question_type: questionType });
+                                    setTaskAnswerMode(getTaskAnswerMode({ question_type: questionType }));
+                                  }}
                                   className="p-2 rounded border"
                                 >
                                   <option value="input">Пайдаланушы жауап енгізеді</option>
@@ -1880,6 +1921,17 @@ export default function CMSPage() {
                                   <option value="mcq6">Нұсқалар A/B/C/D/E/F</option>
                                   <option value="select">Тізімнен таңдау</option>
                                 </select>
+                                {!createUsesBank && supportsAnswerModeSwitch(taskForm.question_type) && (
+                                  <select
+                                    value={taskAnswerMode}
+                                    onChange={(e) => setTaskAnswerMode(e.target.value as AnswerMode)}
+                                    className="p-2 rounded border"
+                                    aria-label="Оқушының жауап беру тәсілі"
+                                  >
+                                    <option value="choices">Нұсқаларды таңдайды</option>
+                                    <option value="written">Жауапты өзі жазады</option>
+                                  </select>
+                                )}
                                 <input
                                   type="file"
                                   accept="image/*"
@@ -1948,6 +2000,13 @@ export default function CMSPage() {
                                   />
                                 )}
                         </div>
+
+                        {!createUsesBank && taskForm.question_type === "input" && (
+                          <AcceptedAnswersEditor
+                            value={taskForm.accepted_answers}
+                            onChange={(accepted_answers) => setTaskForm((prev) => ({ ...prev, accepted_answers }))}
+                          />
+                        )}
 
                         {!createUsesBank && (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "select") && (
                           <div className="grid grid-cols-1 gap-2">
@@ -2132,7 +2191,11 @@ export default function CMSPage() {
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                           <select
                                             value={editTaskForm.question_type}
-                                            onChange={(e) => setEditTaskForm({ ...editTaskForm, question_type: e.target.value as any })}
+                                            onChange={(e) => {
+                                              const questionType = e.target.value as any;
+                                              setEditTaskForm({ ...editTaskForm, question_type: questionType });
+                                              setEditTaskAnswerMode(getTaskAnswerMode({ question_type: questionType }));
+                                            }}
                                             className="p-2 rounded border text-sm"
                                           >
                                             <option value="input">Енгізу</option>
@@ -2141,6 +2204,17 @@ export default function CMSPage() {
                                             <option value="mcq6">MCQ (6)</option>
                                             <option value="select">Сәйкестендіру</option>
                                           </select>
+                                          {supportsAnswerModeSwitch(editTaskForm.question_type) && (
+                                            <select
+                                              value={editTaskAnswerMode}
+                                              onChange={(e) => setEditTaskAnswerMode(e.target.value as AnswerMode)}
+                                              className="p-2 rounded border text-sm"
+                                              aria-label="Оқушының жауап беру тәсілі"
+                                            >
+                                              <option value="choices">Нұсқаларды таңдайды</option>
+                                              <option value="written">Жауапты өзі жазады</option>
+                                            </select>
+                                          )}
                                           <input
                                             type="number"
                                             value={editTaskForm.sort_order}
@@ -2203,6 +2277,15 @@ export default function CMSPage() {
                                             />
                                           )}
                                         </div>
+
+                                        {editTaskForm.question_type === "input" && (
+                                          <AcceptedAnswersEditor
+                                            value={editTaskForm.accepted_answers}
+                                            onChange={(accepted_answers) =>
+                                              setEditTaskForm((prev) => ({ ...prev, accepted_answers }))
+                                            }
+                                          />
+                                        )}
 
                                         {(editTaskForm.question_type === "mcq" || editTaskForm.question_type === "mcq6" || editTaskForm.question_type === "select") && (
                                           <div className="grid grid-cols-1 gap-2">

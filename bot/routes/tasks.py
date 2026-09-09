@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from models.requests import TaskCheckRequest
 from utils.public_payload import strip_solution_fields
-from utils.validation import normalize_task_answer_for_compare
+from utils.validation import is_task_answer_correct, normalize_task_answer_for_compare
 from utils.cache import cache
 
 logger = logging.getLogger(__name__)
@@ -105,13 +105,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             correct_answer = (task.get("answer") or "").strip()
             qt = (task.get("question_type") or "input").strip().lower()
             user_answer_norm = normalize_task_answer_for_compare(task, task_check_request.answer)
-            correct_answer_norm = normalize_task_answer_for_compare(task, correct_answer)
-            if qt in {"mcq", "mcq6", "select"}:
-                is_correct = correct_answer_norm == user_answer_norm
-            elif qt == "tf":
-                is_correct = correct_answer_norm == user_answer_norm
-            else:
-                is_correct = correct_answer_norm == user_answer_norm
+            is_correct = is_task_answer_correct(task, task_check_request.answer)
             
             logger.info(
                 f"Answer check: correct={is_correct}, "

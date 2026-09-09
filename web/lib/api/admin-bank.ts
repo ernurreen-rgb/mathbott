@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
-import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse } from "@/types";
+import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
 // Bank tasks admin API
@@ -101,6 +101,41 @@ export async function getAdminBankTasks(
 
   return fetchWithErrorHandling<BankTaskListResponse>(
     `${apiPath(endpoint)}?${query.toString()}`
+  );
+}
+
+
+export async function getAdminBankUnrecognizedAnswers(
+  email: string,
+  params?: { minCount?: number; limit?: number }
+): Promise<{ data: BankUnrecognizedAnswersResponse | null; error: string | null }> {
+  const query = new URLSearchParams();
+  query.set("email", email);
+  query.set("min_count", String(params?.minCount ?? 2));
+  query.set("limit", String(params?.limit ?? 100));
+  return fetchWithErrorHandling<BankUnrecognizedAnswersResponse>(
+    `${apiPath("admin/bank/unrecognized-answers")}?${query.toString()}`
+  );
+}
+
+
+export async function acceptAdminBankUnrecognizedAnswer(
+  taskId: number,
+  answer: string,
+  email: string,
+  expectedCurrentVersion?: number
+): Promise<{ data: BankAcceptAnswerResponse | null; error: string | null }> {
+  return fetchWithErrorHandling<BankAcceptAnswerResponse>(
+    apiPath(`admin/bank/tasks/${taskId}/accepted-answers`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        answer,
+        expected_current_version: expectedCurrentVersion,
+      }),
+    }
   );
 }
 

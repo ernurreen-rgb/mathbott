@@ -1,0 +1,15 @@
+services:
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api/backend
+        NEXT_PUBLIC_MODULES_UI_ENABLED: "true"
+        NEXT_PUBLIC_SENTRY_DSN: ""
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: demo
+    # The development stack mounts the source tree. A production preview must
+    # use the files baked into the image instead.
+    volumes: !reset []
+    environment:
+      NODE_ENV: production

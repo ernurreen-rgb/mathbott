@@ -5,7 +5,9 @@ import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api";
 import { normalizeFactorGridRows, parseFactorGridAnswer } from "@/lib/factor-grid";
-import { parseMcqAnswerLabels } from "@/lib/question-options";
+import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
+import { parseWrittenAnswerSlots } from "@/lib/written-answer";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
 
@@ -110,12 +112,15 @@ export const isReviewResultActuallyCorrect = (
 
 const renderSelectChoice = (
   options: NonNullable<TrialTestDetails["tasks"][number]["options"]>,
-  label: string
+  label: string,
+  preferWritten = false
 ) => {
-  const upper = label.trim().toUpperCase();
+  const trimmed = label.trim();
+  const upper = trimmed.toUpperCase();
   if (!upper) return <span>Жауап берілмеді</span>;
+  if (preferWritten) return <MathRender inline latex={trimmed} />;
   const option = options.find((item) => (item.label || "").trim().toUpperCase() === upper);
-  if (!option) return <span>{upper}</span>;
+  if (!option) return <MathRender inline latex={trimmed} />;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <span className="font-semibold">{option.label}</span>
@@ -173,32 +178,45 @@ export default function TrialTestDetailedReview({
   const correctUpper = String(correctAnswer).trim().toUpperCase();
   const userMcqLabels = parseMcqAnswerLabels(userAnswerRaw);
   const correctMcqLabels = parseMcqAnswerLabels(correctAnswer);
-
   const renderAnswerBlock = () => {
     if (qt === "mcq" || qt === "mcq6") {
       const options = task.options || [];
+      const isWrittenAnswer = getTaskAnswerMode(task) === "written";
+      const writtenAnswers = parseWrittenAnswerSlots(userAnswerRaw, getTaskMcqCorrectCount(task));
       return (
-        <div className="grid grid-cols-1 gap-2 mt-2">
-          {options.map((option) => {
+        <div className="mt-2 space-y-3">
+          {isWrittenAnswer && (
+            <div className={`rounded-lg border-2 p-3 ${isCorrect ? "border-green-500 bg-green-100" : "border-red-500 bg-red-100"}`}>
+              <div className="mb-1 text-sm font-semibold text-gray-700">Жауабыңыз</div>
+              <div className="flex flex-wrap gap-3">
+                {writtenAnswers.map((answer, index) => (
+                  <MathRender key={`written-review-${index}`} inline latex={answer} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2">
+            {options.map((option) => {
             const labelUpper = (option.label || "").trim().toUpperCase();
-            const isUserChoice = userMcqLabels.includes(labelUpper as any);
+            const isUserChoice = !isWrittenAnswer && userMcqLabels.includes(labelUpper as any);
             const isCorrectOption = correctMcqLabels.includes(labelUpper as any);
             let style = "bg-gray-50 border-gray-200";
             if (isUserChoice && isCorrect) style = "bg-green-100 border-green-500";
             else if (isUserChoice && !isCorrect) style = "bg-red-100 border-red-500";
             else if (!isCorrect && isCorrectOption) style = "bg-green-100 border-green-400";
 
-            return (
-              <div key={option.label} className={`border-2 rounded-lg p-3 text-left ${style}`}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
-                  <span className="font-bold text-gray-900 shrink-0">{option.label}</span>
-                  <div className="min-w-0 break-words whitespace-normal">
-                    <MathRender inline latex={option.text} className="text-gray-700" />
+              return (
+                <div key={option.label} className={`border-2 rounded-lg p-3 text-left ${style}`}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                    <span className="font-bold text-gray-900 shrink-0">{option.label}</span>
+                    <div className="min-w-0 break-words whitespace-normal">
+                      <MathRender inline latex={option.text} className="text-gray-700" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       );
     }
@@ -236,6 +254,7 @@ export default function TrialTestDetailedReview({
       const subquestions = task.subquestions || [];
       const userChoices = parseSelectAnswerPair(userAnswerRaw);
       const correctChoices = parseSelectAnswerPair(correctAnswer);
+      const isWrittenSelectAnswer = getTaskAnswerMode(task) === "written";
 
       return (
         <div className="mt-2 space-y-3">
@@ -243,9 +262,11 @@ export default function TrialTestDetailedReview({
             const subquestion = subquestions[index];
             const userChoice = userChoices[index];
             const correctChoice = correctChoices[index];
-            const rowCorrect =
-              userChoice.trim().toUpperCase() &&
-              userChoice.trim().toUpperCase() === correctChoice.trim().toUpperCase();
+            const rowCorrect = Boolean(
+              isCorrect ||
+              (userChoice.trim().toUpperCase() &&
+                userChoice.trim().toUpperCase() === correctChoice.trim().toUpperCase())
+            );
 
             return (
               <div key={`select-${task.id}-${index}`} className="rounded-lg border border-gray-200 bg-white/80 p-3">
@@ -256,7 +277,7 @@ export default function TrialTestDetailedReview({
                 <div className="text-sm">
                   <span className="font-semibold text-gray-700">Жауабыңыз: </span>
                   <span className={rowCorrect ? "text-green-700" : "text-red-700"}>
-                    {renderSelectChoice(options, userChoice)}
+                    {renderSelectChoice(options, userChoice, isWrittenSelectAnswer)}
                   </span>
                 </div>
                 {!rowCorrect && correctChoice && (

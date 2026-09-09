@@ -9,6 +9,7 @@ import aiosqlite
 
 from .base import BaseRepository
 from .bank_task_repository import BankTaskRepository
+from utils.validation import is_task_answer_correct
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,8 @@ class TaskRepository(BaseRepository):
             bt.text AS text,
             bt.answer AS answer,
             bt.question_type AS question_type,
+            bt.answer_mode AS answer_mode,
+            bt.accepted_answers AS accepted_answers,
             bt.text_scale AS text_scale,
             bt.options AS options,
             bt.subquestions AS subquestions,
@@ -73,6 +76,7 @@ class TaskRepository(BaseRepository):
         text: str,
         answer: str,
         question_type: str,
+        accepted_answers: Optional[List[str]],
         text_scale: str,
         options: Optional[Any],
         subquestions: Optional[Any],
@@ -98,13 +102,14 @@ class TaskRepository(BaseRepository):
         cursor = await db.execute(
             """
             INSERT INTO bank_tasks
-            (text, answer, question_type, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (text, answer, question_type, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 text or "",
                 answer or "",
                 (question_type or "input").strip() or "input",
+                json.dumps(accepted_answers or [], ensure_ascii=False),
                 text_scale or "md",
                 options_value,
                 subquestions_value,
@@ -157,6 +162,7 @@ class TaskRepository(BaseRepository):
         section_id: Optional[int] = None,
         mini_lesson_id: Optional[int] = None,
         question_type: str = "input",
+        accepted_answers: Optional[List[str]] = None,
         text_scale: str = "md",
         options: Optional[Any] = None,
         subquestions: Optional[Any] = None,
@@ -174,6 +180,7 @@ class TaskRepository(BaseRepository):
                     text=text,
                     answer=answer,
                     question_type=question_type,
+                    accepted_answers=accepted_answers,
                     text_scale=text_scale,
                     options=options,
                     subquestions=subquestions,
@@ -210,6 +217,7 @@ class TaskRepository(BaseRepository):
         text: Optional[str] = None,
         answer: Optional[str] = None,
         question_type: Optional[str] = None,
+        accepted_answers: Optional[List[str]] = None,
         text_scale: Optional[str] = None,
         options: Optional[Any] = None,
         subquestions: Optional[Any] = None,
@@ -269,6 +277,7 @@ class TaskRepository(BaseRepository):
                 text=text,
                 answer=answer,
                 question_type=question_type,
+                accepted_answers=accepted_answers,
                 text_scale=text_scale,
                 options=parsed_options if options is not None else None,
                 subquestions=parsed_subquestions if subquestions is not None else None,
@@ -412,8 +421,7 @@ class TaskRepository(BaseRepository):
         task = await self.get_task_by_id(task_id)
         if not task:
             return False
-        correct_answer = (task.get("answer") or "").strip()
-        return user_answer.strip().lower() == correct_answer.lower()
+        return is_task_answer_correct(task, user_answer)
 
     async def get_task_questions(self, task_id: int) -> List[Dict[str, Any]]:
         """

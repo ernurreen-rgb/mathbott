@@ -854,6 +854,8 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
         "text",
         "answer",
         "question_type",
+        "answer_mode",
+        "accepted_answers",
         "text_scale",
         "difficulty",
         "topics",
@@ -867,6 +869,8 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
     assert set(select_item.keys()) == expected_keys
     assert select_item["answer"] == select_answer
     assert select_item["question_type"] == "select"
+    assert select_item["answer_mode"] == "choices"
+    assert select_item["accepted_answers"] == []
     assert select_item["text_scale"] == "lg"
     assert select_item["difficulty"] == "A"
     assert select_item["topics"] == ["Algebra", "Export"]
@@ -884,6 +888,7 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
 
     factor_item = payload[1]
     assert factor_item["answer"] == factor_answer
+    assert factor_item["answer_mode"] == "written"
     assert factor_item["question_type"] == "factor_grid"
     assert factor_item["text_scale"] == "md"
     assert factor_item["options"] is None

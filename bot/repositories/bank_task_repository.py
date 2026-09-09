@@ -12,6 +12,7 @@ from .bank.crud import BankTaskCrudMixin
 from .bank.helpers import BankTaskHelpersMixin
 from .bank.quality import BankTaskQualityMixin
 from .bank.similarity import BankTaskSimilarityMixin
+from .bank.unrecognized_answers import BankTaskUnrecognizedAnswersMixin
 from .bank.versions import (
     BankTaskVersionConflictError,
     BankTaskVersionDeleteError,
@@ -27,6 +28,7 @@ __all__ = [
 
 class BankTaskRepository(
     BankTaskCrudMixin,
+    BankTaskUnrecognizedAnswersMixin,
     BankTaskVersionsMixin,
     BankTaskAuditMixin,
     BankTaskQualityMixin,

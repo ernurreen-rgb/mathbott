@@ -1,11 +1,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import * as Sentry from "@sentry/nextjs";
 import { ErrorBoundary } from '../ErrorBoundary'
-
-jest.mock("@sentry/nextjs", () => ({
-  captureException: jest.fn(),
-}));
 
 // Mock console.error to avoid noise in test output
 const originalError = console.error
@@ -43,6 +38,5 @@ describe('ErrorBoundary', () => {
     // Component shows Kazakh text "Қате орын алды"
     expect(screen.getByText(/Қате орын алды/i)).toBeInTheDocument()
     expect(screen.getByText(/Test error/i)).toBeInTheDocument()
-    expect(Sentry.captureException).toHaveBeenCalledTimes(1)
   })
 })

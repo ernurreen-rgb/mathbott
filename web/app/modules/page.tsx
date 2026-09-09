@@ -1,18 +1,20 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { getModulesMap } from "@/lib/api";
-import { Module } from "@/types";
+
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
+import { getModulesMap } from "@/lib/api";
+import type { Module } from "@/types";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
-const MODULES_UI_ENABLED = process.env.NEXT_PUBLIC_MODULES_UI_ENABLED === "true";
+// Keep the modules page open unless it is explicitly disabled for maintenance.
+const MODULES_UI_ENABLED = process.env.NEXT_PUBLIC_MODULES_UI_ENABLED !== "false";
 
 export default function ModulesPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,27 +23,21 @@ export default function ModulesPage() {
     setLoading(true);
     setError(null);
     if (DEBUG_UI) console.log("Fetching modules for email:", email);
+
     try {
-      const { data, error: err } = await getModulesMap(email);
-      
-      if (err) {
-        // Only log in development
+      const { data, error: requestError } = await getModulesMap(email);
+      if (requestError) {
         if (process.env.NODE_ENV === "development" || DEBUG_UI) {
-          console.error("Error fetching modules:", err);
+          console.error("Error fetching modules:", requestError);
         }
-        setError(err);
-        setModules([]); // Set empty array on error
-      } else if (data) {
-        if (DEBUG_UI) console.log("Modules fetched successfully:", data.length, "modules");
-        setModules(data);
-      } else {
-        if (DEBUG_UI) console.log("No modules data returned");
+        setError(requestError);
         setModules([]);
+      } else {
+        setModules(data || []);
       }
-    } catch (err) {
-      // Only log in development
+    } catch (requestError) {
       if (process.env.NODE_ENV === "development" || DEBUG_UI) {
-        console.error("Error fetching modules:", err);
+        console.error("Error fetching modules:", requestError);
       }
       setError("Модульдерді жүктеу қатесі");
       setModules([]);
@@ -58,11 +54,12 @@ export default function ModulesPage() {
 
     const email = session?.user?.email;
     if (!email) {
-      setLoading(false);
+      if (status !== "loading") setLoading(false);
       return;
     }
-    fetchModules(email);
-  }, [session?.user?.email, fetchModules]);
+
+    void fetchModules(email);
+  }, [fetchModules, session?.user?.email, status]);
 
   const getProgressColor = (progress?: { completed: boolean; progress: number }) => {
     if (!progress) return "bg-gray-300";
@@ -71,12 +68,13 @@ export default function ModulesPage() {
     return "bg-gray-300";
   };
 
-  const getProgressIcon = (progress?: { completed: boolean; progress: number }) => {
-    if (!progress) return "⚪";
-    if (progress.completed) return "✅";
-    if (progress.progress > 0) return "🟡";
-    return "⚪";
-  };
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="h-11 w-11 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
+      </div>
+    );
+  }
 
   if (!session) {
     return (
@@ -92,7 +90,7 @@ export default function ModulesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
-      <div className="absolute inset-0 bg-black/5"></div>
+      <div className="absolute inset-0 bg-black/5" />
       <DesktopNav />
       <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="w-full max-w-6xl">
@@ -106,11 +104,7 @@ export default function ModulesPage() {
 
             <div className="relative min-h-[360px]">
               <div
-                className={
-                  MODULES_UI_ENABLED
-                    ? ""
-                    : "pointer-events-none select-none blur-sm opacity-60"
-                }
+                className={MODULES_UI_ENABLED ? "" : "pointer-events-none select-none blur-sm opacity-60"}
                 aria-hidden={!MODULES_UI_ENABLED}
               >
                 {error && (
@@ -126,11 +120,11 @@ export default function ModulesPage() {
                         key={item}
                         className="glass rounded-2xl shadow-xl p-6 border border-white/30 bg-white/60 min-h-[210px]"
                       >
-                        <div className="h-12 w-12 rounded-xl bg-purple-200 mb-5"></div>
-                        <div className="h-6 w-3/4 rounded bg-gray-300 mb-3"></div>
-                        <div className="h-4 w-full rounded bg-gray-200 mb-2"></div>
-                        <div className="h-4 w-2/3 rounded bg-gray-200 mb-6"></div>
-                        <div className="h-2 w-full rounded-full bg-gray-200"></div>
+                        <div className="h-12 w-12 rounded-xl bg-purple-200 mb-5" />
+                        <div className="h-6 w-3/4 rounded bg-gray-300 mb-3" />
+                        <div className="h-4 w-full rounded bg-gray-200 mb-2" />
+                        <div className="h-4 w-2/3 rounded bg-gray-200 mb-6" />
+                        <div className="h-2 w-full rounded-full bg-gray-200" />
                       </div>
                     ))}
                   </div>
@@ -169,7 +163,7 @@ export default function ModulesPage() {
                               <div
                                 className={`h-2 rounded-full transition-all ${getProgressColor(module.progress)}`}
                                 style={{ width: `${module.progress.progress * 100}%` }}
-                              ></div>
+                              />
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                               {`${module.progress.completed_sections || 0} / ${module.progress.total_sections || 0} бөлім`}

@@ -4,6 +4,7 @@ Version history: recording, listing, rollback and deletion.
 from typing import Optional, List, Dict, Any
 import json
 import aiosqlite
+from utils.validation import normalize_answer_mode
 
 
 class BankTaskVersionConflictError(Exception):
@@ -276,6 +277,8 @@ class BankTaskVersionsMixin:
                 SET text = ?,
                     answer = ?,
                     question_type = ?,
+                    answer_mode = ?,
+                    accepted_answers = ?,
                     options = ?,
                     subquestions = ?,
                     difficulty = ?,
@@ -288,6 +291,11 @@ class BankTaskVersionsMixin:
                     target_snapshot.get("text") or "",
                     target_snapshot.get("answer") or "",
                     target_snapshot.get("question_type") or "input",
+                    normalize_answer_mode(
+                        target_snapshot.get("answer_mode"),
+                        target_snapshot.get("question_type"),
+                    ),
+                    self._to_json_text(target_snapshot.get("accepted_answers") or []),
                     self._to_json_text(target_snapshot.get("options")),
                     self._to_json_text(target_snapshot.get("subquestions")),
                     target_snapshot.get("difficulty") or "B",

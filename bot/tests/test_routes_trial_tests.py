@@ -2,7 +2,7 @@
 import asyncio
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from dependencies import get_db
 from main import app
@@ -212,6 +212,36 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
     user_after_trial = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_trial["total_points"] == 10
     assert user_after_trial["total_solved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trial_test_submit_accepts_configured_alternative(client, test_db, test_user):
+    trial_test = await test_db.trial_tests.create_trial_test(
+        "Alternative Answer Trial", sort_order=0, created_by=test_user["id"]
+    )
+    bank_task = await test_db.bank_tasks.create_task(
+        text="Write the solution",
+        answer="x=1",
+        accepted_answers=["бір"],
+        question_type="input",
+        difficulty="B",
+        created_by=test_user["id"],
+    )
+    trial_task = await test_db.trial_tests.create_trial_test_task(
+        trial_test_id=trial_test["id"],
+        text="Write the solution",
+        answer="x=1",
+        created_by=test_user["id"],
+        bank_task_id=bank_task["id"],
+    )
+
+    response = client.post(
+        f"/api/trial-tests/{trial_test['id']}/submit",
+        json={"email": test_user["email"], "answers": {str(trial_task["id"]): "БІР"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["score"] == 1
 
 
 @pytest.mark.asyncio
