@@ -17,6 +17,12 @@ export default function RootLayout({
   return (
     <html lang="kk">
       <body suppressHydrationWarning>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('mathbot_desktop_nav_collapsed')==='true'){document.body.classList.add('desktop-nav-collapsed');}}catch(e){}",
+          }}
+        />
         <ErrorBoundary>
           <Providers>
             {children}

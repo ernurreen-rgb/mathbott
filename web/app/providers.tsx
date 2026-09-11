@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { useState } from "react";
 import { PresenceProvider } from "@/components/presence/PresenceProvider";
+import { DesktopNavProvider } from "@/lib/desktop-nav-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,10 +25,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
-        <PresenceProvider>{children}</PresenceProvider>
+        <DesktopNavProvider>
+          <PresenceProvider>{children}</PresenceProvider>
+        </DesktopNavProvider>
         <Toaster />
       </SessionProvider>
     </QueryClientProvider>
   );
 }
-

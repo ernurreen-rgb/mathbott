@@ -98,3 +98,24 @@ math-field.student-math-answer-input[read-only] {
   }
 }
 
+@media (min-width: 768px) {
+  .md\:ml-64 {
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .md\:left-64 {
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  body.desktop-nav-collapsed .md\:ml-64 {
+    margin-left: 0 !important;
+  }
+  body.desktop-nav-collapsed .md\:left-64 {
+    left: 0 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md\:ml-64,
+  .md\:left-64 {
+    transition: none !important;
+  }
+}
