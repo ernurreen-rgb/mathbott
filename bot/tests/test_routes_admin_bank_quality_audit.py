@@ -792,8 +792,6 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
     await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     select_answer = '["A","C"]'
-    factor_answer = '["2x","-1","x","3"]'
-
     await test_db.bank_tasks.create_task(
         text="Select export task",
         answer=select_answer,
@@ -813,16 +811,6 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
         ],
         image_filename="task.png",
         solution_filename="solution.png",
-        created_by=admin_user["id"],
-    )
-    await test_db.bank_tasks.create_task(
-        text="Factor export task",
-        answer=factor_answer,
-        question_type="factor_grid",
-        difficulty="C",
-        topics=["Factor"],
-        options=None,
-        subquestions=None,
         created_by=admin_user["id"],
     )
     deleted_task = await test_db.bank_tasks.create_task(
@@ -847,8 +835,8 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
 
     payload = response.json()
     assert isinstance(payload, list)
-    assert len(payload) == 2
-    assert [item["text"] for item in payload] == ["Select export task", "Factor export task"]
+    assert len(payload) == 1
+    assert [item["text"] for item in payload] == ["Select export task"]
 
     expected_keys = {
         "text",
@@ -885,15 +873,6 @@ async def test_admin_bank_export_json_returns_import_compatible_active_tasks(cli
     assert "current_version" not in select_item
     assert "active_usage_count" not in select_item
     assert "created_by" not in select_item
-
-    factor_item = payload[1]
-    assert factor_item["answer"] == factor_answer
-    assert factor_item["answer_mode"] == "written"
-    assert factor_item["question_type"] == "factor_grid"
-    assert factor_item["text_scale"] == "md"
-    assert factor_item["options"] is None
-    assert factor_item["subquestions"] is None
-
 
 @pytest.mark.asyncio
 async def test_admin_bank_export_json_requires_admin(client, test_db):

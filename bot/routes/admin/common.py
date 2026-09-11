@@ -36,7 +36,6 @@ from repositories.user_repository import AdminRoleConflictError, LastSuperAdminE
 from settings import DEFAULT_ADMIN_SECRET, get_settings
 from utils.validation import (
     MAX_MCQ_CORRECT_OPTIONS,
-    canonicalize_factor_grid_answer,
     is_task_answer_correct,
     normalize_accepted_answers,
     normalize_answer_mode,
@@ -191,7 +190,7 @@ def _validate_trial_like_payload(
     options_list: Optional[List[dict]],
     subquestions_list: Optional[List[dict]],
 ) -> None:
-    allowed_types = {"input", "tf", "mcq", "mcq6", "select", "factor_grid"}
+    allowed_types = {"input", "tf", "mcq", "mcq6", "select"}
     if question_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported question_type: {question_type}")
 
@@ -224,11 +223,6 @@ def _validate_trial_like_payload(
     if question_type == "select":
         if subquestions_list is None or len(subquestions_list) != 2:
             raise HTTPException(status_code=400, detail="select requires 2 subquestions")
-    elif question_type == "factor_grid":
-        if options_list not in (None, []):
-            raise HTTPException(status_code=400, detail="options are not allowed for factor_grid")
-        if subquestions_list not in (None, []):
-            raise HTTPException(status_code=400, detail="subquestions are not allowed for factor_grid")
     elif subquestions_list not in (None, []):
         raise HTTPException(status_code=400, detail="subquestions are only allowed for select question_type")
 
@@ -244,13 +238,6 @@ def _parse_json_safe(value):
         except Exception:
             return value
     return value
-
-
-def _normalize_factor_grid_answer_or_raise(raw_answer: Any) -> str:
-    try:
-        return canonicalize_factor_grid_answer(raw_answer)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _get_allowed_mcq_answer_labels(options_list: Optional[List[dict]]) -> List[str]:
@@ -293,8 +280,6 @@ def _normalize_trial_like_answer_or_raise(
 ) -> str:
     if question_type in MCQ_QUESTION_TYPES:
         return _normalize_mcq_answer_or_raise(raw_answer, options_list, question_type)
-    if question_type == "factor_grid":
-        return _normalize_factor_grid_answer_or_raise(raw_answer)
     return str(raw_answer or "")
 
 
@@ -536,13 +521,6 @@ def _normalize_import_select_answer(raw_answer: Any) -> str:
     return json.dumps(normalized, ensure_ascii=False)
 
 
-def _normalize_import_factor_grid_answer(raw_answer: Any) -> str:
-    try:
-        return canonicalize_factor_grid_answer(raw_answer)
-    except ValueError as exc:
-        raise ImportTaskValidationError("answer", str(exc))
-
-
 def _normalize_import_mcq_answer(
     raw_answer: Any,
     options: Optional[List[dict]],
@@ -729,8 +707,6 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     raw_answer = raw_task.get("answer")
     if question_type == "select":
         answer = _normalize_import_select_answer(raw_answer)
-    elif question_type == "factor_grid":
-        answer = _normalize_import_factor_grid_answer(raw_answer)
     elif question_type == "tf":
         answer = _normalize_import_tf_answer(raw_answer)
     elif question_type in MCQ_QUESTION_TYPES:

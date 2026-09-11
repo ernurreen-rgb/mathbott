@@ -9,7 +9,6 @@ import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswe
 import MathRender from "@/components/ui/MathRender";
 import { apiPath, checkAdminTaskAnswerPreview } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
@@ -132,35 +131,6 @@ export default function StudentTaskPreview({
               </button>
             );
           })}
-        </div>
-      );
-    }
-
-    if (questionType === "factor_grid") {
-      const cells = parseFactorGridAnswer(answer);
-      return (
-        <div className="mx-auto flex w-fit max-w-full flex-col gap-3">
-          {[0, 1].map((row) => (
-            <div key={`preview-factor-row-${row}`} className="flex items-center gap-10 sm:gap-14">
-              {[0, 1].map((column) => {
-                const index = row * 2 + column;
-                return (
-                  <div key={`preview-factor-${index}`} className="w-[5.5rem]">
-                    <StudentMathAnswerInput
-                      value={cells[index]}
-                      onChange={(value) => {
-                        const next = [...cells] as typeof cells;
-                        next[index] = value;
-                        updateAnswer(serializeFactorGridAnswer(next));
-                      }}
-                      compact
-                      ariaLabel={`Жауап ${index + 1}`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ))}
         </div>
       );
     }

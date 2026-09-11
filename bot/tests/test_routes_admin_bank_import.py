@@ -261,8 +261,8 @@ async def test_admin_bank_import_confirm_success_after_dry_run(client, test_db):
 
 
 @pytest.mark.asyncio
-async def test_admin_bank_create_factor_grid_canonicalizes_answer(client, test_db):
-    admin_user = await test_db.users.create_user_by_email("admin.bank.factor.grid@example.com")
+async def test_admin_bank_create_rejects_removed_factor_grid_type(client, test_db):
+    admin_user = await test_db.users.create_user_by_email("admin.bank.removed.type@example.com")
     await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
     response = client.post(
@@ -275,10 +275,8 @@ async def test_admin_bank_create_factor_grid_canonicalizes_answer(client, test_d
             "email": admin_user["email"],
         },
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["question_type"] == "factor_grid"
-    assert payload["answer"] == '["2x", "-1", "x", "3"]'
+    assert response.status_code == 400
+    assert response.json()["error"]["detail"] == "Unsupported question_type: factor_grid"
 
 
 @pytest.mark.asyncio

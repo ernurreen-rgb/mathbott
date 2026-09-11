@@ -4,14 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api";
-import { normalizeFactorGridRows, parseFactorGridAnswer } from "@/lib/factor-grid";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
 
-type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select" | "factor_grid";
+type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
 type AccentColor = "purple" | "red" | "blue" | "neutral";
 
 export type TrialTestReviewAnswer = {
@@ -58,57 +57,10 @@ const renderMathOrText = (value: string, emptyLabel = "Жауап берілме
   return <MathRender inline latex={value} />;
 };
 
-const renderFactorGridCell = (cell: string) => {
-  const trimmed = cell.trim();
-  if (!trimmed) {
-    return <span className="text-gray-400">-</span>;
-  }
-
-  const looksSimple = /^[a-z0-9+\-*/=().\s]+$/i.test(trimmed);
-  if (looksSimple) {
-    return <span className="text-gray-900 font-semibold">{trimmed}</span>;
-  }
-
-  return <MathRender inline latex={trimmed} className="text-gray-900 font-semibold" />;
-};
-
-const renderFactorGrid = (value: string, tone: "neutral" | "success" | "error") => {
-  const cells = parseFactorGridAnswer(value);
-  const palette =
-    tone === "success"
-      ? "border-green-400 bg-green-50"
-      : tone === "error"
-      ? "border-red-400 bg-red-50"
-      : "border-gray-200 bg-white/80";
-
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {cells.map((cell, idx) => (
-        <div key={`${tone}-${idx}`} className={`rounded-lg border p-2 ${palette}`}>
-          <div className="min-h-6 text-gray-900">{renderFactorGridCell(cell)}</div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const isFactorGridEquivalent = (left: string, right: string) => {
-  if (!left || !right) return false;
-  return (
-    JSON.stringify(normalizeFactorGridRows(parseFactorGridAnswer(left))) ===
-    JSON.stringify(normalizeFactorGridRows(parseFactorGridAnswer(right)))
-  );
-};
-
 export const isReviewResultActuallyCorrect = (
-  task: TrialTestDetails["tasks"][number],
+  _task: TrialTestDetails["tasks"][number],
   result?: TrialTestReviewAnswer | null
-) => {
-  const storedIsCorrect = result?.correct ?? false;
-  if (storedIsCorrect) return true;
-  if ((task.question_type || "input") !== "factor_grid") return false;
-  return isFactorGridEquivalent(result?.answer ?? "", result?.correct_answer ?? "");
-};
+) => result?.correct ?? false;
 
 const renderSelectChoice = (
   options: NonNullable<TrialTestDetails["tasks"][number]["options"]>,
@@ -289,23 +241,6 @@ export default function TrialTestDetailedReview({
               </div>
             );
           })}
-        </div>
-      );
-    }
-
-    if (qt === "factor_grid") {
-      return (
-        <div className="mt-2 space-y-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">Жауабыңыз</div>
-            {renderFactorGrid(userAnswerRaw, isCorrect ? "success" : "error")}
-          </div>
-          {!isCorrect && correctAnswer && (
-            <div>
-              <div className="text-sm font-semibold text-gray-700 mb-2">Дұрыс жауап</div>
-              {renderFactorGrid(correctAnswer, "success")}
-            </div>
-          )}
         </div>
       );
     }

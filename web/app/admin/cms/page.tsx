@@ -59,7 +59,7 @@ interface MiniLessonTask {
   text: string;
   answer: string;
   accepted_answers?: string[] | null;
-  question_type?: "tf" | "mcq" | "mcq6" | "input" | "select" | "factor_grid";
+  question_type?: "tf" | "mcq" | "mcq6" | "input" | "select";
   answer_mode?: AnswerMode | null;
   options?: string | any[] | null;
   subquestions?: string | any[] | null;
@@ -120,8 +120,6 @@ const formatQuestionTypeLabel = (questionType?: string | null): string => {
       return "MCQ (6)";
     case "select":
       return "Сәйкестендіру";
-    case "factor_grid":
-      return "Factor Grid";
     default:
       return questionType || "Енгізу";
   }

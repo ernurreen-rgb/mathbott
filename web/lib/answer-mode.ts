@@ -8,7 +8,7 @@ export const getTaskAnswerMode = (task: {
   answer_mode?: AnswerMode | string | null;
 }): AnswerMode => {
   const questionType = task.question_type || "input";
-  if (questionType === "input" || questionType === "factor_grid") return "written";
+  if (questionType === "input") return "written";
   if (!supportsAnswerModeSwitch(questionType)) return "choices";
   return task.answer_mode === "written" ? "written" : "choices";
 };

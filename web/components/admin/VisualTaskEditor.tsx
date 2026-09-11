@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { apiPath } from "@/lib/api";
-import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
@@ -799,48 +798,6 @@ export default function VisualTaskEditor({
             />
           )}
 
-          {qt === "factor_grid" && (
-            <div className="grid grid-cols-2 gap-3">
-              {parseFactorGridAnswer(String(taskData.answer || "")).map((cell, idx) => {
-                const labels = ["ax² #1", "c #1", "ax² #2", "c #2"];
-                const fieldKey = `factor-grid-${idx}`;
-                const isEditingCell = isEditing && editingField === fieldKey;
-                return (
-                  <div key={fieldKey} className="space-y-1">
-                    <div className="text-xs font-semibold text-gray-600">{labels[idx]}</div>
-                    {isEditingCell ? (
-                      <MathFieldInput
-                        value={cell}
-                        onChange={(value) => {
-                          const next = parseFactorGridAnswer(String(taskData.answer || ""));
-                          next[idx] = value;
-                          updateTempTask({ answer: serializeFactorGridAnswer(next) });
-                        }}
-                        onBlur={() => setEditingField(null)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-                        placeholder="Жауап"
-                        autoFocus
-                      />
-                    ) : (
-                      <div
-                        onClick={() => {
-                          if (isEditing) {
-                            setEditingField(fieldKey);
-                          }
-                        }}
-                        className={`border border-gray-300 rounded-lg px-3 py-2 min-h-[3rem] text-gray-900 ${
-                          isEditing ? "cursor-pointer hover:bg-gray-100" : ""
-                        }`}
-                      >
-                        {cell ? <MathRender latex={cell} inline /> : isEditing ? "Өңдеу үшін басыңыз" : ""}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {qt === "tf" && (
             <div className="flex gap-2">
               {["true", "false"].map((value) => {
@@ -1154,7 +1111,6 @@ export default function VisualTaskEditor({
             <option value="mcq">Көп таңдаулы (4-8)</option>
             <option value="mcq6">Көп таңдаулы legacy</option>
             <option value="select">Сәйкестендіру</option>
-            <option value="factor_grid">Factor Grid</option>
           </select>
           {supportsAnswerModeSwitch(tempTaskData.question_type) && (
             <div className="mt-4">

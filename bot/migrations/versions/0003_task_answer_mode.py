@@ -25,7 +25,7 @@ def upgrade() -> None:
         """
         UPDATE bank_tasks
         SET answer_mode = 'written'
-        WHERE question_type IN ('input', 'factor_grid')
+        WHERE question_type = 'input'
         """
     )
 

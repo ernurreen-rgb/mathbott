@@ -83,7 +83,7 @@ def normalize_answer_mode(raw_value: Any, question_type: Any) -> str:
     types retain their natural interaction regardless of stored legacy data.
     """
     qt = str(question_type or "input").strip().lower()
-    if qt in {"input", "factor_grid"}:
+    if qt == "input":
         return "written"
     if qt not in ANSWER_MODE_SWITCH_QUESTION_TYPES:
         return "choices"
@@ -129,54 +129,6 @@ def _normalize_freeform_answer(value: str) -> str:
     if re.search(r"[\\\\^_{}]", trimmed):
         return trimmed
     return trimmed.lower()
-
-
-def _parse_factor_grid_cells(raw_answer: Any) -> Optional[List[Any]]:
-    parsed = raw_answer
-    if isinstance(raw_answer, str):
-        if not raw_answer.strip():
-            return None
-        try:
-            parsed = json.loads(raw_answer)
-        except Exception:
-            return None
-
-    if not isinstance(parsed, list) or len(parsed) != 4:
-        return None
-
-    return list(parsed)
-
-
-def _sort_factor_grid_rows(cells: List[str]) -> List[List[str]]:
-    rows = [
-        [cells[0], cells[1]],
-        [cells[2], cells[3]],
-    ]
-    rows.sort(key=lambda row: f"{row[0]}\u0000{row[1]}")
-    return rows
-
-
-def canonicalize_factor_grid_answer(raw_answer: Any) -> str:
-    """Validate + normalize factor-grid answer and return canonical flat JSON."""
-    if raw_answer is None or (isinstance(raw_answer, str) and not raw_answer.strip()):
-        raise ValueError("factor_grid answer is required")
-
-    cells = _parse_factor_grid_cells(raw_answer)
-    if cells is None:
-        raise ValueError("factor_grid answer must contain exactly 4 items")
-
-    normalized: List[str] = []
-    for idx, item in enumerate(cells):
-        if not isinstance(item, str):
-            raise ValueError(f"factor_grid answer item #{idx + 1} must be a non-empty string")
-        value = _normalize_freeform_answer(item)
-        if not value:
-            raise ValueError(f"factor_grid answer item #{idx + 1} must be a non-empty string")
-        normalized.append(value)
-
-    sorted_rows = _sort_factor_grid_rows(normalized)
-    flattened = [cell for row in sorted_rows for cell in row]
-    return json.dumps(flattened, ensure_ascii=False)
 
 
 def parse_mcq_answer_labels(raw_answer: Any) -> List[str]:
@@ -577,12 +529,6 @@ def normalize_task_answer_for_compare(task: dict, user_answer: Any) -> str:
         return _normalize_choice_or_written_answer_for_compare(task, user_answer, ordered=False)
     if qt == "select":
         return _normalize_choice_or_written_answer_for_compare(task, user_answer, ordered=True)
-    if qt == "factor_grid":
-        cells = _parse_factor_grid_cells(ans)
-        if cells is None:
-            return "__invalid_factor_grid__"
-        normalized = [_normalize_written_math_answer(str(item) if item is not None else "") for item in cells]
-        return json.dumps(_sort_factor_grid_rows(normalized), ensure_ascii=False)
     if qt == "tf":
         v = ans.strip().lower()
         true_set = {"true", "1", "t", "да", "истина", "правда", "верно", "yes"}

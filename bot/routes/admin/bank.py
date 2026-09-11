@@ -138,10 +138,10 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         question_type_value: Optional[str] = None
         if question_type is not None and question_type.strip():
             normalized_question_type = question_type.strip().lower()
-            if normalized_question_type not in {"input", "tf", "mcq", "mcq6", "select", "factor_grid"}:
+            if normalized_question_type not in {"input", "tf", "mcq", "mcq6", "select"}:
                 raise HTTPException(
                     status_code=400,
-                    detail="question_type must be one of input, tf, mcq, mcq6, select, factor_grid",
+                    detail="question_type must be one of input, tf, mcq, mcq6, select",
                 )
             question_type_value = normalized_question_type
 
@@ -678,7 +678,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             effective_subquestions,
         )
         effective_answer = answer if answer is not None else existing.get("answer", "")
-        if effective_question_type in MCQ_QUESTION_TYPES or effective_question_type == "factor_grid":
+        if effective_question_type in MCQ_QUESTION_TYPES:
             effective_answer = _normalize_trial_like_answer_or_raise(
                 effective_question_type,
                 effective_answer,

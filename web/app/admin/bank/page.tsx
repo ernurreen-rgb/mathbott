@@ -27,7 +27,6 @@ import {
   restoreAdminBankTask,
   updateAdminBankTask,
 } from "@/lib/api";
-import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
@@ -79,10 +78,6 @@ type BankFormState = {
   subQuestion2: string;
   correctSub1: "A" | "B" | "C" | "D";
   correctSub2: "A" | "B" | "C" | "D";
-  factorTopLeft: string;
-  factorTopRight: string;
-  factorBottomLeft: string;
-  factorBottomRight: string;
   topics: string[];
 };
 
@@ -110,7 +105,7 @@ type JsonEditState = {
   canForceSave: boolean;
 };
 
-const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "input", "select", "factor_grid"];
+const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "input", "select"];
 const JSON_EDIT_DIFFICULTIES: BankDifficulty[] = ["A", "B", "C"];
 
 const createEmptyForm = (): BankFormState => ({
@@ -139,10 +134,6 @@ const createEmptyForm = (): BankFormState => ({
   subQuestion2: "",
   correctSub1: "A",
   correctSub2: "A",
-  factorTopLeft: "",
-  factorTopRight: "",
-  factorBottomLeft: "",
-  factorBottomRight: "",
   topics: [],
 });
 
@@ -176,14 +167,6 @@ const parseTaskToForm = (task: BankTask): BankFormState => {
   if (task.question_type === "tf") {
     form.correctTf = task.answer === "false" ? "false" : "true";
   }
-  if (task.question_type === "factor_grid") {
-    const [topLeft, topRight, bottomLeft, bottomRight] = parseFactorGridAnswer(task.answer || "");
-    form.factorTopLeft = topLeft;
-    form.factorTopRight = topRight;
-    form.factorBottomLeft = bottomLeft;
-    form.factorBottomRight = bottomRight;
-  }
-
   const subquestions = Array.isArray(task.subquestions) ? task.subquestions : [];
   if (task.question_type === "select") {
     if (subquestions.length >= 2) {
@@ -336,13 +319,6 @@ const buildBankFormPreviewTask = (form: BankFormState): LessonTask => {
     ];
   } else if (form.question_type === "tf") {
     answer = form.correctTf;
-  } else if (form.question_type === "factor_grid") {
-    answer = serializeFactorGridAnswer([
-      form.factorTopLeft,
-      form.factorTopRight,
-      form.factorBottomLeft,
-      form.factorBottomRight,
-    ]);
   }
 
   return {
@@ -800,13 +776,6 @@ export default function AdminBankPage() {
         { text: currentForm.subQuestion1.trim(), correct: currentForm.correctSub1 },
         { text: currentForm.subQuestion2.trim(), correct: currentForm.correctSub2 },
       ];
-    } else if (currentForm.question_type === "factor_grid") {
-      answer = serializeFactorGridAnswer([
-        currentForm.factorTopLeft,
-        currentForm.factorTopRight,
-        currentForm.factorBottomLeft,
-        currentForm.factorBottomRight,
-      ]);
     }
 
     return { answer, options, subquestions };
@@ -1396,7 +1365,6 @@ export default function AdminBankPage() {
                         <option value="mcq">MCQ (4-8)</option>
                         <option value="mcq6">MCQ legacy (4-8)</option>
                         <option value="select">Сәйкестендіру</option>
-                        <option value="factor_grid">Factor Grid</option>
                       </select>
                     </div>
                     <div>
@@ -1488,43 +1456,6 @@ export default function AdminBankPage() {
                       value={form.acceptedAnswers}
                       onChange={(acceptedAnswers) => setForm((prev) => ({ ...prev, acceptedAnswers }))}
                     />
-                  )}
-
-                  {form.question_type === "factor_grid" && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">ax² #1</label>
-                        <MathFieldInput
-                          value={form.factorTopLeft}
-                          onChange={(value) => setForm((prev) => ({ ...prev, factorTopLeft: value }))}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">c #1</label>
-                        <MathFieldInput
-                          value={form.factorTopRight}
-                          onChange={(value) => setForm((prev) => ({ ...prev, factorTopRight: value }))}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">ax² #2</label>
-                        <MathFieldInput
-                          value={form.factorBottomLeft}
-                          onChange={(value) => setForm((prev) => ({ ...prev, factorBottomLeft: value }))}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">c #2</label>
-                        <MathFieldInput
-                          value={form.factorBottomRight}
-                          onChange={(value) => setForm((prev) => ({ ...prev, factorBottomRight: value }))}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                        />
-                      </div>
-                    </div>
                   )}
 
                   {(isMcqQuestionType(form.question_type) || form.question_type === "select") && (

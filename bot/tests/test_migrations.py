@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0005_remove_competitive_features"
+HEAD_REVISION = "0006_remove_factor_grid_tasks"
 
 
 def _load_baseline_ddl():
@@ -238,3 +238,161 @@ def test_existing_competitive_columns_are_removed_on_upgrade(tmp_path):
         ).fetchone()
     assert user == ("keep@example.com", "keep")
     assert removed_achievement is None
+
+
+def test_removed_factor_grid_tasks_and_dependent_records_are_cleaned_up(tmp_path):
+    path = str(tmp_path / "obsolete_question_type.db")
+    run_migrations(path)
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("UPDATE alembic_version SET version_num = '0005_remove_competitive_features'")
+        user_id = conn.execute(
+            "INSERT INTO users (email, nickname) VALUES ('learner@example.com', 'learner')"
+        ).lastrowid
+        module_id = conn.execute("INSERT INTO modules (name) VALUES ('Module')").lastrowid
+        section_id = conn.execute(
+            "INSERT INTO sections (module_id, name) VALUES (?, 'Section')", (module_id,)
+        ).lastrowid
+        lesson_id = conn.execute(
+            "INSERT INTO lessons (section_id, title) VALUES (?, 'Lesson')", (section_id,)
+        ).lastrowid
+        mini_lesson_id = conn.execute(
+            "INSERT INTO mini_lessons (lesson_id, mini_index, title) VALUES (?, 1, 'Mini')",
+            (lesson_id,),
+        ).lastrowid
+        removed_bank_task_id = conn.execute(
+            "INSERT INTO bank_tasks (text, answer, question_type) VALUES ('obsolete', '[]', 'factor_grid')"
+        ).lastrowid
+        kept_bank_task_id = conn.execute(
+            "INSERT INTO bank_tasks (text, answer, question_type) VALUES ('keep', '4', 'input')"
+        ).lastrowid
+        removed_task_id = conn.execute(
+            "INSERT INTO tasks (section_id, mini_lesson_id, bank_task_id) VALUES (?, ?, ?)",
+            (section_id, mini_lesson_id, removed_bank_task_id),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO solutions (user_id, task_id, answer) VALUES (?, ?, '[]')",
+            (user_id, removed_task_id),
+        )
+        conn.execute(
+            "INSERT INTO user_progress (user_id, task_id) VALUES (?, ?)",
+            (user_id, removed_task_id),
+        )
+        conn.execute(
+            "INSERT INTO user_task_question_progress (user_id, task_id, question_index) VALUES (?, ?, 0)",
+            (user_id, removed_task_id),
+        )
+        conn.execute(
+            "INSERT INTO reports (user_id, task_id, message) VALUES (?, ?, 'obsolete')",
+            (user_id, removed_task_id),
+        )
+        topic_id = conn.execute(
+            "INSERT INTO bank_topics (name, name_norm) VALUES ('Topic', 'topic')"
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO bank_task_topic_map (bank_task_id, topic_id) VALUES (?, ?)",
+            (removed_bank_task_id, topic_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO bank_task_versions
+            (bank_task_id, version_no, event_type, changed_fields_json, snapshot_json)
+            VALUES (?, 1, 'create', '["question_type"]', '{"question_type":"factor_grid"}')
+            """,
+            (removed_bank_task_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_task_rewards
+            (user_id, reward_key, bank_task_id, difficulty, points_awarded, source)
+            VALUES (?, 'obsolete-reward', ?, 'B', 20, 'lesson')
+            """,
+            (user_id, removed_bank_task_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO admin_audit_logs
+            (domain, action, entity_type, entity_id, actor_email, summary, changed_fields_json, metadata_json)
+            VALUES ('bank', 'create', 'bank_task', ?, 'admin@example.com', 'factor_grid', '[]', '{}')
+            """,
+            (removed_bank_task_id,),
+        )
+
+        trial_test_id = conn.execute(
+            "INSERT INTO trial_tests (title) VALUES ('Trial')"
+        ).lastrowid
+        trial_task_id = conn.execute(
+            "INSERT INTO trial_test_tasks (trial_test_id, bank_task_id) VALUES (?, ?)",
+            (trial_test_id, removed_bank_task_id),
+        ).lastrowid
+        result_id = conn.execute(
+            """
+            INSERT INTO trial_test_results
+            (user_id, trial_test_id, answers, submit_mode)
+            VALUES (?, ?, '{}', 'solo')
+            """,
+            (user_id, trial_test_id),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO trial_test_drafts (user_id, trial_test_id) VALUES (?, ?)",
+            (user_id, trial_test_id),
+        )
+        session_id = conn.execute(
+            "INSERT INTO trial_test_coop_sessions (trial_test_id, owner_id) VALUES (?, ?)",
+            (trial_test_id, user_id),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO trial_test_coop_participants (session_id, user_id, color) VALUES (?, ?, 'blue')",
+            (session_id, user_id),
+        )
+        conn.execute(
+            "INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer) VALUES (?, ?, ?, '[]')",
+            (session_id, user_id, trial_task_id),
+        )
+        conn.execute(
+            "INSERT INTO trial_test_coop_results (session_id, user_id, trial_test_result_id) VALUES (?, ?, ?)",
+            (session_id, user_id, result_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO trial_test_reports
+            (user_id, trial_test_id, trial_test_task_id, message)
+            VALUES (?, ?, ?, 'obsolete')
+            """,
+            (user_id, trial_test_id, trial_task_id),
+        )
+
+    run_migrations(path)
+
+    with sqlite3.connect(path) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM bank_tasks WHERE LOWER(TRIM(question_type)) = 'factor_grid'"
+        ).fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT text FROM bank_tasks WHERE id = ?", (kept_bank_task_id,)
+        ).fetchone() == ("keep",)
+        for table in (
+            "tasks",
+            "solutions",
+            "user_progress",
+            "user_task_question_progress",
+            "reports",
+            "trial_test_tasks",
+            "trial_test_results",
+            "trial_test_drafts",
+            "trial_test_coop_sessions",
+            "trial_test_coop_participants",
+            "trial_test_coop_answers",
+            "trial_test_coop_results",
+            "trial_test_reports",
+            "bank_task_topic_map",
+            "bank_task_versions",
+            "admin_audit_logs",
+        ):
+            assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+        reward = conn.execute(
+            "SELECT bank_task_id, points_awarded FROM user_task_rewards WHERE reward_key = 'obsolete-reward'"
+        ).fetchone()
+        assert reward == (None, 20)
+        assert _stamped_revision(path) == HEAD_REVISION

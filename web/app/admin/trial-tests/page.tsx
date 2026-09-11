@@ -21,7 +21,6 @@ import {
   updateTrialTest,
   upsertTrialTestSlot,
 } from "@/lib/api";
-import { isFactorGridComplete, parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
@@ -58,10 +57,6 @@ type SlotForm = {
   subQuestion2: string;
   correctSub1: "A" | "B" | "C" | "D";
   correctSub2: "A" | "B" | "C" | "D";
-  factorTopLeft: string;
-  factorTopRight: string;
-  factorBottomLeft: string;
-  factorBottomRight: string;
   topicsRaw: string;
 };
 
@@ -87,10 +82,6 @@ const emptySlotForm = (): SlotForm => ({
   subQuestion2: "",
   correctSub1: "A",
   correctSub2: "A",
-  factorTopLeft: "",
-  factorTopRight: "",
-  factorBottomLeft: "",
-  factorBottomRight: "",
   topicsRaw: "",
 });
 
@@ -178,16 +169,6 @@ const buildSlotPayload = (form: SlotForm) => {
     payload.options = buildMcqOptionsFromSlotForm(form);
     return payload;
   }
-  if (form.question_type === "factor_grid") {
-    payload.answer = serializeFactorGridAnswer([
-      form.factorTopLeft,
-      form.factorTopRight,
-      form.factorBottomLeft,
-      form.factorBottomRight,
-    ]);
-    return payload;
-  }
-
   payload.answer = JSON.stringify([form.correctSub1, form.correctSub2]);
   payload.options = [
     { label: "A", text: form.optionA },
@@ -210,7 +191,7 @@ const buildSlotPreviewTask = (form: SlotForm): LessonTask => ({
 
 const getPlacementQuestionType = (placement: BankPlacementTask | null): QuestionType => {
   const raw = placement?.question_type || placement?.bank_task?.question_type || "input";
-  if (raw === "mcq" || raw === "mcq6" || raw === "input" || raw === "tf" || raw === "select" || raw === "factor_grid") {
+  if (raw === "mcq" || raw === "mcq6" || raw === "input" || raw === "tf" || raw === "select") {
     return raw;
   }
   return "input";
@@ -254,8 +235,6 @@ const isSelectAnswerComplete = (value?: string): boolean => {
   const [a, b] = parseSelectAnswer(value);
   return a.trim().length > 0 && b.trim().length > 0;
 };
-
-const isFactorGridAnswerComplete = (value?: string): boolean => isFactorGridComplete(parseFactorGridAnswer(value));
 
 export default function AdminTrialTestsPage() {
   const { data: session, status } = useSession();
@@ -638,7 +617,6 @@ export default function AdminTrialTestsPage() {
     const placement = slotMap.get(slotIndex) || null;
     const questionType = getPlacementQuestionType(placement);
     if (questionType === "select") return isSelectAnswerComplete(value);
-    if (questionType === "factor_grid") return isFactorGridAnswerComplete(value);
     return value.trim().length > 0;
   };
 
@@ -758,30 +736,6 @@ export default function AdminTrialTestsPage() {
               </button>
             );
           })}
-        </div>
-      );
-    }
-
-    if (questionType === "factor_grid") {
-      const cells = parseFactorGridAnswer(value);
-      const labels = ["ax² #1", "c #1", "ax² #2", "c #2"];
-      return (
-        <div className="grid grid-cols-2 gap-3">
-          {cells.map((cell, idx) => (
-            <div key={`slot-${currentSlotIndex}-factor-${idx}`} className="space-y-1">
-              <div className="text-xs font-semibold text-gray-600">{labels[idx]}</div>
-              <MathFieldInput
-                value={cell}
-                onChange={(nextValue) => {
-                  const next = [...cells] as typeof cells;
-                  next[idx] = nextValue;
-                  setPreviewAnswer(currentSlotIndex, serializeFactorGridAnswer(next));
-                }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-                placeholder="Жауап"
-              />
-            </div>
-          ))}
         </div>
       );
     }
@@ -1237,7 +1191,7 @@ export default function AdminTrialTestsPage() {
                   const questionType = e.target.value as QuestionType;
                   setSlotForm((p) => ({ ...p, question_type: questionType, answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
                 }}>
-                  <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option><option value="factor_grid">Factor Grid</option>
+                  <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
                 </select>
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
                   <option value="A">A</option><option value="B">B</option><option value="C">C</option>
@@ -1278,14 +1232,6 @@ export default function AdminTrialTestsPage() {
                   value={slotForm.acceptedAnswers}
                   onChange={(acceptedAnswers) => setSlotForm((previous) => ({ ...previous, acceptedAnswers }))}
                 />
-              )}
-              {slotForm.question_type === "factor_grid" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <MathFieldInput value={slotForm.factorTopLeft} onChange={(v) => setSlotForm((p) => ({ ...p, factorTopLeft: v }))} placeholder="ax² #1" />
-                  <MathFieldInput value={slotForm.factorTopRight} onChange={(v) => setSlotForm((p) => ({ ...p, factorTopRight: v }))} placeholder="c #1" />
-                  <MathFieldInput value={slotForm.factorBottomLeft} onChange={(v) => setSlotForm((p) => ({ ...p, factorBottomLeft: v }))} placeholder="ax² #2" />
-                  <MathFieldInput value={slotForm.factorBottomRight} onChange={(v) => setSlotForm((p) => ({ ...p, factorBottomRight: v }))} placeholder="c #2" />
-                </div>
               )}
               {slotForm.question_type === "tf" && (
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.correctTf} onChange={(e) => setSlotForm((p) => ({ ...p, correctTf: e.target.value as "true" | "false" }))}>

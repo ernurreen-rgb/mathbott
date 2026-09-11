@@ -1,4 +1,3 @@
-import { isFactorGridComplete, parseFactorGridAnswer } from "./factor-grid";
 import { getTaskMcqCorrectCount, isMcqAnswerComplete } from "./question-options";
 import type { LessonTask } from "@/types";
 import { isWrittenAnswerComplete } from "./written-answer";
@@ -21,9 +20,6 @@ export const isTrialTaskAnswerComplete = (task: LessonTask, value?: string): boo
     return getTaskAnswerMode(task) === "written"
       ? isWrittenAnswerComplete(value, 2)
       : isSelectAnswerComplete(value);
-  }
-  if (task.question_type === "factor_grid") {
-    return isFactorGridComplete(parseFactorGridAnswer(value));
   }
   if (task.question_type === "mcq" || task.question_type === "mcq6") {
     const requiredCount = getTaskMcqCorrectCount(task);

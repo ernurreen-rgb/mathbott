@@ -303,7 +303,7 @@ def register_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             effective_subquestions,
         )
         effective_answer = answer if answer is not None else task.get("answer", "")
-        if effective_question_type in MCQ_QUESTION_TYPES or effective_question_type == "factor_grid":
+        if effective_question_type in MCQ_QUESTION_TYPES:
             effective_answer = _normalize_trial_like_answer_or_raise(
                 effective_question_type,
                 effective_answer,

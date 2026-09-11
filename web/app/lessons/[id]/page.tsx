@@ -7,7 +7,6 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import { getLessonDetails } from "@/lib/api";
 import { API_URL } from "@/lib/constants";
-import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
@@ -465,52 +464,6 @@ export default function LessonPage() {
       );
     }
 
-    if (qt === "factor_grid") {
-      const cells = parseFactorGridAnswer(answers[task.id]);
-      const isCompleted = task.status === "completed";
-      const renderFactorInput = (idx: number) => (
-        <StudentMathAnswerInput
-          value={cells[idx]}
-          onChange={(value) => {
-            const next = [...cells] as typeof cells;
-            next[idx] = value;
-            setAnswers((m) => ({
-              ...m,
-              [task.id]: serializeFactorGridAnswer(next),
-            }));
-          }}
-          disabled={isCompleted}
-          compact
-          className="w-full min-w-0 text-sm"
-          ariaLabel={`Жауап ${idx + 1}`}
-          placeholder={"\u0416\u0430\u0443\u0430\u043F"}
-        />
-      );
-
-      return (
-        <div className="space-y-3">
-          <div className="inline-flex max-w-full flex-col gap-2 sm:gap-3">
-            {[0, 1].map((row) => (
-              <div
-                key={`${task.id}-factor-row-${row}`}
-                className="flex items-center justify-between gap-[2.75rem] sm:gap-[3.5rem] md:gap-[4rem]"
-              >
-                <div className="w-[4.5rem] sm:w-[5.5rem]">{renderFactorInput(row * 2)}</div>
-                <div className="w-[4.5rem] sm:w-[5.5rem]">{renderFactorInput(row * 2 + 1)}</div>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={() => submitCheck(task, serializeFactorGridAnswer(cells))}
-            disabled={!!checking[task.id] || isCompleted}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
-          >
-            {"\u0422\u0435\u043A\u0441\u0435\u0440\u0443"}
-          </button>
-        </div>
-      );
-    }
-
     return (
       <div className="flex flex-col gap-3">
         <StudentMathAnswerInput
@@ -681,21 +634,9 @@ export default function LessonPage() {
                   </div>
 
                   <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
-                    <div
-                      className={
-                        activeTask.question_type === "factor_grid"
-                          ? "mx-auto w-fit max-w-full"
-                          : ""
-                      }
-                    >
+                    <div>
                     <div className="flex items-start justify-between gap-3 mb-3">
-                      <div
-                        className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(activeTask.text_scale))} ${
-                          activeTask.question_type === "factor_grid"
-                            ? "w-full flex justify-center"
-                            : ""
-                        }`}
-                      >
+                      <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(activeTask.text_scale))}`}>
                         {activeTask.text || "Мәтіні жоқ есеп"}
                       </div>
                     </div>

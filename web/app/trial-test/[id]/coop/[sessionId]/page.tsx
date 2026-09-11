@@ -19,7 +19,6 @@ import {
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { API_URL } from "@/lib/constants";
-import { parseFactorGridAnswer, serializeFactorGridAnswer } from "@/lib/factor-grid";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
@@ -368,40 +367,6 @@ export default function TrialTestCoopPage() {
       );
     }
 
-    if (qt === "factor_grid") {
-      const cells = parseFactorGridAnswer(answers[task.id]);
-      const renderFactorInput = (idx: number) => (
-        <StudentMathAnswerInput
-          value={cells[idx]}
-          onChange={(value) => {
-            const next = [...cells] as typeof cells;
-            next[idx] = value;
-            const payload = serializeFactorGridAnswer(next);
-            setAnswers((m) => ({ ...m, [task.id]: payload }));
-            sendAnswerUpdate(task.id, payload);
-          }}
-          compact
-          className="w-full min-w-0 text-sm"
-          ariaLabel={`Жауап ${idx + 1}`}
-          placeholder={"\u0416\u0430\u0443\u0430\u043F"}
-        />
-      );
-
-      return (
-        <div className="inline-flex max-w-full flex-col gap-2 sm:gap-3">
-          {[0, 1].map((row) => (
-            <div
-              key={`${task.id}-factor-row-${row}`}
-              className="flex items-center justify-between gap-[2.75rem] sm:gap-[3.5rem] md:gap-[4rem]"
-            >
-              <div className="w-[4.5rem] sm:w-[5.5rem]">{renderFactorInput(row * 2)}</div>
-              <div className="w-[4.5rem] sm:w-[5.5rem]">{renderFactorInput(row * 2 + 1)}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
     return (
       <StudentMathAnswerInput
         value={answers[task.id] || ""}
@@ -567,21 +532,9 @@ export default function TrialTestCoopPage() {
               className="glass rounded-3xl shadow-2xl p-6 border border-white/30"
             >
               <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
-                <div
-                  className={
-                    currentTask.question_type === "factor_grid"
-                      ? "mx-auto w-fit max-w-full"
-                      : ""
-                  }
-                >
+                <div>
                 <div className="mb-4">
-                  <div
-                    className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))} ${
-                      currentTask.question_type === "factor_grid"
-                        ? "w-full flex justify-center"
-                        : ""
-                    }`}
-                  >
+                  <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))}`}>
                     {currentTask.text ? (
                       <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
                     ) : (

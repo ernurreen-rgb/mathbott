@@ -305,55 +305,6 @@ async def test_check_task_answer_incorrect(client, test_db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_check_task_answer_factor_grid_accepts_swapped_rows(client, test_db, test_user):
-    """Factor-grid answers should accept row swaps but reject in-row swaps."""
-    module = await test_db.curriculum.create_module("Factor Grid Module", sort_order=1)
-    section = await test_db.curriculum.create_section(module["id"], "Factor Grid Section", sort_order=1)
-    task = await test_db.create_task_in_section(
-        section["id"],
-        "2x^2 + 5x - 3 = 0",
-        '["\\\\text{2x}","\\\\text{-1}","\\\\text{x}","\\\\text{3}"]',
-        test_user["id"],
-        question_type="factor_grid",
-    )
-
-    swapped_rows = client.post(
-        "/api/task/check",
-        json={
-            "task_id": task["id"],
-            "answer": '["x","3","2x","-1"]',
-            "email": test_user["email"],
-        },
-    )
-    assert swapped_rows.status_code == 200
-    assert swapped_rows.json()["correct"] is True
-
-    swapped_rows_unicode_minus = client.post(
-        "/api/task/check",
-        json={
-            "task_id": task["id"],
-            "answer": '["x","3","2x","\\u22121"]',
-            "email": test_user["email"],
-        },
-    )
-    assert swapped_rows_unicode_minus.status_code == 200
-    assert swapped_rows_unicode_minus.json()["correct"] is True
-
-    swapped_inside_row = client.post(
-        "/api/task/check",
-        json={
-            "task_id": task["id"],
-            "answer": '["-1","2x","x","3"]',
-            "email": test_user["email"],
-        },
-    )
-    assert swapped_inside_row.status_code == 200
-    payload = swapped_inside_row.json()
-    assert payload["correct"] is False
-    assert payload["correct_answer"] == '["\\\\text{2x}","\\\\text{-1}","\\\\text{x}","\\\\text{3}"]'
-
-
-@pytest.mark.asyncio
 async def test_check_task_answer_awards_points_once_by_difficulty(client, test_db, test_user):
     module = await test_db.curriculum.create_module("Points Module", sort_order=1)
     section = await test_db.curriculum.create_section(module["id"], "Points Section", sort_order=1)

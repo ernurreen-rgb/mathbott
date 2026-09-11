@@ -560,7 +560,6 @@ export default function AdminBankQualityPage() {
                       <option value="mcq">mcq</option>
                       <option value="mcq6">mcq6</option>
                       <option value="select">select</option>
-                      <option value="factor_grid">factor_grid</option>
                     </select>
                   </div>
 

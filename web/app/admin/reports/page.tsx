@@ -62,7 +62,7 @@ function ReportsPageContent() {
   const [taskForm, setTaskForm] = useState({
     text: "",
     answer: "",
-    question_type: "input" as "tf" | "mcq" | "mcq6" | "input" | "factor_grid",
+    question_type: "input" as "tf" | "mcq" | "mcq6" | "input",
     optionA: "",
     optionB: "",
     optionC: "",
@@ -556,7 +556,7 @@ function ReportsPageContent() {
                   />
                 </div>
 
-                {(taskForm.question_type === "input" || taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "factor_grid") && (
+                {(taskForm.question_type === "input" || taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Жауап
@@ -583,7 +583,6 @@ function ReportsPageContent() {
                     <option value="tf">Шын/Жалған</option>
                     <option value="mcq">Бірнеше таңдау</option>
                     <option value="mcq6">Бірнеше таңдау (6)</option>
-                    <option value="factor_grid">Factor Grid</option>
                   </select>
                 </div>
 

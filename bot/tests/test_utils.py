@@ -10,7 +10,6 @@ from utils.file_storage import normalize_stored_image_filename
 from utils.scoring import build_reward_identity, normalize_difficulty_code, points_for_difficulty
 from utils.internal_proxy_auth import build_ws_token, verify_ws_token
 from utils.validation import (
-    canonicalize_factor_grid_answer,
     get_mcq_answer_count,
     parse_mcq_answer_labels,
     serialize_mcq_answer_labels,
@@ -325,38 +324,6 @@ def test_written_mcq_maps_equivalent_algebraic_expression_to_option_label():
     }
 
     assert normalize_task_answer_for_compare(task, "x(x-1)") == "B"
-
-
-def test_factor_grid_compares_equivalent_numeric_cell_values():
-    task = {"question_type": "factor_grid", "answer": r'["x","\\frac{1}{2}","2x","3"]'}
-
-    expected = normalize_task_answer_for_compare(task, task["answer"])
-    equivalent = normalize_task_answer_for_compare(task, '["x","0.5","2x","3"]')
-
-    assert expected == equivalent
-
-
-def test_factor_grid_normalization_and_canonicalization():
-    task_factor = {"question_type": "factor_grid", "answer": '["\\\\text{2x}","\\\\text{-1}","\\\\text{x}","\\\\text{3}"]'}
-
-    canonical = normalize_task_answer_for_compare(task_factor, '["2x","-1","x","3"]')
-    swapped = normalize_task_answer_for_compare(task_factor, '["x","3","2x","-1"]')
-    swapped_with_unicode_minus = normalize_task_answer_for_compare(task_factor, '["x","3","2x","\\u22121"]')
-    wrong = normalize_task_answer_for_compare(task_factor, '["-1","2x","x","3"]')
-
-    assert canonical == swapped
-    assert canonical == swapped_with_unicode_minus
-    assert canonical != wrong
-    assert canonicalize_factor_grid_answer('["x","3","2x","-1"]') == '["2x", "-1", "x", "3"]'
-
-
-def test_factor_grid_invalid_payload_rejected():
-    task_factor = {"question_type": "factor_grid", "answer": '["2x","-1","x","3"]'}
-
-    assert normalize_task_answer_for_compare(task_factor, "not-json") == "__invalid_factor_grid__"
-
-    with pytest.raises(ValueError, match="exactly 4 items"):
-        canonicalize_factor_grid_answer('["2x","-1","x"]')
 
 
 def test_mcq_answer_label_helpers():
