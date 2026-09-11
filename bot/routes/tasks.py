@@ -126,7 +126,6 @@ def setup_tasks_routes(app, db, limiter: Limiter):
                 # Invalidate cache for user stats and modules map
                 cache.invalidate_pattern(f"user:stats:{task_check_request.email}")
                 cache.invalidate_pattern(f"modules:map:{task_check_request.email}")
-                cache.invalidate_pattern("rating:")  # Invalidate all rating caches
             except Exception as e:
                 logger.error(f"Failed to record_solution: {e}", exc_info=True)
                 # Don't fail the check response; user can retry

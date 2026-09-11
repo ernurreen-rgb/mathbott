@@ -43,7 +43,7 @@ class CacheHeadersMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/health"):
             # Health check should not be cached
             self._set_no_store_headers(response)
-        elif path.startswith("/api/rating") or path.startswith("/api/user/web/"):
+        elif path.startswith("/api/user/web/"):
             # User-specific data: short cache with revalidation
             response.headers["Cache-Control"] = f"private, max-age=30, must-revalidate"
             # Add ETag for conditional requests

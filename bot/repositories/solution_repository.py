@@ -17,7 +17,7 @@ class SolutionRepository(BaseRepository):
     
     async def record_solution(
         self, user_id: int, task_id: int, answer: str, is_correct: bool,
-        progress_repo, user_repo, achievement_repo, rating_repo, task_repo, task_snapshot: Optional[Dict[str, Any]] = None
+        progress_repo, user_repo, achievement_repo, task_repo, task_snapshot: Optional[Dict[str, Any]] = None
     ):
         """Record user solution"""
         try:
@@ -66,7 +66,7 @@ class SolutionRepository(BaseRepository):
                 
                 if award_result.get("awarded"):
                     try:
-                        await achievement_repo.check_and_unlock_achievements(user_id, user_repo, rating_repo)
+                        await achievement_repo.check_and_unlock_achievements(user_id, user_repo)
                     except Exception as e:
                         logger.error(f"Failed to check achievements: {e}", exc_info=True)
         except Exception as e:

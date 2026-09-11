@@ -6,7 +6,6 @@ import json
 import logging
 import time
 from typing import Optional, Dict, Any, List
-from models.db_models import League, LEAGUE_GROUP_SIZE
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -77,15 +76,6 @@ class UserRepository(BaseRepository):
                 if existing:
                     return dict(existing)
             
-            # Assign new users into groups of fixed size within the default league.
-            default_league = League.KOLA.value
-            async with db.execute(
-                "SELECT COUNT(*) as count FROM users WHERE league = ?",
-                (default_league,),
-            ) as cursor:
-                count_row = await cursor.fetchone()
-                group = (count_row["count"] // LEAGUE_GROUP_SIZE) if count_row else 0
-
             # Generate a unique negative telegram_id from email hash
             email_hash = hash(email)
             dummy_telegram_id = -(abs(email_hash) % (2**31 - 1))
@@ -104,13 +94,11 @@ class UserRepository(BaseRepository):
                 admin_role = ADMIN_ROLE_SUPER_ADMIN
             
             await db.execute(
-                """INSERT INTO users (telegram_id, email, league, league_group, is_admin, admin_role)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO users (telegram_id, email, is_admin, admin_role)
+                   VALUES (?, ?, ?, ?)""",
                 (
                     dummy_telegram_id,
                     email,
-                    default_league,
-                    group,
                     1 if is_admin else 0,
                     admin_role,
                 )
@@ -607,13 +595,11 @@ class UserRepository(BaseRepository):
                     """
                     UPDATE users SET
                         total_points = total_points + ?,
-                        week_points = week_points + ?,
                         total_solved = total_solved + 1,
-                        week_solved = week_solved + 1,
                         last_active = CURRENT_TIMESTAMP
                     WHERE id = ?
                     """,
-                    (points, points, user_id),
+                    (points, user_id),
                 )
                 await db.commit()
                 return {"awarded": True, "points": points}

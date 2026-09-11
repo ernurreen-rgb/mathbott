@@ -61,7 +61,6 @@ def setup_export_routes(app, db):
             "id": 1,
             "email": "user@example.com",
             "nickname": "TestUser",
-            "league": "Қола",
             "total_solved": 50,
             "total_points": 500
           },
@@ -119,7 +118,6 @@ def setup_export_routes(app, db):
                     yield _csv_line(["Field", "Value"])
                     yield _csv_line(["Email", user["email"]])
                     yield _csv_line(["Nickname", user.get("nickname", "")])
-                    yield _csv_line(["League", user["league"]])
                     yield _csv_line(["Total Solved", user["total_solved"]])
                     yield _csv_line(["Total Points", user["total_points"]])
                     yield "\n"
@@ -174,11 +172,8 @@ def setup_export_routes(app, db):
                     yield f'    "id": {user["id"]},\n'
                     yield f'    "email": "{user["email"]}",\n'
                     yield f'    "nickname": {json.dumps(user.get("nickname"))},\n'
-                    yield f'    "league": "{user["league"]}",\n'
                     yield f'    "total_solved": {user["total_solved"]},\n'
                     yield f'    "total_points": {user["total_points"]},\n'
-                    yield f'    "week_solved": {user["week_solved"]},\n'
-                    yield f'    "week_points": {user["week_points"]},\n'
                     yield f'    "streak": {user.get("streak", 0)}\n'
                     yield '  },\n'
                     
@@ -276,17 +271,11 @@ def setup_export_routes(app, db):
             async with conn.execute("SELECT COUNT(*) as count FROM solutions") as cursor:
                 total_solutions = (await cursor.fetchone())[0]
             
-            # Users by league
-            async with conn.execute(
-                "SELECT league, COUNT(*) as count FROM users GROUP BY league"
-            ) as cursor:
-                league_stats = {row[0]: row[1] for row in await cursor.fetchall()}
-        
+
         data = {
             "total_users": total_users,
             "total_tasks": total_tasks,
-            "total_solutions": total_solutions,
-            "users_by_league": league_stats
+            "total_solutions": total_solutions
         }
         
         if format == "csv":
@@ -296,11 +285,7 @@ def setup_export_routes(app, db):
             writer.writerow(["Total Users", total_users])
             writer.writerow(["Total Tasks", total_tasks])
             writer.writerow(["Total Solutions", total_solutions])
-            writer.writerow([])
-            writer.writerow(["League", "User Count"])
-            for league, count in league_stats.items():
-                writer.writerow([league, count])
-            
+
             output.seek(0)
             return StreamingResponse(
                 iter([output.getvalue()]),
@@ -313,4 +298,3 @@ def setup_export_routes(app, db):
                 media_type="application/json",
                 headers={"Content-Disposition": 'attachment; filename="admin_stats.json"'}
             )
-

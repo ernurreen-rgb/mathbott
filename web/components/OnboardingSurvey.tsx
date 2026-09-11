@@ -125,7 +125,7 @@ export default function OnboardingSurvey({ onComplete }: OnboardingSurveyProps) 
                   Есіміңізді енгізіңіз
                 </h2>
                 <p className="text-gray-600">
-                  Бұл есім рейтингте көрсетіледі
+                  Бұл есім профиліңізде көрсетіледі
                 </p>
               </div>
               <input

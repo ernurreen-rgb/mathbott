@@ -666,7 +666,7 @@ export default function TrialTestPage() {
                             {friend.nickname || `Пайдаланушы #${friend.id}`}
                           </div>
                           <div className="text-sm md:text-base text-gray-500">
-                            {friend.league} • {friend.total_points} ұпай
+                            {friend.total_points} ұпай
                           </div>
                         </div>
                         <button

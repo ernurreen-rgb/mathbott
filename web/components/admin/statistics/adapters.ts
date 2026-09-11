@@ -82,12 +82,6 @@ export const buildQuestionTypeSuccessSeries = (stats: AdminStatistics): Question
     success_rate: toNumber(row.success_rate),
   }));
 
-export const buildLeagueDistributionSeries = (stats: AdminStatistics): PieDistributionPoint[] =>
-  ensureArray(stats.league_distribution).map((row) => ({
-    label: String(row.league || "unknown"),
-    value: toNumber(row.count),
-  }));
-
 export const buildReportStatusSeries = (stats: AdminStatistics): PieDistributionPoint[] =>
   ensureArray(stats.report_status_distribution).map((row) => ({
     label: String(row.status || "unknown"),

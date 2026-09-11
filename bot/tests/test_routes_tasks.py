@@ -94,9 +94,7 @@ async def test_task_questions_hide_answers_and_award_once(client, test_db, test_
 
     user_after_completion = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_completion["total_points"] == 10
-    assert user_after_completion["week_points"] == 10
     assert user_after_completion["total_solved"] == 1
-    assert user_after_completion["week_solved"] == 1
 
     repeat = client.post(
         f"/api/tasks/{task['id']}/questions/check",
@@ -107,9 +105,7 @@ async def test_task_questions_hide_answers_and_award_once(client, test_db, test_
 
     user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_repeat["total_points"] == 10
-    assert user_after_repeat["week_points"] == 10
     assert user_after_repeat["total_solved"] == 1
-    assert user_after_repeat["week_solved"] == 1
 
 
 def test_get_task_by_id_not_found(client):
@@ -378,9 +374,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 10
-    assert user_after_first["week_points"] == 10
     assert user_after_first["total_solved"] == 1
-    assert user_after_first["week_solved"] == 1
 
     second = client.post(
         "/api/task/check",
@@ -391,9 +385,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 10
-    assert user_after_second["week_points"] == 10
     assert user_after_second["total_solved"] == 1
-    assert user_after_second["week_solved"] == 1
 
 
 @pytest.mark.asyncio

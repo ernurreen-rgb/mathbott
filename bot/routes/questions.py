@@ -95,7 +95,6 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
                 cache.invalidate_pattern(f"user:stats:{email}")
                 cache.invalidate_pattern(f"modules:map:{email}")
-                cache.invalidate_pattern("rating:")
                 if award_result.get("awarded"):
                     try:
                         await db.users.update_streak(user["id"])

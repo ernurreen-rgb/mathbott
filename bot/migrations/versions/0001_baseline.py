@@ -23,24 +23,13 @@ CREATE TABLE users (
             telegram_id INTEGER UNIQUE,
             email TEXT UNIQUE,
             nickname TEXT,
-            league TEXT NOT NULL DEFAULT 'Қола',
-            league_group INTEGER NOT NULL DEFAULT 0,
             total_solved INTEGER NOT NULL DEFAULT 0,
-            week_solved INTEGER NOT NULL DEFAULT 0,
-            week_points INTEGER NOT NULL DEFAULT 0,
             total_points INTEGER NOT NULL DEFAULT 0,
             is_admin BOOLEAN NOT NULL DEFAULT 0,
             admin_role TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         , streak INTEGER NOT NULL DEFAULT 0, last_streak_date DATE, onboarding_completed BOOLEAN NOT NULL DEFAULT 0)
-    """,
-    """
-CREATE TABLE weekly_resets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            reset_date DATE NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
     """,
     """
 CREATE TABLE user_achievements (
@@ -635,15 +624,6 @@ CREATE INDEX idx_user_progress_user_task ON user_progress(user_id, task_id)
     """,
     """
 CREATE INDEX idx_users_email ON users(email)
-    """,
-    """
-CREATE INDEX idx_users_league_group ON users(league, league_group)
-    """,
-    """
-CREATE INDEX idx_users_total_points ON users(total_points DESC, total_solved DESC)
-    """,
-    """
-CREATE INDEX idx_users_week_points ON users(week_points DESC, total_points DESC)
     """,
     """
 CREATE INDEX idx_users_admin_role ON users(admin_role)

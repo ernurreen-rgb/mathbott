@@ -122,18 +122,11 @@ export default function StatisticsPage() {
             
             <div className="mb-6">
               <h3 className="text-xl font-semibold mb-3">Орташа көрсеткіштер</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <StatCard label="Орташа шешілген" value={stats.avg_user_stats.avg_solved.toFixed(1)} />
                 <StatCard label="Орташа ұпай" value={stats.avg_user_stats.avg_points.toFixed(1)} />
                 <StatCard label="Орташа серия" value={stats.avg_user_stats.avg_streak.toFixed(1)} />
-                <StatCard label="Орташа апталық ұпай" value={stats.avg_user_stats.avg_week_points.toFixed(1)} />
               </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <TopUsersTable title="Топ-10 ұпай бойынша" users={stats.top_users_by_points} />
-              <TopUsersTable title="Топ-10 шешілген бойынша" users={stats.top_users_by_solved} />
-              <TopUsersTable title="Топ-10 серия бойынша" users={stats.top_users_by_streak} />
             </div>
           </div>
 
@@ -275,42 +268,9 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* 8. League Statistics */}
+          {/* 8. Time-based Statistics */}
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Лигалар статистикасы</h2>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Таралу</h3>
-                <div className="space-y-2">
-                  {stats.league_distribution.map((league) => (
-                    <div key={league.league} className="flex justify-between items-center bg-white/70 rounded p-2">
-                      <span>{league.league}</span>
-                      <span className="font-bold">{league.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Орташа көрсеткіштер</h3>
-                <div className="space-y-2">
-                  {stats.league_averages.map((avg) => (
-                    <div key={avg.league} className="bg-white/70 rounded p-3">
-                      <div className="font-semibold">{avg.league}</div>
-                      <div className="text-sm text-gray-600">
-                        Шешілген: {avg.avg_solved?.toFixed(1) || 0} | 
-                        Ұпай: {avg.avg_points?.toFixed(1) || 0} | 
-                        Серия: {avg.avg_streak?.toFixed(1) || 0}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 9. Time-based Statistics */}
-          <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">9. Уақыт бойынша статистика</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Уақыт бойынша статистика</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <div>
                 <h3 className="text-xl font-semibold mb-3">Тіркелулер (соңғы 90 күн)</h3>
@@ -341,9 +301,9 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* 10. Module Statistics */}
+          {/* 9. Module Statistics */}
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Модульдер статистикасы</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">9. Модульдер статистикасы</h2>
             <div className="space-y-3">
               {stats.module_progress.map((module) => (
                 <div key={module.id} className="bg-white/70 rounded-lg p-4">
@@ -363,10 +323,10 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* 11. Onboarding Statistics */}
+          {/* 10. Onboarding Statistics */}
           {onboardingStats && (
             <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">11. Онбординг опросы статистикасы</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Онбординг опросы статистикасы</h2>
               
               <div className="mb-6">
                 <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-4 text-white">
@@ -428,26 +388,6 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
     <div className="bg-white/70 rounded-lg p-4 border border-white/40">
       <div className="text-sm text-gray-600 mb-1">{label}</div>
       <div className="text-2xl font-bold text-gray-900">{value}</div>
-    </div>
-  );
-}
-
-function TopUsersTable({ title, users }: { title: string; users: any[] }) {
-  return (
-    <div className="bg-white/70 rounded-lg p-4">
-      <h4 className="font-semibold mb-3">{title}</h4>
-      <div className="space-y-2">
-        {users.slice(0, 5).map((user, idx) => (
-          <div key={user.id} className="flex justify-between items-center text-sm">
-            <span className="font-semibold">{idx + 1}. {user.nickname || user.email?.split("@")[0] || "Пайдаланушы"}</span>
-            <span className="text-purple-600 font-bold">
-              {title.includes("ұпай") ? user.total_points : 
-               title.includes("шешілген") ? user.total_solved : 
-               user.streak}
-            </span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

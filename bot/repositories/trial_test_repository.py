@@ -555,13 +555,11 @@ class TrialTestRepository(BaseRepository):
                             """
                             UPDATE users SET
                                 total_points = total_points + ?,
-                                week_points = week_points + ?,
                                 total_solved = total_solved + ?,
-                                week_solved = week_solved + ?,
                                 last_active = CURRENT_TIMESTAMP
                             WHERE id = ?
                             """,
-                            (awarded_points, awarded_points, awarded_count, awarded_count, user_id),
+                            (awarded_points, awarded_count, user_id),
                         )
 
                     streak_milestone = None

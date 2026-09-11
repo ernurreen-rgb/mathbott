@@ -12,14 +12,11 @@ logger = logging.getLogger(__name__)
 class AchievementRepository(BaseRepository):
     """Repository for achievement operations"""
     
-    async def check_and_unlock_achievements(self, user_id: int, user_repo, rating_repo):
+    async def check_and_unlock_achievements(self, user_id: int, user_repo):
         """Check user stats and unlock achievements"""
         user = await user_repo.get_user_by_id(user_id)
         if not user:
             return []
-        
-        stats = await rating_repo.get_user_stats(user_id)
-        user.update(stats)
         
         unlocked = []
         
@@ -36,20 +33,8 @@ class AchievementRepository(BaseRepository):
              "check": lambda u: u.get("streak", 0) >= 7},
             {"id": "streak_30", "name": "Қатарынан ай", "description": "30 күн қатарынан есептерді шешіңіз", "icon": "⭐",
              "check": lambda u: u.get("streak", 0) >= 30},
-            {"id": "top_league", "name": "Элитасы", "description": "Алмас лигасына жетіңіз", "icon": "💎",
-             "check": lambda u: u.get("league") == "Алмас"},
-            {"id": "top_3", "name": "Үздік 3", "description": "Өз лигаңызда топ-3-ке кіріңіз", "icon": "🥉",
-             "check": lambda u: u.get("league_position", 999) <= 3 and u.get("league_position", 0) > 0},
             {"id": "thousand_points", "name": "Мыңдық", "description": "1000 ұпай жинаңыз", "icon": "💵",
-             "check": lambda u: u.get("total_points", 0) >= 1000},
-            {"id": "bronze_league", "name": "Қола", "description": "Қола лигасына жетіңіз", "icon": "🥉",
-             "check": lambda u: u.get("league") == "Қола" and u.get("total_solved", 0) >= 1},
-            {"id": "silver_league", "name": "Күміс", "description": "Күміс лигасына жетіңіз", "icon": "🥈",
-             "check": lambda u: u.get("league") == "Күміс"},
-            {"id": "gold_league", "name": "Алтын", "description": "Алтын лигасына жетіңіз", "icon": "🥇",
-             "check": lambda u: u.get("league") == "Алтын"},
-            {"id": "platinum_league", "name": "Платина", "description": "Платина лигасына жетіңіз", "icon": "💍",
-             "check": lambda u: u.get("league") == "Платина"}
+             "check": lambda u: u.get("total_points", 0) >= 1000}
         ]
         
         for achievement in achievements:
@@ -103,13 +88,7 @@ class AchievementRepository(BaseRepository):
             "hundred_solves": {"name": "Жүздік", "description": "100 есепті шешіңіз", "icon": "🏆"},
             "streak_7": {"name": "Қатарынан апта", "description": "7 күн қатарынан есептерді шешіңіз", "icon": "🔥"},
             "streak_30": {"name": "Қатарынан ай", "description": "30 күн қатарынан есептерді шешіңіз", "icon": "⭐"},
-            "top_league": {"name": "Элитасы", "description": "Алмас лигасына жетіңіз", "icon": "💎"},
-            "top_3": {"name": "Үздік 3", "description": "Өз лигаңызда топ-3-ке кіріңіз", "icon": "🥉"},
-            "thousand_points": {"name": "Мыңдық", "description": "1000 ұпай жинаңыз", "icon": "💵"},
-            "bronze_league": {"name": "Қола", "description": "Қола лигасына жетіңіз", "icon": "🥉"},
-            "silver_league": {"name": "Күміс", "description": "Күміс лигасына жетіңіз", "icon": "🥈"},
-            "gold_league": {"name": "Алтын", "description": "Алтын лигасына жетіңіз", "icon": "🥇"},
-            "platinum_league": {"name": "Платина", "description": "Платина лигасына жетіңіз", "icon": "💍"}
+            "thousand_points": {"name": "Мыңдық", "description": "1000 ұпай жинаңыз", "icon": "💵"}
         }
         
         result = []

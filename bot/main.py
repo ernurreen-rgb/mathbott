@@ -69,10 +69,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Initial ops monitor cycle failed: {e}", exc_info=True)
 
-    task_week = asyncio.create_task(check_and_reset_week(db))
     task_maint = asyncio.create_task(run_db_maintenance(db, BANK_TRASH_RETENTION_DAYS, ops_monitor))
     task_ops = asyncio.create_task(ops_monitor.run_loop())
-    logger.info("Weekly reset checker started (runs every Monday at 00:00)")
     logger.info("Database maintenance started (runs daily at 03:00)")
     logger.info("Ops monitor started (runs every 60 seconds)")
 
@@ -93,10 +91,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # === shutdown ===
-    task_week.cancel()
     task_maint.cancel()
     task_ops.cancel()
-    await asyncio.gather(task_week, task_maint, task_ops, return_exceptions=True)
+    await asyncio.gather(task_maint, task_ops, return_exceptions=True)
     if db.connection_pool:
         await db.connection_pool.close()
         logger.info("Connection pool closed")
@@ -108,30 +105,6 @@ app = create_app(lifespan=lifespan)
 
 # Зарегистрировать все роуты
 register_routes(app, app.state.db, app.state.limiter)
-
-
-async def check_and_reset_week(db):
-    """Check if weekly reset is needed and perform it
-    Resets happen every Monday at 00:00 (midnight)
-    Checks every 5 minutes to catch the reset time
-    """
-    from datetime import datetime as dt
-    
-    while True:
-        try:
-            now = dt.now()
-            # Check if it's Monday (weekday 0) and time is 00:00-00:05
-            if now.weekday() == 0 and now.hour == 0 and now.minute < 5:
-                result = await db.reset_week()
-                if result:
-                    logger.info(f"✅ Weekly reset performed at {now.strftime('%Y-%m-%d %H:%M:%S')}")
-                    logger.info("📊 League promotions and demotions completed")
-                await asyncio.sleep(55 * 60)
-            else:
-                await asyncio.sleep(5 * 60)
-        except Exception as e:
-            logger.error(f"Error in weekly reset check: {e}", exc_info=True)
-            await asyncio.sleep(5 * 60)
 
 
 async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monitor: OpsMonitor | None = None):

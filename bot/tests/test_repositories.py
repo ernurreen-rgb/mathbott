@@ -1,17 +1,13 @@
 """
 Tests for repository classes
 """
-import aiosqlite
 import pytest
-from models.db_models import LEAGUE_GROUP_SIZE
-from migrations.seeds import run_seeds
 from repositories.user_repository import (
     AdminRoleConflictError,
     LastSuperAdminError,
     UserRepository,
 )
 from repositories.task_repository import TaskRepository
-from repositories.rating_repository import RatingRepository
 from repositories.progress_repository import ProgressRepository
 
 
@@ -54,48 +50,11 @@ async def test_user_repository_create_user_by_email(test_db):
     user = await repo.create_user_by_email("newuser@example.com")
     assert user is not None
     assert user["email"] == "newuser@example.com"
-    assert user["league"] == "Қола"
+    assert user["total_points"] == 0
     
     # Try to create again (should return existing)
     existing = await repo.create_user_by_email("newuser@example.com")
     assert existing["id"] == user["id"]
-
-
-@pytest.mark.asyncio
-async def test_user_repository_assigns_new_league_group_after_twenty_users(test_db):
-    repo = UserRepository(db_path=test_db.db_path)
-
-    users = [
-        await repo.create_user_by_email(f"league-group-{index}@example.com")
-        for index in range(LEAGUE_GROUP_SIZE + 1)
-    ]
-
-    assert all(user["league_group"] == 0 for user in users[:LEAGUE_GROUP_SIZE])
-    assert users[LEAGUE_GROUP_SIZE]["league_group"] == 1
-
-
-@pytest.mark.asyncio
-async def test_seeds_rebalance_oversized_league_groups(test_db):
-    repo = UserRepository(db_path=test_db.db_path)
-    for index in range(LEAGUE_GROUP_SIZE + 1):
-        await repo.create_user_by_email(f"oversized-league-group-{index}@example.com")
-
-    async with aiosqlite.connect(test_db.db_path) as db:
-        await db.execute("UPDATE users SET league_group = 0")
-        await db.commit()
-        await run_seeds(db)
-
-        async with db.execute(
-            """
-            SELECT league_group, COUNT(*)
-            FROM users
-            GROUP BY league_group
-            ORDER BY league_group ASC
-            """
-        ) as cursor:
-            rows = await cursor.fetchall()
-
-    assert rows == [(0, LEAGUE_GROUP_SIZE), (1, 1)]
 
 
 @pytest.mark.asyncio
@@ -456,9 +415,7 @@ async def test_user_repository_award_task_reward_once_deduplicates(test_db, test
 
     user_after_first = await test_db.users.get_user_by_id(test_user["id"])
     assert user_after_first["total_points"] == 20
-    assert user_after_first["week_points"] == 20
     assert user_after_first["total_solved"] == 1
-    assert user_after_first["week_solved"] == 1
 
     second = await repo.award_task_reward_once(
         user_id=test_user["id"],
@@ -473,9 +430,7 @@ async def test_user_repository_award_task_reward_once_deduplicates(test_db, test
 
     user_after_second = await test_db.users.get_user_by_id(test_user["id"])
     assert user_after_second["total_points"] == 20
-    assert user_after_second["week_points"] == 20
     assert user_after_second["total_solved"] == 1
-    assert user_after_second["week_solved"] == 1
 
 
 @pytest.mark.asyncio
@@ -685,94 +640,6 @@ async def test_task_repository_get_tasks_by_section(test_db, test_user):
     task_ids = [t["id"] for t in tasks]
     assert task1["id"] in task_ids
     assert task2["id"] in task_ids
-
-
-@pytest.mark.asyncio
-async def test_rating_repository_get_rating(test_db):
-    """Test getting rating"""
-    repo = RatingRepository(db_path=test_db.db_path)
-    
-    # Create users with nicknames
-    user1 = await test_db.users.create_user_by_email("user1@example.com")
-    user2 = await test_db.users.create_user_by_email("user2@example.com")
-    await test_db.users.update_user_nickname("user1@example.com", "User1")
-    await test_db.users.update_user_nickname("user2@example.com", "User2")
-    
-    # Get rating
-    rating = await repo.get_rating(limit=10)
-    assert len(rating) >= 2
-    
-    # Test pagination
-    rating_page1 = await repo.get_rating(limit=1, offset=0)
-    rating_page2 = await repo.get_rating(limit=1, offset=1)
-    assert len(rating_page1) == 1
-    assert len(rating_page2) == 1
-    assert rating_page1[0]["id"] != rating_page2[0]["id"]
-
-
-@pytest.mark.asyncio
-async def test_rating_repository_get_rating_count(test_db):
-    """Test getting rating count"""
-    repo = RatingRepository(db_path=test_db.db_path)
-    
-    # Create users
-    await test_db.users.create_user_by_email("user1@example.com")
-    await test_db.users.create_user_by_email("user2@example.com")
-    await test_db.users.update_user_nickname("user1@example.com", "User1")
-    await test_db.users.update_user_nickname("user2@example.com", "User2")
-    
-    # Get count
-    count = await repo.get_rating_count()
-    assert count >= 2
-    
-    # Test league filter
-    count_kola = await repo.get_rating_count(league="Қола")
-    assert count_kola >= 2
-
-
-@pytest.mark.asyncio
-async def test_rating_repository_get_global_position(test_db):
-    repo = RatingRepository(db_path=test_db.db_path)
-
-    users = [
-        await test_db.users.create_user_by_email("rank-1@example.com"),
-        await test_db.users.create_user_by_email("rank-2@example.com"),
-        await test_db.users.create_user_by_email("rank-3@example.com"),
-    ]
-    for index, user in enumerate(users, start=1):
-        await test_db.users.update_user_nickname(user["email"], f"RankUser{index}")
-
-    async with aiosqlite.connect(test_db.db_path) as db:
-        await db.execute(
-            "UPDATE users SET total_points = 300, total_solved = 30 WHERE id = ?",
-            (users[0]["id"],),
-        )
-        await db.execute(
-            "UPDATE users SET total_points = 200, total_solved = 20 WHERE id = ?",
-            (users[1]["id"],),
-        )
-        await db.execute(
-            "UPDATE users SET total_points = 100, total_solved = 10 WHERE id = ?",
-            (users[2]["id"],),
-        )
-        await db.commit()
-
-    assert await repo.get_global_position(users[0]["id"]) == 1
-    assert await repo.get_global_position(users[1]["id"]) == 2
-    assert await repo.get_global_position(users[2]["id"]) == 3
-
-
-@pytest.mark.asyncio
-async def test_rating_repository_get_user_stats(test_db, test_user):
-    """Test getting user stats"""
-    repo = RatingRepository(db_path=test_db.db_path)
-    
-    # Get user stats
-    stats = await repo.get_user_stats(test_user["id"])
-    assert stats is not None
-    assert stats["id"] == test_user["id"]
-    assert "league_position" in stats
-    assert "league_size" in stats
 
 
 @pytest.mark.asyncio

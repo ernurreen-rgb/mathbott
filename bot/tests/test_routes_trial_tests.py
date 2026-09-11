@@ -79,18 +79,14 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 45
-    assert user_after_first["week_points"] == 45
     assert user_after_first["total_solved"] == 3
-    assert user_after_first["week_solved"] == 3
 
     second = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
     assert second.status_code == 409
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 45
-    assert user_after_second["week_points"] == 45
     assert user_after_second["total_solved"] == 3
-    assert user_after_second["week_solved"] == 3
 
 
 @pytest.mark.asyncio
@@ -127,9 +123,7 @@ async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test
 
     user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_submit["total_points"] == 15
-    assert user_after_submit["week_points"] == 15
     assert user_after_submit["total_solved"] == 1
-    assert user_after_submit["week_solved"] == 1
 
 
 @pytest.mark.asyncio
@@ -316,9 +310,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_first["total_points"] == 20
-    assert user_after_first["week_points"] == 20
     assert user_after_first["total_solved"] == 1
-    assert user_after_first["week_solved"] == 1
 
     repeat = client.post(
         f"/api/trial-tests/{trial_test['id']}/coop/finish",
@@ -332,9 +324,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
 
     user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_repeat["total_points"] == 20
-    assert user_after_repeat["week_points"] == 20
     assert user_after_repeat["total_solved"] == 1
-    assert user_after_repeat["week_solved"] == 1
 
 
 @pytest.mark.asyncio

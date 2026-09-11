@@ -112,10 +112,7 @@ function ProfilePageContent() {
         setUserData({
           id: 0,
           email: sessionEmail,
-          league: "Қола",
           total_solved: 0,
-          week_solved: 0,
-          week_points: 0,
           total_points: 0,
         });
       } else if (data) {
@@ -131,10 +128,7 @@ function ProfilePageContent() {
       setUserData({
         id: 0,
         email: sessionEmail || "",
-        league: "Қола",
         total_solved: 0,
-        week_solved: 0,
-        week_points: 0,
         total_points: 0,
       });
     } finally {
@@ -830,21 +824,6 @@ function ProfilePageContent() {
                   </div>
                 </div>
 
-                {/* Текущая лига */}
-                <div className="glass rounded-2xl shadow-xl p-4 border border-white/30 bg-gradient-to-br from-blue-50 to-indigo-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-glow flex-shrink-0">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-1">{userData?.league || "Жоқ"}</div>
-                      <div className="text-sm font-semibold text-gray-700">Ағымдағы лига</div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Решено задач */}
                 <div className="glass rounded-2xl shadow-xl p-4 border border-white/30 bg-gradient-to-br from-green-50 to-emerald-50">
                   <div className="flex items-center gap-3">
@@ -960,9 +939,7 @@ function ProfilePageContent() {
                           <div className="text-sm font-semibold text-gray-800">
                             {friend.nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {"\u041b\u0438\u0433\u0430: "}{friend.league || "\u2014"} {"\u00b7 "}{"\u04b0\u043f\u0430\u0439: "}{friend.total_points}
-                          </div>
+                          <div className="text-xs text-gray-500">{"\u04b0\u043f\u0430\u0439: "}{friend.total_points}</div>
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <button

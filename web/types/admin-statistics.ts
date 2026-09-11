@@ -1,41 +1,8 @@
 
-export interface AdminTopUserByPoints {
-  id: number;
-  email: string;
-  nickname: string | null;
-  total_points: number;
-  total_solved: number;
-  week_points: number;
-  streak: number;
-}
-
-
-export interface AdminTopUserBySolved {
-  id: number;
-  email: string;
-  nickname: string | null;
-  total_solved: number;
-  total_points: number;
-  week_points: number;
-  streak: number;
-}
-
-
-export interface AdminTopUserByStreak {
-  id: number;
-  email: string;
-  nickname: string | null;
-  streak: number;
-  total_solved: number;
-  total_points: number;
-}
-
-
 export interface AdminAvgUserStats {
   avg_solved: number;
   avg_points: number;
   avg_streak: number;
-  avg_week_points: number;
 }
 
 
@@ -110,21 +77,6 @@ export interface AdminProblematicTaskItem {
 }
 
 
-export interface AdminLeagueDistributionItem {
-  league: string;
-  count: number;
-}
-
-
-export interface AdminLeagueAverageItem {
-  league: string;
-  avg_solved: number;
-  avg_points: number;
-  avg_week_points: number;
-  avg_streak: number;
-}
-
-
 export interface AdminRegistrationsOverTimeItem {
   date: string;
   count: number;
@@ -165,9 +117,6 @@ export interface AdminStatistics {
   active_users_today: number;
   active_users_week: number;
   active_users_month: number;
-  top_users_by_points: AdminTopUserByPoints[];
-  top_users_by_solved: AdminTopUserBySolved[];
-  top_users_by_streak: AdminTopUserByStreak[];
   avg_user_stats: AdminAvgUserStats;
   popular_tasks: AdminTaskStatItem[];
   difficult_tasks: AdminTaskStatItem[];
@@ -182,8 +131,6 @@ export interface AdminStatistics {
   report_status_distribution: AdminReportStatusDistributionItem[];
   problematic_tasks: AdminProblematicTaskItem[];
   avg_report_resolution_time: number;
-  league_distribution: AdminLeagueDistributionItem[];
-  league_averages: AdminLeagueAverageItem[];
   registrations_over_time: AdminRegistrationsOverTimeItem[];
   solutions_over_time: AdminSolutionsOverTimeItem[];
   module_progress: AdminModuleProgressItem[];

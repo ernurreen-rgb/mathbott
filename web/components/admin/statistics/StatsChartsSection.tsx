@@ -20,11 +20,10 @@ import {
   YAxis,
 } from "recharts";
 
-import type { AdminLeagueAverageItem, AdminStatistics } from "@/types";
+import type { AdminStatistics } from "@/types";
 import NoDataPanel from "./NoDataPanel";
 import {
   buildActivityTrendSeries,
-  buildLeagueDistributionSeries,
   buildQuestionTypeSuccessSeries,
   buildRegistrationsTrendSeries,
   buildReportStatusSeries,
@@ -178,7 +177,6 @@ export default function StatsChartsSection({ stats }: StatsChartsSectionProps) {
   const solutionsSeries = useMemo(() => buildSolutionsTrendSeries(stats, periodDays), [stats, periodDays]);
   const registrationsSeries = useMemo(() => buildRegistrationsTrendSeries(stats, periodDays), [stats, periodDays]);
   const questionTypeSeries = useMemo(() => buildQuestionTypeSuccessSeries(stats), [stats]);
-  const leagueSeries = useMemo(() => buildLeagueDistributionSeries(stats), [stats]);
   const reportStatusSeries = useMemo(() => buildReportStatusSeries(stats), [stats]);
 
   const handleActivityClick = (eventState: unknown) => {
@@ -255,27 +253,6 @@ export default function StatsChartsSection({ stats }: StatsChartsSectionProps) {
       ],
       actionHref: "/admin/bank",
       actionLabel: "Банкке өту",
-    });
-  };
-
-  const handleLeagueClick = (eventState: unknown) => {
-    const point = getPayloadFromSeriesEvent<PieDistributionPoint>(eventState);
-    if (!point) {
-      return;
-    }
-
-    const avg = stats.league_averages.find(
-      (item: AdminLeagueAverageItem) => String(item.league) === String(point.label)
-    );
-
-    setDrilldown({
-      title: `Лига: ${point.label}`,
-      metrics: [
-        { label: "Пайдаланушы саны", value: formatNumber(point.value) },
-        { label: "Орташа solved", value: Number(avg?.avg_solved ?? 0).toFixed(1) },
-        { label: "Орташа points", value: Number(avg?.avg_points ?? 0).toFixed(1) },
-        { label: "Орташа streak", value: Number(avg?.avg_streak ?? 0).toFixed(1) },
-      ],
     });
   };
 
@@ -406,32 +383,6 @@ export default function StatsChartsSection({ stats }: StatsChartsSectionProps) {
                 <Tooltip />
                 <Bar dataKey="success_rate" name="Табыс %" fill={COLORS.accent} onClick={handleQuestionTypeClick} />
               </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Лигалар бойынша таралу">
-          {leagueSeries.length === 0 ? (
-            <NoDataPanel />
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={leagueSeries}
-                  dataKey="value"
-                  nameKey="label"
-                  innerRadius={55}
-                  outerRadius={90}
-                  onClick={handleLeagueClick}
-                  style={{ cursor: "pointer" }}
-                >
-                  {leagueSeries.map((_, idx) => (
-                    <Cell key={`league-cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
             </ResponsiveContainer>
           )}
         </ChartCard>

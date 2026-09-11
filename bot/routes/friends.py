@@ -115,8 +115,7 @@ def setup_friends_routes(app, db, limiter: Limiter):
             "expires_at": expires_at,
             "inviter": {
                 "id": inviter["id"],
-                "nickname": inviter.get("nickname"),
-                "league": inviter.get("league")
+                "nickname": inviter.get("nickname")
             },
             "can_accept": can_accept,
             "is_friend": is_friend

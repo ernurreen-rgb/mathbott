@@ -78,26 +78,13 @@ class StatisticsRepository(BaseRepository):
                 async with db.execute("SELECT COUNT(DISTINCT user_id) FROM solutions WHERE DATE(created_at) >= ?", (month_ago.isoformat(),)) as cursor:
                     stats["active_users_month"] = (await cursor.fetchone())[0]
                 
-                async with db.execute("""SELECT id, email, nickname, total_points, total_solved, week_points, streak
-                       FROM users ORDER BY total_points DESC LIMIT 10""") as cursor:
-                    stats["top_users_by_points"] = [dict(row) for row in await cursor.fetchall()]
-                
-                async with db.execute("""SELECT id, email, nickname, total_solved, total_points, week_points, streak
-                       FROM users ORDER BY total_solved DESC LIMIT 10""") as cursor:
-                    stats["top_users_by_solved"] = [dict(row) for row in await cursor.fetchall()]
-                
-                async with db.execute("""SELECT id, email, nickname, streak, total_solved, total_points
-                       FROM users WHERE streak > 0 ORDER BY streak DESC LIMIT 10""") as cursor:
-                    stats["top_users_by_streak"] = [dict(row) for row in await cursor.fetchall()]
-                
                 async with db.execute("""SELECT AVG(total_solved) as avg_solved, AVG(total_points) as avg_points,
-                       AVG(streak) as avg_streak, AVG(week_points) as avg_week_points FROM users""") as cursor:
+                       AVG(streak) as avg_streak FROM users""") as cursor:
                     row = await cursor.fetchone()
                     stats["avg_user_stats"] = {
                         "avg_solved": round(row[0] or 0, 2),
                         "avg_points": round(row[1] or 0, 2),
-                        "avg_streak": round(row[2] or 0, 2),
-                        "avg_week_points": round(row[3] or 0, 2)
+                        "avg_streak": round(row[2] or 0, 2)
                     }
                 
                 if stats["total_solutions"] > 0:
@@ -240,16 +227,7 @@ class StatisticsRepository(BaseRepository):
                     row = await cursor.fetchone()
                     stats["avg_report_resolution_time"] = round(row[0] or 0, 2)
                 
-                # 8. League Statistics
-                async with db.execute("SELECT league, COUNT(*) as count FROM users GROUP BY league ORDER BY count DESC") as cursor:
-                    stats["league_distribution"] = [dict(row) for row in await cursor.fetchall()]
-                
-                async with db.execute("""SELECT league, AVG(total_solved) as avg_solved, AVG(total_points) as avg_points,
-                       AVG(week_points) as avg_week_points, AVG(streak) as avg_streak
-                       FROM users GROUP BY league""") as cursor:
-                    stats["league_averages"] = [dict(row) for row in await cursor.fetchall()]
-                
-                # 9. Time-based Statistics
+                # 8. Time-based Statistics
                 async with db.execute("""SELECT DATE(created_at) as date, COUNT(*) as count FROM users
                        WHERE DATE(created_at) >= DATE('now', '-90 days')
                        GROUP BY DATE(created_at) ORDER BY date""") as cursor:
@@ -261,7 +239,7 @@ class StatisticsRepository(BaseRepository):
                        GROUP BY DATE(created_at) ORDER BY date""") as cursor:
                     stats["solutions_over_time"] = [dict(row) for row in await cursor.fetchall()]
                 
-                # 10. Module Statistics
+                # 9. Module Statistics
                 try:
                     async with db.execute("""SELECT m.id, m.name, COUNT(DISTINCT up.user_id) as users_with_progress,
                            COUNT(DISTINCT up.task_id) as tasks_completed FROM modules m

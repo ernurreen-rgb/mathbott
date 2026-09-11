@@ -284,7 +284,6 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         logger.error(f"Failed to unlock achievements after trial submit: {e}", exc_info=True)
 
                 cache.invalidate_pattern(f"user:stats:{email}")
-                cache.invalidate_pattern("rating:")
 
                 return {
                     "score": score,

@@ -30,14 +30,10 @@ function makeBaseStats(): AdminStatistics {
     active_users_today: 0,
     active_users_week: 0,
     active_users_month: 0,
-    top_users_by_points: [],
-    top_users_by_solved: [],
-    top_users_by_streak: [],
     avg_user_stats: {
       avg_solved: 0,
       avg_points: 0,
       avg_streak: 0,
-      avg_week_points: 0,
     },
     popular_tasks: [],
     difficult_tasks: [],
@@ -52,8 +48,6 @@ function makeBaseStats(): AdminStatistics {
     report_status_distribution: [],
     problematic_tasks: [],
     avg_report_resolution_time: 0,
-    league_distribution: [],
-    league_averages: [],
     registrations_over_time: [],
     solutions_over_time: [],
     module_progress: [],
@@ -117,6 +111,6 @@ describe("StatsChartsSection", () => {
 
   it("renders no-data panels when chart series are empty", () => {
     render(<StatsChartsSection stats={makeBaseStats()} />);
-    expect(screen.getAllByText(/Деректер жоқ/i).length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText(/Деректер жоқ/i).length).toBeGreaterThanOrEqual(5);
   });
 });

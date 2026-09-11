@@ -74,13 +74,6 @@ export default function AdminPage() {
         section: "review",
       },
       {
-        title: "Лигалар",
-        description: "Лига топтары мен қатысушыларын көру",
-        href: "/admin/leagues",
-        icon: "🏆",
-        section: "review",
-      },
-      {
         title: "Хабарламалар",
         description: "Пайдаланушылардың хабарламаларын басқару",
         href: "/admin/reports",

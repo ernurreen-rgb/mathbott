@@ -263,7 +263,6 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             await db.trial_test_coop.create_result_link(session_id, user["id"], submit_result["result"]["id"])
             await db.trial_test_coop.set_participant_finished(session_id, user["id"], True)
             cache.invalidate_pattern(f"user:stats:{email}")
-            cache.invalidate_pattern("rating:")
 
             participants = await db.trial_test_coop.list_participants(session_id)
             if participants and all(p.get("is_finished") for p in participants):

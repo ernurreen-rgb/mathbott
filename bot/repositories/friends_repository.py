@@ -174,11 +174,11 @@ class FriendsRepository(BaseRepository):
 
     async def list_friends(self, user_id: int) -> List[Dict[str, Any]]:
         query = """
-            SELECT u.id, u.nickname, u.league, u.total_points, u.total_solved
+            SELECT u.id, u.nickname, u.total_points, u.total_solved
             FROM friendships f
             JOIN users u ON u.id = f.friend_id
             WHERE f.user_id = ?
-            ORDER BY u.total_points DESC, u.total_solved DESC, u.id ASC
+            ORDER BY COALESCE(u.nickname, '') COLLATE NOCASE ASC, u.id ASC
         """
         return await self._fetch_all(query, (user_id,))
 
@@ -241,7 +241,7 @@ class FriendsRepository(BaseRepository):
     async def list_incoming_requests(self, user_id: int) -> List[Dict[str, Any]]:
         query = """
             SELECT fr.id, fr.status, fr.created_at, fr.responded_at,
-                   u.id as sender_id, u.nickname as sender_nickname, u.league as sender_league
+                   u.id as sender_id, u.nickname as sender_nickname
             FROM friend_requests fr
             JOIN users u ON u.id = fr.sender_id
             WHERE fr.receiver_id = ?
@@ -252,7 +252,7 @@ class FriendsRepository(BaseRepository):
     async def list_outgoing_requests(self, user_id: int) -> List[Dict[str, Any]]:
         query = """
             SELECT fr.id, fr.status, fr.created_at, fr.responded_at,
-                   u.id as receiver_id, u.nickname as receiver_nickname, u.league as receiver_league
+                   u.id as receiver_id, u.nickname as receiver_nickname
             FROM friend_requests fr
             JOIN users u ON u.id = fr.receiver_id
             WHERE fr.sender_id = ?
@@ -297,7 +297,7 @@ class FriendsRepository(BaseRepository):
 
     async def list_blocked_users(self, blocker_id: int) -> List[Dict[str, Any]]:
         query = """
-            SELECT u.id, u.nickname, u.league, u.total_points, u.total_solved, b.created_at as blocked_at
+            SELECT u.id, u.nickname, u.total_points, u.total_solved, b.created_at as blocked_at
             FROM blocks b
             JOIN users u ON u.id = b.blocked_id
             WHERE b.blocker_id = ?

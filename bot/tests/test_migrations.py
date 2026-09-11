@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0004_task_accepted_answers"
+HEAD_REVISION = "0005_remove_competitive_features"
 
 
 def _load_baseline_ddl():
@@ -73,6 +73,15 @@ def test_fresh_database_gets_full_schema(tmp_path):
     assert "submit_mode" in _columns(path, "trial_test_results")
     assert "answer_mode" in _columns(path, "bank_tasks")
     assert "accepted_answers" in _columns(path, "bank_tasks")
+    assert {"league", "league_group", "week_solved", "week_points"}.isdisjoint(
+        _columns(path, "users")
+    )
+    assert "weekly_resets" not in tables
+    assert {
+        "idx_users_league_group",
+        "idx_users_total_points",
+        "idx_users_week_points",
+    }.isdisjoint(_indexes(path))
     assert "uq_trial_test_results_solo_user_test" in _indexes(path)
     assert _stamped_revision(path) == HEAD_REVISION
 
@@ -183,3 +192,49 @@ def test_migrated_database_upgrade_is_noop(tmp_path):
 
     assert _tables(path) == before
     assert _stamped_revision(path) == HEAD_REVISION
+
+
+def test_existing_competitive_columns_are_removed_on_upgrade(tmp_path):
+    path = str(tmp_path / "old_competitive_schema.db")
+    run_migrations(path)
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE alembic_version SET version_num = '0004_task_accepted_answers'")
+        conn.execute("ALTER TABLE users ADD COLUMN league TEXT NOT NULL DEFAULT 'Қола'")
+        conn.execute("ALTER TABLE users ADD COLUMN league_group INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN week_solved INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN week_points INTEGER NOT NULL DEFAULT 0")
+        conn.execute("CREATE INDEX idx_users_league_group ON users(league, league_group)")
+        conn.execute("CREATE INDEX idx_users_total_points ON users(total_points DESC, total_solved DESC)")
+        conn.execute("CREATE INDEX idx_users_week_points ON users(week_points DESC, total_points DESC)")
+        conn.execute(
+            """
+            CREATE TABLE weekly_resets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reset_date DATE NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute("INSERT INTO users (email, nickname) VALUES ('keep@example.com', 'keep')")
+        user_id = conn.execute("SELECT id FROM users WHERE email = 'keep@example.com'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, 'top_league')",
+            (user_id,),
+        )
+
+    run_migrations(path)
+
+    assert _stamped_revision(path) == HEAD_REVISION
+    assert {"league", "league_group", "week_solved", "week_points"}.isdisjoint(
+        _columns(path, "users")
+    )
+    assert "weekly_resets" not in _tables(path)
+    with sqlite3.connect(path) as conn:
+        user = conn.execute("SELECT email, nickname FROM users WHERE id = ?", (user_id,)).fetchone()
+        removed_achievement = conn.execute(
+            "SELECT 1 FROM user_achievements WHERE user_id = ? AND achievement_id = 'top_league'",
+            (user_id,),
+        ).fetchone()
+    assert user == ("keep@example.com", "keep")
+    assert removed_achievement is None

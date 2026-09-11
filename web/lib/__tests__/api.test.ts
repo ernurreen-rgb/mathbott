@@ -14,7 +14,6 @@ import {
   getAdminOpsHealthSummary,
   getAdminOpsHealthTimeseries,
   getAdminOpsIncidents,
-  getRating,
   getUserData,
   exportAdminBankTasksJson,
   importAdminBankTasks,
@@ -105,62 +104,12 @@ describe("API Client", () => {
     });
   });
 
-  describe("getRating", () => {
-    it("fetches rating successfully", async () => {
-      const mockRating = [
-        { id: 1, nickname: "User1", total_points: 100 },
-        { id: 2, nickname: "User2", total_points: 50 },
-      ];
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "application/json" }),
-        text: async () => JSON.stringify(mockRating),
-      });
-
-      const result = await getRating(10);
-      expect(result.data).toEqual(mockRating);
-      expect(result.error).toBeNull();
-    });
-
-    it("handles rating fetch error", async () => {
-      // Use a unique league parameter to bypass cache
-      const uniqueLeague = `test-league-${Date.now()}`;
-      
-      // Mock fetch to intercept the rating call with unique league
-      (global.fetch as jest.Mock).mockImplementation((url: string) => {
-        if (url.includes("rating") && url.includes(uniqueLeague)) {
-          return Promise.resolve({
-            ok: false,
-            status: 500,
-            statusText: "Internal Server Error",
-            headers: new Headers({ "content-type": "application/json" }),
-            text: async () => JSON.stringify({ detail: "Server error" }),
-          });
-        }
-        // For other URLs, return a successful response
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          headers: new Headers({ "content-type": "application/json" }),
-          text: async () => JSON.stringify({}),
-        });
-      });
-
-      const result = await getRating(10, uniqueLeague);
-      expect(result.data).toBeNull();
-      expect(result.error).toBeTruthy();
-    });
-  });
-
   describe("getUserData", () => {
     it("fetches user data successfully", async () => {
       const mockUserData = {
         id: 1,
         email: "test@example.com",
         nickname: "TestUser",
-        league: "Қола",
       };
 
       (global.fetch as jest.Mock).mockResolvedValue({

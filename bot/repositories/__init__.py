@@ -7,7 +7,6 @@ from .task_repository import TaskRepository
 from .curriculum_repository import CurriculumRepository
 from .progress_repository import ProgressRepository
 from .solution_repository import SolutionRepository
-from .rating_repository import RatingRepository
 from .achievement_repository import AchievementRepository
 from .trial_test_repository import TrialTestRepository
 from .trial_test_coop_repository import TrialTestCoopRepository
@@ -26,7 +25,6 @@ __all__ = [
     "CurriculumRepository",
     "ProgressRepository",
     "SolutionRepository",
-    "RatingRepository",
     "AchievementRepository",
     "TrialTestRepository",
     "TrialTestCoopRepository",

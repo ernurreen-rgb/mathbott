@@ -16,7 +16,6 @@ from repositories.task_repository import TaskRepository
 from repositories.curriculum_repository import CurriculumRepository
 from repositories.progress_repository import ProgressRepository
 from repositories.solution_repository import SolutionRepository
-from repositories.rating_repository import RatingRepository
 from repositories.achievement_repository import AchievementRepository
 from repositories.trial_test_repository import TrialTestRepository
 from repositories.trial_test_coop_repository import TrialTestCoopRepository
@@ -56,7 +55,6 @@ class Database:
         self.curriculum = CurriculumRepository(db_path, connection_pool=self.connection_pool)
         self.progress = ProgressRepository(db_path, connection_pool=self.connection_pool)
         self.solutions = SolutionRepository(db_path, connection_pool=self.connection_pool)
-        self.rating = RatingRepository(db_path, connection_pool=self.connection_pool)
         self.achievements = AchievementRepository(db_path, connection_pool=self.connection_pool)
         self.trial_tests = TrialTestRepository(db_path, connection_pool=self.connection_pool)
         self.trial_test_coop = TrialTestCoopRepository(db_path, connection_pool=self.connection_pool)
@@ -109,16 +107,12 @@ class Database:
         """Record user solution"""
         return await self.solutions.record_solution(
             user_id, task_id, answer, is_correct,
-            self.progress, self.users, self.achievements, self.rating, self.tasks, task_snapshot
+            self.progress, self.users, self.achievements, self.tasks, task_snapshot
         )
-
-    async def reset_week(self):
-        """Reset weekly statistics and update leagues"""
-        return await self.rating.reset_week(self.users)
 
     async def check_and_unlock_achievements(self, user_id: int):
         """Check user stats and unlock achievements"""
-        return await self.achievements.check_and_unlock_achievements(user_id, self.users, self.rating)
+        return await self.achievements.check_and_unlock_achievements(user_id, self.users)
 
     async def calculate_lesson_completion(self, user_id: int, lesson_id: int) -> Dict[str, Any]:
         """Calculate lesson completion"""

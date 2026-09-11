@@ -75,49 +75,6 @@ async def test_module_progress_calculation_flow(test_db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_rating_and_league_flow(test_db):
-    """Test rating and league system flow"""
-    # Create multiple users with different points
-    user1 = await test_db.users.create_user_by_email("user1@example.com")
-    user2 = await test_db.users.create_user_by_email("user2@example.com")
-    user3 = await test_db.users.create_user_by_email("user3@example.com")
-    
-    # Set nicknames
-    await test_db.users.update_user_nickname("user1@example.com", "User1")
-    await test_db.users.update_user_nickname("user2@example.com", "User2")
-    await test_db.users.update_user_nickname("user3@example.com", "User3")
-    
-    # Create tasks and solve them to give points
-    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
-    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
-    
-    # User1 solves 3 tasks
-    for i in range(3):
-        task = await test_db.create_task_in_section(
-            section["id"], f"Task {i}", str(i), user1["id"]
-        )
-        await test_db.record_solution(user1["id"], task["id"], str(i), True)
-    
-    # User2 solves 2 tasks
-    for i in range(2):
-        task = await test_db.create_task_in_section(
-            section["id"], f"Task {i+10}", str(i+10), user2["id"]
-        )
-        await test_db.record_solution(user2["id"], task["id"], str(i+10), True)
-    
-    # Check rating
-    rating = await test_db.rating.get_rating(limit=10)
-    assert len(rating) >= 2
-    
-    # User1 should have more points than User2
-    user1_rating = next((u for u in rating if u["email"] == "user1@example.com"), None)
-    user2_rating = next((u for u in rating if u["email"] == "user2@example.com"), None)
-    
-    if user1_rating and user2_rating:
-        assert user1_rating["total_points"] >= user2_rating["total_points"]
-
-
-@pytest.mark.asyncio
 async def test_admin_access_flow(test_db):
     """Test admin access flow"""
     # Create regular user
@@ -138,36 +95,4 @@ async def test_admin_access_flow(test_db):
     # Verify in database
     user = await test_db.users.get_user_by_email("user@example.com")
     assert user["is_admin"] == 1
-
-
-@pytest.mark.asyncio
-async def test_weekly_reset_flow(test_db, test_user):
-    """Test weekly reset flow"""
-    # Create task and solve it
-    module = await test_db.curriculum.create_module("Test Module", sort_order=1)
-    section = await test_db.curriculum.create_section(module["id"], "Test Section", sort_order=1)
-    task = await test_db.create_task_in_section(
-        section["id"], "Test task", "42", test_user["id"]
-    )
-    
-    # Solve task
-    await test_db.record_solution(test_user["id"], task["id"], "42", True)
-    
-    # Check week stats
-    user = await test_db.users.get_user_by_email("test@example.com")
-    assert user["week_solved"] == 1
-    assert user["week_points"] == 15
-    
-    # Reset week (this would normally be called by a scheduled task)
-    # Note: This test might fail if reset was already done today
-    # In a real scenario, you'd mock the date or use a test database
-    try:
-        await test_db.reset_week()
-        # After reset, week stats should be reset (but total stats remain)
-        user = await test_db.users.get_user_by_email("test@example.com")
-        # Week stats might be reset to 0, but total should remain
-        assert user["total_solved"] >= 1
-    except Exception:
-        # Reset might fail if already done today - that's ok for this test
-        pass
 

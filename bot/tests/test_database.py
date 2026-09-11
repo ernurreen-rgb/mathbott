@@ -11,7 +11,7 @@ async def test_create_user(test_db):
     user = await test_db.users.create_user_by_email("test@example.com")
     assert user is not None
     assert user["email"] == "test@example.com"
-    assert user["league"] == "Қола"
+    assert user["total_points"] == 0
 
 
 @pytest.mark.asyncio
@@ -115,22 +115,6 @@ async def test_calculate_section_completion(test_db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_get_rating(test_db):
-    """Test getting rating"""
-    # Create users with nicknames
-    user1 = await test_db.users.create_user_by_email("user1@example.com")
-    user2 = await test_db.users.create_user_by_email("user2@example.com")
-    await test_db.users.update_user_nickname("user1@example.com", "User1")
-    await test_db.users.update_user_nickname("user2@example.com", "User2")
-    
-    rating = await test_db.rating.get_rating(limit=10)
-    assert len(rating) >= 2
-    # Check that users with nicknames are in rating
-    emails = [u["email"] for u in rating]
-    assert "user1@example.com" in emails or "user2@example.com" in emails
-
-
-@pytest.mark.asyncio
 async def test_get_task_by_id(test_db, test_user):
     """Test getting task by ID"""
     module = await test_db.curriculum.create_module("Test Module", sort_order=1)
@@ -159,4 +143,3 @@ async def test_get_solved_task_ids(test_db, test_user):
     
     solved_ids = await test_db.users.get_solved_task_ids(test_user["id"])
     assert task["id"] in solved_ids
-

@@ -13,7 +13,6 @@ from .bank import register_bank_routes
 from .reports import register_reports_routes
 from .ops import register_ops_routes
 from .statistics import register_statistics_routes
-from .leagues import register_league_routes
 
 
 def setup_admin_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -26,4 +25,3 @@ def setup_admin_routes(app: FastAPI, db: Database, limiter: Limiter):
     register_reports_routes(app, db, limiter)
     register_ops_routes(app, db, limiter)
     register_statistics_routes(app, db, limiter)
-    register_league_routes(app, db, limiter)

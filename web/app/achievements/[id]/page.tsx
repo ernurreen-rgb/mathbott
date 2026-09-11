@@ -105,10 +105,10 @@ export default function PublicAchievementsPage() {
                 {error || "Пайдаланушы табылмады"}
               </div>
               <Link
-                href="/rating"
+                href="/achievements"
                 className="inline-block px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-bold rounded-xl hover:shadow-glow transition-all"
               >
-                Рейтингке оралу
+                Жетістіктерге оралу
               </Link>
             </div>
           </div>

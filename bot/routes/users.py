@@ -3,7 +3,7 @@ Routes for users
 """
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import HTTPException, Query, Request
 from slowapi import Limiter
 from models.requests import NicknameUpdateRequest
 from settings import get_settings
@@ -15,98 +15,16 @@ logger = logging.getLogger(__name__)
 def setup_users_routes(app, db, limiter: Limiter):
     """Setup user routes"""
     
-    @app.get("/api/rating")
-    async def get_rating(
-        limit: int = Query(10, ge=1, le=100),
-        offset: int = Query(0, ge=0),
-        league: Optional[str] = Query(None),
-        group: Optional[int] = Query(None, ge=0)
-    ):
-        """
-        Get rating - only users with nickname (with pagination)
-        
-        Returns a list of users sorted by total points, optionally filtered by league.
-        
-        **Example Request:**
-        ```
-        GET /api/rating?limit=50&offset=0&league=Алмас
-        ```
-        
-        **Example Response:**
-        ```json
-        {
-          "items": [
-            {
-              "id": 1,
-              "nickname": "User1",
-              "league": "Алмас",
-              "league_group": 0,
-              "total_points": 1000,
-              "week_points": 100,
-              "total_solved": 50
-            }
-          ],
-          "total": 150,
-          "limit": 50,
-          "offset": 0,
-          "has_more": true
-        }
-        ```
-        
-        **Query Parameters:**
-        - `limit` (int, 1-100): Maximum number of users to return (default: 10)
-        - `offset` (int, >=0): Number of users to skip (default: 0)
-        - `group` (int, optional): Filter by league group inside the selected league
-        - `league` (str, optional): Filter by league name (e.g., "Алмас", "Қола")
-        
-        **Error Codes:**
-        - 200: Success
-        - 400: Invalid parameters
-        - 500: Internal server error
-        """
-        # Use cache for rating (cache for 30 seconds as per plan)
-        cache_key = f"rating:{limit}:{offset}:{league or 'all'}:{group if group is not None else 'all'}"
-        cached_rating = cache.get(cache_key)
-        if cached_rating is not None:
-            return cached_rating
-        
-        # Get total count for pagination
-        total = await db.rating.get_rating_count(league=league, group=group)
-        
-        # Get paginated rating
-        rating = await db.rating.get_rating(limit=limit, offset=offset, league=league, group=group)
-        result = {
-            "items": [
-                {
-                    "id": u["id"],
-                    "nickname": u.get("nickname"),
-                    "league": u["league"],
-                    "league_group": u["league_group"],
-                    "total_points": u["total_points"],
-                    "week_points": u["week_points"],
-                    "total_solved": u["total_solved"]
-                }
-                for u in rating
-            ],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "has_more": (offset + limit) < total
-        }
-        # Cache for 30 seconds (as per plan)
-        cache.set(cache_key, result, ttl=30)
-        return result
-
     @app.get("/api/user/web/{email}")
     async def get_user_web(
         email: str, 
         refresh_achievements: bool = Query(False),
-        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,email,nickname,league')")
+        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,email,nickname')")
     ):
         """
         Get user statistics for web - creates user if doesn't exist
         
-        Returns comprehensive user statistics including progress, achievements, and league information.
+        Returns user progress and achievements.
         
         **Example Request:**
         ```
@@ -119,12 +37,7 @@ def setup_users_routes(app, db, limiter: Limiter):
           "id": 1,
           "email": "user@example.com",
           "nickname": "TestUser",
-          "league": "Қола",
-          "league_position": 5,
-          "league_size": 20,
           "total_solved": 50,
-          "week_solved": 10,
-          "week_points": 100,
           "total_points": 500,
           "streak": 3,
           "last_streak_date": "2024-01-15",
@@ -164,8 +77,6 @@ def setup_users_routes(app, db, limiter: Limiter):
             if admin_email and email.lower() == admin_email.lower():
                 logger.info(f"User {email} created as admin")
 
-        stats = await db.rating.get_user_stats(user["id"])
-        global_position = await db.rating.get_global_position(user["id"])
         is_admin = await db.users.is_admin(email=email)
         
         # Check and update streak if needed (in case user hasn't solved today but streak needs checking)
@@ -224,14 +135,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "id": user["id"],
             "email": user["email"],
             "nickname": user.get("nickname"),
-            "league": user["league"],
-            "league_group": user["league_group"],
-            "global_position": global_position,
-            "league_position": stats.get("league_position"),
-            "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],
-            "week_solved": user["week_solved"],
-            "week_points": user["week_points"],
             "total_points": user["total_points"],
             "streak": streak_value,
             "last_streak_date": last_streak_date_value,
@@ -273,12 +177,7 @@ def setup_users_routes(app, db, limiter: Limiter):
         {
           "id": 123,
           "nickname": "TestUser",
-          "league": "Қола",
-          "league_position": 5,
-          "league_size": 20,
           "total_solved": 50,
-          "week_solved": 10,
-          "week_points": 100,
           "total_points": 500,
           "streak": 3,
           "last_streak_date": "2024-01-15",
@@ -308,9 +207,6 @@ def setup_users_routes(app, db, limiter: Limiter):
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        
-        stats = await db.rating.get_user_stats(user["id"])
-        global_position = await db.rating.get_global_position(user["id"])
         
         # Check and normalize streak (same logic as get_user_web)
         last_streak_date_value = user.get("last_streak_date")
@@ -345,14 +241,7 @@ def setup_users_routes(app, db, limiter: Limiter):
         result = {
             "id": user["id"],
             "nickname": user.get("nickname"),
-            "league": user["league"],
-            "league_group": user["league_group"],
-            "global_position": global_position,
-            "league_position": stats.get("league_position"),
-            "league_size": stats.get("league_size"),
             "total_solved": user["total_solved"],
-            "week_solved": user["week_solved"],
-            "week_points": user["week_points"],
             "total_points": user["total_points"],
             "streak": streak_value,
             "last_streak_date": last_streak_date_value,
@@ -370,4 +259,3 @@ def setup_users_routes(app, db, limiter: Limiter):
         """Update user nickname"""
         await db.users.update_user_nickname(nickname_request.email, nickname_request.nickname)
         return {"success": True}
-

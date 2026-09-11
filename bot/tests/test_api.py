@@ -21,13 +21,17 @@ def test_api_modules_map(client):
     assert isinstance(data, list)
 
 
-def test_api_rating(client):
-    """Test rating endpoint"""
-    response = client.get("/api/rating?limit=10")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, dict)
-    assert "items" in data
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/rating",
+        "/api/admin/leagues",
+        "/api/admin/leagues/participants",
+    ],
+)
+def test_removed_competitive_routes_are_not_registered(client, path):
+    response = client.get(path)
+    assert response.status_code == 404
 
 
 def test_validation_error(client):

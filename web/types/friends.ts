@@ -2,7 +2,6 @@
 export interface FriendUser {
   id: number;
   nickname: string | null;
-  league: string | null;
   total_points: number;
   total_solved: number;
 }
@@ -27,7 +26,6 @@ export interface FriendInviteDetails {
   inviter: {
     id: number;
     nickname: string | null;
-    league: string | null;
   };
   can_accept: boolean;
   is_friend: boolean;
@@ -41,17 +39,14 @@ export interface FriendRequestItem {
   responded_at?: string | null;
   sender_id?: number;
   sender_nickname?: string | null;
-  sender_league?: string | null;
   receiver_id?: number;
   receiver_nickname?: string | null;
-  receiver_league?: string | null;
 }
 
 
 export interface BlockedUser {
   id: number;
   nickname: string | null;
-  league: string | null;
   total_points: number;
   total_solved: number;
   blocked_at?: string | null;
