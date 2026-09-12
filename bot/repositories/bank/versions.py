@@ -242,7 +242,7 @@ class BankTaskVersionsMixin:
         reason: Optional[str] = None,
         expected_current_version: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = aiosqlite.Row
             current_row = await self._fetch_task_row(db, task_id)
             if not current_row or current_row.get("deleted_at") is not None:
@@ -308,7 +308,6 @@ class BankTaskVersionsMixin:
 
             updated_row = await self._fetch_task_row(db, task_id)
             if not updated_row:
-                await db.commit()
                 return None
             updated_topics = await self._fetch_topics_for_task(db, task_id)
             after_snapshot = self._build_snapshot(updated_row, updated_topics)
@@ -344,6 +343,5 @@ class BankTaskVersionsMixin:
                     "reason": reason if isinstance(reason, str) else None,
                 },
             )
-            await db.commit()
 
         return await self.get_task_by_id(task_id, include_deleted=True)

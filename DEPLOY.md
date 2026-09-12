@@ -150,3 +150,22 @@ mathbot-backup-20260515-163203.db
 ```
 
 It was checked with `integrity_check ok`, 36 tables, 122 users, and 140 bank tasks.
+## WebSocket routing and cooperative answer persistence
+
+The browser uses the site's own origin for `/ws/presence` and `/ws/trial-tests/coop/*`
+unless `NEXT_PUBLIC_WS_API_URL` is explicitly configured at frontend build time.
+The bundled Caddy configuration forwards `/ws/*` to the private backend.
+For the Vercel frontend, set `NEXT_PUBLIC_WS_API_URL=wss://<backend-domain>`
+in Vercel and rebuild; the Next.js HTTP proxy cannot forward WebSocket upgrades.
+
+For the nginx Compose stacks, the backend is bound to loopback port 8001
+(`BACKEND_BIND_PORT` can override it). Install the `/ws/` location from the nginx
+template and keep its upstream port in sync with that variable. With a Dockerized
+nginx, apply the proxy-network override and route `/ws/` to
+`http://mathbot-backend-prod:8000` instead. HTTP API requests still go through the
+authenticated Next.js proxy.
+
+Cooperative answers are saved through authenticated HTTP requests as well, so
+polling can recover shared answers if WebSocket delivery is temporarily unavailable.
+The UI reports pending or failed saves and retries them. Existing deployments need
+the updated proxy configuration for live presence and WebSocket notifications.

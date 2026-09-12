@@ -4,7 +4,7 @@
 import logging
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import FileResponse
 from slowapi import Limiter
 
@@ -23,7 +23,7 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
         return {"message": "Mathbot API", "version": "1.0.0"}
     
     @app.get("/api/health")
-    async def health_check(request: Request):
+    async def health_check(request: Request, response: Response):
         """Проверка здоровья сервиса для мониторинга"""
         try:
             # Проверить подключение к БД
@@ -38,6 +38,7 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
         if started_at_epoch > 0:
             uptime_sec = max(0, int(datetime.now().timestamp() - started_at_epoch))
 
+        response.status_code = 200 if db_status == "ok" else 503
         return {
             "status": "healthy" if db_status == "ok" else "degraded",
             "database": db_status,

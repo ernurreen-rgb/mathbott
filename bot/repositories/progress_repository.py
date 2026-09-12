@@ -47,12 +47,6 @@ class ProgressRepository(BaseRepository):
                     raise
                 await asyncio.sleep(0.15 * attempt)
     
-    async def check_if_task_all_questions_completed(self, user_id: int, task_id: int) -> bool:
-        """Check if all questions in a task are completed correctly"""
-        # This method needs access to task repository, so we'll keep it in database.py for now
-        # or pass task_repo as dependency
-        return False  # Placeholder
-    
     async def get_user_task_progress(self, user_id: int, task_id: int) -> Optional[Dict[str, Any]]:
         """Get user progress for a specific task"""
         async with self._connection() as db:
@@ -202,12 +196,13 @@ class ProgressRepository(BaseRepository):
                         l.id AS lesson_id,
                         COUNT(DISTINCT ml.id) AS total_mini_lessons,
                         COUNT(DISTINCT CASE 
-                            WHEN ml.id IS NOT NULL AND 
+                            WHEN ml.id IS NOT NULL AND
+                                 EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL) AND
                                  (SELECT COUNT(*) FROM tasks t2 
                                   WHERE t2.mini_lesson_id = ml.id AND t2.deleted_at IS NULL) = 
                                  (SELECT COUNT(*) FROM user_progress up2 
                                   JOIN tasks t3 ON t3.id = up2.task_id 
-                                  WHERE up2.user_id = ? AND t3.mini_lesson_id = ml.id AND up2.status = 'completed')
+                                  WHERE up2.user_id = ? AND t3.mini_lesson_id = ml.id AND t3.deleted_at IS NULL AND up2.status = 'completed')
                             THEN ml.id 
                             ELSE NULL 
                         END) AS completed_mini_lessons
@@ -220,7 +215,7 @@ class ProgressRepository(BaseRepository):
                 ) as cursor:
                     rows = await cursor.fetchall()
                     completed_lessons = 0
-                    total_lessons = max(len(rows), EXPECTED_LESSONS_PER_SECTION)
+                    total_lessons = len(rows)
                     
                     for row in rows:
                         total_mini = int(row[1] or 0)
@@ -293,7 +288,6 @@ class ProgressRepository(BaseRepository):
         total_lessons = 0
         completed_lessons = 0
         completed_sections = 0
-        current_lesson_position = 0
 
         section_ids = [s["id"] for s in sections_sorted]
         if not section_ids:
@@ -312,12 +306,13 @@ class ProgressRepository(BaseRepository):
                     l.lesson_number,
                     COUNT(DISTINCT ml.id) AS total_mini_lessons,
                     COUNT(DISTINCT CASE 
-                        WHEN ml.id IS NOT NULL AND 
+                        WHEN ml.id IS NOT NULL AND
+                                 EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL) AND
                              (SELECT COUNT(*) FROM tasks t2 
                               WHERE t2.mini_lesson_id = ml.id AND t2.deleted_at IS NULL) = 
                              (SELECT COUNT(*) FROM user_progress up2 
                               JOIN tasks t3 ON t3.id = up2.task_id 
-                              WHERE up2.user_id = ? AND t3.mini_lesson_id = ml.id AND up2.status = 'completed')
+                              WHERE up2.user_id = ? AND t3.mini_lesson_id = ml.id AND t3.deleted_at IS NULL AND up2.status = 'completed')
                         THEN ml.id 
                         ELSE NULL 
                     END) AS completed_mini_lessons
@@ -356,35 +351,14 @@ class ProgressRepository(BaseRepository):
             section_total_lessons = len(lessons_sorted)
             total_lessons += section_total_lessons
             
-            section_completed_lessons = 0
-            first_incomplete_lesson = None
-            
-            for lesson in lessons_sorted:
-                total_mini = lesson.get("total_mini_lessons", 0)
-                completed_mini = lesson.get("completed_mini_lessons", 0)
-                is_completed = total_mini > 0 and completed_mini == total_mini
-                
-                if is_completed:
-                    section_completed_lessons += 1
-                elif first_incomplete_lesson is None:
-                    first_incomplete_lesson = lesson
-            
-            if section_completed_lessons == section_total_lessons and section_total_lessons > 0:
+            section_completed_lessons = sum(
+                1 for lesson in lessons_sorted
+                if lesson["total_mini_lessons"] > 0
+                and lesson["completed_mini_lessons"] == lesson["total_mini_lessons"]
+            )
+            completed_lessons += section_completed_lessons
+            if section_total_lessons > 0 and section_completed_lessons == section_total_lessons:
                 completed_sections += 1
-                completed_lessons += section_completed_lessons
-            else:
-                if current_lesson_position == 0:
-                    if first_incomplete_lesson:
-                        lesson_number = first_incomplete_lesson.get("lesson_number")
-                        if lesson_number:
-                            current_lesson_position = lesson_number
-                        else:
-                            current_lesson_position = lessons_sorted.index(first_incomplete_lesson) + 1
-                    else:
-                        current_lesson_position = section_completed_lessons + 1
-                    completed_lessons += section_completed_lessons + 1
-                else:
-                    completed_lessons += section_completed_lessons
 
         progress_percentage = completed_lessons / total_lessons if total_lessons > 0 else 0.0
         all_completed = completed_lessons >= total_lessons and total_lessons > 0

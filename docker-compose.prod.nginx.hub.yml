@@ -18,6 +18,8 @@ services:
       ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
     expose:
       - "8000"
+    ports:
+      - "127.0.0.1:${BACKEND_BIND_PORT:-8001}:8000"
     volumes:
       - mathbot_db:/data
       - mathbot_images:/images

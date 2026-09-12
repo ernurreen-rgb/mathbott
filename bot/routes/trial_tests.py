@@ -12,7 +12,7 @@ from dependencies import get_db
 from database import Database
 from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.cache import cache
-from utils.public_payload import public_subquestions
+from utils.public_payload import public_subquestions, task_review_snapshot
 from utils.scoring import build_reward_identity
 from utils.validation import get_mcq_answer_count, is_task_answer_correct, normalize_answer_mode
 
@@ -199,7 +199,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             
             async with _get_trial_test_write_lock(user["id"], test_id):
                 previous_results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=test_id)
-                if previous_results:
+                if any(result.get("submit_mode", "solo") == "solo" for result in previous_results):
                     raise HTTPException(
                         status_code=409,
                         detail="Trial test has already been submitted. Review the saved result instead.",
@@ -227,7 +227,8 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     results[int(task_id)] = {
                         "answer": user_answer,
                         "correct": is_correct,
-                        "correct_answer": task.get("answer")
+                        "correct_answer": task.get("answer"),
+                        "task": task_review_snapshot(task)
                     }
 
                 percentage = (score / total * 100) if total > 0 else 0.0

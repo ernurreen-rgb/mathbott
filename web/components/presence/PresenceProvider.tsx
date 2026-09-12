@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { getPresenceWsToken } from "@/lib/api";
+import { resolveWebSocketBase } from "@/lib/websocket-url";
 
 type PresenceStatus = "connecting" | "connected" | "disconnected";
 
@@ -51,26 +52,6 @@ function upsertPresenceUser(users: PresenceUser[], nextUser: PresenceUser): Pres
   const byId = new Map(users.map((user) => [user.id, user]));
   byId.set(nextUser.id, nextUser);
   return sortPresenceUsers(Array.from(byId.values()));
-}
-
-function resolvePresenceWsBase(): string | null {
-  const configuredBase = process.env.NEXT_PUBLIC_WS_API_URL?.trim();
-  if (configuredBase && !configuredBase.startsWith("/")) {
-    return configuredBase.replace(/^http/, "ws").replace(/\/$/, "");
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    return null;
-  }
-
-  const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
-  const base = apiBase && !apiBase.startsWith("/")
-    ? apiBase
-    : typeof window !== "undefined"
-      ? window.location.origin
-      : "";
-  if (!base) return null;
-  return base.replace(/^http/, "ws").replace(/\/$/, "");
 }
 
 function presenceDisplayName(user: PresenceUser): string {
@@ -138,7 +119,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     };
 
     const connect = async () => {
-      const wsBase = resolvePresenceWsBase();
+      const wsBase = resolveWebSocketBase();
       if (!wsBase || closed) {
         setStatus("disconnected");
         return;

@@ -26,7 +26,7 @@ describe("DesktopNav collapse functionality", () => {
     localStorage.clear();
     document.body.className = "";
     jest.clearAllMocks();
-    mockCheckAdminStatus.mockResolvedValue({ data: { is_admin: false }, error: null });
+    mockCheckAdminStatus.mockResolvedValue({ data: { is_admin: false, role: null, is_super_admin: false, permissions: [] }, error: null });
   });
 
   it("renders navigation items by default when expanded", async () => {
@@ -110,7 +110,7 @@ describe("DesktopNav collapse functionality", () => {
   });
 
   it("renders admin link when user is admin", async () => {
-    mockCheckAdminStatus.mockResolvedValue({ data: { is_admin: true }, error: null });
+    mockCheckAdminStatus.mockResolvedValue({ data: { is_admin: true, role: "super_admin", is_super_admin: true, permissions: [] }, error: null });
 
     await act(async () => {
       render(

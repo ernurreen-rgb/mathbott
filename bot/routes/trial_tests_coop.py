@@ -7,16 +7,31 @@ from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends
 from slowapi import Limiter
+from pydantic import BaseModel, Field, field_validator
 
 from dependencies import get_db
 from database import Database
 from settings import get_settings
 from utils.cache import cache
 from utils.internal_proxy_auth import WEBSOCKET_TOKEN_TTL_SECONDS, build_ws_token, verify_ws_token
+from utils.public_payload import task_review_snapshot
 from utils.scoring import build_reward_identity
+from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.validation import is_task_answer_correct
 
 logger = logging.getLogger(__name__)
+
+
+class CoopAnswersRequest(BaseModel):
+    email: str
+    answers: Dict[int, str] = Field(max_length=200)
+
+    @field_validator("answers")
+    @classmethod
+    def validate_answers(cls, answers):
+        if any(task_id <= 0 or len(answer) > 10000 for task_id, answer in answers.items()):
+            raise ValueError("Invalid task id or answer length")
+        return answers
 
 
 class CoopConnectionManager:
@@ -69,6 +84,24 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     def _is_production() -> bool:
         return get_settings().is_production
+
+    @app.put("/api/trial-tests/coop/session/{session_id}/answers")
+    async def save_coop_answers(session_id: int, payload: CoopAnswersRequest, db: Database = Depends(get_db)):
+        user = await db.users.get_user_by_email(payload.email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        try:
+            participant = await db.trial_test_coop.save_answers(session_id, user["id"], payload.answers)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        for task_id, answer in payload.answers.items():
+            await manager.broadcast(session_id, {"type": "answer_update", "user_id": user["id"],
+                "color": participant["color"], "task_id": task_id, "answer": answer})
+        return {"ok": True}
 
     @app.post("/api/trial-tests/{test_id}/coop/session")
     async def create_coop_session(
@@ -212,7 +245,8 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 results[int(task_id)] = {
                     "answer": user_answer,
                     "correct": is_correct,
-                    "correct_answer": task.get("answer")
+                    "correct_answer": task.get("answer"),
+                    "task": task_review_snapshot(task)
                 }
 
             percentage = (score / total * 100) if total > 0 else 0.0
@@ -245,6 +279,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 should_update_streak=had_any_correct,
                 delete_draft=False,
                 submit_mode="coop",
+                coop_session_id=session_id,
             )
 
             if submit_result.get("streak_milestone") and user.get("email"):
@@ -260,23 +295,17 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                 except Exception as e:
                     logger.error(f"Failed to unlock achievements after coop finish: {e}", exc_info=True)
 
-            await db.trial_test_coop.create_result_link(session_id, user["id"], submit_result["result"]["id"])
-            await db.trial_test_coop.set_participant_finished(session_id, user["id"], True)
             cache.invalidate_pattern(f"user:stats:{email}")
-
-            participants = await db.trial_test_coop.list_participants(session_id)
-            if participants and all(p.get("is_finished") for p in participants):
-                await db.trial_test_coop.update_session_status(session_id, "completed")
-                session_status = "completed"
-            else:
-                session_status = session.get("status", "active")
-
+            saved_result = submit_result["result"]
             return {
-                "score": score,
-                "total": total,
-                "percentage": round(percentage, 2),
-                "session_status": session_status
+                "score": saved_result["score"],
+                "total": saved_result["total"],
+                "percentage": round(saved_result["percentage"], 2),
+                "session_status": submit_result["session_status"],
             }
+        except TrialTestAlreadySubmitted:
+            raise HTTPException(status_code=409, detail="This participant has already finished the session.")
+
         except HTTPException:
             raise
         except Exception as e:

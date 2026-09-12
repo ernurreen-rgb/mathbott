@@ -20,6 +20,8 @@ services:
       ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
     expose:
       - "8000"
+    ports:
+      - "127.0.0.1:${BACKEND_BIND_PORT:-8001}:8000"
     volumes:
       - mathbot_db:/data
       - mathbot_images:/images
@@ -50,6 +52,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api/backend
+        NEXT_PUBLIC_WS_API_URL: ${NEXT_PUBLIC_WS_API_URL:-}
         NEXT_PUBLIC_MODULES_UI_ENABLED: "true"
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}

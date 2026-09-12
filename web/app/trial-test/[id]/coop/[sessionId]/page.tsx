@@ -18,7 +18,8 @@ import {
   apiPath,
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { API_URL } from "@/lib/constants";
+import { useCoopAnswerSync } from "@/lib/use-coop-answer-sync";
+import { resolveWebSocketBase } from "@/lib/websocket-url";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
@@ -50,6 +51,7 @@ export default function TrialTestCoopPage() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const email = session?.user?.email || null;
+  const { saveAnswer, saveStatus } = useCoopAnswerSync(sessionId, email);
 
   const participantsById = useMemo(() => {
     if (!coopSession) return new Map<number, { color: string; nickname: string | null }>();
@@ -157,21 +159,18 @@ export default function TrialTestCoopPage() {
 
   useEffect(() => {
     if (!email || !coopSessionId) return;
-    const wsEnvBase = process.env.NEXT_PUBLIC_WS_API_URL;
-    const envApiUrl = process.env.NEXT_PUBLIC_API_URL;
-    const apiBase = envApiUrl && !envApiUrl.startsWith("/") ? envApiUrl : API_URL;
-    const base = (wsEnvBase && wsEnvBase.trim()) || apiBase;
-    if (!base || base.startsWith("/")) {
-      // WS cannot be proxied through Next.js API routes; rely on polling instead.
-      return;
-    }
+    const base = resolveWebSocketBase();
+    if (!base) return;
     let closed = false;
     let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = async () => {
       const wsBase = base.replace(/^http/, "ws").replace(/\/$/, "");
       const { data: tokenData, error: tokenError } = await getTrialTestCoopWsToken(coopSessionId, email);
-      if (closed || tokenError || !tokenData?.token) {
+      if (closed) return;
+      if (tokenError || !tokenData?.token) {
+        reconnectTimer = setTimeout(() => void connect(), 3000);
         return;
       }
       const wsUrl = `${wsBase}/ws/trial-tests/coop/${coopSessionId}?email=${encodeURIComponent(email)}&token=${encodeURIComponent(tokenData.token)}`;
@@ -186,7 +185,7 @@ export default function TrialTestCoopPage() {
             const taskId = Number(payload.task_id);
             const answer = String(payload.answer || "");
             if (currentUserId && userId === currentUserId) {
-              setAnswers((prev) => ({ ...prev, [taskId]: answer }));
+              return; // Do not overwrite newer local input with our own delayed echo.
             } else {
               setOtherAnswers((prev) => ({
                 ...prev,
@@ -207,8 +206,9 @@ export default function TrialTestCoopPage() {
         }
       };
 
-      ws.onerror = () => {
-        // Silent - fallback to polling
+      ws.onerror = () => ws?.close();
+      ws.onclose = () => {
+        if (!closed) reconnectTimer = setTimeout(() => void connect(), 3000);
       };
     };
 
@@ -216,6 +216,7 @@ export default function TrialTestCoopPage() {
 
     return () => {
       closed = true;
+      clearTimeout(reconnectTimer);
       ws?.close();
       wsRef.current = null;
     };
@@ -246,14 +247,7 @@ export default function TrialTestCoopPage() {
   };
 
   const sendAnswerUpdate = (taskId: number, answer: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(
-      JSON.stringify({
-        type: "answer_update",
-        task_id: taskId,
-        answer,
-      })
-    );
+    saveAnswer(taskId, answer);
   };
 
   const renderTaskControls = (task: LessonTask) => {
@@ -446,6 +440,9 @@ export default function TrialTestCoopPage() {
       <DesktopNav />
       <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="w-full max-w-4xl">
+        <div role="status" className="text-sm text-gray-700">
+          {saveStatus === "saving" ? "Сақталуда…" : saveStatus === "error" ? "Жауап сақталмады. Қайта сақталуда…" : ""}
+        </div>
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <button
               onClick={() => router.back()}

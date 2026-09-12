@@ -24,7 +24,7 @@ export interface TrialTestResult {
   score: number;
   total: number;
   percentage: number;
-  answers: Record<number, { answer: string; correct: boolean; correct_answer?: string }>;
+  answers: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
   completed_at: string;
 }
 
@@ -39,7 +39,7 @@ export interface TrialTestSubmitResponse {
   score: number;
   total: number;
   percentage: number;
-  results: Record<number, { answer: string; correct: boolean; correct_answer?: string }>;
+  results: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
 }
 
 
@@ -92,7 +92,7 @@ export interface TrialTestCoopResultItem {
   score: number;
   total: number;
   percentage: number;
-  answers: Record<number, { answer: string; correct: boolean; correct_answer?: string }>;
+  answers: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
   completed_at: string;
   color?: TrialTestCoopColor;
 }

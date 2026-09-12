@@ -13,6 +13,7 @@ COPY . .
 
 # Build-time public config and Sentry source map upload credentials
 ARG NEXT_PUBLIC_API_URL=/api/backend
+ARG NEXT_PUBLIC_WS_API_URL=
 ARG NEXT_PUBLIC_MODULES_UI_ENABLED=true
 ARG NEXT_PUBLIC_SENTRY_DSN=
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=production

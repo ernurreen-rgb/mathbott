@@ -11,7 +11,7 @@ import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } fro
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
 import { isWrittenAnswerComplete } from "@/lib/written-answer";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
 import { showToast } from "@/lib/toast";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
@@ -636,9 +636,7 @@ export default function LessonPage() {
                   <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
                     <div>
                     <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(activeTask.text_scale))}`}>
-                        {activeTask.text || "Мәтіні жоқ есеп"}
-                      </div>
+                      <TaskStatement task={activeTask} />
                     </div>
 
                     {renderTaskControls(activeTask)}

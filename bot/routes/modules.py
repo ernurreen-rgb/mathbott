@@ -272,6 +272,7 @@ def setup_modules_routes(app, db, limiter):
                 tasks_data.append({
                     "id": t["id"],
                     "text": t.get("text", ""),
+                    "image_filename": t.get("image_filename"),
                     "question_type": t.get("question_type", "input"),
                     "answer_mode": normalize_answer_mode(t.get("answer_mode"), t.get("question_type")),
                     "correct_count": (

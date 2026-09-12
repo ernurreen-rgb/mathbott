@@ -128,7 +128,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
                 cache.invalidate_pattern(f"modules:map:{task_check_request.email}")
             except Exception as e:
                 logger.error(f"Failed to record_solution: {e}", exc_info=True)
-                # Don't fail the check response; user can retry
+                raise HTTPException(status_code=503, detail="Could not save the answer. Please retry.")
 
             result = {
                 "correct": is_correct,

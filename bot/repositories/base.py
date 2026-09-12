@@ -87,6 +87,21 @@ class BaseRepository:
             yield conn
         finally:
             await self._release_connection(conn)
+
+    @asynccontextmanager
+    async def _write_transaction(self):
+        """Reserve the writer before reading state used to authorize a change."""
+        # Acquire the lock before a connection so waiting writers cannot exhaust
+        # the pool. BEGIN IMMEDIATE also serializes writers in other processes.
+        async with _get_process_write_lock():
+            async with self._connection() as conn:
+                await conn.execute("BEGIN IMMEDIATE")
+                try:
+                    yield conn
+                    await conn.commit()
+                except BaseException:
+                    await conn.rollback()
+                    raise
     
     async def batch_insert(
         self,

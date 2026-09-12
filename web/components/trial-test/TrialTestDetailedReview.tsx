@@ -9,15 +9,12 @@ import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
+import { getReviewTasks, type ReviewAnswer } from "@/lib/trial-test-review";
 
 type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
 type AccentColor = "purple" | "red" | "blue" | "neutral";
 
-export type TrialTestReviewAnswer = {
-  answer?: string;
-  correct?: boolean;
-  correct_answer?: string;
-};
+export type TrialTestReviewAnswer = ReviewAnswer;
 
 type TrialTestDetailedReviewProps = {
   tasks: TrialTestDetails["tasks"];
@@ -82,7 +79,7 @@ const renderSelectChoice = (
 };
 
 export default function TrialTestDetailedReview({
-  tasks,
+  tasks: currentTasks,
   answers,
   title,
   accentColor = "purple",
@@ -90,6 +87,7 @@ export default function TrialTestDetailedReview({
   defaultTaskIndex = 0,
   className = "",
 }: TrialTestDetailedReviewProps) {
+  const tasks = useMemo(() => getReviewTasks(currentTasks, answers), [currentTasks, answers]);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(defaultTaskIndex);
 
   useEffect(() => {

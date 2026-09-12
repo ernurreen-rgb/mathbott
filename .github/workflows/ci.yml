@@ -67,6 +67,10 @@ jobs:
     - name: Run tests
       working-directory: ./web
       run: npm test -- --coverage --watchAll=false
+
+    - name: Check TypeScript
+      working-directory: ./web
+      run: npm run typecheck
     
     - name: Check security (npm audit)
       working-directory: ./web

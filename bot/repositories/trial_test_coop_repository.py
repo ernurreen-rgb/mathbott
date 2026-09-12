@@ -110,18 +110,34 @@ class TrialTestCoopRepository(BaseRepository):
             )
             await db.commit()
 
-    async def upsert_answer(self, session_id: int, user_id: int, task_id: int, answer: str) -> None:
-        async with self._connection() as db:
-            await db.execute(
-                """
-                INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(session_id, user_id, task_id)
-                DO UPDATE SET answer = excluded.answer, updated_at = CURRENT_TIMESTAMP
-                """,
-                (session_id, user_id, task_id, answer)
+    async def save_answers(self, session_id: int, user_id: int, answers: Dict[int, str]) -> Dict[str, Any]:
+        """Save a batch while the participant is active; serialize with finishing."""
+        async with self._write_transaction() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """SELECT p.color, p.is_finished, s.status, s.trial_test_id
+                   FROM trial_test_coop_participants p JOIN trial_test_coop_sessions s ON s.id = p.session_id
+                   WHERE p.session_id = ? AND p.user_id = ?""", (session_id, user_id),
+            ) as cursor:
+                participant = await cursor.fetchone()
+            if not participant:
+                raise PermissionError("Not a participant")
+            if participant["is_finished"] or participant["status"] != "active":
+                raise RuntimeError("Session is already finished")
+            async with db.execute("SELECT id FROM trial_test_tasks WHERE trial_test_id = ?", (participant["trial_test_id"],)) as cursor:
+                valid_ids = {row[0] for row in await cursor.fetchall()}
+            if not set(answers).issubset(valid_ids):
+                raise ValueError("Answer refers to a task outside this test")
+            await db.executemany(
+                """INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
+                   VALUES (?, ?, ?, ?) ON CONFLICT(session_id, user_id, task_id)
+                   DO UPDATE SET answer = excluded.answer, updated_at = CURRENT_TIMESTAMP""",
+                [(session_id, user_id, task_id, answer) for task_id, answer in answers.items()],
             )
-            await db.commit()
+            return dict(participant)
+
+    async def upsert_answer(self, session_id: int, user_id: int, task_id: int, answer: str) -> None:
+        await self.save_answers(session_id, user_id, {task_id: answer})
 
     async def list_answers_for_user(self, session_id: int, user_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:

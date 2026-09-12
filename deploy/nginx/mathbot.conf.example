@@ -37,6 +37,20 @@ server {
 
     client_max_body_size 20m;
 
+    # Must match BACKEND_BIND_PORT (loopback only) in the nginx Compose stack.
+    # For a Dockerized proxy, use mathbot-backend-prod:8000 on proxy_network.
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+
     location / {
         proxy_pass http://mathbot_frontend;
         proxy_http_version 1.1;

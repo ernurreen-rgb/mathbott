@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import TrialTestDetailedReview, { isReviewResultActuallyCorrect } from "@/components/trial-test/TrialTestDetailedReview";
+import TrialTestDetailedReview from "@/components/trial-test/TrialTestDetailedReview";
 import { getTrialTestCoopResults, getTrialTestDetails } from "@/lib/api";
 import { TrialTestCoopResultItem, TrialTestCoopResultsResponse, TrialTestDetails } from "@/types";
 
@@ -86,11 +86,8 @@ export default function TrialTestCoopResultsPage() {
   const scoredItems = useMemo(() => {
     if (!test || !results) return [];
     return results.items.map((item) => {
-      const displayScore = test.tasks.reduce((score, task) => {
-        const result = item.answers?.[task.id];
-        return score + (isReviewResultActuallyCorrect(task, result) ? 1 : 0);
-      }, 0);
-      const displayPercentage = item.total > 0 ? (displayScore / item.total) * 100 : 0;
+      const displayScore = item.score;
+      const displayPercentage = item.percentage;
       return {
         ...item,
         displayScore,

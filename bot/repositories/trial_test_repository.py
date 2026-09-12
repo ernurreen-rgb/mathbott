@@ -4,10 +4,10 @@ Trial test repository (placement model with bank_tasks as content source).
 import aiosqlite
 import json
 import logging
-from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 
 from .base import BaseRepository
+from utils.scoring import calculate_next_streak
 from .bank_task_repository import BankTaskRepository
 
 logger = logging.getLogger(__name__)
@@ -53,35 +53,7 @@ class TrialTestRepository(BaseRepository):
             return value
         return json.dumps(value)
 
-    @staticmethod
-    def _calculate_next_streak(current_streak: int, last_streak_date_value: Any) -> tuple[int, str]:
-        """Match the user streak rules while staying inside one submit transaction."""
-        today = date.today()
-        last_streak_date = None
-
-        if last_streak_date_value:
-            try:
-                if isinstance(last_streak_date_value, str):
-                    raw_value = last_streak_date_value.split()[0]
-                    last_streak_date = datetime.strptime(raw_value, "%Y-%m-%d").date()
-                elif isinstance(last_streak_date_value, datetime):
-                    last_streak_date = last_streak_date_value.date()
-                else:
-                    last_streak_date = last_streak_date_value
-            except Exception:
-                last_streak_date = None
-
-        if last_streak_date is None:
-            return 1, today.isoformat()
-
-        days_diff = (today - last_streak_date).days
-        if days_diff == 0:
-            new_streak = current_streak
-        elif days_diff == 1:
-            new_streak = current_streak + 1
-        else:
-            new_streak = 1
-        return new_streak, today.isoformat()
+    _calculate_next_streak = staticmethod(calculate_next_streak)
 
     async def _create_bank_task_for_inline(
         self,
@@ -489,6 +461,7 @@ class TrialTestRepository(BaseRepository):
         should_update_streak: bool,
         delete_draft: bool = True,
         submit_mode: str = "solo",
+        coop_session_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Persist a trial-test submit in one transaction to minimize SQLite lock windows."""
 
@@ -497,6 +470,32 @@ class TrialTestRepository(BaseRepository):
                 db.row_factory = aiosqlite.Row
                 try:
                     await db.execute("BEGIN IMMEDIATE")
+
+                    session_status = None
+                    if coop_session_id is not None:
+                        async with db.execute(
+                            """SELECT p.is_finished, s.status FROM trial_test_coop_participants p
+                               JOIN trial_test_coop_sessions s ON s.id = p.session_id
+                               WHERE p.session_id = ? AND p.user_id = ? AND s.trial_test_id = ?""",
+                            (coop_session_id, user_id, trial_test_id),
+                        ) as participant_cursor:
+                            participant = await participant_cursor.fetchone()
+                        if not participant:
+                            raise ValueError("Not a participant of this trial test")
+                        async with db.execute(
+                            """SELECT r.* FROM trial_test_coop_results c
+                               JOIN trial_test_results r ON r.id = c.trial_test_result_id
+                               WHERE c.session_id = ? AND c.user_id = ?""",
+                            (coop_session_id, user_id),
+                        ) as saved_cursor:
+                            saved = await saved_cursor.fetchone()
+                        if saved:
+                            await db.rollback()
+                            return {"result": dict(saved), "awarded_any": False,
+                                    "streak_milestone": None, "reused": True,
+                                    "session_status": participant["status"]}
+                        if participant["is_finished"] or participant["status"] != "active":
+                            raise TrialTestAlreadySubmitted()
 
                     answers_json = json.dumps(answers)
                     normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
@@ -589,18 +588,43 @@ class TrialTestRepository(BaseRepository):
                             (user_id, trial_test_id),
                         )
 
-                    await db.commit()
-
+                    if coop_session_id is not None:
+                        await db.executemany(
+                            """INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
+                               VALUES (?, ?, ?, ?) ON CONFLICT(session_id, user_id, task_id)
+                               DO UPDATE SET answer = excluded.answer, updated_at = CURRENT_TIMESTAMP""",
+                            [(coop_session_id, user_id, int(task_id), result.get("answer", ""))
+                             for task_id, result in answers.items()],
+                        )
+                        await db.execute(
+                            """INSERT INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
+                               VALUES (?, ?, ?)""", (coop_session_id, user_id, result_id),
+                        )
+                        await db.execute(
+                            "UPDATE trial_test_coop_participants SET is_finished = 1 WHERE session_id = ? AND user_id = ?",
+                            (coop_session_id, user_id),
+                        )
+                        await db.execute(
+                            """UPDATE trial_test_coop_sessions SET status = 'completed' WHERE id = ?
+                               AND NOT EXISTS (SELECT 1 FROM trial_test_coop_participants
+                                               WHERE session_id = ? AND is_finished = 0)""",
+                            (coop_session_id, coop_session_id),
+                        )
+                        async with db.execute("SELECT status FROM trial_test_coop_sessions WHERE id = ?", (coop_session_id,)) as status_cursor:
+                            session_status = (await status_cursor.fetchone())[0]
                     async with db.execute(
                         "SELECT * FROM trial_test_results WHERE id = ?",
                         (result_id,),
                     ) as cursor_result:
                         result_row = await cursor_result.fetchone()
 
+                    await db.commit()
+
                     return {
                         "result": dict(result_row) if result_row else {"id": result_id},
                         "awarded_any": awarded_any,
                         "streak_milestone": streak_milestone,
+                        "session_status": session_status,
                     }
                 except Exception:
                     await db.rollback()

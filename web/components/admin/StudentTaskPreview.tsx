@@ -1,16 +1,14 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
-import MathRender from "@/components/ui/MathRender";
-import { apiPath, checkAdminTaskAnswerPreview } from "@/lib/api";
+import TaskStatement from "@/components/student/TaskStatement";
+import { checkAdminTaskAnswerPreview } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import type { LessonTask } from "@/types";
 
@@ -66,10 +64,6 @@ export default function StudentTaskPreview({
     setFeedback(null);
   }, [answerDefinitionSignature]);
 
-  const resolvedImageSrc =
-    imageSrc === undefined && previewTask.image_filename
-      ? apiPath(`images/${previewTask.image_filename}`)
-      : imageSrc;
   const answerComplete = isTrialTaskAnswerComplete(previewTask, answer);
   const updateAnswer = (value: string) => {
     setAnswer(value);
@@ -206,28 +200,7 @@ export default function StudentTaskPreview({
         <div className="overflow-hidden rounded-[1.5rem] border border-white/80 bg-white shadow-lg">
           <div className="h-1.5 bg-gradient-to-r from-purple-600 via-fuchsia-500 to-blue-500" />
           <div className="space-y-4 p-4 sm:p-6">
-            <div
-              className={`min-w-0 break-words font-semibold text-gray-900 ${getTaskTextScaleClass(
-                normalizeTaskTextScale(previewTask.text_scale)
-              )}`}
-            >
-              {previewTask.text ? (
-                <MathRender latex={previewTask.text} />
-              ) : (
-                <span className="text-gray-400">Тапсырма мәтіні осы жерде көрсетіледі</span>
-              )}
-            </div>
-
-            {resolvedImageSrc && (
-              <Image
-                src={resolvedImageSrc}
-                alt="Тапсырма"
-                width={1280}
-                height={720}
-                unoptimized
-                className="max-h-64 w-auto max-w-full rounded-lg border border-gray-200 object-contain"
-              />
-            )}
+            <TaskStatement task={previewTask} imageSrc={imageSrc} />
 
             {renderAnswerFields()}
 

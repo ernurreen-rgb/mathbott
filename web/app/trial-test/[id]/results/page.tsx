@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import TrialTestDetailedReview, { isReviewResultActuallyCorrect } from "@/components/trial-test/TrialTestDetailedReview";
+import TrialTestDetailedReview from "@/components/trial-test/TrialTestDetailedReview";
 import { getTrialTestDetails, getTrialTestResults } from "@/lib/api";
 import { TrialTestDetails, TrialTestResult } from "@/types";
 
@@ -90,15 +90,8 @@ export default function TrialTestResultsPage() {
     );
   }
 
-  const displayScore = latestResult
-    ? test.tasks.reduce((score, task) => {
-        const result = latestResult.answers[task.id];
-        return score + (isReviewResultActuallyCorrect(task, result) ? 1 : 0);
-      }, 0)
-    : 0;
-
-  const displayPercentage =
-    latestResult && latestResult.total > 0 ? (displayScore / latestResult.total) * 100 : 0;
+  const displayScore = latestResult?.score ?? 0;
+  const displayPercentage = latestResult?.percentage ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">

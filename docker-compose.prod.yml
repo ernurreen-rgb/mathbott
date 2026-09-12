@@ -50,6 +50,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api/backend
+        NEXT_PUBLIC_WS_API_URL: ${NEXT_PUBLIC_WS_API_URL:-}
         NEXT_PUBLIC_MODULES_UI_ENABLED: "true"
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
