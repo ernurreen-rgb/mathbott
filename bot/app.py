@@ -21,7 +21,6 @@ from middleware.error_handler import (
 )
 from middleware.metrics_middleware import MetricsMiddleware
 from middleware.csrf import CSRFMiddleware
-from middleware.connection_cleanup_middleware import ConnectionCleanupMiddleware
 from middleware.cache_headers_middleware import CacheHeadersMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
 from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
@@ -84,7 +83,6 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     app.add_exception_handler(Exception, general_exception_handler)
     
     # Добавить middleware
-    app.add_middleware(ConnectionCleanupMiddleware)  # Must be first to cleanup connections
     # Use FastAPI's built-in GZipMiddleware instead of custom CompressionMiddleware
     # It properly handles Content-Length for UTF-8 characters and is well-tested
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)  # Compress responses >= 1KB

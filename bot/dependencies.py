@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import Depends, HTTPException, Query, Request
+from fastapi import Depends, HTTPException, Request
 from slowapi import Limiter
 
 from database import Database
@@ -46,36 +46,6 @@ async def get_db(request: Request) -> Database:
 
 async def get_limiter(request: Request) -> Limiter:
     return request.app.state.limiter
-
-
-# --- Per-repository providers ---
-# Prefer these over get_db when a route only needs one repository:
-#   users: UserRepository = Depends(get_user_repository)
-
-
-def _make_repo_provider(attr: str):
-    async def provider(request: Request):
-        return getattr(request.app.state.db, attr)
-
-    provider.__name__ = f"get_{attr}_repository"
-    return provider
-
-
-get_user_repository = _make_repo_provider("users")
-get_task_repository = _make_repo_provider("tasks")
-get_curriculum_repository = _make_repo_provider("curriculum")
-get_progress_repository = _make_repo_provider("progress")
-get_solution_repository = _make_repo_provider("solutions")
-get_achievement_repository = _make_repo_provider("achievements")
-get_trial_test_repository = _make_repo_provider("trial_tests")
-get_trial_test_coop_repository = _make_repo_provider("trial_test_coop")
-get_bank_task_repository = _make_repo_provider("bank_tasks")
-get_report_repository = _make_repo_provider("reports")
-get_trial_test_report_repository = _make_repo_provider("trial_test_reports")
-get_statistics_repository = _make_repo_provider("statistics")
-get_friends_repository = _make_repo_provider("friends")
-get_ops_repository = _make_repo_provider("ops")
-get_onboarding_repository = _make_repo_provider("onboarding")
 
 
 def _get_runtime_environment() -> str:
@@ -237,13 +207,3 @@ async def require_admin_super_critical(
         db=db,
         capability=CAPABILITY_SUPER_CRITICAL,
     )
-
-
-async def get_current_user(
-    email: Optional[str] = Query(None),
-    db: Database = Depends(get_db),
-) -> Optional[dict]:
-    if not email:
-        return None
-    user = await db.users.get_user_by_email(email)
-    return user

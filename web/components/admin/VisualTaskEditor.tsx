@@ -1,38 +1,20 @@
-﻿"use client";
+"use client";
+import BankMetadataFields from "./visual-task-editor/BankMetadataFields";
+import MatchingAnswerFields from "./visual-task-editor/MatchingAnswerFields";
+import McqAnswerFields from "./visual-task-editor/McqAnswerFields";
+import { CropPercent, HANDLES, MIN_CROP_PCT, VisualTaskEditorProps } from "./visual-task-editor/model";
+import TaskImageCrop from "./visual-task-editor/TaskImageCrop";
+import TaskImageUpload from "./visual-task-editor/TaskImageUpload";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import Image from "next/image";
-import { apiPath } from "@/lib/api";
-import {
-  MAX_MCQ_CORRECT_OPTIONS,
-  MCQ_OPTION_LABELS,
-  isMcqQuestionType,
-  parseMcqAnswerLabels,
-  toggleMcqAnswerLabel,
-} from "@/lib/question-options";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
-import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
-import { LessonTask, QuestionType } from "@/types";
-import { createCroppedImageFile } from "@/lib/imageCrop";
+import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
+import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
-import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
-import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
-
-type CropPercent = { left: number; top: number; width: number; height: number };
-const MIN_CROP_PCT = 5;
-const HANDLES = ["tl", "t", "tr", "r", "br", "b", "bl", "l"] as const;
-
-interface VisualTaskEditorProps {
-  tasks: LessonTask[];
-  onSave: (task: Partial<LessonTask> & { imageFile?: File | null; removeImage?: boolean }) => Promise<void>;
-  onAdd: () => void;
-  onDelete: (taskId: number) => Promise<void>;
-  context: "trial-test" | "mini-lesson";
-  showBankMetadata?: boolean;
-  testIdOrMiniLessonId?: number;
-  email: string;
-}
+import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
+import { createCroppedImageFile } from "@/lib/imageCrop";
+import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { LessonTask, QuestionType } from "@/types";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function VisualTaskEditor({
   tasks,
@@ -214,7 +196,7 @@ export default function VisualTaskEditor({
 
   const handleSave = async () => {
     if (!isDirty && !isNewTask) return;
-    
+
     // Prepare data for saving
     const taskToSave: Partial<LessonTask> & { imageFile?: File | null; removeImage?: boolean } = { ...tempTaskData };
     taskToSave.accepted_answers = normalizeAcceptedAnswers(taskToSave.accepted_answers);
@@ -224,16 +206,16 @@ export default function VisualTaskEditor({
     } else if (removeImage) {
       taskToSave.removeImage = true;
     }
-    
+
     // For select, answer should be JSON array of correct answers
     if (taskToSave.question_type === "select" && taskToSave.subquestions) {
       const correctAnswers = taskToSave.subquestions.map((sq: any) => sq.correct || "A");
       taskToSave.answer = JSON.stringify(correctAnswers);
     }
-    
+
     // For TF, answer is "true" or "false"
     // For input, answer is the text value
-    
+
     setSaving(true);
     try {
       await onSave(taskToSave);
@@ -370,9 +352,8 @@ export default function VisualTaskEditor({
                     setEditingField("text");
                   }
                 }}
-                className={`font-semibold text-gray-900 min-h-[3rem] ${getTaskTextScaleClass(normalizeTaskTextScale(taskData.text_scale))} ${
-                  isEditing ? "cursor-pointer hover:bg-gray-100 rounded p-2" : ""
-                }`}
+                className={`font-semibold text-gray-900 min-h-[3rem] ${getTaskTextScaleClass(normalizeTaskTextScale(taskData.text_scale))} ${isEditing ? "cursor-pointer hover:bg-gray-100 rounded p-2" : ""
+                  }`}
               >
                 {taskData.text ? (
                   <MathRender latex={taskData.text} />
@@ -398,11 +379,10 @@ export default function VisualTaskEditor({
                       key={item.value}
                       type="button"
                       onClick={() => updateTempTask({ text_scale: item.value as "sm" | "md" | "lg" })}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                        isActive
-                          ? "border-purple-600 bg-purple-600 text-white"
-                          : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                      }`}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${isActive
+                        ? "border-purple-600 bg-purple-600 text-white"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        }`}
                     >
                       {item.label}
                     </button>
@@ -412,352 +392,56 @@ export default function VisualTaskEditor({
             </div>
           )}
 
-          {isEditing && showBankMetadata && context === "trial-test" && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="text-sm font-semibold text-gray-700 mb-2">БАНК параметрлері</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Күрделілік</label>
-                  <select
-                    value={(taskData.bank_difficulty || "B") as string}
-                    onChange={(e) => updateTempTask({ bank_difficulty: e.target.value as any })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 disabled:bg-gray-100 disabled:text-gray-500"
-                    disabled={!isNewTask && !taskData.bank_task_id}
-                  >
-                    <option value="A">A (оңай)</option>
-                    <option value="B">B (орташа)</option>
-                    <option value="C">C (қиын)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Тақырыптар</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {(Array.isArray(taskData.bank_topics) ? taskData.bank_topics : []).map((topic) => (
-                      <span key={topic} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">
-                        {topic}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const prevTopics = Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [];
-                            updateTempTask({ bank_topics: prevTopics.filter((value) => value.toLowerCase() !== topic.toLowerCase()) });
-                          }}
-                          className="text-purple-700 hover:text-purple-900 disabled:text-gray-400"
-                          disabled={!isNewTask && !taskData.bank_task_id}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={bankTopicInput}
-                      onChange={(e) => setBankTopicInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const prevTopics = Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [];
-                          updateTempTask({ bank_topics: appendTopic(prevTopics, bankTopicInput) });
-                          setBankTopicInput("");
-                        }
-                      }}
-                      placeholder="Тақырып қосу"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 disabled:bg-gray-100 disabled:text-gray-500"
-                      disabled={!isNewTask && !taskData.bank_task_id}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const prevTopics = Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [];
-                        updateTempTask({ bank_topics: appendTopic(prevTopics, bankTopicInput) });
-                        setBankTopicInput("");
-                      }}
-                      className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50"
-                      disabled={!isNewTask && !taskData.bank_task_id}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">Ең көбі 10 тақырып, әрқайсысы 64 таңбаға дейін</div>
-                </div>
-              </div>
-              {!isNewTask && !taskData.bank_task_id && (
-                <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  Бұл ескі тапсырма БАНК-пен байланыспаған. Тегтер өшірулі, БАНК-пен синхрондау орындалмайды.
-                </div>
-              )}
-            </div>
-          )}
+          <BankMetadataFields
+            isEditing={isEditing}
+            showBankMetadata={showBankMetadata}
+            context={context}
+            taskData={taskData}
+            updateTempTask={updateTempTask}
+            isNewTask={isNewTask}
+            bankTopicInput={bankTopicInput}
+            setBankTopicInput={setBankTopicInput}
+            appendTopic={appendTopic}
+          />
 
           {/* Тапсырма суреті */}
-          {(tempImagePreview || (taskData.image_filename && !removeImage)) && (
-            <div className="mb-4">
-              {isEditing ? (
-                <div
-                  ref={imageWrapperRef}
-                  className={`relative inline-block rounded-lg border border-gray-200 overflow-hidden ${!inlineCropActive ? "cursor-pointer" : ""}`}
-                  onClick={(e) => {
-                    if (inlineCropActive) e.stopPropagation();
-                    else {
-                      const src = tempImagePreview || apiPath(`images/${taskData.image_filename}`);
-                      handleStartInlineCrop(src);
-                    }
-                  }}
-                >
-                  <Image
-                    ref={cropImageRef}
-                    src={tempImagePreview || apiPath(`images/${taskData.image_filename}`)}
-                    alt="Тапсырма"
-                    width={1280}
-                    height={720}
-                    unoptimized
-                    className="max-h-64 w-auto block rounded-lg border-0"
-                    draggable={false}
-                    style={inlineCropActive ? { pointerEvents: "none" } : undefined}
-                  />
-                  {inlineCropActive && inlineCropSrc === (tempImagePreview || apiPath(`images/${taskData.image_filename}`)) && (
-                    <>
-                      <div
-                        className="absolute inset-0 bg-black/50"
-                        style={{
-                          clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${cropPercent.left}% ${cropPercent.top}%, ${cropPercent.left + cropPercent.width}% ${cropPercent.top}%, ${cropPercent.left + cropPercent.width}% ${cropPercent.top + cropPercent.height}%, ${cropPercent.left}% ${cropPercent.top + cropPercent.height}%)`,
-                          clipRule: "evenodd",
-                        }}
-                      />
-                      <div
-                        className="absolute border-2 border-white pointer-events-none box-border"
-                        style={{
-                          left: `${cropPercent.left}%`,
-                          top: `${cropPercent.top}%`,
-                          width: `${cropPercent.width}%`,
-                          height: `${cropPercent.height}%`,
-                        }}
-                      />
-                      {HANDLES.map((h) => {
-                        let left = cropPercent.left;
-                        let top = cropPercent.top;
-                        if (h === "t" || h === "b") left = cropPercent.left + cropPercent.width / 2;
-                        else if (h === "tr" || h === "r" || h === "br") left = cropPercent.left + cropPercent.width;
-                        if (h === "l" || h === "r") top = cropPercent.top + cropPercent.height / 2;
-                        else if (h === "bl" || h === "b" || h === "br") top = cropPercent.top + cropPercent.height;
-                        return (
-                          <div
-                            key={h}
-                            className="absolute w-4 h-4 bg-white border-2 border-purple-600 rounded-full cursor-move -translate-x-1/2 -translate-y-1/2 z-10"
-                            style={{ left: `${left}%`, top: `${top}%` }}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setDraggingHandle(h);
-                            }}
-                          />
-                        );
-                      })}
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCancelInlineCrop();
-                          }}
-                          className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg"
-                        >
-                          Болдырмау
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApplyInlineCrop();
-                          }}
-                          disabled={inlineCropApplying}
-                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
-                        >
-                          {inlineCropApplying ? "…" : "Қолдану"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <Image
-                  src={tempImagePreview || apiPath(`images/${taskData.image_filename}`)}
-                  alt="Тапсырма"
-                  width={1280}
-                  height={720}
-                  unoptimized
-                  className="max-h-64 w-auto rounded-lg border border-gray-200"
-                />
-              )}
-            </div>
-          )}
+          <TaskImageCrop
+            tempImagePreview={tempImagePreview}
+            taskData={taskData}
+            removeImage={removeImage}
+            isEditing={isEditing}
+            imageWrapperRef={imageWrapperRef}
+            inlineCropActive={inlineCropActive}
+            handleStartInlineCrop={handleStartInlineCrop}
+            cropImageRef={cropImageRef}
+            inlineCropSrc={inlineCropSrc}
+            cropPercent={cropPercent}
+            setDraggingHandle={setDraggingHandle}
+            handleCancelInlineCrop={handleCancelInlineCrop}
+            handleApplyInlineCrop={handleApplyInlineCrop}
+            inlineCropApplying={inlineCropApplying}
+          />
 
-          {isEditing && (
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Сурет</label>
-              {(tempImagePreview || taskData.image_filename || removeImage) && (
-                <div className="mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="text-xs text-gray-600 mb-1">
-                    {removeImage
-                      ? "Сақтаған кезде сурет жойылады"
-                      : tempImageFile
-                        ? "Жаңа сурет (сақталады)"
-                        : taskData.image_filename
-                          ? `Ағымдағы: ${taskData.image_filename}`
-                          : null}
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <label className="flex-1 cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      if (file) {
-                        setTempImageFile(file);
-                        setRemoveImage(false);
-                        setIsDirty(true);
-                      }
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
-                  <div className="w-full border border-gray-300 rounded-lg px-3 py-2 text-center bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold transition-colors">
-                    {removeImage ? "Сурет қосу" : tempImageFile || taskData.image_filename ? "Суретті ауыстыру" : "Сурет қосу"}
-                  </div>
-                </label>
-                {removeImage ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setRemoveImage(false);
-                      setIsDirty(true);
-                    }}
-                    className="shrink-0 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors cursor-pointer select-none"
-                  >
-                    Жоюды болдырмау
-                  </button>
-                ) : (tempImageFile || taskData.image_filename) ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setTempImageFile(null);
-                      setRemoveImage(true);
-                      setIsDirty(true);
-                    }}
-                    className="shrink-0 px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors cursor-pointer select-none"
-                  >
-                    Жою
-                  </button>
-                ) : null}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                💡 Суретті Ctrl+V арқылы да қоюға болады
-              </div>
-            </div>
-          )}
+          <TaskImageUpload
+            isEditing={isEditing}
+            tempImagePreview={tempImagePreview}
+            taskData={taskData}
+            removeImage={removeImage}
+            tempImageFile={tempImageFile}
+            setTempImageFile={setTempImageFile}
+            setRemoveImage={setRemoveImage}
+            setIsDirty={setIsDirty}
+          />
 
           {/* Тапсырмаға арналған басқару элементтері */}
-          {isMcqQuestionType(qt) && (
-            <div className="grid grid-cols-1 gap-2">
-              {(isEditing
-                ? MCQ_OPTION_LABELS
-                : (taskData.options || []).map((option: any) => option.label).filter(Boolean)
-              ).map((label: string) => {
-                const option = taskData.options?.find((o: any) => o.label === label);
-                const optionText = option?.text || "";
-                const correctLabels = parseMcqAnswerLabels(String(taskData.answer || ""));
-                const isCorrect = correctLabels.includes(label as any);
-                const isEditingOption = isEditing && editingField === `option-${label}`;
-                const toggleCorrectAnswer = () => {
-                  const current = String(taskData.answer || "");
-                  if (isCorrect && correctLabels.length <= 1) return;
-                  updateTempTask({
-                    answer: toggleMcqAnswerLabel(current, label as any, MAX_MCQ_CORRECT_OPTIONS),
-                  });
-                };
-
-                return (
-                  <div key={label}>
-                    {isEditingOption ? (
-                      <div className="border-2 border-purple-500 rounded-lg p-3 bg-white">
-                        <div className="font-bold text-gray-900 mb-2">{label}</div>
-                        <MathFieldInput
-                          value={optionText}
-                          onChange={(value) => {
-                            const newOptions = [...(taskData.options || [])];
-                            const existingIndex = newOptions.findIndex((o: any) => o.label === label);
-                            if (existingIndex >= 0) {
-                              newOptions[existingIndex] = { label, text: value };
-                            } else {
-                              newOptions.push({ label, text: value });
-                            }
-                            updateTempTask({ options: newOptions });
-                          }}
-                          onBlur={() => setEditingField(null)}
-                          className="w-full border border-gray-300 rounded px-2 py-1 mb-2"
-                          placeholder="Жауап нұсқасы"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => {
-                            toggleCorrectAnswer();
-                            setEditingField(null);
-                          }}
-                          className={`w-full text-xs px-2 py-1 rounded ${
-                            isCorrect
-                              ? "bg-purple-600 text-white"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                          }`}
-                        >
-                          {isCorrect ? "✓ Дұрыс жауап" : "Дұрыс қылу"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (isEditing) {
-                            if (editingField === null) {
-                              setEditingField(`option-${label}`);
-                            } else {
-                              toggleCorrectAnswer();
-                            }
-                          }
-                        }}
-                        className={`text-left border-2 rounded-lg p-3 transition-colors w-full ${
-                          isCorrect
-                            ? "bg-purple-600 border-purple-700 text-white"
-                            : isEditing
-                            ? "border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer"
-                            : "border-gray-200"
-                        }`}
-                      >
-                        <div className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 ${isCorrect ? "text-white" : "text-gray-700"}`}>
-                          <span className={`font-bold shrink-0 ${isCorrect ? "text-white" : "text-gray-900"}`}>
-                            {label}
-                          </span>
-                          <div className="min-w-0 break-words whitespace-normal">
-                            {optionText ? (
-                              <MathRender latex={optionText} inline className={isCorrect ? "text-white" : "text-gray-700"} />
-                            ) : (
-                              isEditing ? "Өңдеу үшін басыңыз" : ""
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <McqAnswerFields
+            qt={qt}
+            isEditing={isEditing}
+            taskData={taskData}
+            editingField={editingField}
+            updateTempTask={updateTempTask}
+            setEditingField={setEditingField}
+          />
 
           {qt === "input" && (
             <div>
@@ -777,9 +461,8 @@ export default function VisualTaskEditor({
                       setEditingField("answer");
                     }
                   }}
-                  className={`flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400 ${
-                    isEditing ? "cursor-pointer hover:bg-gray-100" : ""
-                  }`}
+                  className={`flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400 ${isEditing ? "cursor-pointer hover:bg-gray-100" : ""
+                    }`}
                 >
                   {taskData.answer ? (
                     <MathRender latex={taskData.answer} inline />
@@ -810,17 +493,16 @@ export default function VisualTaskEditor({
                         updateTempTask({ answer: value });
                       }
                     }}
-                    className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${
-                      isSelected
-                        ? "bg-purple-600 text-white"
-                        : isEditing
+                    className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${isSelected
+                      ? "bg-purple-600 text-white"
+                      : isEditing
                         ? value === "true"
                           ? "bg-green-600 hover:bg-green-700 text-white"
                           : "bg-red-600 hover:bg-red-700 text-white"
                         : value === "true"
-                        ? "bg-green-600 text-white"
-                        : "bg-red-600 text-white"
-                    }`}
+                          ? "bg-green-600 text-white"
+                          : "bg-red-600 text-white"
+                      }`}
                   >
                     {value === "true" ? "Дұрыс" : "Жалған"}
                   </button>
@@ -829,144 +511,14 @@ export default function VisualTaskEditor({
             </div>
           )}
 
-          {qt === "select" && (
-            <div className="space-y-3">
-              {/* Options for select type */}
-              <div className="mb-4">
-                <div className="text-sm font-semibold text-gray-700 mb-2">Жауап нұсқалары:</div>
-                <div className="grid grid-cols-1 gap-2">
-                  {["A", "B", "C", "D"].map((label) => {
-                    const option = taskData.options?.find((o: any) => o.label === label);
-                    const optionText = option?.text || "";
-                    const isEditingOption = isEditing && editingField === `select-option-${label}`;
-
-                    return (
-                      <div key={label}>
-                        {isEditingOption ? (
-                          <MathFieldInput
-                            value={optionText}
-                            onChange={(value) => {
-                              const newOptions = [...(taskData.options || [])];
-                              const existingIndex = newOptions.findIndex((o: any) => o.label === label);
-                              if (existingIndex >= 0) {
-                                newOptions[existingIndex] = { label, text: value };
-                              } else {
-                                newOptions.push({ label, text: value });
-                              }
-                              updateTempTask({ options: newOptions });
-                            }}
-                            onBlur={() => setEditingField(null)}
-                            className="w-full border-2 border-purple-500 rounded px-2 py-1"
-                            placeholder={`Нұсқа ${label}`}
-                            autoFocus
-                          />
-                        ) : (
-                          <div
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingField(`select-option-${label}`);
-                              }
-                            }}
-                            className={`border rounded px-2 py-1 text-sm ${
-                              isEditing ? "cursor-pointer hover:bg-gray-100 border-gray-300" : "border-gray-200"
-                            }`}
-                          >
-                            <span className="font-bold">{label}:</span> {optionText ? (
-                              <MathRender latex={optionText} inline />
-                            ) : (
-                              isEditing ? "Өңдеу үшін басыңыз" : ""
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Subquestions */}
-              {[0, 1].map((idx) => {
-                const subquestion = taskData.subquestions?.[idx];
-                const subText = subquestion?.text || "";
-                const correctAnswer = subquestion?.correct || "A";
-                const isEditingSub = isEditing && editingField === `subquestion-${idx}`;
-
-                return (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className="w-6 text-gray-700 font-semibold">{idx === 0 ? "A)" : "B)"}</div>
-                    <div className="flex-1">
-                      {isEditingSub ? (
-                        <div className="space-y-2">
-                          <MathFieldInput
-                            value={subText}
-                            onChange={(value) => {
-                              const newSubquestions = [...(taskData.subquestions || [])];
-                              newSubquestions[idx] = { text: value, correct: correctAnswer };
-                              updateTempTask({ subquestions: newSubquestions });
-                            }}
-                            onBlur={() => setEditingField(null)}
-                            className="w-full border-2 border-purple-500 rounded-lg px-3 py-2"
-                            placeholder="Қосымша сұрақ мәтіні"
-                            autoFocus
-                          />
-                          <select
-                            value={correctAnswer}
-                            onChange={(e) => {
-                              const newSubquestions = [...(taskData.subquestions || [])];
-                              newSubquestions[idx] = { text: subText, correct: e.target.value };
-                              updateTempTask({ subquestions: newSubquestions });
-                            }}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                          >
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <div>
-                          <div
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingField(`subquestion-${idx}`);
-                              }
-                            }}
-                            className={`text-gray-900 mb-2 ${
-                              isEditing ? "cursor-pointer hover:bg-gray-100 rounded p-2" : ""
-                            }`}
-                          >
-                            {subText ? (
-                              <MathRender latex={subText} inline />
-                            ) : (
-                              isEditing ? "Қосымша сұрақты өңдеу үшін басыңыз" : ""
-                            )}
-                          </div>
-                          <select
-                            value={correctAnswer}
-                            onChange={(e) => {
-                              if (isEditing) {
-                                const newSubquestions = [...(taskData.subquestions || [])];
-                                newSubquestions[idx] = { text: subText, correct: e.target.value };
-                                updateTempTask({ subquestions: newSubquestions });
-                              }
-                            }}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 bg-white"
-                            disabled={!isEditing}
-                          >
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <MatchingAnswerFields
+            qt={qt}
+            taskData={taskData}
+            isEditing={isEditing}
+            editingField={editingField}
+            updateTempTask={updateTempTask}
+            setEditingField={setEditingField}
+          />
         </div>
 
         {/* Action buttons */}
@@ -1010,11 +562,10 @@ export default function VisualTaskEditor({
                     setCurrentTaskIndex(idx);
                   }
                 }}
-                className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${
-                  isCurrent
-                    ? "bg-purple-600 border-purple-700 text-white"
-                    : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400"
-                }`}
+                className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${isCurrent
+                  ? "bg-purple-600 border-purple-700 text-white"
+                  : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400"
+                  }`}
               >
                 {idx + 1}
               </button>
@@ -1128,11 +679,10 @@ export default function VisualTaskEditor({
                       key={mode.value}
                       type="button"
                       onClick={() => updateTempTask({ answer_mode: mode.value as "choices" | "written" })}
-                      className={`rounded-xl border p-3 text-left transition-colors ${
-                        isActive
-                          ? "border-purple-600 bg-purple-50 ring-2 ring-purple-200"
-                          : "border-gray-300 bg-white hover:border-purple-300"
-                      }`}
+                      className={`rounded-xl border p-3 text-left transition-colors ${isActive
+                        ? "border-purple-600 bg-purple-50 ring-2 ring-purple-200"
+                        : "border-gray-300 bg-white hover:border-purple-300"
+                        }`}
                     >
                       <div className="font-semibold text-gray-900">{mode.title}</div>
                       <div className="mt-1 text-xs text-gray-600">{mode.hint}</div>
@@ -1156,7 +706,4 @@ export default function VisualTaskEditor({
     </div>
   );
 }
-
-
-
 

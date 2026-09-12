@@ -1,6 +1,5 @@
 // Barrel re-exports: the former monolithic api.ts is split into lib/api/* domain modules.
 export * from "./api/client";
-export * from "./api/tasks";
 export * from "./api/user";
 export * from "./api/friends";
 export * from "./api/modules";

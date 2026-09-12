@@ -1,14 +1,11 @@
-﻿"use client";
+"use client";
+import BankPickerDialog from "./_components/BankPickerDialog";
+import CurrentSlotControls from "./_components/CurrentSlotControls";
+import InlineTaskDialog from "./_components/InlineTaskDialog";
+import { SlotForm, buildSlotPayload, buildSlotPreviewTask, emptySlotForm, getPlacementImageFilename, getPlacementQuestionType, getPlacementText, getPlacementTextScale, isSelectAnswerComplete } from "./_components/model";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
-import { useSession } from "next-auth/react";
-import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
-import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
-import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
   apiPath,
@@ -16,225 +13,18 @@ import {
   createTrialTest,
   deleteTrialTest,
   getAdminBankTasks,
-  getAdminTrialTests,
   getAdminTrialTestTasks,
+  getAdminTrialTests,
   updateTrialTest,
   upsertTrialTestSlot,
 } from "@/lib/api";
-import {
-  MAX_MCQ_CORRECT_OPTIONS,
-  MCQ_OPTION_LABELS,
-  McqOptionLabel,
-  isMcqQuestionType,
-  parseMcqAnswerLabels,
-  serializeMcqAnswerLabels,
-  toggleMcqAnswerLabel,
-} from "@/lib/question-options";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
-import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
+import { getTaskTextScaleClass } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
-import { AnswerMode, BankDifficulty, BankPlacementTask, BankTask, LessonTask, QuestionType, TaskTextScale, TrialTest } from "@/types";
-
-type SlotForm = {
-  text: string;
-  question_type: QuestionType;
-  answer_mode: AnswerMode;
-  text_scale: TaskTextScale;
-  answer: string;
-  acceptedAnswers: string[];
-  difficulty: BankDifficulty;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  optionE: string;
-  optionF: string;
-  optionG: string;
-  optionH: string;
-  correctOptions: McqOptionLabel[];
-  correctTf: "true" | "false";
-  subQuestion1: string;
-  subQuestion2: string;
-  correctSub1: "A" | "B" | "C" | "D";
-  correctSub2: "A" | "B" | "C" | "D";
-  topicsRaw: string;
-};
-
-const emptySlotForm = (): SlotForm => ({
-  text: "",
-  question_type: "mcq",
-  answer_mode: "choices",
-  text_scale: "md",
-  answer: "",
-  acceptedAnswers: [],
-  difficulty: "B",
-  optionA: "",
-  optionB: "",
-  optionC: "",
-  optionD: "",
-  optionE: "",
-  optionF: "",
-  optionG: "",
-  optionH: "",
-  correctOptions: ["A"],
-  correctTf: "true",
-  subQuestion1: "",
-  subQuestion2: "",
-  correctSub1: "A",
-  correctSub2: "A",
-  topicsRaw: "",
-});
-
-const parseTopics = (raw: string): string[] =>
-  raw
-    .split(",")
-    .map((s) => s.trim().replace(/\s+/g, " "))
-    .filter(Boolean)
-    .slice(0, 10);
-
-const getSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel): string => {
-  switch (label) {
-    case "A":
-      return form.optionA;
-    case "B":
-      return form.optionB;
-    case "C":
-      return form.optionC;
-    case "D":
-      return form.optionD;
-    case "E":
-      return form.optionE;
-    case "F":
-      return form.optionF;
-    case "G":
-      return form.optionG;
-    case "H":
-      return form.optionH;
-  }
-};
-
-const setSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel, value: string): SlotForm => {
-  switch (label) {
-    case "A":
-      return { ...form, optionA: value };
-    case "B":
-      return { ...form, optionB: value };
-    case "C":
-      return { ...form, optionC: value };
-    case "D":
-      return { ...form, optionD: value };
-    case "E":
-      return { ...form, optionE: value };
-    case "F":
-      return { ...form, optionF: value };
-    case "G":
-      return { ...form, optionG: value };
-    case "H":
-      return { ...form, optionH: value };
-  }
-};
-
-const buildMcqOptionsFromSlotForm = (form: SlotForm): Array<{ label: string; text: string }> => {
-  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
-    const value = getSlotFormOptionValue(form, label).trim();
-    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
-  }, 3);
-  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
-    label,
-    text: getSlotFormOptionValue(form, label),
-  }));
-};
-
-const buildSlotPayload = (form: SlotForm) => {
-  const payload: Record<string, any> = {
-    text: form.text,
-    question_type: form.question_type,
-    answer_mode: form.answer_mode,
-    accepted_answers: normalizeAcceptedAnswers(form.acceptedAnswers),
-    text_scale: form.text_scale,
-    bank_difficulty: form.difficulty,
-    bank_topics: parseTopics(form.topicsRaw),
-  };
-
-  if (form.question_type === "input") {
-    payload.answer = form.answer;
-    return payload;
-  }
-  if (form.question_type === "tf") {
-    payload.answer = form.correctTf;
-    return payload;
-  }
-  if (isMcqQuestionType(form.question_type)) {
-    payload.answer = serializeMcqAnswerLabels(form.correctOptions);
-    payload.options = buildMcqOptionsFromSlotForm(form);
-    return payload;
-  }
-  payload.answer = JSON.stringify([form.correctSub1, form.correctSub2]);
-  payload.options = [
-    { label: "A", text: form.optionA },
-    { label: "B", text: form.optionB },
-    { label: "C", text: form.optionC },
-    { label: "D", text: form.optionD },
-  ];
-  payload.subquestions = [
-    { text: form.subQuestion1, correct: form.correctSub1 },
-    { text: form.subQuestion2, correct: form.correctSub2 },
-  ];
-  return payload;
-};
-
-const buildSlotPreviewTask = (form: SlotForm): LessonTask => ({
-  id: -1,
-  sort_order: 0,
-  ...(buildSlotPayload(form) as Omit<LessonTask, "id" | "sort_order">),
-});
-
-const getPlacementQuestionType = (placement: BankPlacementTask | null): QuestionType => {
-  const raw = placement?.question_type || placement?.bank_task?.question_type || "input";
-  if (raw === "mcq" || raw === "mcq6" || raw === "input" || raw === "tf" || raw === "select") {
-    return raw;
-  }
-  return "input";
-};
-
-const getPlacementOptions = (placement: BankPlacementTask | null) => {
-  const options = placement?.options || placement?.bank_task?.options;
-  return Array.isArray(options) ? options : [];
-};
-
-const getPlacementSubquestions = (placement: BankPlacementTask | null) => {
-  const subquestions = placement?.subquestions || placement?.bank_task?.subquestions;
-  return Array.isArray(subquestions) ? subquestions : [];
-};
-
-const getPlacementText = (placement: BankPlacementTask | null): string => {
-  return placement?.text || placement?.bank_task?.text || "";
-};
-
-const getPlacementTextScale = (placement: BankPlacementTask | null): TaskTextScale =>
-  normalizeTaskTextScale(placement?.text_scale || placement?.bank_task?.text_scale);
-
-const getPlacementImageFilename = (placement: BankPlacementTask | null): string | null => {
-  return placement?.image_filename || placement?.bank_task?.image_filename || null;
-};
-
-const parseSelectAnswer = (value?: string): [string, string] => {
-  if (!value) return ["", ""];
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) {
-      return [String(parsed[0] || ""), String(parsed[1] || "")];
-    }
-  } catch {
-    // ignore parse errors
-  }
-  return ["", ""];
-};
-
-const isSelectAnswerComplete = (value?: string): boolean => {
-  const [a, b] = parseSelectAnswer(value);
-  return a.trim().length > 0 && b.trim().length > 0;
-};
+import { BankDifficulty, BankPlacementTask, BankTask, TrialTest } from "@/types";
+import { useSession } from "next-auth/react";
+import Image from "next/image";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export default function AdminTrialTestsPage() {
   const { data: session, status } = useSession();
@@ -620,136 +410,6 @@ export default function AdminTrialTestsPage() {
     return value.trim().length > 0;
   };
 
-  const renderCurrentSlotControls = () => {
-    if (!currentPlacement) return null;
-
-    const questionType = getPlacementQuestionType(currentPlacement);
-    const options = getPlacementOptions(currentPlacement);
-    const subquestions = getPlacementSubquestions(currentPlacement);
-    const value = previewAnswers[currentSlotIndex] || "";
-
-    if (questionType === "tf") {
-      const isTrue = value === "true" || value === "1";
-      const isFalse = value === "false" || value === "0";
-      return (
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setPreviewAnswer(currentSlotIndex, "true")}
-            className={`font-semibold py-2 px-3 rounded-lg border transition-colors ${
-              isTrue
-                ? "bg-purple-600 border-purple-700 text-white"
-                : "bg-green-600 border-green-700 text-white hover:bg-green-700"
-            }`}
-          >
-            Шын
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreviewAnswer(currentSlotIndex, "false")}
-            className={`font-semibold py-2 px-3 rounded-lg border transition-colors ${
-              isFalse
-                ? "bg-purple-600 border-purple-700 text-white"
-                : "bg-red-600 border-red-700 text-white hover:bg-red-700"
-            }`}
-          >
-            Жалған
-          </button>
-        </div>
-      );
-    }
-
-    if (questionType === "select") {
-      const selected = parseSelectAnswer(value);
-      const subLabels = ["A", "B"];
-      return (
-        <div className="space-y-3">
-          {[0, 1].map((subIndex) => {
-            const subText = subquestions[subIndex]?.text || `${subIndex + 1}-қосымша сұрақ`;
-            return (
-              <div key={`slot-${currentSlotIndex}-sub-${subIndex}`} className="space-y-2">
-                <div className="font-semibold text-gray-800">{subLabels[subIndex]})</div>
-                <div className="text-gray-900">
-                  <MathRender latex={subText} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {options.map((option, optionIndex) => {
-                    const label = String(option?.label || "");
-                    const isSelected = selected[subIndex] === label;
-                    return (
-                      <button
-                        key={`slot-${currentSlotIndex}-sub-${subIndex}-option-${optionIndex}`}
-                        type="button"
-                        onClick={() => {
-                          const next = [...selected] as [string, string];
-                          next[subIndex] = label;
-                          setPreviewAnswer(currentSlotIndex, JSON.stringify(next));
-                        }}
-                        className={`text-left border rounded-lg p-2 transition-colors ${
-                          isSelected
-                            ? "bg-purple-600 border-purple-700 text-white"
-                            : "bg-white border-gray-300 text-gray-900 hover:border-purple-300 hover:bg-purple-50"
-                        }`}
-                      >
-                        <div className="font-bold">{label || `#${optionIndex + 1}`}</div>
-                        <div className={isSelected ? "text-white" : "text-gray-700"}>
-                          <MathRender inline latex={String(option?.text || "")} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-
-    if (questionType === "mcq" || questionType === "mcq6") {
-      const selectedLabels = parseMcqAnswerLabels(value);
-      return (
-        <div className="grid grid-cols-1 gap-2">
-          {options.map((option, optionIndex) => {
-            const label = String(option?.label || "");
-            const isSelected = selectedLabels.includes(label as McqOptionLabel);
-            return (
-              <button
-                key={`slot-${currentSlotIndex}-option-${optionIndex}`}
-                type="button"
-                onClick={() =>
-                  setPreviewAnswer(
-                    currentSlotIndex,
-                    toggleMcqAnswerLabel(value, label as McqOptionLabel, MAX_MCQ_CORRECT_OPTIONS)
-                  )
-                }
-                className={`text-left border rounded-lg p-3 transition-colors ${
-                  isSelected
-                    ? "bg-purple-600 border-purple-700 text-white"
-                    : "border-gray-200 bg-white text-gray-900 hover:border-purple-300 hover:bg-purple-50"
-                }`}
-              >
-                <div className={`font-bold ${isSelected ? "text-white" : "text-gray-900"}`}>{label}</div>
-                <div className={isSelected ? "text-white" : "text-gray-700"}>
-                  <MathRender inline latex={String(option?.text || "")} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      );
-    }
-
-    return (
-      <input
-        value={value}
-        onChange={(e) => setPreviewAnswer(currentSlotIndex, e.target.value)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400"
-        placeholder="Жауапты енгізіңіз"
-      />
-    );
-  };
-
   if (status === "loading" || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -878,9 +538,8 @@ export default function AdminTrialTestsPage() {
                     tests.map((test) => (
                       <div
                         key={test.id}
-                        className={`rounded-lg border p-2 ${
-                          selectedTestId === test.id ? "border-purple-500 bg-purple-50" : "border-gray-200 bg-white"
-                        }`}
+                        className={`rounded-lg border p-2 ${selectedTestId === test.id ? "border-purple-500 bg-purple-50" : "border-gray-200 bg-white"
+                          }`}
                       >
                         <button className="w-full text-left" onClick={() => setSelectedTestId(test.id)}>
                           <div className="font-semibold text-sm">{test.title}</div>
@@ -939,13 +598,12 @@ export default function AdminTrialTestsPage() {
                             key={`slot-nav-${slotIndex}`}
                             type="button"
                             onClick={() => setCurrentSlotIndex(slotIndex)}
-                            className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${
-                              isCurrent
-                                ? "bg-purple-600 border-purple-700 text-white"
-                                : isAnswered
+                            className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${isCurrent
+                              ? "bg-purple-600 border-purple-700 text-white"
+                              : isAnswered
                                 ? "bg-green-100 border-green-300 text-green-700"
                                 : "bg-white border-gray-300 text-gray-700 hover:border-purple-400"
-                            }`}
+                              }`}
                           >
                             {slotIndex}
                           </button>
@@ -1025,7 +683,12 @@ export default function AdminTrialTestsPage() {
                             />
                           )}
 
-                          {renderCurrentSlotControls()}
+                          <CurrentSlotControls
+                            currentPlacement={currentPlacement}
+                            previewAnswers={previewAnswers}
+                            currentSlotIndex={currentSlotIndex}
+                            setPreviewAnswer={setPreviewAnswer}
+                          />
                         </div>
                       ) : (
                         <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4">
@@ -1045,251 +708,40 @@ export default function AdminTrialTestsPage() {
         </div>
       </main>
 
-      {showBankPicker && selectedTestId && activeSlot && (
-        <div className="fixed inset-0 bg-black/50 z-50 p-4 overflow-auto">
-          <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 border border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">БАНК • ұяшық {activeSlot}</h3>
-              <button
-                className="text-sm"
-                onClick={() => {
-                  setShowBankPicker(false);
-                  setSelectedBankTaskIds([]);
-                }}
-              >
-                Жабу
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <input
-                className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Іздеу"
-                value={bankSearch}
-                onChange={(e) => setBankSearch(e.target.value)}
-              />
-              <select
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                value={bankDifficulty}
-                onChange={(e) => setBankDifficulty(e.target.value as BankDifficulty | "")}
-              >
-                <option value="">Барлығы</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </div>
-            <button
-              className="mb-3 text-sm border border-gray-300 rounded px-3 py-1 disabled:opacity-50"
-              onClick={() => void fetchBank()}
-              disabled={bankLoading}
-            >
-              {bankLoading ? "Ізделуде..." : "Іздеу"}
-            </button>
-            <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm text-gray-700">
-                  Таңдалды: <span className="font-semibold">{selectedBankTaskIds.length}</span>
-                  <span className="ml-2 text-xs text-gray-500">Көрсетілген: {bankItems.length}/{bankTotal}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onSelectAllBankTasks()}
-                    disabled={bankSelectAllLoading || bankLoading || bankTotal === 0}
-                    className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:opacity-50"
-                  >
-                    {bankSelectAllLoading ? "Жүктелуде..." : "Барлығын таңдау"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBankTaskIds([])}
-                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
-                    className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-50"
-                  >
-                    Таңдауды тазалау
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onAssignSelectedBankTasks()}
-                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
-                    className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:bg-gray-300"
-                  >
-                    {bankAssigningSelected ? "Қосылуда..." : "Таңдалғанды қосу"}
-                  </button>
-                </div>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                Барлығын таңдау ағымдағы іздеу/деңгей сүзгісіне сай барлық банк тапсырмаларын алады. Тестте бұрыннан бар тапсырмалар қайталанбайды.
-              </div>
-            </div>
-            <div className="space-y-2 max-h-[420px] overflow-auto">
-              {bankItems.map((task) => {
-                const alreadyAssigned = assignedBankTaskIds.has(task.id);
-                return (
-                  <div key={task.id} className="rounded-lg border border-gray-200 p-2">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <div className="text-xs text-gray-500">#{task.id}</div>
-                      <label className={`flex items-center gap-2 text-xs ${alreadyAssigned ? "text-gray-400" : "text-gray-700"}`}>
-                        <input
-                          type="checkbox"
-                          disabled={alreadyAssigned}
-                          checked={!alreadyAssigned && selectedBankTaskIds.includes(task.id)}
-                          onChange={() => toggleBankTaskSelection(task.id)}
-                        />
-                        {alreadyAssigned ? "Тестте бар" : "Таңдау"}
-                      </label>
-                    </div>
-                    <div className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}><MathRender latex={task.text || ""} /></div>
-                    <button
-                      className="text-xs bg-green-600 text-white rounded px-2 py-1"
-                      onClick={() => void onAssignBankTask(task.id)}
-                    >
-                      Осы ұяшыққа
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      <BankPickerDialog
+        showBankPicker={showBankPicker}
+        selectedTestId={selectedTestId}
+        activeSlot={activeSlot}
+        setShowBankPicker={setShowBankPicker}
+        setSelectedBankTaskIds={setSelectedBankTaskIds}
+        bankSearch={bankSearch}
+        setBankSearch={setBankSearch}
+        bankDifficulty={bankDifficulty}
+        setBankDifficulty={setBankDifficulty}
+        fetchBank={fetchBank}
+        bankLoading={bankLoading}
+        selectedBankTaskIds={selectedBankTaskIds}
+        bankItems={bankItems}
+        bankTotal={bankTotal}
+        onSelectAllBankTasks={onSelectAllBankTasks}
+        bankSelectAllLoading={bankSelectAllLoading}
+        bankAssigningSelected={bankAssigningSelected}
+        onAssignSelectedBankTasks={onAssignSelectedBankTasks}
+        assignedBankTaskIds={assignedBankTaskIds}
+        toggleBankTaskSelection={toggleBankTaskSelection}
+        onAssignBankTask={onAssignBankTask}
+      />
 
-      {showInlineCreate && selectedTestId && activeSlot && (
-        <div className="fixed inset-0 bg-black/50 z-50 p-4 overflow-auto">
-          <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 border border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">Жаңа тапсырма • ұяшық {activeSlot}</h3>
-              <button className="text-sm" onClick={() => setShowInlineCreate(false)}>Жабу</button>
-            </div>
-            <form onSubmit={onSaveInlineSlot} className="space-y-3">
-              <MathFieldInput value={slotForm.text} onChange={(v) => setSlotForm((p) => ({ ...p, text: v }))} placeholder="Тапсырма мәтіні" />
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-gray-700">Мәтін өлшемі</label>
-                <div className="flex gap-2">
-                  {[
-                    { label: "S", value: "sm" },
-                    { label: "M", value: "md" },
-                    { label: "L", value: "lg" },
-                  ].map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => setSlotForm((p) => ({ ...p, text_scale: item.value as TaskTextScale }))}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
-                        slotForm.text_scale === item.value
-                          ? "border-purple-600 bg-purple-600 text-white"
-                          : "border-gray-300 bg-white text-gray-700"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
-                  const questionType = e.target.value as QuestionType;
-                  setSlotForm((p) => ({ ...p, question_type: questionType, answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
-                }}>
-                  <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
-                </select>
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
-                  <option value="A">A</option><option value="B">B</option><option value="C">C</option>
-                </select>
-                <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Тақырыптар (үтір арқылы)" value={slotForm.topicsRaw} onChange={(e) => setSlotForm((p) => ({ ...p, topicsRaw: e.target.value }))} />
-              </div>
-
-              {supportsAnswerModeSwitch(slotForm.question_type) && (
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-gray-700">Оқушының жауап беру тәсілі</label>
-                  <select
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    value={slotForm.answer_mode}
-                    onChange={(e) => setSlotForm((p) => ({ ...p, answer_mode: e.target.value as AnswerMode }))}
-                  >
-                    <option value="choices">Дайын нұсқаларды таңдайды</option>
-                    <option value="written">Жауапты өзі жазады</option>
-                  </select>
-                </div>
-              )}
-
-              {(isMcqQuestionType(slotForm.question_type) || slotForm.question_type === "select") && (
-                <div className="grid grid-cols-2 gap-2">
-                  {(isMcqQuestionType(slotForm.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
-                    <MathFieldInput
-                      key={label}
-                      value={getSlotFormOptionValue(slotForm, label)}
-                      onChange={(v) => setSlotForm((p) => setSlotFormOptionValue(p, label, v))}
-                      placeholder={label}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {slotForm.question_type === "input" && <MathFieldInput value={slotForm.answer} onChange={(v) => setSlotForm((p) => ({ ...p, answer: v }))} placeholder="Дұрыс жауап" />}
-              {slotForm.question_type === "input" && (
-                <AcceptedAnswersEditor
-                  value={slotForm.acceptedAnswers}
-                  onChange={(acceptedAnswers) => setSlotForm((previous) => ({ ...previous, acceptedAnswers }))}
-                />
-              )}
-              {slotForm.question_type === "tf" && (
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.correctTf} onChange={(e) => setSlotForm((p) => ({ ...p, correctTf: e.target.value as "true" | "false" }))}>
-                  <option value="true">Шын</option><option value="false">Жалған</option>
-                </select>
-              )}
-              {isMcqQuestionType(slotForm.question_type) && (
-                <div className="space-y-1">
-                  <div className="flex flex-wrap gap-2">
-                    {MCQ_OPTION_LABELS.map((label) => {
-                      const isSelected = slotForm.correctOptions.includes(label);
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() =>
-                            setSlotForm((prev) => {
-                              if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) {
-                                return prev;
-                              }
-                              return {
-                                ...prev,
-                                correctOptions: parseMcqAnswerLabels(
-                                  toggleMcqAnswerLabel(
-                                    serializeMcqAnswerLabels(prev.correctOptions),
-                                    label,
-                                    MAX_MCQ_CORRECT_OPTIONS
-                                  )
-                                ),
-                              };
-                            })
-                          }
-                          className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-bold ${
-                            isSelected
-                              ? "border-purple-700 bg-purple-600 text-white"
-                              : "border-gray-300 bg-white text-gray-800 hover:border-purple-300 hover:bg-purple-50"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</div>
-                </div>
-              )}
-              {slotForm.question_type === "select" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <MathFieldInput value={slotForm.subQuestion1} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion1: v }))} placeholder="1-қосымша сұрақ" />
-                  <MathFieldInput value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
-                </div>
-              )}
-              <StudentTaskPreview task={slotPreviewTask} />
-              <button className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm">Сақтау</button>
-            </form>
-          </div>
-        </div>
-      )}
+      <InlineTaskDialog
+        showInlineCreate={showInlineCreate}
+        selectedTestId={selectedTestId}
+        activeSlot={activeSlot}
+        setShowInlineCreate={setShowInlineCreate}
+        onSaveInlineSlot={onSaveInlineSlot}
+        slotForm={slotForm}
+        setSlotForm={setSlotForm}
+        slotPreviewTask={slotPreviewTask}
+      />
     </div>
   );
 }

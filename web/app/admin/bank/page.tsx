@@ -1,340 +1,45 @@
-﻿"use client";
+"use client";
+import BankTaskForm from "./_components/BankTaskForm";
+import DuplicateDialog from "./_components/DuplicateDialog";
+import HistoryDialog from "./_components/HistoryDialog";
+import ImportPreviewDialog from "./_components/ImportPreviewDialog";
+import JsonEditDialog from "./_components/JsonEditDialog";
+import SnapshotDialog from "./_components/SnapshotDialog";
+import UsageDialog from "./_components/UsageDialog";
+import { createImportActions } from "./_components/createImportActions";
+import { createVersionActions } from "./_components/createVersionActions";
+import { BankFormState, ImportPreviewState, JsonEditState, PendingDedupState, SnapshotViewState, buildBankFormPreviewTask, buildMcqOptionsFromBankForm, createEmptyForm, formatDifficultyLabel, parseTaskToForm } from "./_components/model";
 
 import { useSession } from "next-auth/react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
-import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
+import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import UnrecognizedAnswersPanel from "@/components/admin/UnrecognizedAnswersPanel";
-import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
   createAdminBankTask,
   deleteAdminBankTask,
-  deleteAdminBankTaskVersion,
-  exportAdminBankTasksJson,
   getAdminBankTasks,
-  getAdminBankTaskUsage,
-  getAdminBankTaskVersion,
-  getAdminBankTaskVersions,
   getAdminBankTopics,
-  importAdminBankTasks,
   permanentlyDeleteAdminBankTask,
-  rollbackAdminBankTask,
   restoreAdminBankTask,
-  updateAdminBankTask,
+  updateAdminBankTask
 } from "@/lib/api";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
-  MCQ_OPTION_LABELS,
-  McqOptionLabel,
   isMcqQuestionType,
-  parseMcqAnswerLabels,
-  serializeMcqAnswerLabels,
-  toggleMcqAnswerLabel,
+  serializeMcqAnswerLabels
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
-import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import {
-  AnswerMode,
   BankDifficulty,
-  BankImportPreviewResponse,
   BankTask,
-  BankTaskSimilarCandidate,
   BankTaskUsageItem,
-  BankTaskVersionItem,
-  LessonTask,
-  QuestionType,
-  TaskTextScale,
+  BankTaskVersionItem
 } from "@/types";
-
-type BankFormState = {
-  text: string;
-  question_type: QuestionType;
-  answer_mode: AnswerMode;
-  text_scale: TaskTextScale;
-  answer: string;
-  acceptedAnswers: string[];
-  difficulty: BankDifficulty;
-  currentVersion: number | null;
-  imageFile: File | null;
-  existingImageFilename: string | null;
-  removeImage: boolean;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  optionE: string;
-  optionF: string;
-  optionG: string;
-  optionH: string;
-  correctOptions: McqOptionLabel[];
-  correctTf: "true" | "false";
-  subQuestion1: string;
-  subQuestion2: string;
-  correctSub1: "A" | "B" | "C" | "D";
-  correctSub2: "A" | "B" | "C" | "D";
-  topics: string[];
-};
-
-type PendingDedupState = {
-  similarTasks: BankTaskSimilarCandidate[];
-};
-
-type ImportPreviewState = {
-  payload: Record<string, any> | Array<Record<string, any>>;
-  preview: BankImportPreviewResponse;
-};
-
-type SnapshotViewState = {
-  taskId: number;
-  versionNo: number;
-  snapshot: any;
-};
-
-type JsonEditState = {
-  task: BankTask;
-  versionNo: number;
-  value: string;
-  error: string | null;
-  saving: boolean;
-  canForceSave: boolean;
-};
-
-const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "input", "select"];
-const JSON_EDIT_DIFFICULTIES: BankDifficulty[] = ["A", "B", "C"];
-
-const createEmptyForm = (): BankFormState => ({
-  text: "",
-  question_type: "mcq",
-  answer_mode: "choices",
-  text_scale: "md",
-  answer: "",
-  acceptedAnswers: [],
-  difficulty: "B",
-  currentVersion: null,
-  imageFile: null,
-  existingImageFilename: null,
-  removeImage: false,
-  optionA: "",
-  optionB: "",
-  optionC: "",
-  optionD: "",
-  optionE: "",
-  optionF: "",
-  optionG: "",
-  optionH: "",
-  correctOptions: ["A"],
-  correctTf: "true",
-  subQuestion1: "",
-  subQuestion2: "",
-  correctSub1: "A",
-  correctSub2: "A",
-  topics: [],
-});
-
-const parseTaskToForm = (task: BankTask): BankFormState => {
-  const form = createEmptyForm();
-  form.text = task.text || "";
-  form.question_type = (task.question_type || "input") as QuestionType;
-  form.answer_mode = getTaskAnswerMode(task);
-  form.text_scale = normalizeTaskTextScale(task.text_scale);
-  form.answer = task.answer || "";
-  form.acceptedAnswers = normalizeAcceptedAnswers(task.accepted_answers);
-  form.difficulty = (task.difficulty || "B") as BankDifficulty;
-  form.currentVersion = typeof task.current_version === "number" ? task.current_version : null;
-  form.existingImageFilename = task.image_filename || null;
-  form.topics = Array.isArray(task.topics) ? task.topics : [];
-
-  const options = Array.isArray(task.options) ? task.options : [];
-  form.optionA = options.find((o) => o.label === "A")?.text || "";
-  form.optionB = options.find((o) => o.label === "B")?.text || "";
-  form.optionC = options.find((o) => o.label === "C")?.text || "";
-  form.optionD = options.find((o) => o.label === "D")?.text || "";
-  form.optionE = options.find((o) => o.label === "E")?.text || "";
-  form.optionF = options.find((o) => o.label === "F")?.text || "";
-  form.optionG = options.find((o) => o.label === "G")?.text || "";
-  form.optionH = options.find((o) => o.label === "H")?.text || "";
-
-  if (isMcqQuestionType(task.question_type)) {
-    const correctOptions = parseMcqAnswerLabels(task.answer || "A");
-    form.correctOptions = correctOptions.length ? correctOptions : ["A"];
-  }
-  if (task.question_type === "tf") {
-    form.correctTf = task.answer === "false" ? "false" : "true";
-  }
-  const subquestions = Array.isArray(task.subquestions) ? task.subquestions : [];
-  if (task.question_type === "select") {
-    if (subquestions.length >= 2) {
-      form.subQuestion1 = subquestions[0]?.text || "";
-      form.subQuestion2 = subquestions[1]?.text || "";
-      form.correctSub1 = (subquestions[0]?.correct || "A") as BankFormState["correctSub1"];
-      form.correctSub2 = (subquestions[1]?.correct || "A") as BankFormState["correctSub2"];
-    } else {
-      try {
-        const parsed = JSON.parse(task.answer || "[]");
-        if (Array.isArray(parsed) && parsed.length >= 2) {
-          form.correctSub1 = (parsed[0] || "A") as BankFormState["correctSub1"];
-          form.correctSub2 = (parsed[1] || "A") as BankFormState["correctSub2"];
-        }
-      } catch {
-        // no-op
-      }
-    }
-  }
-
-  return form;
-};
-
-const formatDifficultyLabel = (difficulty: BankDifficulty): string => {
-  if (difficulty === "A") return "A (оңай)";
-  if (difficulty === "B") return "B (орташа)";
-  return "C (қиын)";
-};
-
-const normalizeJsonEditQuestionType = (value: unknown): QuestionType => {
-  if (typeof value === "string" && JSON_EDIT_QUESTION_TYPES.includes(value as QuestionType)) {
-    return value as QuestionType;
-  }
-  throw new Error(`question_type жарамсыз: ${String(value || "")}`);
-};
-
-const normalizeJsonEditDifficulty = (value: unknown): BankDifficulty => {
-  if (typeof value === "string" && JSON_EDIT_DIFFICULTIES.includes(value as BankDifficulty)) {
-    return value as BankDifficulty;
-  }
-  return "B";
-};
-
-const normalizeJsonEditStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
-};
-
-const normalizeJsonEditArray = (value: unknown): any[] => {
-  return Array.isArray(value) ? value : [];
-};
-
-const buildJsonEditValue = (snapshot: any, task: BankTask): string => {
-  const payload = {
-    text: snapshot?.text ?? "",
-    answer: snapshot?.answer ?? "",
-    question_type: snapshot?.question_type ?? task.question_type ?? "input",
-    answer_mode: getTaskAnswerMode({
-      question_type: snapshot?.question_type ?? task.question_type,
-      answer_mode: snapshot?.answer_mode ?? task.answer_mode,
-    }),
-    accepted_answers: normalizeAcceptedAnswers(
-      Array.isArray(snapshot?.accepted_answers) ? snapshot.accepted_answers : task.accepted_answers
-    ),
-    text_scale: normalizeTaskTextScale(snapshot?.text_scale ?? task.text_scale),
-    difficulty: snapshot?.difficulty ?? task.difficulty ?? "B",
-    topics: Array.isArray(snapshot?.topics) ? snapshot.topics : [],
-    options: Array.isArray(snapshot?.options) ? snapshot.options : [],
-    subquestions: Array.isArray(snapshot?.subquestions) ? snapshot.subquestions : [],
-    image_filename: snapshot?.image_filename ?? null,
-    solution_filename: snapshot?.solution_filename ?? null,
-  };
-  return JSON.stringify(payload, null, 2);
-};
-
-const getBankFormOptionValue = (form: BankFormState, label: McqOptionLabel): string => {
-  switch (label) {
-    case "A":
-      return form.optionA;
-    case "B":
-      return form.optionB;
-    case "C":
-      return form.optionC;
-    case "D":
-      return form.optionD;
-    case "E":
-      return form.optionE;
-    case "F":
-      return form.optionF;
-    case "G":
-      return form.optionG;
-    case "H":
-      return form.optionH;
-  }
-};
-
-const setBankFormOptionValue = (
-  form: BankFormState,
-  label: McqOptionLabel,
-  value: string
-): BankFormState => {
-  switch (label) {
-    case "A":
-      return { ...form, optionA: value };
-    case "B":
-      return { ...form, optionB: value };
-    case "C":
-      return { ...form, optionC: value };
-    case "D":
-      return { ...form, optionD: value };
-    case "E":
-      return { ...form, optionE: value };
-    case "F":
-      return { ...form, optionF: value };
-    case "G":
-      return { ...form, optionG: value };
-    case "H":
-      return { ...form, optionH: value };
-  }
-};
-
-const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string; text: string }> => {
-  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
-    const value = getBankFormOptionValue(form, label).trim();
-    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
-  }, 3);
-  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
-    label,
-    text: getBankFormOptionValue(form, label),
-  }));
-};
-
-const buildBankFormPreviewTask = (form: BankFormState): LessonTask => {
-  let answer = form.answer;
-  let options: LessonTask["options"] = [];
-  let subquestions: LessonTask["subquestions"] = [];
-
-  if (isMcqQuestionType(form.question_type)) {
-    answer = serializeMcqAnswerLabels(form.correctOptions);
-    options = buildMcqOptionsFromBankForm(form);
-  } else if (form.question_type === "select") {
-    answer = JSON.stringify([form.correctSub1, form.correctSub2]);
-    options = MCQ_OPTION_LABELS.slice(0, 4).map((label) => ({
-      label,
-      text: getBankFormOptionValue(form, label),
-    }));
-    subquestions = [
-      { text: form.subQuestion1, correct: form.correctSub1 },
-      { text: form.subQuestion2, correct: form.correctSub2 },
-    ];
-  } else if (form.question_type === "tf") {
-    answer = form.correctTf;
-  }
-
-  return {
-    id: -1,
-    text: form.text,
-    question_type: form.question_type,
-    answer_mode: form.answer_mode,
-    answer,
-    accepted_answers: normalizeAcceptedAnswers(form.acceptedAnswers),
-    text_scale: form.text_scale,
-    options,
-    subquestions,
-    image_filename: form.existingImageFilename,
-    sort_order: 0,
-  };
-};
 
 export default function AdminBankPage() {
   const { data: session, status } = useSession();
@@ -525,231 +230,18 @@ export default function AdminBankPage() {
     setForm((prev) => ({ ...prev, topics: prev.topics.filter((value) => value !== topic) }));
   };
 
-  const normalizeImportTasksPayload = (
-    value: unknown
-  ): Record<string, any> | Array<Record<string, any>> => {
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        throw new Error("JSON массиві бос болмауы керек");
-      }
-      for (let i = 0; i < value.length; i += 1) {
-        const item = value[i];
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
-          throw new Error(`tasks[${i}] объект болуы керек`);
-        }
-      }
-      return value as Array<Record<string, any>>;
-    }
-    if (value && typeof value === "object") {
-      return value as Record<string, any>;
-    }
-    throw new Error("JSON объект немесе объекттер массиві болуы керек");
-  };
-
-  const runBankImportDryRun = async (payload: Record<string, any> | Array<Record<string, any>>) => {
-    if (!email) return;
-    setImporting(true);
-    setImportResult(null);
-    setError(null);
-    setImportPreviewState(null);
-
-    const { preview, data, error: err, conflict, validation } = await importAdminBankTasks(email, payload, {
-      mode: "dry_run",
-    });
-
-    if (validation?.code === "IMPORT_VALIDATION_FAILED") {
-      setError("JSON импортында валидация қатесі бар");
-      setImportPreviewState({
-        payload,
-        preview: {
-          mode: "dry_run",
-          preview_token: "",
-          expires_at: "",
-          summary: {
-            total_tasks: Array.isArray(payload) ? payload.length : 1,
-            valid_count: 0,
-            invalid_count: validation.errors.length,
-            duplicate_count: 0,
-            can_confirm: false,
-            requires_dedup_confirmation: false,
-          },
-          validation_errors: validation.errors || [],
-          duplicate_conflicts: [],
-        },
-      });
-      setImporting(false);
-      return;
-    }
-
-    if (conflict?.code === "SIMILAR_TASKS_FOUND") {
-      setError(conflict.message || "Ұқсас тапсырмалар табылды");
-      setImportPreviewState({
-        payload,
-        preview: {
-          mode: "dry_run",
-          preview_token: "",
-          expires_at: "",
-          summary: {
-            total_tasks: Array.isArray(payload) ? payload.length : 1,
-            valid_count: Array.isArray(payload) ? payload.length : 1,
-            invalid_count: 0,
-            duplicate_count: conflict.conflicts?.length || 1,
-            can_confirm: true,
-            requires_dedup_confirmation: true,
-          },
-          validation_errors: [],
-          duplicate_conflicts:
-            conflict.conflicts && conflict.conflicts.length > 0
-              ? conflict.conflicts
-              : [{ index: conflict.task_index ?? 0, similar_tasks: conflict.similar_tasks || [] }],
-        },
-      });
-      setImporting(false);
-      return;
-    }
-
-    if (err) {
-      setError(err);
-      setImporting(false);
-      return;
-    }
-
-    if (preview) {
-      setImportPreviewState({ payload, preview });
-    } else if (data) {
-      // Defensive fallback if backend unexpectedly returns confirm payload for dry_run mode.
-      setImportResult(`Импорт сәтті аяқталды: ${data.created_count}`);
-      setOffset(0);
-      await fetchTasks();
-    }
-
-    setImporting(false);
-  };
-
-  const runBankImportConfirm = async (dedupConfirmed: boolean) => {
-    if (!email || !importPreviewState) return;
-    const { payload, preview } = importPreviewState;
-    setConfirmingImport(true);
-    setError(null);
-    setImportResult(null);
-
-    const { data, error: err, conflict, validation } = await importAdminBankTasks(email, payload, {
-      mode: "confirm",
-      previewToken: preview.preview_token,
-      dedupConfirmed,
-    });
-
-    if (validation?.code === "IMPORT_VALIDATION_FAILED") {
-      setError("JSON импортын растау кезінде валидация қатесі табылды");
-      setImportPreviewState((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          preview: {
-            ...prev.preview,
-            summary: {
-              ...prev.preview.summary,
-              invalid_count: validation.errors.length,
-              valid_count: Math.max(0, prev.preview.summary.total_tasks - validation.errors.length),
-              can_confirm: false,
-            },
-            validation_errors: validation.errors || [],
-          },
-        };
-      });
-      setConfirmingImport(false);
-      return;
-    }
-
-    if (conflict?.code === "SIMILAR_TASKS_FOUND") {
-      setError(conflict.message || "Ұқсас тапсырмалар табылды");
-      setImportPreviewState((prev) => {
-        if (!prev) return prev;
-        const conflicts =
-          conflict.conflicts && conflict.conflicts.length > 0
-            ? conflict.conflicts
-            : [{ index: conflict.task_index ?? 0, similar_tasks: conflict.similar_tasks || [] }];
-        return {
-          ...prev,
-          preview: {
-            ...prev.preview,
-            summary: {
-              ...prev.preview.summary,
-              duplicate_count: conflicts.length,
-              requires_dedup_confirmation: conflicts.length > 0,
-              can_confirm: prev.preview.summary.invalid_count === 0,
-            },
-            duplicate_conflicts: conflicts,
-          },
-        };
-      });
-      setConfirmingImport(false);
-      return;
-    }
-
-    if (err) {
-      setError(err);
-      setConfirmingImport(false);
-      return;
-    }
-
-    if (data) {
-      setImportPreviewState(null);
-      setImportResult(`Импорт сәтті аяқталды: ${data.created_count}`);
-      setOffset(0);
-      await fetchTasks();
-    }
-
-    setConfirmingImport(false);
-  };
-
-  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !email) {
-      return;
-    }
-
-    try {
-      const raw = await file.text();
-      const parsed = JSON.parse(raw);
-      const payload = normalizeImportTasksPayload(parsed);
-      await runBankImportDryRun(payload);
-    } catch (err: any) {
-      setImportPreviewState(null);
-      setImportResult(null);
-      setError(err?.message || "JSON оқу немесе талдау қатесі");
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const handleExportJson = async () => {
-    setExporting(true);
-    setError(null);
-
-    try {
-      const { blob, filename, error: err } = await exportAdminBankTasksJson();
-      if (err) {
-        setError(err);
-        return;
-      }
-      if (!blob) {
-        setError("JSON экспорт қатесі");
-        return;
-      }
-
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = filename || "bank_tasks_export.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    } finally {
-      setExporting(false);
-    }
-  };
+  const { normalizeImportTasksPayload, runBankImportDryRun, runBankImportConfirm, handleImportFileChange, handleExportJson } = createImportActions({
+    email,
+    setImporting,
+    setImportResult,
+    setError,
+    setImportPreviewState,
+    setOffset,
+    fetchTasks,
+    importPreviewState,
+    setConfirmingImport,
+    setExporting,
+  });
 
   const buildAnswerAndPayload = (currentForm: BankFormState) => {
     let answer = currentForm.answer;
@@ -887,207 +379,26 @@ export default function AdminBankPage() {
     setPendingDedup(null);
   };
 
-  const openHistory = async (task: BankTask) => {
-    if (!email) return;
-    setHistoryTask(task);
-    setHistoryItems([]);
-    setHistoryError(null);
-    setSnapshotView(null);
-    setJsonEdit(null);
-    setHistoryLoading(true);
-    const { data, error: err } = await getAdminBankTaskVersions(task.id, email, { limit: 100, offset: 0 });
-    if (err) setHistoryError(err);
-    else setHistoryItems(data?.items || []);
-    setHistoryLoading(false);
-  };
-
-  const openSnapshot = async (taskId: number, versionNo: number) => {
-    if (!email) return;
-    const { data, error: err } = await getAdminBankTaskVersion(taskId, versionNo, email);
-    if (err || !data) {
-      setError(err || "Нұсқа snapshot-ын жүктеу мүмкін болмады");
-      return;
-    }
-    setSnapshotView({ taskId, versionNo, snapshot: data.snapshot });
-  };
-
-  const openJsonEdit = async (task: BankTask, versionNo: number) => {
-    if (!email) return;
-    setHistoryError(null);
-    const { data, error: err } = await getAdminBankTaskVersion(task.id, versionNo, email);
-    if (err || !data) {
-      setHistoryError(err || "JSON өңдеу үшін нұсқаны жүктеу мүмкін болмады");
-      return;
-    }
-    setJsonEdit({
-      task,
-      versionNo,
-      value: buildJsonEditValue(data.snapshot, task),
-      error: null,
-      saving: false,
-      canForceSave: false,
-    });
-  };
-
-  const saveJsonEdit = async (dedupConfirmed: boolean = false) => {
-    if (!email || !jsonEdit) return;
-
-    try {
-      let parsed: Record<string, unknown>;
-      try {
-        const raw = JSON.parse(jsonEdit.value);
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-          throw new Error("JSON object болуы керек");
-        }
-        parsed = raw as Record<string, unknown>;
-      } catch (err: any) {
-        setJsonEdit((prev) => (prev ? { ...prev, error: err?.message || "JSON форматы қате", canForceSave: false } : prev));
-        return;
-      }
-
-      const text = String(parsed.text ?? "").trim();
-      if (!text) {
-        setJsonEdit((prev) => (prev ? { ...prev, error: "text бос болмауы керек", canForceSave: false } : prev));
-        return;
-      }
-
-      const questionType = normalizeJsonEditQuestionType(parsed.question_type ?? jsonEdit.task.question_type);
-      const answerMode = getTaskAnswerMode({
-        question_type: questionType,
-        answer_mode: typeof parsed.answer_mode === "string" ? parsed.answer_mode : jsonEdit.task.answer_mode,
-      });
-      const formData = new FormData();
-      formData.append("text", text);
-      formData.append("answer", String(parsed.answer ?? ""));
-      formData.append("question_type", questionType);
-      formData.append("answer_mode", answerMode);
-      formData.append(
-        "accepted_answers",
-        JSON.stringify(normalizeAcceptedAnswers(normalizeJsonEditStringArray(parsed.accepted_answers)))
-      );
-      formData.append("text_scale", normalizeTaskTextScale(typeof parsed.text_scale === "string" ? parsed.text_scale : null));
-      formData.append("difficulty", normalizeJsonEditDifficulty(parsed.difficulty));
-      formData.append("topics", JSON.stringify(normalizeJsonEditStringArray(parsed.topics)));
-      if (isMcqQuestionType(questionType) || questionType === "select") {
-        formData.append("options", JSON.stringify(normalizeJsonEditArray(parsed.options)));
-      } else {
-        formData.append("options", "");
-      }
-      if (questionType === "select") {
-        formData.append("subquestions", JSON.stringify(normalizeJsonEditArray(parsed.subquestions)));
-      } else {
-        formData.append("subquestions", "");
-      }
-      if (dedupConfirmed) formData.append("dedup_confirmed", "true");
-      if (typeof jsonEdit.task.current_version === "number") {
-        formData.append("expected_current_version", String(jsonEdit.task.current_version));
-      }
-
-      setJsonEdit((prev) => (prev ? { ...prev, saving: true, error: null, canForceSave: false } : prev));
-
-      const { error: err, conflict } = await updateAdminBankTask(jsonEdit.task.id, formData, email);
-      if (conflict?.code === "SIMILAR_TASKS_FOUND") {
-        setJsonEdit((prev) =>
-          prev
-            ? {
-                ...prev,
-                saving: false,
-                error: conflict.message || "Ұқсас тапсырмалар табылды. Қажет болса, мәжбүрлеп сақтаңыз.",
-                canForceSave: true,
-              }
-            : prev
-        );
-        return;
-      }
-      if (conflict?.code === "VERSION_CONFLICT") {
-        setJsonEdit((prev) =>
-          prev
-            ? {
-                ...prev,
-                saving: false,
-                error: conflict.message || "Тапсырма нұсқасы ескірген. Тарихты қайта ашып көріңіз.",
-                canForceSave: false,
-              }
-            : prev
-        );
-        await fetchTasks();
-        return;
-      }
-      if (err) {
-        setJsonEdit((prev) => (prev ? { ...prev, saving: false, error: err, canForceSave: false } : prev));
-        return;
-      }
-
-      setJsonEdit(null);
-      setSnapshotView(null);
-      await fetchTasks();
-      if (historyTask && historyTask.id === jsonEdit.task.id) {
-        await openHistory(jsonEdit.task);
-      }
-    } catch (err: any) {
-      setJsonEdit((prev) =>
-        prev ? { ...prev, saving: false, error: err?.message || "JSON арқылы сақтау қатесі", canForceSave: false } : prev
-      );
-    }
-  };
-
-  const handleRollbackVersion = async (task: BankTask, versionNo: number) => {
-    if (!email) return;
-    if (!confirm(`Тапсырма #${task.id} нұсқасын v${versionNo} дейін қайтару керек пе?`)) return;
-    setRollbackLoading(true);
-    const { error: err, conflict } = await rollbackAdminBankTask(task.id, {
-      email,
-      target_version: versionNo,
-      expected_current_version: task.current_version,
-    });
-    setRollbackLoading(false);
-    if (conflict?.code === "VERSION_CONFLICT") {
-      setError(conflict.message || "Нұсқа қайшылығы. Тапсырма деректерін қайта жүктеңіз.");
-      await fetchTasks();
-      if (historyTask && historyTask.id === task.id) await openHistory(task);
-      return;
-    }
-    if (err) {
-      setError(err);
-      return;
-    }
-    await fetchTasks();
-    if (historyTask && historyTask.id === task.id) {
-      await openHistory(task);
-    }
-  };
-
-  const handleDeleteVersion = async (task: BankTask, versionNo: number) => {
-    if (!email) return;
-    if (!confirm(`Тарихтағы v${versionNo} нұсқасын біржола жою керек пе?`)) return;
-    setHistoryError(null);
-    setDeleteVersionLoadingNo(versionNo);
-    const { error: err } = await deleteAdminBankTaskVersion(task.id, versionNo, email);
-    setDeleteVersionLoadingNo(null);
-    if (err) {
-      setHistoryError(err);
-      return;
-    }
-    if (snapshotView && snapshotView.taskId === task.id && snapshotView.versionNo === versionNo) {
-      setSnapshotView(null);
-    }
-    await fetchTasks();
-    if (historyTask && historyTask.id === task.id) {
-      await openHistory(task);
-    }
-  };
-
-  const openUsage = async (task: BankTask) => {
-    if (!email) return;
-    setUsageTask(task);
-    setUsageItems([]);
-    setUsageError(null);
-    setUsageLoading(true);
-    const { data, error: err } = await getAdminBankTaskUsage(task.id, email, "active");
-    if (err) setUsageError(err);
-    else setUsageItems(data?.items || []);
-    setUsageLoading(false);
-  };
+  const { openHistory, openSnapshot, openJsonEdit, saveJsonEdit, handleRollbackVersion, handleDeleteVersion, openUsage } = createVersionActions({
+    email,
+    setHistoryTask,
+    setHistoryItems,
+    setHistoryError,
+    setSnapshotView,
+    setJsonEdit,
+    setHistoryLoading,
+    setError,
+    jsonEdit,
+    fetchTasks,
+    historyTask,
+    setRollbackLoading,
+    setDeleteVersionLoadingNo,
+    snapshotView,
+    setUsageTask,
+    setUsageItems,
+    setUsageError,
+    setUsageLoading,
+  });
 
   if (status === "loading" || accessLoading) {
     return (
@@ -1297,291 +608,23 @@ export default function AdminBankPage() {
               </div>
             )}
 
-            {tab === "active" && showForm && (
-              <div className="mb-6 p-4 bg-white/70 rounded-2xl border border-white/40 space-y-3">
-                <h2 className="text-xl font-bold text-gray-900">{editingTaskId ? `Өңдеу #${editingTaskId}` : "Жаңа тапсырма"}</h2>
-                {editingTaskId && (
-                  <div className="text-sm text-gray-600">
-                    Нұсқа: v{form.currentVersion ?? "?"}
-                  </div>
-                )}
-                <form onSubmit={handleSubmitForm} className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Тапсырма мәтіні</label>
-                    <MathFieldInput
-                      value={form.text}
-                      onChange={(value) => setForm((prev) => ({ ...prev, text: value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <label className="block text-sm font-semibold text-gray-700">Мәтін өлшемі</label>
-                      <div className="flex gap-2">
-                        {[
-                          { label: "S", value: "sm" },
-                          { label: "M", value: "md" },
-                          { label: "L", value: "lg" },
-                        ].map((item) => (
-                          <button
-                            key={item.value}
-                            type="button"
-                            onClick={() => setForm((prev) => ({ ...prev, text_scale: item.value as TaskTextScale }))}
-                            className={`rounded-lg border px-3 py-1 text-xs font-semibold ${
-                              form.text_scale === item.value
-                                ? "border-purple-600 bg-purple-600 text-white"
-                                : "border-gray-300 bg-white text-gray-700"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className={`min-h-[2.5rem] font-semibold text-gray-900 ${getTaskTextScaleClass(form.text_scale)}`}>
-                      {form.text ? <MathRender latex={form.text} /> : "Тапсырма мәтіні preview"}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Түрі</label>
-                      <select
-                        value={form.question_type}
-                        onChange={(e) => {
-                          const questionType = e.target.value as QuestionType;
-                          setForm((prev) => ({
-                            ...prev,
-                            question_type: questionType,
-                            answer_mode: getTaskAnswerMode({ question_type: questionType }),
-                          }));
-                        }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      >
-                        <option value="input">Енгізу</option>
-                        <option value="tf">Шын/Жалған</option>
-                        <option value="mcq">MCQ (4-8)</option>
-                        <option value="mcq6">MCQ legacy (4-8)</option>
-                        <option value="select">Сәйкестендіру</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Күрделілік</label>
-                      <select
-                        value={form.difficulty}
-                        onChange={(e) => setForm((prev) => ({ ...prev, difficulty: e.target.value as BankDifficulty }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      >
-                        <option value="A">A (оңай)</option>
-                        <option value="B">B (орташа)</option>
-                        <option value="C">C (қиын)</option>
-                      </select>
-                    </div>
-                  </div>
-                  {supportsAnswerModeSwitch(form.question_type) && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Оқушының жауап беру тәсілі</label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {[
-                          { value: "choices", label: "Нұсқаларды таңдайды" },
-                          { value: "written", label: "Жауапты өзі жазады" },
-                        ].map((mode) => (
-                          <button
-                            key={mode.value}
-                            type="button"
-                            onClick={() => setForm((prev) => ({ ...prev, answer_mode: mode.value as AnswerMode }))}
-                            className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
-                              form.answer_mode === mode.value
-                                ? "border-purple-600 bg-purple-50 text-purple-800"
-                                : "border-gray-300 bg-white text-gray-700"
-                            }`}
-                          >
-                            {mode.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Тақырыптар</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {form.topics.map((topic) => (
-                        <button key={topic} type="button" onClick={() => removeFormTopic(topic)} className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                          {topic} x
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formTopicInput}
-                        onChange={(e) => setFormTopicInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addFormTopic(formTopicInput);
-                          }
-                        }}
-                        placeholder="Тақырып қосу"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      />
-                      <button type="button" onClick={() => addFormTopic(formTopicInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3">+</button>
-                    </div>
-                    {formTopicSuggestions.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {formTopicSuggestions.map((topic) => (
-                          <button key={topic} type="button" onClick={() => addFormTopic(topic)} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
-                            {topic}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {form.question_type === "input" && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
-                      <MathFieldInput
-                        value={form.answer}
-                        onChange={(value) => setForm((prev) => ({ ...prev, answer: value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      />
-                    </div>
-                  )}
-
-                  {form.question_type === "input" && (
-                    <AcceptedAnswersEditor
-                      value={form.acceptedAnswers}
-                      onChange={(acceptedAnswers) => setForm((prev) => ({ ...prev, acceptedAnswers }))}
-                    />
-                  )}
-
-                  {(isMcqQuestionType(form.question_type) || form.question_type === "select") && (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {(isMcqQuestionType(form.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label, index) => (
-                          <div key={label}>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                              {label}
-                              {isMcqQuestionType(form.question_type) && index >= 4 ? " (қосымша)" : ""}
-                            </label>
-                            <MathFieldInput
-                              value={getBankFormOptionValue(form, label)}
-                              onChange={(value) => setForm((prev) => setBankFormOptionValue(prev, label, value))}
-                              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      {isMcqQuestionType(form.question_type) && (
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
-                          <div className="flex flex-wrap gap-2">
-                            {MCQ_OPTION_LABELS.map((label) => {
-                              const isSelected = form.correctOptions.includes(label);
-                              return (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() =>
-                                    setForm((prev) => {
-                                      if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        correctOptions: parseMcqAnswerLabels(
-                                          toggleMcqAnswerLabel(
-                                            serializeMcqAnswerLabels(prev.correctOptions),
-                                            label,
-                                            MAX_MCQ_CORRECT_OPTIONS
-                                          )
-                                        ),
-                                      };
-                                    })
-                                  }
-                                  className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-bold ${
-                                    isSelected
-                                      ? "border-purple-700 bg-purple-600 text-white"
-                                      : "border-gray-300 bg-white text-gray-800 hover:border-purple-300 hover:bg-purple-50"
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <p className="mt-1 text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {form.question_type === "select" && (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <MathFieldInput value={form.subQuestion1} onChange={(value) => setForm((prev) => ({ ...prev, subQuestion1: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                        <MathFieldInput value={form.subQuestion2} onChange={(value) => setForm((prev) => ({ ...prev, subQuestion2: value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <select value={form.correctSub1} onChange={(e) => setForm((prev) => ({ ...prev, correctSub1: e.target.value as BankFormState["correctSub1"] }))} className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                          <option value="A">Сәйкестендіру-1: A</option>
-                          <option value="B">Сәйкестендіру-1: B</option>
-                          <option value="C">Сәйкестендіру-1: C</option>
-                          <option value="D">Сәйкестендіру-1: D</option>
-                        </select>
-                        <select value={form.correctSub2} onChange={(e) => setForm((prev) => ({ ...prev, correctSub2: e.target.value as BankFormState["correctSub2"] }))} className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                          <option value="A">Сәйкестендіру-2: A</option>
-                          <option value="B">Сәйкестендіру-2: B</option>
-                          <option value="C">Сәйкестендіру-2: C</option>
-                          <option value="D">Сәйкестендіру-2: D</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  {form.question_type === "tf" && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
-                      <select value={form.correctTf} onChange={(e) => setForm((prev) => ({ ...prev, correctTf: e.target.value as "true" | "false" }))} className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                        <option value="true">Ш/Ж: Шын</option>
-                        <option value="false">Ш/Ж: Жалған</option>
-                      </select>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Сурет</label>
-                    <input type="file" accept="image/*" onChange={(e) => setForm((prev) => ({ ...prev, imageFile: e.target.files?.[0] || null, removeImage: false }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                  </div>
-
-                  {form.existingImageFilename && (
-                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" checked={form.removeImage} onChange={(e) => setForm((prev) => ({ ...prev, removeImage: e.target.checked, imageFile: null }))} />
-                      Ағымдағы суретті жою ({form.existingImageFilename})
-                    </label>
-                  )}
-
-                  <StudentTaskPreview
-                    task={formPreviewTask}
-                    imageSrc={form.removeImage ? null : formImagePreview || undefined}
-                  />
-
-                  <div className="flex gap-2">
-                    <button type="submit" disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
-                      {saving ? "Сақталуда..." : editingTaskId ? "Сақтау" : "Құру"}
-                    </button>
-                    <button type="button" onClick={resetAndHideForm} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">
-                      Бас тарту
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
+            <BankTaskForm
+              tab={tab}
+              showForm={showForm}
+              editingTaskId={editingTaskId}
+              form={form}
+              handleSubmitForm={handleSubmitForm}
+              setForm={setForm}
+              removeFormTopic={removeFormTopic}
+              formTopicInput={formTopicInput}
+              setFormTopicInput={setFormTopicInput}
+              addFormTopic={addFormTopic}
+              formTopicSuggestions={formTopicSuggestions}
+              formPreviewTask={formPreviewTask}
+              formImagePreview={formImagePreview}
+              saving={saving}
+              resetAndHideForm={resetAndHideForm}
+            />
 
             {tab !== "answers" && (
               <>
@@ -1592,57 +635,57 @@ export default function AdminBankPage() {
                 ) : (
                   <div className="space-y-3">
                     {tasks.map((task, idx) => (
-                  <div key={task.id} className="bg-white/70 rounded-2xl p-4 border border-white/40">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className={`font-semibold text-gray-900 break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
-                          {offset + idx + 1}. {task.text ? <MathRender inline latex={task.text} /> : `Тапсырма #${task.id}`}
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          Түрі: {task.question_type} · Күрделілік: {formatDifficultyLabel(task.difficulty)} · Нұсқа: v{task.current_version ?? 1} · Қолданыста: {task.active_usage_count ?? 0}
-                        </div>
-                        {task.topics.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {task.topics.map((topic) => (
-                              <span key={`${task.id}-${topic}`} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">{topic}</span>
-                            ))}
+                      <div key={task.id} className="bg-white/70 rounded-2xl p-4 border border-white/40">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-semibold text-gray-900 break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
+                              {offset + idx + 1}. {task.text ? <MathRender inline latex={task.text} /> : `Тапсырма #${task.id}`}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              Түрі: {task.question_type} · Күрделілік: {formatDifficultyLabel(task.difficulty)} · Нұсқа: v{task.current_version ?? 1} · Қолданыста: {task.active_usage_count ?? 0}
+                            </div>
+                            {task.topics.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {task.topics.map((topic) => (
+                                  <span key={`${task.id}-${topic}`} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">{topic}</span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
 
-                      {tab === "active" ? (
-                        <div className="flex flex-wrap gap-2 justify-end">
-                          <button onClick={() => openHistory(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Тарих
-                          </button>
-                          <button onClick={() => openUsage(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Қай жерде қолданылады
-                          </button>
-                          <button onClick={() => startEdit(task)} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Өңдеу
-                          </button>
-                          <button onClick={() => handleDeleteTask(task.id)} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Себетке
-                          </button>
+                          {tab === "active" ? (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              <button onClick={() => openHistory(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Тарих
+                              </button>
+                              <button onClick={() => openUsage(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Қай жерде қолданылады
+                              </button>
+                              <button onClick={() => startEdit(task)} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Өңдеу
+                              </button>
+                              <button onClick={() => handleDeleteTask(task.id)} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Себетке
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              <button onClick={() => openHistory(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Тарих
+                              </button>
+                              <button onClick={() => openUsage(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Қай жерде қолданылады
+                              </button>
+                              <button onClick={() => handleRestoreTask(task.id)} className="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Қалпына келтіру
+                              </button>
+                              <button onClick={() => handlePermanentDeleteTask(task.id)} className="bg-red-700 hover:bg-red-800 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                Біржола жою
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-2 justify-end">
-                          <button onClick={() => openHistory(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Тарих
-                          </button>
-                          <button onClick={() => openUsage(task)} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Қай жерде қолданылады
-                          </button>
-                          <button onClick={() => handleRestoreTask(task.id)} className="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Қалпына келтіру
-                          </button>
-                          <button onClick={() => handlePermanentDeleteTask(task.id)} className="bg-red-700 hover:bg-red-800 text-white font-semibold py-1 px-3 rounded-lg text-sm">
-                            Біржола жою
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1650,367 +693,92 @@ export default function AdminBankPage() {
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-gray-600">Бет {page} / {totalPages} · Барлығы: {total}</div>
                   <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setOffset((prev) => Math.max(0, prev - LIMIT))}
-                  disabled={offset === 0}
-                  className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
-                >
-                  ← Артқа
-                </button>
-                {paginationPages.map((pageNo, index) => (
-                  <Fragment key={pageNo}>
-                    {index > 0 && pageNo - paginationPages[index - 1] > 1 && (
-                      <span className="px-1 text-sm text-gray-500">...</span>
-                    )}
                     <button
-                      type="button"
-                      onClick={() => goToPage(pageNo)}
-                      disabled={pageNo === page}
-                      aria-current={pageNo === page ? "page" : undefined}
-                      className={`min-w-10 rounded-lg px-3 py-2 text-sm font-semibold ${
-                        pageNo === page
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                      }`}
+                      onClick={() => setOffset((prev) => Math.max(0, prev - LIMIT))}
+                      disabled={offset === 0}
+                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
                     >
-                      {pageNo}
+                      ← Артқа
                     </button>
-                  </Fragment>
-                ))}
-                <button
-                  onClick={() => setOffset((prev) => prev + LIMIT)}
-                  disabled={offset + LIMIT >= total}
-                  className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
-                >
-                  Алға →
-                </button>
+                    {paginationPages.map((pageNo, index) => (
+                      <Fragment key={pageNo}>
+                        {index > 0 && pageNo - paginationPages[index - 1] > 1 && (
+                          <span className="px-1 text-sm text-gray-500">...</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => goToPage(pageNo)}
+                          disabled={pageNo === page}
+                          aria-current={pageNo === page ? "page" : undefined}
+                          className={`min-w-10 rounded-lg px-3 py-2 text-sm font-semibold ${pageNo === page
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                            }`}
+                        >
+                          {pageNo}
+                        </button>
+                      </Fragment>
+                    ))}
+                    <button
+                      onClick={() => setOffset((prev) => prev + LIMIT)}
+                      disabled={offset + LIMIT >= total}
+                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
+                    >
+                      Алға →
+                    </button>
                   </div>
                 </div>
               </>
             )}
 
-            {pendingDedup && (
-              <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-3xl bg-white rounded-2xl p-5 shadow-2xl max-h-[80vh] overflow-y-auto">
-                  <h3 className="text-lg font-bold mb-2">Ұқсас тапсырмалар табылды</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Төмендегі тізімді тексеріңіз. Бас тартуға немесе мәжбүрлеп сақтауға болады.
-                  </p>
-                  <div className="space-y-2 mb-4">
-                    {pendingDedup.similarTasks.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-3">
-                        <div className="text-sm text-gray-700 mb-1">
-                          #{item.id} · ұқсастық: {(item.score * 100).toFixed(1)}% · {item.question_type}
-                        </div>
-                        <div className="text-sm text-gray-900 break-words">
-                          {item.text ? <MathRender inline latex={item.text} /> : `Тапсырма #${item.id}`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setPendingDedup(null)}
-                      className="bg-gray-300 hover:bg-gray-400 text-gray-900 font-semibold py-2 px-4 rounded-lg"
-                    >
-                      Бас тарту
-                    </button>
-                    <button
-                      onClick={() => submitBankForm(true)}
-                      disabled={saving}
-                      className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
-                    >
-                      Соған қарамастан сақтау
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <DuplicateDialog
+              pendingDedup={pendingDedup}
+              setPendingDedup={setPendingDedup}
+              submitBankForm={submitBankForm}
+              saving={saving}
+            />
 
-            {importPreviewState && (
-              <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-3xl bg-white rounded-2xl p-5 shadow-2xl max-h-[80vh] overflow-y-auto">
-                  <h3 className="text-lg font-bold mb-2">JSON импорт preview</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Алдымен тексеру нәтижесі көрсетіледі. Растамайынша базаға ештеңе сақталмайды.
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm mb-4">
-                    <div className="bg-gray-100 rounded px-2 py-1">Барлығы: {importPreviewState.preview.summary.total_tasks}</div>
-                    <div className="bg-green-100 rounded px-2 py-1">Дұрыс: {importPreviewState.preview.summary.valid_count}</div>
-                    <div className="bg-red-100 rounded px-2 py-1">Қате: {importPreviewState.preview.summary.invalid_count}</div>
-                    <div className="bg-amber-100 rounded px-2 py-1">Дубликат: {importPreviewState.preview.summary.duplicate_count}</div>
-                    <div className="bg-blue-100 rounded px-2 py-1 col-span-2 md:col-span-1">
-                      Растау: {importPreviewState.preview.summary.can_confirm ? "Иә" : "Жоқ"}
-                    </div>
-                  </div>
+            <ImportPreviewDialog
+              importPreviewState={importPreviewState}
+              setImportPreviewState={setImportPreviewState}
+              runBankImportConfirm={runBankImportConfirm}
+              confirmingImport={confirmingImport}
+            />
 
-                  {importPreviewState.preview.validation_errors.length > 0 && (
-                    <div className="mb-4">
-                      <div className="font-semibold mb-2 text-red-700">Валидация қателері</div>
-                      <ul className="list-disc pl-5 text-sm space-y-1">
-                        {importPreviewState.preview.validation_errors.map((item, index) => (
-                          <li key={`${item.index}-${item.field}-${index}`}>
-                            #{item.index + 1} · {item.field}: {item.message}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+            <HistoryDialog
+              historyTask={historyTask}
+              setHistoryTask={setHistoryTask}
+              setSnapshotView={setSnapshotView}
+              setJsonEdit={setJsonEdit}
+              historyLoading={historyLoading}
+              historyError={historyError}
+              historyItems={historyItems}
+              openSnapshot={openSnapshot}
+              handleRollbackVersion={handleRollbackVersion}
+              rollbackLoading={rollbackLoading}
+              handleDeleteVersion={handleDeleteVersion}
+              deleteVersionLoadingNo={deleteVersionLoadingNo}
+              openJsonEdit={openJsonEdit}
+            />
 
-                  {importPreviewState.preview.duplicate_conflicts.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                      <div className="font-semibold text-amber-700">Ұқсас тапсырмалар</div>
-                      {importPreviewState.preview.duplicate_conflicts.map((conflict) => (
-                        <div key={`conflict-${conflict.index}`} className="border rounded-lg p-3">
-                          <div className="text-sm text-gray-700 mb-2">JSON жолы: #{conflict.index + 1}</div>
-                          {conflict.similar_tasks.map((item) => (
-                            <div key={`${conflict.index}-${item.id}`} className="border rounded-lg p-3 mb-2 last:mb-0">
-                              <div className="text-sm text-gray-700 mb-1">
-                                #{item.id} · ұқсастық: {(item.score * 100).toFixed(1)}% · {item.question_type}
-                              </div>
-                              <div className="text-sm text-gray-900 break-words">
-                                {item.text ? <MathRender inline latex={item.text} /> : `Тапсырма #${item.id}`}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            <SnapshotDialog
+              snapshotView={snapshotView}
+              setSnapshotView={setSnapshotView}
+            />
 
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setImportPreviewState(null)}
-                      className="bg-gray-300 hover:bg-gray-400 text-gray-900 font-semibold py-2 px-4 rounded-lg"
-                    >
-                      Бас тарту
-                    </button>
-                    <button
-                      onClick={() => void runBankImportConfirm(false)}
-                      disabled={
-                        confirmingImport ||
-                        !importPreviewState.preview.summary.can_confirm ||
-                        importPreviewState.preview.summary.duplicate_count > 0
-                      }
-                      className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
-                    >
-                      {confirmingImport ? "Расталуда..." : "Импортты растау"}
-                    </button>
-                    <button
-                      onClick={() => void runBankImportConfirm(true)}
-                      disabled={
-                        confirmingImport ||
-                        !importPreviewState.preview.summary.can_confirm ||
-                        importPreviewState.preview.summary.duplicate_count === 0
-                      }
-                      className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
-                    >
-                      Соған қарамастан импорттау
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <JsonEditDialog
+              jsonEdit={jsonEdit}
+              setJsonEdit={setJsonEdit}
+              saveJsonEdit={saveJsonEdit}
+            />
 
-            {historyTask && (
-              <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-4xl bg-white rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">Тапсырма нұсқаларының тарихы #{historyTask.id}</h3>
-                    <button
-                      onClick={() => {
-                        setHistoryTask(null);
-                        setSnapshotView(null);
-                        setJsonEdit(null);
-                      }}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-900 px-3 py-1 rounded-lg"
-                    >
-                      Жабу
-                    </button>
-                  </div>
-                  {historyLoading ? (
-                    <div className="text-sm text-gray-600">Тарих жүктелуде...</div>
-                  ) : historyError ? (
-                    <div className="text-sm text-red-600">{historyError}</div>
-                  ) : historyItems.length === 0 ? (
-                    <div className="text-sm text-gray-600">Нұсқалар табылмады</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {historyItems.map((item) => {
-                        return (
-                          <div key={item.id} className="border rounded-lg p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                              <div className="text-sm font-semibold">
-                                v{item.version_no} · {item.event_type}
-                              </div>
-                              <div className="text-xs text-gray-500">{item.created_at}</div>
-                            </div>
-                            <div className="text-xs text-gray-600 mb-2">
-                              Өзгерген өрістер: {item.changed_fields?.length ? item.changed_fields.join(", ") : "-"}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                onClick={() => openSnapshot(historyTask.id, item.version_no)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded-lg"
-                              >
-                                Нұсқа көрінісі
-                              </button>
-                              <button
-                                onClick={() => handleRollbackVersion(historyTask, item.version_no)}
-                                disabled={rollbackLoading}
-                                className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm px-3 py-1 rounded-lg"
-                              >
-                                v{item.version_no} нұсқасына қайтару
-                              </button>
-                              <button
-                                onClick={() => handleDeleteVersion(historyTask, item.version_no)}
-                                disabled={deleteVersionLoadingNo === item.version_no}
-                                className="bg-red-700 hover:bg-red-800 disabled:opacity-60 text-white text-sm px-3 py-1 rounded-lg"
-                              >
-                                Біржола жою
-                              </button>
-                              <button
-                                onClick={() => openJsonEdit(historyTask, item.version_no)}
-                                className="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1 rounded-lg"
-                              >
-                                Өңдеу
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {snapshotView && (
-              <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-3xl bg-white rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold">Нұсқа көрінісі v{snapshotView.versionNo}</h3>
-                    <button
-                      onClick={() => setSnapshotView(null)}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-900 px-3 py-1 rounded-lg"
-                    >
-                      Жабу
-                    </button>
-                  </div>
-                  <pre className="text-xs bg-gray-100 rounded-lg p-3 overflow-auto whitespace-pre-wrap break-words">
-                    {JSON.stringify(snapshotView.snapshot, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {jsonEdit && (
-              <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-4xl bg-white rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <div>
-                      <h3 className="text-lg font-bold">JSON өңдеу #{jsonEdit.task.id}</h3>
-                      <div className="text-xs text-gray-500">v{jsonEdit.versionNo} нұсқасы бойынша</div>
-                    </div>
-                    <button
-                      onClick={() => setJsonEdit(null)}
-                      disabled={jsonEdit.saving}
-                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-60 text-gray-900 px-3 py-1 rounded-lg"
-                    >
-                      Жабу
-                    </button>
-                  </div>
-                  {jsonEdit.error && (
-                    <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                      {jsonEdit.error}
-                    </div>
-                  )}
-                  <label htmlFor="bank-json-edit" className="mb-2 block text-sm font-semibold text-gray-700">
-                    Тапсырма JSON
-                  </label>
-                  <textarea
-                    id="bank-json-edit"
-                    value={jsonEdit.value}
-                    onChange={(e) =>
-                      setJsonEdit((prev) =>
-                        prev ? { ...prev, value: e.target.value, error: null, canForceSave: false } : prev
-                      )
-                    }
-                    spellCheck={false}
-                    className="min-h-[420px] w-full rounded-lg border border-gray-300 bg-gray-950 p-3 font-mono text-xs leading-5 text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                  <div className="mt-2 text-xs text-gray-500">
-                    image_filename және solution_filename тек анықтама үшін көрсетіледі.
-                  </div>
-                  <div className="mt-4 flex flex-wrap justify-end gap-2">
-                    <button
-                      onClick={() => setJsonEdit(null)}
-                      disabled={jsonEdit.saving}
-                      className="bg-gray-200 hover:bg-gray-300 disabled:opacity-60 text-gray-900 font-semibold py-2 px-4 rounded-lg"
-                    >
-                      Бас тарту
-                    </button>
-                    {jsonEdit.canForceSave && (
-                      <button
-                        onClick={() => saveJsonEdit(true)}
-                        disabled={jsonEdit.saving}
-                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
-                      >
-                        Сонда да сақтау
-                      </button>
-                    )}
-                    <button
-                      onClick={() => saveJsonEdit(false)}
-                      disabled={jsonEdit.saving}
-                      className="bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
-                    >
-                      {jsonEdit.saving ? "Сақталуда..." : "JSON сақтау"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {usageTask && (
-              <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                <div className="w-full max-w-4xl bg-white rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">Тапсырма #{usageTask.id} қай жерде қолданылады</h3>
-                    <button
-                      onClick={() => setUsageTask(null)}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-900 px-3 py-1 rounded-lg"
-                    >
-                      Жабу
-                    </button>
-                  </div>
-                  {usageLoading ? (
-                    <div className="text-sm text-gray-600">Жүктелуде...</div>
-                  ) : usageError ? (
-                    <div className="text-sm text-red-600">{usageError}</div>
-                  ) : usageItems.length === 0 ? (
-                    <div className="text-sm text-gray-600">Белсенді орналастыру жоқ</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {usageItems.map((item) => (
-                        <div key={`${item.kind}-${item.placement_id}`} className="border rounded-lg p-3 text-sm">
-                          {item.kind === "trial_test" ? (
-                            <div>
-                              Сынақ тесті #{item.trial_test_id}: {item.trial_test_title || "-"} · ұяшық {item.sort_order + 1} ·{" "}
-                              <Link href="/admin/trial-tests" className="text-blue-600 hover:underline">Ашу</Link>
-                            </div>
-                          ) : (
-                            <div>
-                              Модуль: {item.module_name || "-"} · Бөлім: {item.section_name || "-"} · Сабақ: {item.lesson_title || "-"} · орын {item.sort_order + 1} ·{" "}
-                              <Link href="/admin/cms" className="text-blue-600 hover:underline">Ашу</Link>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <UsageDialog
+              usageTask={usageTask}
+              setUsageTask={setUsageTask}
+              usageLoading={usageLoading}
+              usageError={usageError}
+              usageItems={usageItems}
+            />
           </div>
         </div>
       </main>
@@ -2018,7 +786,4 @@ export default function AdminBankPage() {
     </div>
   );
 }
-
-
-
 
