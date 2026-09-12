@@ -1,6 +1,12 @@
 # QazMath Deployment Runbook
 
-Current production topology:
+Current status (2026-09-12): there is no production server, as confirmed by the
+project owner. No production deployment or production database backup was made
+for the September fixes. The hosts, paths and commands below describe the former
+setup and are reference material only. Confirm a new deployment target before
+using them; do not treat the old VPS or Vercel project as an active release target.
+
+Former production topology:
 
 - Frontend: Next.js in `web`, deployed to Vercel.
 - Production frontend: `https://qazmath.vercel.app`
