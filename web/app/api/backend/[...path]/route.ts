@@ -216,8 +216,14 @@ function replacePrivatePathEmail(pathSegments: string[], proxyUserEmail: string)
 }
 
 function hasEmailSearchParam(searchParams: URLSearchParams): boolean {
-  const value = searchParams.get("email");
-  return value !== null && value.trim() !== "";
+  // Presence matters even when the first value is blank. set() below replaces
+  // every occurrence so the backend cannot select a different repeated value.
+  return searchParams.has("email");
+}
+
+function isJsonContentType(mediaType: string): boolean {
+  return !mediaType || mediaType === "application/json" ||
+    (mediaType.startsWith("application/") && mediaType.endsWith("+json"));
 }
 
 function pathRequiresProxyUserEmail(pathSegments: string[]): boolean {
@@ -297,9 +303,12 @@ async function proxyRequest(
 
     let body: BodyInit | undefined;
     const contentType = request.headers.get("content-type") || "";
+    const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();
+    const isJsonBody = isJsonContentType(mediaType);
+    const isMultipartBody = mediaType === "multipart/form-data";
     let bodyHasEmail = false;
 
-    if (contentType.includes("application/json")) {
+    if (isJsonBody && isMutatingMethod(request.method)) {
       const rawBody = await request.text();
       if (rawBody) {
         try {
@@ -308,20 +317,22 @@ async function proxyRequest(
             payload &&
             typeof payload === "object" &&
             !Array.isArray(payload) &&
-            normalizeEmail(payload.email)
+            Object.prototype.hasOwnProperty.call(payload, "email")
           ) {
             bodyHasEmail = true;
           }
           body = rawBody;
         } catch {
-          body = rawBody;
+          // Never sign JSON we could not inspect. Backend parsers may accept
+          // encodings (e.g. UTF-16) that JSON.parse(request.text()) rejects.
+          return NextResponse.json({ detail: "Invalid JSON request body" }, { status: 400 });
         }
       } else {
         body = rawBody;
       }
-    } else if (contentType.includes("multipart/form-data")) {
+    } else if (isMultipartBody) {
       const formData = await request.formData();
-      bodyHasEmail = normalizeEmail(String(formData.get("email") || "")) !== "";
+      bodyHasEmail = formData.has("email");
       body = formData;
     } else if (request.method !== "GET" && request.method !== "HEAD") {
       try {
@@ -356,7 +367,7 @@ async function proxyRequest(
       if (hasPrivatePathEmail) {
         effectivePathSegments = replacePrivatePathEmail(effectivePathSegments, proxyUserEmail);
       }
-      if (contentType.includes("application/json") && typeof body === "string" && body) {
+      if (isJsonBody && typeof body === "string" && body) {
         try {
           const payload = JSON.parse(body);
           if (
@@ -368,14 +379,14 @@ async function proxyRequest(
             body = JSON.stringify({ ...payload, email: proxyUserEmail });
           }
         } catch {
-          // Keep non-JSON payloads unchanged. Backend validation will reject malformed JSON.
+          return NextResponse.json({ detail: "Invalid JSON request body" }, { status: 400 });
         }
       } else if (body instanceof FormData && body.has("email")) {
         body.set("email", proxyUserEmail);
       } else if (
         typeof body === "string" &&
         body &&
-        contentType.includes("application/x-www-form-urlencoded")
+        mediaType === "application/x-www-form-urlencoded"
       ) {
         const formParams = new URLSearchParams(body);
         if (formParams.has("email")) {
@@ -400,7 +411,7 @@ async function proxyRequest(
       if (STRIP_REQUEST_HEADERS.has(lowerKey)) {
         return;
       }
-      if (lowerKey === "content-type" && contentType.includes("multipart/form-data")) {
+      if (lowerKey === "content-type" && isMultipartBody) {
         return;
       }
       headers.set(key, value);

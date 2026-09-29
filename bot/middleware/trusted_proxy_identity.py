@@ -86,38 +86,50 @@ def _is_sensitive_identity_path(path: str) -> bool:
     return path.startswith("/api/tasks/") and path.endswith("/questions/check")
 
 
-def _extract_query_email(scope: Scope) -> Optional[str]:
+def _extract_query_emails(scope: Scope) -> list[str]:
     try:
         raw_query = (scope.get("query_string") or b"").decode("utf-8")
     except Exception:
-        return None
+        return []
     values = parse_qs(raw_query, keep_blank_values=True)
-    email_values = values.get("email") or []
-    return _normalize_email(email_values[0] if email_values else None)
+    # Validate every value: FastAPI uses the last repeated query parameter.
+    return [_normalize_email(value) or "" for value in values.get("email", [])]
 
 
-def _extract_body_email(content_type: str, body: bytes) -> Optional[str]:
-    if not body or len(body) > MAX_IDENTITY_BODY_BYTES:
-        return None
+def _is_json_content_type(media_type: str) -> bool:
+    # Match FastAPI's JSON media types, including headerless legacy requests.
+    return (
+        not media_type
+        or media_type == "application/json"
+        or (media_type.startswith("application/") and media_type.endswith("+json"))
+    )
 
-    if "application/json" in content_type:
+
+def _extract_body_emails(media_type: str, body: bytes) -> list[str]:
+    # The caller already bounds buffered bodies. Do not silently skip identity
+    # validation for signed JSON imports larger than MAX_IDENTITY_BODY_BYTES.
+    if not body:
+        return []
+
+    if _is_json_content_type(media_type):
         try:
-            payload = json.loads(body.decode("utf-8"))
+            # Use the same bytes parser as Request.json(), including BOMs and
+            # UTF-16/32, so identity checks cannot disagree with the endpoint.
+            payload = json.loads(body)
         except Exception:
-            return None
-        if isinstance(payload, dict):
-            return _normalize_email(payload.get("email"))
-        return None
+            return []
+        if isinstance(payload, dict) and "email" in payload:
+            return [_normalize_email(payload["email"]) or ""]
+        return []
 
-    if "application/x-www-form-urlencoded" in content_type:
+    if media_type == "application/x-www-form-urlencoded":
         try:
             values = parse_qs(body.decode("utf-8"), keep_blank_values=True)
         except Exception:
-            return None
-        email_values = values.get("email") or []
-        return _normalize_email(email_values[0] if email_values else None)
+            return []
+        return [_normalize_email(value) or "" for value in values.get("email", [])]
 
-    return None
+    return []
 
 
 def _explicit_emails_match(proxy_email: str, explicit_emails: Iterable[Optional[str]]) -> bool:
@@ -141,25 +153,19 @@ class TrustedProxyIdentityMiddleware:
         path = str(scope.get("path") or "")
         headers = Headers(scope=scope)
         content_type = headers.get("content-type", "")
+        media_type = content_type.split(";", 1)[0].strip().lower()
         request = Request(scope, receive)
         has_signature = has_proxy_signature_headers(request)
         is_valid_proxy = False
         proxy_email: Optional[str] = None
 
         environment = _get_environment()
-        explicit_query_email = _extract_query_email(scope)
+        explicit_query_emails = _extract_query_emails(scope)
         explicit_path_email = _private_email_from_path(path)
 
-        should_inspect_body = (
-            "application/json" in content_type
-            or "application/x-www-form-urlencoded" in content_type
-        )
-        # In production, signed proxy requests already passed the trusted identity boundary.
-        # Avoid buffering large bodies on hot paths such as admin imports.
-        should_inspect_body = should_inspect_body and not (
-            environment == "production"
-            and has_signature
-            and headers.get(PROXY_BODY_SHA256_HEADER)
+        should_inspect_body = request.method.upper() in _MUTATING_METHODS and (
+            _is_json_content_type(media_type)
+            or media_type == "application/x-www-form-urlencoded"
         )
         should_verify_signed_body = bool(
             has_signature
@@ -209,9 +215,9 @@ class TrustedProxyIdentityMiddleware:
                 return
 
         explicit_emails = [
-            explicit_query_email,
+            *explicit_query_emails,
             explicit_path_email,
-            _extract_body_email(content_type, body),
+            *_extract_body_emails(media_type, body),
         ]
         has_explicit_email = any(email is not None for email in explicit_emails)
 

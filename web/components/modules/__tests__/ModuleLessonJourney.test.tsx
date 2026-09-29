@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import ModuleLessonJourney, {
   getLessonDisplayName,
@@ -72,5 +72,21 @@ describe("ModuleLessonJourney", () => {
   it("renders empty sections compactly", () => {
     render(<ModuleLessonJourney sections={[section(1, [])]} />);
     expect(screen.getByText("Бұл бөлімде сабақтар әлі қосылмаған.")).toBeInTheDocument();
+  });
+
+  it("opens the clicked section guide, including sections without lessons", () => {
+    const onOpenGuide = jest.fn();
+    const addition = { ...section(1, [lesson(1)]), name: "Қосу" };
+    const multiplication = { ...section(2, []), name: "Көбейту" };
+    render(<ModuleLessonJourney sections={[addition, multiplication]} onOpenGuide={onOpenGuide} />);
+
+    const secondButton = screen.getByRole("button", { name: "Анықтамалық: Көбейту" });
+    expect(secondButton.closest("section")).toHaveAttribute("id", "section-2");
+    fireEvent.click(secondButton);
+    expect(onOpenGuide).toHaveBeenLastCalledWith(2, secondButton);
+
+    const firstButton = screen.getByRole("button", { name: "Анықтамалық: Қосу" });
+    fireEvent.click(firstButton);
+    expect(onOpenGuide).toHaveBeenLastCalledWith(1, firstButton);
   });
 });

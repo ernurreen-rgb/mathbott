@@ -3,6 +3,122 @@ import json
 
 import pytest
 from tests.route_helpers import _extract_http_detail, _legacy_proxy_headers, _proxy_headers
+from middleware.trusted_proxy_identity import MAX_IDENTITY_BODY_BYTES, MAX_SIGNED_BODY_BYTES
+
+
+@pytest.fixture
+def production_proxy(monkeypatch):
+    secret = "test-shared-secret"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("INTERNAL_PROXY_SHARED_SECRET", secret)
+    return secret
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query", [
+    "email=&email=victim%40example.com",
+    "email=test%40example.com&email=victim%40example.com",
+    "email=victim%40example.com&email=test%40example.com",
+    "email=test%40example.com&email=",
+])
+async def test_repeated_query_email_cannot_read_victim_invites(client, test_db, test_user, production_proxy, query):
+    victim = await test_db.users.create_user_by_email("victim@example.com")
+    await test_db.friends.create_invite(victim["id"], "2099-01-01 00:00:00")
+    path = "/api/friends/invites"
+    response = client.get(f"{path}?{query}", headers=_proxy_headers(
+        "GET", path, query, test_user["email"], production_proxy,
+    ))
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_repeated_form_email_cannot_change_victim_onboarding(client, test_db, test_user, production_proxy):
+    victim = await test_db.users.create_user_by_email("victim@example.com")
+    path = "/api/user/onboarding"
+    content_type = "application/x-www-form-urlencoded"
+    body = "email=&email=victim%40example.com&nickname=ChangedByOther&math_level=basic&how_did_you_hear=friend"
+    response = client.post(path, content=body, headers={"Content-Type": content_type, **_proxy_headers(
+        "POST", path, "", test_user["email"], production_proxy, body=body, content_type=content_type,
+    )})
+    assert response.status_code == 403
+    assert not await test_db.onboarding.is_onboarding_completed(victim["id"])
+
+
+def test_unsigned_repeated_query_requires_authentication(client, production_proxy):
+    response = client.get("/api/modules/map?email=&email=victim%40example.com")
+    assert response.status_code == 401
+
+
+def test_repeated_matching_query_email_is_allowed(client, test_user, production_proxy):
+    path = "/api/friends/invites"
+    query = "email=test%40example.com&email=test%40example.com"
+    response = client.get(f"{path}?{query}", headers=_proxy_headers(
+        "GET", path, query, test_user["email"], production_proxy,
+    ))
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content_type", [
+    "application/json", "application/problem+json", "APPLICATION/VND.MATHBOT+JSON; charset=utf-8", "",
+])
+@pytest.mark.parametrize("foreign_identity", [True, False])
+async def test_json_identity_must_match_signed_user(client, test_db, test_user, production_proxy, content_type, foreign_identity):
+    victim = await test_db.users.create_user_by_email("victim@example.com")
+    original_nickname = victim["nickname"]
+    path = "/api/user/web/nickname"
+    email = victim["email"] if foreign_identity else test_user["email"]
+    body = json.dumps({"email": email, "nickname": "ProxyNick"})
+    headers = _proxy_headers("POST", path, "", test_user["email"], production_proxy,
+                             body=body, content_type=content_type)
+    if content_type:
+        headers["Content-Type"] = content_type
+    response = client.post(path, content=body, headers=headers)
+    # Headerless JSON may be rejected by FastAPI's strict content-type policy;
+    # foreign identity must still be stopped at the authentication boundary.
+    expected = 403 if foreign_identity else (200 if content_type else 422)
+    assert response.status_code == expected
+    assert (await test_db.users.get_user_by_id(victim["id"]))["nickname"] == original_nickname
+    if not foreign_identity and content_type:
+        assert (await test_db.users.get_user_by_id(test_user["id"]))["nickname"] == "ProxyNick"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign_identity", [True, False])
+async def test_large_signed_json_still_checks_identity(client, test_db, test_user, production_proxy, foreign_identity):
+    victim = await test_db.users.create_user_by_email("victim@example.com")
+    body = json.dumps({"email": victim["email"] if foreign_identity else test_user["email"],
+                       "nickname": "LargeBodyNick", "padding": "x" * MAX_IDENTITY_BODY_BYTES})
+    path = "/api/user/web/nickname"
+    headers = {"Content-Type": "application/json", **_proxy_headers(
+        "POST", path, "", test_user["email"], production_proxy, body=body, content_type="application/json",
+    )}
+    response = client.post(path, content=body, headers=headers)
+    assert response.status_code == (403 if foreign_identity else 200)
+    assert (await test_db.users.get_user_by_id(victim["id"]))["nickname"] == victim["nickname"]
+
+
+def test_signed_body_size_limit_still_applies(client, test_user, production_proxy):
+    body = "x" * (MAX_SIGNED_BODY_BYTES + 1)
+    path = "/api/user/web/nickname"
+    response = client.post(path, content=body, headers={"Content-Type": "application/json", **_proxy_headers(
+        "POST", path, "", test_user["email"], production_proxy, body=body, content_type="application/json",
+    )})
+    assert response.status_code == 413
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16-le", "utf-32-le"])
+async def test_encoded_json_cannot_hide_foreign_identity(client, test_db, test_user, production_proxy, encoding):
+    victim = await test_db.users.create_user_by_email("victim@example.com")
+    body = json.dumps({"email": victim["email"], "nickname": "ChangedByOther"}).encode(encoding)
+    path = "/api/user/web/nickname"
+    response = client.post(path, content=body, headers={"Content-Type": "application/json", **_proxy_headers(
+        "POST", path, "", test_user["email"], production_proxy, body=body, content_type="application/json",
+    )})
+    assert response.status_code == 403
+    assert (await test_db.users.get_user_by_id(victim["id"]))["nickname"] == victim["nickname"]
 
 
 def test_production_private_email_route_requires_trusted_proxy(client, monkeypatch):

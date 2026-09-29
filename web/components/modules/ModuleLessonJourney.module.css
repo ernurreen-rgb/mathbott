@@ -1,0 +1,131 @@
+.journey {
+  container: lesson-journey / inline-size;
+  --journey-nav-space: calc(65px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .journey {
+    --journey-nav-space: 0px;
+  }
+}
+
+@container lesson-journey (max-width: 639px) {
+  .journey .activeStart {
+    padding-top: 44px;
+  }
+
+  .viewportSection {
+    /* Match MobileNav's 64px content, 1px border and bottom safe area.
+       svh keeps the layout stable when the browser's address bar hides. */
+    --journey-node-size: clamp(64px, 10svh, 88px);
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100svh - var(--journey-nav-space) - 24px);
+  }
+
+  .viewportSection > header {
+    flex-shrink: 0;
+  }
+
+  .viewportSection .lessonList {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding-bottom: 16px;
+  }
+
+  .viewportSection .lessonStep {
+    /* Leave room for the node, 8px gap and 6px progress marks.
+       Intrinsic minimum sizes let short screens scroll without clipping. */
+    flex: 1 0 calc(var(--journey-node-size) + 14px);
+    height: auto;
+    min-height: calc(var(--journey-node-size) + 14px);
+  }
+
+  .viewportSection .lessonStep:last-child {
+    flex-grow: 0;
+  }
+
+  .viewportSection .lessonConnector {
+    top: calc(var(--journey-node-size) / 2);
+    height: 100%;
+  }
+
+  .viewportSection .lessonNode {
+    width: var(--journey-node-size);
+    height: var(--journey-node-size);
+  }
+}
+
+@container lesson-journey (min-width: 640px) {
+  .journey .guideButton {
+    width: auto;
+    gap: 8px;
+    padding-inline: 14px;
+  }
+
+  .journey .guideLabel {
+    display: inline;
+  }
+
+  .journey .lessonList {
+    display: flex;
+    max-width: none;
+    padding: 24px 28px 20px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .journey .activeStart {
+    padding-top: 44px;
+  }
+
+  .journey .shortList {
+    justify-content: center;
+  }
+
+  .journey .lessonStep {
+    flex: 0 0 160px;
+    height: 176px;
+    scroll-snap-align: center;
+  }
+
+  .shortList .lessonStep {
+    /* Five nodes share the actual content width beside the sidebar. */
+    flex: 0 1 160px;
+    min-width: 112px;
+  }
+
+  .journey .lessonConnector {
+    display: none;
+  }
+
+  .journey .horizontalConnector {
+    display: block;
+  }
+
+  .journey .lessonLink {
+    position: static;
+    display: block;
+    width: 100%;
+    transform: none;
+  }
+
+  .journey .lessonNode {
+    width: 96px;
+    height: 96px;
+  }
+
+  .journey .progressWrap {
+    margin-top: 10px;
+  }
+
+  .journey .progressMarks {
+    gap: 6px;
+  }
+
+  .journey .progressMark {
+    width: 20px;
+    height: 8px;
+  }
+}

@@ -99,7 +99,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
 
   return (
     <nav 
-      className="fixed bottom-0 left-0 right-0 glass border-t border-white/30 shadow-2xl md:hidden z-50"
+      className="fixed bottom-0 left-0 right-0 glass border-t border-white/30 pb-[env(safe-area-inset-bottom)] shadow-2xl md:hidden z-50"
       role="navigation"
       aria-label="Мобильная навигация"
     >

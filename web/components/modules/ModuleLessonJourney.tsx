@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import type { LessonSummary, Section } from "@/types";
+import styles from "./ModuleLessonJourney.module.css";
 
 export type LessonJourneyStatus = "completed" | "active" | "upcoming";
 
@@ -68,12 +69,6 @@ export const getLessonJourneyStatus = (
   return "upcoming";
 };
 
-const statusLabel: Record<LessonJourneyStatus, string> = {
-  completed: "Аяқталды",
-  active: "Қазір",
-  upcoming: "Алда",
-};
-
 const statusAriaLabel: Record<LessonJourneyStatus, string> = {
   completed: "Аяқталды",
   active: "Қазір оқитын сабақ",
@@ -136,13 +131,13 @@ function ProgressMarks({ lesson }: { lesson: LessonSummary }) {
     <span
       role="img"
       aria-label={`Сабақ прогресі ${Math.round(progress * 100)}%`}
-      className="flex justify-center gap-1 sm:gap-1.5"
+      className={`${styles.progressMarks} flex justify-center gap-1`}
     >
       {[0, 1, 2, 3].map((mark) => (
         <span
           key={mark}
           aria-hidden="true"
-          className={`h-1.5 w-4 rounded-full sm:h-2 sm:w-5 ${mark < filled ? "bg-amber-400" : "bg-violet-100"}`}
+          className={`${styles.progressMark} h-1.5 w-4 rounded-full ${mark < filled ? "bg-amber-400" : "bg-violet-100"}`}
         />
       ))}
     </span>
@@ -176,13 +171,18 @@ function SectionProgress({ lessons }: { lessons: LessonSummary[] }) {
   );
 }
 
-export default function ModuleLessonJourney({ sections }: { sections: Section[] }) {
+type ModuleLessonJourneyProps = {
+  sections: Section[];
+  onOpenGuide?: (sectionId: number, trigger: HTMLButtonElement) => void;
+};
+
+export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLessonJourneyProps) {
   const sortedSections = sortJourneySections(sections);
   const activeLessonId = getNextJourneyLessonId(sortedSections);
   let globalLessonIndex = 0;
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className={`${styles.journey} space-y-5 sm:space-y-6`}>
       {sortedSections.map((section, sectionIndex) => {
         const lessons = sortJourneyLessons(section.lessons);
         const sectionStartIndex = globalLessonIndex;
@@ -192,7 +192,7 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
           <section
             key={section.id}
             id={`section-${section.id}`}
-            className="scroll-mt-40 overflow-hidden rounded-[1.5rem] border border-white/90 bg-white/70 shadow-[0_20px_60px_rgba(88,28,135,0.1)] backdrop-blur-sm sm:rounded-[2rem]"
+            className={`scroll-mt-3 overflow-hidden rounded-[1.5rem] border border-white/90 bg-white/70 shadow-[0_20px_60px_rgba(88,28,135,0.1)] backdrop-blur-sm sm:rounded-[2rem] ${lessons.length === 5 ? styles.viewportSection : ""}`}
           >
             <header className="flex items-start justify-between gap-3 border-b border-purple-100/80 bg-gradient-to-r from-rose-50/90 via-white/80 to-violet-50/90 px-4 py-3.5 sm:gap-4 sm:px-7 sm:py-[18px]">
               <div className="min-w-0">
@@ -206,7 +206,28 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                   </p>
                 )}
               </div>
-              <SectionProgress lessons={lessons} />
+              <div className="flex shrink-0 items-center gap-3">
+                <SectionProgress lessons={lessons} />
+                {onOpenGuide && (
+                  <button
+                    type="button"
+                    onClick={(event) => onOpenGuide(section.id, event.currentTarget)}
+                    aria-label={`Анықтамалық: ${section.name}`}
+                    title={`Анықтамалық: ${section.name}`}
+                    className={`${styles.guideButton} inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-700 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 motion-reduce:transition-none`}
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6a1 1 0 0 1 .7.3l5.4 5.4a1 1 0 0 1 .3.7V19a2 2 0 0 1-2 2Z"
+                      />
+                    </svg>
+                    <span className={`${styles.guideLabel} hidden whitespace-nowrap`}>Анықтамалық</span>
+                  </button>
+                )}
+              </div>
             </header>
 
             {lessons.length === 0 ? (
@@ -215,12 +236,10 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
               </div>
             ) : (
               <ol
-                className={`relative mx-auto w-full max-w-2xl list-none px-2 pb-2 sm:flex sm:max-w-none sm:px-7 sm:pb-5 ${
-                  lessons.length <= 5
-                    ? "sm:justify-center sm:overflow-x-hidden"
-                    : "sm:snap-x sm:justify-start sm:overflow-x-auto"
+                className={`${styles.lessonList} relative mx-auto w-full max-w-2xl list-none px-2 pb-2 ${
+                  lessons.length <= 5 ? styles.shortList : ""
                 } ${
-                  lessons[0]?.id === activeLessonId ? "pt-10 sm:pt-11" : "pt-5 sm:pt-6"
+                  lessons[0]?.id === activeLessonId ? `${styles.activeStart} pt-10` : "pt-5"
                 }`}
               >
                 {lessons.map((lesson, lessonIndex) => {
@@ -234,7 +253,7 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                     <li
                       key={lesson.id}
                       data-side={isLeft ? "left" : "right"}
-                      className="relative h-[188px] sm:h-[176px] sm:w-40 sm:shrink-0 sm:snap-center"
+                      className={`${styles.lessonStep} relative h-[130px]`}
                     >
                       {lessonIndex < lessons.length - 1 && (
                         <>
@@ -242,7 +261,7 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                             aria-hidden="true"
                             viewBox="0 0 100 100"
                             preserveAspectRatio="none"
-                            className="pointer-events-none absolute left-0 top-[44px] z-0 h-[188px] w-full overflow-visible sm:hidden"
+                            className={`${styles.lessonConnector} pointer-events-none absolute left-0 top-[44px] z-0 h-[130px] w-full overflow-visible`}
                           >
                             <path
                               d={isLeft ? "M 25 0 C 25 38, 75 62, 75 100" : "M 75 0 C 75 38, 25 62, 25 100"}
@@ -262,11 +281,11 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                           </svg>
                           <span
                             aria-hidden="true"
-                            className={`pointer-events-none absolute left-1/2 top-[46px] z-0 hidden h-[5px] w-full rounded-full sm:block ${connectorTrackClasses[status]}`}
+                            className={`${styles.horizontalConnector} pointer-events-none absolute left-1/2 top-[46px] z-0 hidden h-[5px] w-full rounded-full ${connectorTrackClasses[status]}`}
                           />
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute left-1/2 top-[48px] z-0 hidden h-px w-full border-t border-dashed border-white/80 sm:block"
+                            className={`${styles.horizontalConnector} pointer-events-none absolute left-1/2 top-[48px] z-0 hidden h-px w-full border-t border-dashed border-white/80`}
                           />
                         </>
                       )}
@@ -275,12 +294,12 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                         href={`/lessons/${lesson.id}`}
                         aria-current={status === "active" ? "step" : undefined}
                         aria-label={`${title}. ${statusAriaLabel[status]}. ${Math.round(progress * 100)}%`}
-                        className={`group absolute top-0 z-10 w-[132px] -translate-x-1/2 text-center focus:outline-none sm:static sm:block sm:w-full sm:translate-x-0 ${
+                        className={`${styles.lessonLink} group absolute top-0 z-10 w-[132px] -translate-x-1/2 text-center focus:outline-none ${
                           isLeft ? "left-1/4" : "left-3/4"
                         }`}
                       >
                         <span
-                          className={`relative mx-auto flex h-[88px] w-[88px] items-center justify-center rounded-full border-[6px] border-white transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-105 group-focus-visible:ring-4 group-focus-visible:ring-purple-300 sm:h-24 sm:w-24 ${nodeClasses[status]}`}
+                          className={`${styles.lessonNode} relative mx-auto flex h-[88px] w-[88px] items-center justify-center rounded-full border-[6px] border-white transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-105 group-focus-visible:ring-4 group-focus-visible:ring-purple-300 ${nodeClasses[status]}`}
                         >
                           <LessonNodeIcon lesson={lesson} status={status} />
                           {status === "active" && (
@@ -290,22 +309,8 @@ export default function ModuleLessonJourney({ sections }: { sections: Section[] 
                           )}
                         </span>
 
-                        <span className="mt-2 block sm:mt-2.5">
+                        <span className={`${styles.progressWrap} mt-2 block`}>
                           <ProgressMarks lesson={lesson} />
-                          <span className="mt-1.5 line-clamp-2 min-h-8 text-sm font-black leading-tight text-slate-800 transition-colors group-hover:text-purple-700 sm:text-base">
-                            {title}
-                          </span>
-                          <span className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-[10px] leading-none sm:text-[11px]">
-                            <span className="font-bold uppercase tracking-wide text-purple-500">
-                              {statusLabel[status]}
-                            </span>
-                            <span aria-hidden="true" className="text-purple-300">·</span>
-                            <span className="text-slate-500">
-                              {lesson.progress?.total_mini_lessons
-                                ? `${lesson.progress.completed_mini_lessons || 0}/${lesson.progress.total_mini_lessons}`
-                                : `${Math.round(progress * 100)}%`}
-                            </span>
-                          </span>
                         </span>
                       </Link>
                     </li>

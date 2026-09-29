@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,9 +19,9 @@ import ModuleLessonJourney, {
   sortJourneyLessons,
   sortJourneySections,
 } from "@/components/modules/ModuleLessonJourney";
-import { getModuleHeaderCollapsedState } from "@/components/modules/moduleHeaderState";
 import { getModuleDetails } from "@/lib/api";
 import type { ModuleDetails, Section } from "@/types";
+import styles from "./ModuleDetail.module.css";
 
 function OrnamentRail({ side }: { side: "left" | "right" }) {
   return (
@@ -100,9 +99,8 @@ export default function ModuleDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<number | null>(null);
   const [guideSectionId, setGuideSectionId] = useState<number | null>(null);
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const didScrollToHashRef = useRef(false);
-  const guideButtonRef = useRef<HTMLButtonElement>(null);
+  const guideButtonRef = useRef<HTMLButtonElement | null>(null);
   const guideCloseButtonRef = useRef<HTMLButtonElement>(null);
 
   const fetchModule = useCallback(async () => {
@@ -227,32 +225,6 @@ export default function ModuleDetailPage() {
     };
   }, [sortedSections]);
 
-  useLayoutEffect(() => {
-    let animationFrameId: number | null = null;
-
-    const updateHeaderState = () => {
-      animationFrameId = null;
-      const scrollY = window.scrollY || window.pageYOffset;
-      setIsHeaderCollapsed((current) =>
-        getModuleHeaderCollapsedState(scrollY, current),
-      );
-    };
-
-    const scheduleUpdate = () => {
-      if (animationFrameId !== null) return;
-      animationFrameId = window.requestAnimationFrame(updateHeaderState);
-    };
-
-    updateHeaderState();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-
-    return () => {
-      window.removeEventListener("scroll", scheduleUpdate);
-      if (animationFrameId !== null)
-        window.cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
   const currentSection = useMemo(
     () =>
       sortedSections.find((section) => section.id === activeSectionId) ||
@@ -266,6 +238,11 @@ export default function ModuleDetailPage() {
       sortedSections.find((section) => section.id === guideSectionId) || null,
     [guideSectionId, sortedSections],
   );
+
+  const openGuide = useCallback((sectionId: number, trigger: HTMLButtonElement) => {
+    guideButtonRef.current = trigger;
+    setGuideSectionId(sectionId);
+  }, []);
 
   const closeGuide = useCallback(() => {
     setGuideSectionId(null);
@@ -360,139 +337,47 @@ export default function ModuleDetailPage() {
       <MountainBackdrop />
       <DesktopNav />
 
-      <header className="pointer-events-none sticky top-0 z-40 h-[132px] px-3 pt-3 sm:h-[144px] sm:px-6 md:ml-64">
+      <header className="relative z-40 px-3 pt-3 sm:px-6 md:ml-64">
         <div
-          data-header-state={isHeaderCollapsed ? "collapsed" : "expanded"}
-          className={`pointer-events-auto mx-auto overflow-hidden border border-white/90 bg-white/90 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl transition-[max-width,padding,border-radius,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
-            isHeaderCollapsed
-              ? "max-w-2xl rounded-2xl p-2.5 shadow-[0_12px_35px_rgba(88,28,135,0.14)]"
-              : "max-w-4xl rounded-[1.75rem] p-4 sm:p-5"
-          }`}
+          className={`${styles.moduleHeader} overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/90 p-4 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl sm:p-5`}
         >
-          <div
-            className={`flex items-center transition-[gap] duration-300 motion-reduce:transition-none ${
-              isHeaderCollapsed ? "gap-2" : "gap-3 sm:gap-4"
-            }`}
-          >
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/modules"
               aria-label="Модульдерге қайту"
-              className={`flex shrink-0 items-center justify-center bg-purple-50 font-black text-purple-700 transition hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 ${
-                isHeaderCollapsed
-                  ? "h-10 w-10 rounded-xl text-lg"
-                  : "h-11 w-11 rounded-2xl text-xl"
-              }`}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-xl font-black text-purple-700 transition hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
             >
               ←
             </Link>
 
             <h1 className="sr-only">{module.name}</h1>
-            <div
-              className={`relative min-w-0 flex-1 transition-[height] duration-300 ease-out motion-reduce:transition-none ${
-                isHeaderCollapsed ? "h-9" : "h-[3.75rem]"
-              }`}
-            >
+            <div className="min-w-0 flex-1">
               <div
                 aria-hidden="true"
-                className={`absolute inset-0 flex flex-col justify-center transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
-                  isHeaderCollapsed
-                    ? "pointer-events-none -translate-y-1 opacity-0"
-                    : "translate-y-0 opacity-100 delay-100"
-                }`}
+                className="flex h-[3.75rem] flex-col justify-center"
               >
-                  <div className="truncate text-xl font-black text-slate-900 sm:text-2xl">
-                    {module.icon || "📚"} {module.name}
-                  </div>
-                {currentSection && (
-                  <div className="truncate text-xs font-semibold text-slate-500 sm:text-sm">
-                    {currentSection.name}
-                  </div>
-                )}
-              </div>
-
-              <div
-                aria-hidden="true"
-                className={`absolute inset-0 flex flex-col justify-center transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
-                  isHeaderCollapsed
-                    ? "translate-y-0 opacity-100 delay-100"
-                    : "pointer-events-none translate-y-1 opacity-0"
-                }`}
-              >
-                <div className="truncate text-sm font-black text-slate-900 sm:text-base">
-                  {module.icon || "📚"} {currentSection?.name || module.name}
+                <div className="truncate text-xl font-black text-slate-900 sm:text-2xl">
+                  {module.icon || "📚"} {module.name}
                 </div>
               </div>
+
             </div>
 
             <div
               aria-hidden="true"
-              className={`shrink-0 overflow-hidden text-right transition-[max-width,opacity] duration-300 motion-reduce:transition-none ${
-                isHeaderCollapsed
-                  ? "max-w-16 opacity-100"
-                  : "max-w-0 opacity-0 sm:max-w-[9rem] sm:opacity-100"
-              }`}
+              className="hidden shrink-0 text-right sm:block"
             >
               <div
-                className={`overflow-hidden text-[10px] font-bold uppercase tracking-wide text-purple-500 transition-[max-height,opacity] duration-200 motion-reduce:transition-none ${
-                  isHeaderCollapsed
-                    ? "max-h-0 opacity-0"
-                    : "max-h-4 opacity-100"
-                }`}
+                className="text-[10px] font-bold uppercase tracking-wide text-purple-500"
               >
                 Прогресс
               </div>
               <div className="whitespace-nowrap text-sm font-black text-slate-800 sm:text-lg">
                 {sectionSummary.completed}/{sectionSummary.total}
-                <span
-                  className={`inline-block overflow-hidden align-bottom transition-[max-width,opacity] duration-200 motion-reduce:transition-none ${
-                    isHeaderCollapsed
-                      ? "max-w-0 opacity-0"
-                      : "max-w-16 opacity-100"
-                  }`}
-                >
-                  &nbsp;сабақ
-                </span>
+                &nbsp;сабақ
               </div>
             </div>
 
-            {currentSection && (
-              <button
-                ref={guideButtonRef}
-                type="button"
-                onClick={() => setGuideSectionId(currentSection.id)}
-                aria-label={`Анықтамалық: ${currentSection.name}`}
-                title={isHeaderCollapsed ? "Анықтамалық" : undefined}
-                className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-gradient-to-r from-fuchsia-600 to-purple-700 font-black text-white shadow-lg transition-[height,padding,border-radius,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 motion-reduce:transition-none ${
-                  isHeaderCollapsed
-                    ? "h-10 w-10 rounded-xl p-0"
-                    : "h-11 gap-2 rounded-2xl px-3.5 py-2 text-xs sm:px-4 sm:text-sm"
-                }`}
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6a1 1 0 0 1 .7.3l5.4 5.4a1 1 0 0 1 .3.7V19a2 2 0 0 1-2 2Z"
-                  />
-                </svg>
-                <span
-                  className={`hidden overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 motion-reduce:transition-none min-[350px]:inline-block ${
-                    isHeaderCollapsed
-                      ? "max-w-0 opacity-0"
-                      : "max-w-32 opacity-100"
-                  }`}
-                >
-                  Анықтамалық
-                </span>
-              </button>
-            )}
           </div>
 
           <div
@@ -501,9 +386,7 @@ export default function ModuleDetailPage() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={sectionSummary.progress}
-            className={`overflow-hidden rounded-full bg-purple-100 transition-[height,margin] duration-300 motion-reduce:transition-none ${
-              isHeaderCollapsed ? "mt-1.5 h-1" : "mt-4 h-2"
-            }`}
+            className="mt-4 h-2 overflow-hidden rounded-full bg-purple-100"
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-purple-600 to-blue-500 transition-[width] duration-700"
@@ -531,7 +414,7 @@ export default function ModuleDetailPage() {
               </div>
             </div>
           ) : (
-            <ModuleLessonJourney sections={sortedSections} />
+            <ModuleLessonJourney sections={sortedSections} onOpenGuide={openGuide} />
           )}
         </div>
       </main>
