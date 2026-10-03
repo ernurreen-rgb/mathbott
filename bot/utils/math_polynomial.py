@@ -130,9 +130,19 @@ def _power_polynomial(value: Polynomial, exponent: int) -> Polynomial:
 
 
 def _constant_value(value: _RationalPolynomial) -> Optional[Fraction]:
-    numerator = value.numerator.get((), Fraction(0)) if len(value.numerator) <= 1 else None
-    denominator = value.denominator.get((), Fraction(0)) if len(value.denominator) == 1 else None
-    if numerator is None or denominator in {None, Fraction(0)}:
+    if not value.numerator:
+        numerator = Fraction(0)
+    elif len(value.numerator) == 1 and () in value.numerator:
+        numerator = value.numerator[()]
+    else:
+        return None
+
+    if len(value.denominator) == 1 and () in value.denominator:
+        denominator = value.denominator[()]
+    else:
+        return None
+
+    if denominator == 0:
         return None
     return numerator / denominator
 

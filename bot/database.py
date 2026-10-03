@@ -26,6 +26,7 @@ from repositories.statistics_repository import StatisticsRepository
 from repositories.friends_repository import FriendsRepository
 from repositories.ops_repository import OpsRepository
 from repositories.onboarding_repository import OnboardingRepository
+from repositories.quiz_repository import QuizRepository
 from utils.connection_pool import ConnectionPool
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ class Database:
         self.friends = FriendsRepository(db_path, connection_pool=self.connection_pool)
         self.ops = OpsRepository(db_path, connection_pool=self.connection_pool)
         self.onboarding = OnboardingRepository(db_path, connection_pool=self.connection_pool)
+        self.quizzes = QuizRepository(db_path, connection_pool=self.connection_pool)
 
     async def _configure_connection(self, db: aiosqlite.Connection) -> None:
         # Improve concurrency (readers don't block writers as much)

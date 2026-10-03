@@ -12,3 +12,4 @@ export * from "./api/admin-ops";
 export * from "./api/admin-trial-tests";
 export * from "./api/admin-bank";
 export * from "./api/admin-task-preview";
+export * from "./api/quizzes";

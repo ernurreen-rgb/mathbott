@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0006_remove_factor_grid_tasks"
+HEAD_REVISION = "0007_quizizz_service"
 
 
 def _load_baseline_ddl():
