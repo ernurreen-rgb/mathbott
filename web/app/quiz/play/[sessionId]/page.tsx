@@ -148,7 +148,7 @@ export default function PlayQuizPage({ params }: PageProps) {
         if (msg.type === "game_started") {
           setSessionData((prev) => (prev ? { ...prev, status: "in_progress" } : null));
           toast("Ойын басталды! Сәттілік!", { icon: "🚀" });
-        } else if (msg.type === "game_finished") {
+        } else if (msg.type === "game_finished" || msg.type === "game_over") {
           setSessionData((prev) => (prev ? { ...prev, status: "finished" } : null));
           setIsFinished(true);
         }

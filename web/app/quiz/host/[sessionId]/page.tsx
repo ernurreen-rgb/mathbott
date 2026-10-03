@@ -90,7 +90,7 @@ export default function HostQuizPage({ params }: PageProps) {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === "participant_joined") {
+        if (msg.type === "participant_joined" || msg.type === "player_joined") {
           setParticipants((prev) => {
             const exists = prev.some((p) => p.id === msg.participant.id);
             if (exists) return prev;
@@ -98,27 +98,35 @@ export default function HostQuizPage({ params }: PageProps) {
           });
         } else if (msg.type === "game_started") {
           setQuizSession((prev) => (prev ? { ...prev, status: "in_progress" } : null));
-        } else if (msg.type === "answer_submitted") {
-          setParticipants((prev) =>
-            prev.map((p) =>
-              p.id === msg.participant_id
-                ? {
-                    ...p,
-                    score: msg.score,
-                    streak: msg.streak,
-                    total_answered: p.total_answered + 1,
-                    correct_count: msg.is_correct ? p.correct_count + 1 : p.correct_count,
-                  }
-                : p
-            )
-          );
-        } else if (msg.type === "participant_finished") {
-          setParticipants((prev) =>
-            prev.map((p) =>
-              p.id === msg.participant_id ? { ...p, is_finished: true } : p
-            )
-          );
-        } else if (msg.type === "game_finished") {
+        } else if (msg.type === "answer_submitted" || msg.type === "leaderboard_update") {
+          if (msg.leaderboard && Array.isArray(msg.leaderboard)) {
+            setParticipants(msg.leaderboard);
+          } else {
+            setParticipants((prev) =>
+              prev.map((p) =>
+                p.id === msg.participant_id
+                  ? {
+                      ...p,
+                      score: msg.score ?? p.score,
+                      streak: msg.streak ?? p.streak,
+                      total_answered: p.total_answered + 1,
+                      correct_count: msg.is_correct ? p.correct_count + 1 : p.correct_count,
+                    }
+                  : p
+              )
+            );
+          }
+        } else if (msg.type === "participant_finished" || msg.type === "player_finished") {
+          if (msg.leaderboard && Array.isArray(msg.leaderboard)) {
+            setParticipants(msg.leaderboard);
+          } else {
+            setParticipants((prev) =>
+              prev.map((p) =>
+                p.id === msg.participant_id ? { ...p, is_finished: true } : p
+              )
+            );
+          }
+        } else if (msg.type === "game_finished" || msg.type === "game_over") {
           setQuizSession((prev) => (prev ? { ...prev, status: "finished" } : null));
           if (msg.stats) {
             setStats(msg.stats);

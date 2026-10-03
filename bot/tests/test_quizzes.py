@@ -156,6 +156,19 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert join2_resp.status_code == 200
     p2 = join2_resp.json()["participant"]
 
+    # 3.5. Premature answer rejection: answering while in "lobby" must return 400
+    lobby_ans_resp = client.post(
+        f"/api/quiz-sessions/{session_id}/answers",
+        json={
+            "participant_id": p1["id"],
+            "question_id": q1["id"],
+            "answer": "A",
+            "time_taken_seconds": 5.0,
+        },
+    )
+    assert lobby_ans_resp.status_code == 400
+    assert "not active" in str(lobby_ans_resp.json())
+
     # 4. Host starts the game
     start_resp = client.post(
         f"/api/quiz-sessions/{session_id}/start",
@@ -189,6 +202,20 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     # Fast answer: ~1000 * (0.5 + 0.5 * (25/30)) = ~916 pts
     assert ans1_data["points_awarded"] > 850
     assert ans1_data["streak"] == 1
+    score_after_q1 = ans1_data["total_score"]
+
+    # 6.5. Double-submission protection: submitting Q1 again must not increase score
+    ans1_duplicate = client.post(
+        f"/api/quiz-sessions/{session_id}/answers",
+        json={
+            "participant_id": p1["id"],
+            "question_id": q1["id"],
+            "answer": "A",
+            "time_taken_seconds": 1.0,
+        },
+    )
+    assert ans1_duplicate.status_code == 200
+    assert ans1_duplicate.json()["total_score"] == score_after_q1
 
     # 7. Player 2 answers Q1 incorrectly
     ans2_resp = client.post(

@@ -174,11 +174,10 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         await quiz_manager.broadcast(
             session["id"],
             {
-                "type": "player_joined",
+                "type": "participant_joined",
                 "participant": participant,
             },
         )
-
         return {
             "session": session,
             "participant": participant,
@@ -233,7 +232,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         await quiz_manager.broadcast(
             session_id,
             {
-                "type": "game_over",
+                "type": "game_finished",
                 "session_id": session_id,
                 "stats": stats,
             },
@@ -286,8 +285,11 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         session = await db.quizzes.get_session_by_id(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session["status"] == "finished":
-            raise HTTPException(status_code=400, detail="Game session is finished")
+        if session["status"] != "in_progress":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Game session is not active (current status: {session['status']})",
+            )
 
         participant = await db.quizzes.get_participant(session_id, payload.participant_id)
         if not participant:
@@ -296,6 +298,21 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         question = await db.quizzes.get_question_by_id(payload.question_id)
         if not question or question["quiz_id"] != session["quiz_id"]:
             raise HTTPException(status_code=404, detail="Question not found in this quiz")
+
+        # Double-submission protection: if already answered, return existing result without re-scoring
+        existing_answer = await db.quizzes.get_participant_answer(
+            session_id, payload.participant_id, payload.question_id
+        )
+        if existing_answer:
+            is_prev_correct = bool(existing_answer["is_correct"])
+            return {
+                "is_correct": is_prev_correct,
+                "points_awarded": existing_answer["points_awarded"],
+                "streak": participant.get("streak", 0),
+                "total_score": participant.get("score", 0),
+                "correct_answer": question.get("correct_answer") if not is_prev_correct else None,
+                "explanation": question.get("explanation"),
+            }
 
         # Validate answer via math engine
         is_correct = check_question_answer(question, payload.answer)
@@ -327,7 +344,13 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         await quiz_manager.broadcast(
             session_id,
             {
-                "type": "leaderboard_update",
+                "type": "answer_submitted",
+                "session_id": session_id,
+                "participant_id": payload.participant_id,
+                "score": updated_participant.get("score", 0),
+                "streak": updated_participant.get("streak", 0),
+                "is_correct": is_correct,
+                "points_awarded": points_awarded,
                 "leaderboard": leaderboard,
                 "last_answer": {
                     "participant_id": payload.participant_id,
@@ -360,7 +383,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         await quiz_manager.broadcast(
             session_id,
             {
-                "type": "player_finished",
+                "type": "participant_finished",
                 "participant_id": participant_id,
                 "leaderboard": leaderboard,
             },

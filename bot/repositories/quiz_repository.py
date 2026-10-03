@@ -408,6 +408,25 @@ class QuizRepository(BaseRepository):
 
     # --- Answers and Scoring ---
 
+    async def get_participant_answer(
+        self,
+        session_id: int,
+        participant_id: int,
+        question_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Get an existing answer record for a participant on a question."""
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM quiz_answers
+                WHERE session_id = ? AND participant_id = ? AND question_id = ?
+                """,
+                (session_id, participant_id, question_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
     async def record_answer(
         self,
         session_id: int,
