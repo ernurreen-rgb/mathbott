@@ -116,10 +116,6 @@ export default function DesktopNav(_props: DesktopNavProps) {
     });
   }
 
-  const userInitial = (session?.user?.name || session?.user?.email || "Q")
-    .trim()
-    .charAt(0)
-    .toUpperCase();
 
   return (
     <nav
@@ -272,62 +268,6 @@ export default function DesktopNav(_props: DesktopNavProps) {
           );
         })}
       </div>
-
-      {/* Footer / User Profile */}
-      {!isCollapsed ? (
-        <div className="px-3 pt-2 pb-1 border-t border-gray-200/40 flex flex-col gap-2">
-          {session?.user && (
-            <Link
-              href="/profile"
-              className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/60 transition-colors group focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white font-bold text-xs flex items-center justify-center shadow-sm flex-shrink-0 group-hover:ring-2 group-hover:ring-purple-400 transition-all">
-                {userInitial}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-gray-800 truncate group-hover:text-purple-600 transition-colors">
-                  {session.user.name || "Пайдаланушы"}
-                </p>
-                <p className="text-[11px] text-gray-500 truncate">
-                  {session.user.email || ""}
-                </p>
-              </div>
-            </Link>
-          )}
-          <div className="flex items-center justify-between px-2 pt-1 text-xs text-gray-500">
-            <button
-              type="button"
-              onClick={toggleNav}
-              className="flex items-center gap-2 font-semibold hover:text-purple-600 transition-colors focus:outline-none"
-              aria-label="Мәзірді жию"
-            >
-              <SidebarIcon className="w-4 h-4" />
-              <span>Мәзірді жию</span>
-            </button>
-            <kbd className="px-1.5 py-0.5 rounded bg-gray-100/80 border border-gray-200 font-mono text-[10px] text-gray-500">
-              Ctrl+B
-            </kbd>
-          </div>
-        </div>
-      ) : (
-        <div className="py-2 border-t border-gray-200/40 flex flex-col items-center gap-2">
-          <div className="relative group">
-            <Link
-              href="/profile"
-              aria-label="Профиль"
-              className="w-10 h-10 rounded-full flex items-center justify-center hover:ring-2 hover:ring-purple-400 hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
-                {userInitial}
-              </div>
-            </Link>
-            <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center px-3 py-1.5 rounded-lg bg-gray-900/95 text-white text-xs font-medium shadow-xl whitespace-nowrap z-50">
-              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900/95" />
-              <span>{session?.user?.name || session?.user?.email || "Профиль"}</span>
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 }
