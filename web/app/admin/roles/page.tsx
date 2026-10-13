@@ -14,9 +14,9 @@ import type { AdminRole, AdminRoleUserItem } from "@/types";
 const PAGE_LIMIT = 20;
 
 const ROLE_LABELS: Record<AdminRole, string> = {
-  content_editor: "Kontent redaktory",
-  reviewer: "Reviewer",
-  super_admin: "Super admin",
+  content_editor: "Контент редакторы",
+  reviewer: "Рецензент (Reviewer)",
+  super_admin: "Супер әкімші",
 };
 
 const formatDateTime = (value: string | null | undefined): string => {
@@ -107,7 +107,7 @@ export default function AdminRolesPage() {
   const handleRoleSave = async () => {
     if (!email) return;
     if (!targetEmail.trim()) {
-      showToast.error("Email engiziniz");
+      showToast.error("Email енгізіңіз");
       return;
     }
 
@@ -119,11 +119,11 @@ export default function AdminRolesPage() {
     setSaving(false);
 
     if (err || !data) {
-      showToast.error(err || "Role update failed");
+      showToast.error(err || "Рөлді жаңарту сәтсіз аяқталды");
       return;
     }
 
-    showToast.success(data.changed ? "Role updated" : "No changes");
+    showToast.success(data.changed ? "Рөл жаңартылды" : "Өзгеріс жоқ");
     setTargetEmail("");
     setOffset(0);
     await fetchRoles();
@@ -142,21 +142,21 @@ export default function AdminRolesPage() {
     setRowPendingId(null);
 
     if (err || !data) {
-      showToast.error(err || "Role update failed");
+      showToast.error(err || "Рөлді жаңарту сәтсіз аяқталды");
       return;
     }
 
-    showToast.success(data.changed ? "Role updated" : "No changes");
+    showToast.success(data.changed ? "Рөл жаңартылды" : "Өзгеріс жоқ");
     await fetchRoles();
   };
 
   const handleRemoveAdmin = async (userEmail: string) => {
     if (!email) return;
     if (isSameEmail(email, userEmail)) {
-      showToast.error("Cannot remove your own admin access");
+      showToast.error("Өз әкімші құқығыңызды өшіре алмайсыз");
       return;
     }
-    if (!window.confirm(`Remove admin access for ${userEmail}?`)) {
+    if (!window.confirm(`${userEmail} үшін әкімші құқығын өшіру керек пе?`)) {
       return;
     }
 
@@ -168,11 +168,11 @@ export default function AdminRolesPage() {
     setSaving(false);
 
     if (err || !data) {
-      showToast.error(err || "Admin remove failed");
+      showToast.error(err || "Әкімшіні өшіру сәтсіз аяқталды");
       return;
     }
 
-    showToast.success(data.changed ? "Admin access removed" : "No changes");
+    showToast.success(data.changed ? "Әкімші құқығы өшірілді" : "Өзгеріс жоқ");
     setOffset(0);
     await fetchRoles();
   };
@@ -180,7 +180,7 @@ export default function AdminRolesPage() {
   if (status === "loading" || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl">Жүктелуде...</div>
       </div>
     );
   }
@@ -188,7 +188,7 @@ export default function AdminRolesPage() {
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Please sign in to access admin roles</div>
+        <div className="text-xl">Әкімші рөлдеріне қол жеткізу үшін жүйеге кіріңіз</div>
       </div>
     );
   }
@@ -204,22 +204,22 @@ export default function AdminRolesPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-                  Rolderdi baskaru
+                  Рөлдерді басқару
                 </h1>
-                <p className="text-gray-700 mt-1">Admin role management</p>
+                <p className="text-gray-700 mt-1">Әкімші рөлдерін тағайындау және өзгерту</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => void fetchRoles()}
                   className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg"
                 >
-                  Zhanartu
+                  Жаңарту
                 </button>
                 <Link href="/admin/bank/audit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg">
-                  Audit history
+                  Аудит тарихы
                 </Link>
                 <Link href="/admin" className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
-                  Artqa
+                  Артқа
                 </Link>
               </div>
             </div>
@@ -227,13 +227,13 @@ export default function AdminRolesPage() {
             {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
 
             <div className="bg-white/70 rounded-2xl p-4 border border-white/40 mb-4 space-y-3">
-              <div className="text-sm font-semibold text-gray-800">Role assign</div>
+              <div className="text-sm font-semibold text-gray-800">Рөл тағайындау</div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <input
                   type="email"
                   value={targetEmail}
                   onChange={(e) => setTargetEmail(e.target.value)}
-                  placeholder="target email"
+                  placeholder="Пайдаланушы email-і"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
                 <select
@@ -250,19 +250,19 @@ export default function AdminRolesPage() {
                   disabled={saving}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-2 px-4 rounded-lg"
                 >
-                  {saving ? "Saving..." : "Saqtau"}
+                  {saving ? "Сақталуда..." : "Сақтау"}
                 </button>
               </div>
             </div>
 
             <div className="bg-white/70 rounded-2xl p-4 border border-white/40 mb-4 space-y-3">
-              <div className="text-sm font-semibold text-gray-800">Filter</div>
+              <div className="text-sm font-semibold text-gray-800">Сүзгі</div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <input
                   type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="search by email"
+                  placeholder="Email бойынша іздеу"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
                 <select
@@ -271,7 +271,7 @@ export default function AdminRolesPage() {
                   onChange={(e) => setRoleFilter((e.target.value || "") as AdminRole | "")}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 >
-                  <option value="">All roles</option>
+                  <option value="">Барлық рөлдер</option>
                   <option value="content_editor">{ROLE_LABELS.content_editor}</option>
                   <option value="reviewer">{ROLE_LABELS.reviewer}</option>
                   <option value="super_admin">{ROLE_LABELS.super_admin}</option>
@@ -280,33 +280,33 @@ export default function AdminRolesPage() {
                   onClick={applySearch}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg"
                 >
-                  Izdeu
+                  Іздеу
                 </button>
                 <button
                   onClick={resetSearch}
                   className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg"
                 >
-                  Tazalau
+                  Тазалау
                 </button>
               </div>
             </div>
 
-            <div className="mb-4 text-sm text-gray-700">Barlygy: {total}</div>
+            <div className="mb-4 text-sm text-gray-700">Барлығы: {total}</div>
 
             {loading ? (
-              <div className="text-center py-8 text-gray-600">Loading...</div>
+              <div className="text-center py-8 text-gray-600">Жүктелуде...</div>
             ) : items.length === 0 ? (
-              <div className="text-center py-8 text-gray-600">No admin users found</div>
+              <div className="text-center py-8 text-gray-600">Әкімші пайдаланушылары табылмады</div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-white/40">
                 <table className="w-full text-sm">
                   <thead className="bg-white/70">
                     <tr>
                       <th className="text-left px-4 py-3">Email</th>
-                      <th className="text-left px-4 py-3">Role</th>
-                      <th className="text-left px-4 py-3">Created</th>
-                      <th className="text-left px-4 py-3">Last active</th>
-                      <th className="text-left px-4 py-3">Actions</th>
+                      <th className="text-left px-4 py-3">Рөл</th>
+                      <th className="text-left px-4 py-3">Құрылған уақыты</th>
+                      <th className="text-left px-4 py-3">Соңғы белсенділік</th>
+                      <th className="text-left px-4 py-3">Әрекеттер</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white/50">
@@ -341,7 +341,7 @@ export default function AdminRolesPage() {
                               }
                               className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold py-1.5 px-3 rounded-lg"
                             >
-                              {rowPendingId === item.id ? "Saving..." : "Saqtau"}
+                              {rowPendingId === item.id ? "Сақталуда..." : "Сақтау"}
                             </button>
                           </div>
                         </td>
@@ -353,7 +353,7 @@ export default function AdminRolesPage() {
                             disabled={saving || rowPendingId === item.id || isSameEmail(email, item.email)}
                             className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold py-1.5 px-3 rounded-lg"
                           >
-                            Admindi oshiru
+                            Әкімшіліктен шығару
                           </button>
                         </td>
                       </tr>
@@ -365,7 +365,7 @@ export default function AdminRolesPage() {
 
             <div className="mt-4 flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                Bet {page} / {totalPages}
+                Бет {page} / {totalPages}
               </div>
               <div className="flex gap-2">
                 <button
@@ -373,14 +373,14 @@ export default function AdminRolesPage() {
                   disabled={offset === 0}
                   className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
                 >
-                  Artqa
+                  Артқа
                 </button>
                 <button
                   onClick={() => setOffset((prev) => prev + PAGE_LIMIT)}
                   disabled={offset + PAGE_LIMIT >= total}
                   className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
                 >
-                  Alga
+                  Алға
                 </button>
               </div>
             </div>

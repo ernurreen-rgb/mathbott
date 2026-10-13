@@ -95,7 +95,7 @@ describe("AdminRolesPage", () => {
     render(<AdminRolesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Rolderdi baskaru")).toBeInTheDocument();
+      expect(screen.getByText("Рөлдерді басқару")).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByText("editor@example.com")).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("AdminRolesPage", () => {
     });
 
     fireEvent.change(screen.getByTestId("roles-filter-role"), { target: { value: "reviewer" } });
-    fireEvent.click(screen.getByText("Izdeu"));
+    fireEvent.click(screen.getByText("Іздеу"));
 
     await waitFor(() => {
       expect(mockGetAdminRoles).toHaveBeenLastCalledWith(
@@ -166,7 +166,7 @@ describe("AdminRolesPage", () => {
     render(<AdminRolesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Rolderdi baskaru")).toBeInTheDocument();
+      expect(screen.getByText("Рөлдерді басқару")).toBeInTheDocument();
     });
     expect(mockGetAdminRoles).not.toHaveBeenCalled();
   });
