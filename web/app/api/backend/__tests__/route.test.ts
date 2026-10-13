@@ -76,6 +76,23 @@ it("preserves anonymous access to public requests without email", async () => {
   expect(mockGetToken).not.toHaveBeenCalled();
 });
 
+it("forwards optional Quiz owner identity even when the URL has no email", async () => {
+  const response = await GET(new NextRequest("https://mathbot.example/api/backend/quizzes/1"), context("quizzes", "1"));
+  expect(response.status).toBe(200);
+  expect(mockFetch.mock.calls[0][1].headers.get("X-Proxy-User-Email")).toBe(ownerEmail);
+});
+
+it("preserves guest capability requests without requiring a Google session", async () => {
+  mockGetToken.mockResolvedValue(null);
+  const response = await GET(new NextRequest("https://mathbot.example/api/backend/quiz-sessions/1/progress", {
+    headers: { "X-Quiz-Participant-Token": "guest-credential" },
+  }), context("quiz-sessions", "1", "progress"));
+  expect(response.status).toBe(200);
+  const headers = mockFetch.mock.calls[0][1].headers;
+  expect(headers.get("X-Proxy-User-Email")).toBeNull();
+  expect(headers.get("X-Quiz-Participant-Token")).toBe("guest-credential");
+});
+
 const jsonContentTypes = [
   "application/json",
   "application/problem+json",

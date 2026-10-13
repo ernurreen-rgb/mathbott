@@ -2,13 +2,14 @@
 Routes for Quizzes management (Quizizz-like service)
 """
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from slowapi import Limiter
 
-from dependencies import get_db, require_internal_identity
+from dependencies import get_db, require_internal_identity, optional_internal_identity
 from database import Database
+from utils.quiz import public_question
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class CreateQuizRequest(BaseModel):
     description: Optional[str] = Field(default="", max_length=1000)
     cover_image: Optional[str] = None
     is_public: bool = True
+    questions: List["QuizQuestionItem"] = Field(default_factory=list, max_length=200)
 
 
 class UpdateQuizRequest(BaseModel):
@@ -29,7 +31,7 @@ class UpdateQuizRequest(BaseModel):
 
 class QuizQuestionItem(BaseModel):
     question_text: str = Field(min_length=1, max_length=5000)
-    question_type: str = Field(default="mcq")  # mcq, multi_select, input, tf
+    question_type: Literal["mcq", "multi_select", "input", "tf"] = "mcq"
     options: Optional[List[Dict[str, Any]]] = None
     correct_answer: str = Field(min_length=1, max_length=1000)
     accepted_answers: Optional[List[str]] = None
@@ -42,7 +44,7 @@ class QuizQuestionItem(BaseModel):
 
 class UpdateQuestionItem(BaseModel):
     question_text: Optional[str] = Field(default=None, min_length=1, max_length=5000)
-    question_type: Optional[str] = None
+    question_type: Optional[Literal["mcq", "multi_select", "input", "tf"]] = None
     options: Optional[List[Dict[str, Any]]] = None
     correct_answer: Optional[str] = Field(default=None, min_length=1, max_length=1000)
     accepted_answers: Optional[List[str]] = None
@@ -56,6 +58,13 @@ class UpdateQuestionItem(BaseModel):
 def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Setup Quizzes CRUD routes."""
 
+    def can_manage(quiz, user):
+        return bool(user and (user['id'] == quiz['created_by'] or user.get('is_admin')))
+
+    def ensure_visible(quiz, user):
+        if not quiz or (not quiz['is_public'] and not can_manage(quiz, user)):
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
     @app.get("/api/quizzes")
     async def list_quizzes_endpoint(
         my_only: bool = Query(False),
@@ -63,13 +72,10 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         limit: int = Query(50, ge=1, le=100),
         offset: int = Query(0, ge=0),
         db: Database = Depends(get_db),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
     ):
         """List public quizzes or user's own quizzes."""
-        user_id = None
-        if email:
-            user = await db.users.get_user_by_email(email)
-            if user:
-                user_id = user["id"]
+        user_id = current_user['id'] if current_user else None
 
         if my_only:
             if not user_id:
@@ -78,29 +84,30 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         else:
             quizzes = await db.quizzes.list_quizzes(is_public=True, limit=limit, offset=offset)
 
-        return quizzes
+        return [{**quiz, 'can_manage': can_manage(quiz, current_user)} for quiz in quizzes]
 
     @app.get("/api/quizzes/{quiz_id}")
     async def get_quiz_endpoint(
         quiz_id: int,
         db: Database = Depends(get_db),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
     ):
         """Get a single quiz details."""
         quiz = await db.quizzes.get_quiz_by_id(quiz_id)
-        if not quiz:
-            raise HTTPException(status_code=404, detail="Quiz not found")
-        return quiz
+        ensure_visible(quiz, current_user)
+        return {**quiz, 'can_manage': can_manage(quiz, current_user)}
 
     @app.get("/api/quizzes/{quiz_id}/questions")
     async def get_quiz_questions_endpoint(
         quiz_id: int,
         db: Database = Depends(get_db),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
     ):
         """Get all questions of a quiz."""
         quiz = await db.quizzes.get_quiz_by_id(quiz_id)
-        if not quiz:
-            raise HTTPException(status_code=404, detail="Quiz not found")
-        return await db.quizzes.get_quiz_questions(quiz_id)
+        ensure_visible(quiz, current_user)
+        questions = await db.quizzes.get_quiz_questions(quiz_id)
+        return questions if can_manage(quiz, current_user) else [public_question(q) for q in questions]
 
     @app.post("/api/quizzes")
     async def create_quiz_endpoint(
@@ -115,6 +122,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             description=payload.description or "",
             cover_image=payload.cover_image,
             is_public=payload.is_public,
+            questions=[q.model_dump() for q in payload.questions],
         )
         return quiz
 

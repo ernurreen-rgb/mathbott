@@ -35,7 +35,7 @@ class CacheHeadersMiddleware(BaseHTTPMiddleware):
         
         path = get_scope_path(request)
 
-        if self._has_user_identity(request):
+        if self._has_user_identity(request) or path.startswith(("/api/quizzes", "/api/quiz-sessions")):
             self._set_no_store_headers(response)
             return response
         

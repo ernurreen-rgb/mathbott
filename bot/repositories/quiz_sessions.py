@@ -1,0 +1,267 @@
+"""Quiz session snapshots, participant capabilities and atomic scoring."""
+import json
+import random
+import secrets
+import time
+import aiosqlite
+
+from utils.quiz import (QuizError, token_hash, public_participant, public_question,
+                        answer_result, check_question_answer, calculate_speed_points)
+
+
+class QuizSessionsMixin:
+    @staticmethod
+    async def _row(db, sql, args=()):
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    @staticmethod
+    async def _snapshot_questions(db, session_id):
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? ORDER BY position",
+            (session_id,),
+        ) as cursor:
+            return [json.loads(row[0]) for row in await cursor.fetchall()]
+
+    async def create_session(self, quiz_id: int, host_id: int, settings=None):
+        async with self._write_transaction() as db:
+            quiz = await self._row(db, "SELECT * FROM quizzes WHERE id = ?", (quiz_id,))
+            host = await self._row(db, "SELECT * FROM users WHERE id = ?", (host_id,))
+            if not quiz or not host:
+                raise QuizError("not_found", "Quiz or host not found")
+            if not quiz['is_public'] and quiz['created_by'] != host_id and not host['is_admin']:
+                raise QuizError("forbidden", "Private quiz is not available")
+            async with db.execute("SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY sort_order, id", (quiz_id,)) as cursor:
+                questions = [dict(row) for row in await cursor.fetchall()]
+            if not questions:
+                raise QuizError("invalid", "Quiz has no questions")
+            for _ in range(100):
+                pin = str(100000 + secrets.randbelow(900000))
+                if not await self._row(db, "SELECT id FROM quiz_sessions WHERE pin_code = ?", (pin,)):
+                    break
+            else:
+                raise QuizError("conflict", "No available PIN; try again")
+            cursor = await db.execute(
+                "INSERT INTO quiz_sessions (quiz_id, host_id, pin_code, status, settings) VALUES (?, ?, ?, 'lobby', ?)",
+                (quiz_id, host_id, pin, json.dumps(settings or {}, ensure_ascii=False)),
+            )
+            session_id = cursor.lastrowid
+            for position, question in enumerate(questions):
+                for key in ('options', 'accepted_answers'):
+                    question[key] = json.loads(question.get(key) or '[]')
+                await db.execute("INSERT INTO quiz_session_questions VALUES (?, ?, ?, ?)",
+                                 (session_id, question['id'], position, json.dumps(question, ensure_ascii=False)))
+        return await self.get_session_by_id(session_id)
+
+    async def get_session_by_id(self, session_id: int):
+        async with self._connection() as db:
+            session = await self._row(db, """SELECT s.*, q.title AS quiz_title,
+                q.description AS quiz_description, u.nickname AS host_nickname
+                FROM quiz_sessions s JOIN quizzes q ON q.id = s.quiz_id
+                JOIN users u ON u.id = s.host_id WHERE s.id = ?""", (session_id,))
+            if session:
+                session['settings'] = json.loads(session.get('settings') or '{}')
+            return session
+
+    async def get_session_by_pin(self, pin_code: str):
+        async with self._connection() as db:
+            row = await self._row(db, "SELECT id FROM quiz_sessions WHERE pin_code = ? AND status != 'finished'", (pin_code,))
+        return await self.get_session_by_id(row['id']) if row else None
+
+    async def update_session_status(self, session_id: int, status: str):
+        async with self._write_transaction() as db:
+            row = await self._row(db, "SELECT * FROM quiz_sessions WHERE id = ?", (session_id,))
+            if not row:
+                raise QuizError('not_found', 'Session not found')
+            if status == row['status']:
+                pass  # Retry does not reset the clock.
+            elif status == 'in_progress' and row['status'] == 'lobby':
+                await db.execute("UPDATE quiz_sessions SET status = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
+            elif status == 'finished' and row['status'] in ('lobby', 'in_progress'):
+                await db.execute("UPDATE quiz_sessions SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
+            else:
+                raise QuizError('conflict', 'Invalid session status transition')
+        return await self.get_session_by_id(session_id)
+
+    async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None):
+        nickname = nickname.strip()
+        if not nickname:
+            raise QuizError('invalid', 'Nickname is required')
+        async with self._write_transaction() as db:
+            session = await self._row(db, 'SELECT * FROM quiz_sessions WHERE id = ?', (session_id,))
+            if not session or session['status'] == 'finished':
+                raise QuizError('conflict', 'Session is not accepting participants')
+            existing = await self._row(db, 'SELECT * FROM quiz_participants WHERE session_id = ? AND nickname = ?', (session_id, nickname))
+            if existing:
+                owns_token = bool(participant_token and existing['token_hash'] == token_hash(participant_token))
+                owns_account = bool(user_id and existing['user_id'] == user_id)
+                if not owns_token and not owns_account:
+                    raise QuizError('conflict', 'Nickname already taken; choose another nickname')
+                participant_id = existing['id']
+                if owns_token:
+                    issued_token = participant_token
+                else:
+                    # Authenticated account recovery also handles legacy records.
+                    issued_token = secrets.token_urlsafe(32)
+                    await db.execute('UPDATE quiz_participants SET token_hash = ? WHERE id = ?', (token_hash(issued_token), participant_id))
+            else:
+                issued_token = secrets.token_urlsafe(32)
+                color = avatar_color or random.choice(['#ef4444', '#22c55e', '#3b82f6', '#8b5cf6'])
+                cursor = await db.execute('''INSERT INTO quiz_participants
+                    (session_id, user_id, nickname, avatar_color, token_hash) VALUES (?, ?, ?, ?, ?)''',
+                    (session_id, user_id, nickname, color, token_hash(issued_token)))
+                participant_id = cursor.lastrowid
+            participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
+        return {**public_participant(participant), 'participant_token': issued_token}
+
+    async def get_participant(self, session_id: int, participant_id: int):
+        async with self._connection() as db:
+            return await self._row(db, 'SELECT * FROM quiz_participants WHERE session_id = ? AND id = ?', (session_id, participant_id))
+
+    async def _token_participant(self, db, session_id, participant_token, participant_id=None):
+        participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE session_id = ? AND token_hash = ?',
+                                      (session_id, token_hash(participant_token)))
+        if not participant or (participant_id is not None and participant['id'] != participant_id):
+            raise QuizError('unauthorized', 'Invalid participant token')
+        return participant
+
+    async def authenticate_participant(self, session_id, participant_token):
+        async with self._connection() as db:
+            return await self._token_participant(db, session_id, participant_token)
+
+    async def list_participants(self, session_id: int):
+        async with self._connection() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute('SELECT * FROM quiz_participants WHERE session_id = ? ORDER BY score DESC, correct_count DESC, id', (session_id,)) as cursor:
+                return [public_participant(dict(row)) for row in await cursor.fetchall()]
+
+    async def get_session_questions(self, session_id):
+        async with self._connection() as db:
+            return await self._snapshot_questions(db, session_id)
+
+    async def get_participant_answer(self, session_id, participant_id, question_id):
+        async with self._connection() as db:
+            return await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
+                                   (session_id, participant_id, question_id))
+
+    async def _progress(self, db, session_id, participant, now):
+        session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+        questions = await self._snapshot_questions(db, session_id)
+        index = participant['current_question_index']
+        question = questions[index] if index < len(questions) else None
+        answer = None
+        if question:
+            answer = await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
+                                     (session_id, participant['id'], question['id']))
+        started_at = participant['question_started_at']
+        visible = question if started_at is not None or answer else None
+        return {
+            'status': session['status'], 'participant': public_participant(participant),
+            'question_count': len(questions), 'current_question_index': index,
+            'current_question': public_question(visible) if visible else None,
+            'deadline_at': started_at + question['time_limit_seconds'] if started_at is not None and question else None,
+            'server_now': now, 'result': answer_result(answer, participant, question) if answer else None,
+        }
+
+    async def get_player_progress(self, session_id, participant_token):
+        async with self._connection() as db:
+            participant = await self._token_participant(db, session_id, participant_token)
+            return await self._progress(db, session_id, participant, time.time())
+
+    async def activate_question(self, session_id, participant_token, advance=False, question_id=None):
+        async with self._write_transaction() as db:
+            participant = await self._token_participant(db, session_id, participant_token)
+            session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+            if session['status'] != 'in_progress':
+                raise QuizError('conflict', 'Game is not active')
+            questions = await self._snapshot_questions(db, session_id)
+            now = time.time()
+            if participant['is_finished']:
+                return await self._progress(db, session_id, participant, now)
+            index = participant['current_question_index']
+            if not questions or index >= len(questions):
+                raise QuizError('conflict', 'Session has no playable questions')
+            if advance:
+                if question_id != questions[index]['id']:
+                    # A delayed retry for an earlier answered question must not advance twice.
+                    previous = await self._row(db, 'SELECT id FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
+                                               (session_id, participant['id'], question_id))
+                    if previous:
+                        return await self._progress(db, session_id, participant, now)
+                    raise QuizError('conflict', 'Question does not match current progress')
+                answered = await self._row(db, 'SELECT id FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
+                                          (session_id, participant['id'], questions[index]['id']))
+                if not answered:
+                    raise QuizError('conflict', 'Answer the current question first')
+                if index + 1 == len(questions):
+                    await db.execute('UPDATE quiz_participants SET is_finished = 1 WHERE session_id = ? AND id = ?', (session_id, participant['id']))
+                else:
+                    await db.execute('UPDATE quiz_participants SET current_question_index = ?, question_started_at = ? WHERE session_id = ? AND id = ?',
+                                     (index + 1, now, session_id, participant['id']))
+            elif participant['question_started_at'] is None:
+                await db.execute('UPDATE quiz_participants SET question_started_at = ? WHERE session_id = ? AND id = ?', (now, session_id, participant['id']))
+            participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant['id'],))
+            return await self._progress(db, session_id, participant, now)
+
+    async def record_answer(self, session_id, participant_id, question_id, user_answer, participant_token):
+        """Authorize, check clock/state, grade and persist exactly once in one write transaction."""
+        async with self._write_transaction() as db:
+            participant = await self._token_participant(db, session_id, participant_token, participant_id)
+            question_row = await self._row(db, 'SELECT snapshot_json, position FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
+                                          (session_id, question_id))
+            if not question_row:
+                raise QuizError('not_found', 'Question not found in this session')
+            question = json.loads(question_row['snapshot_json'])
+            existing = await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
+                                      (session_id, participant_id, question_id))
+            if existing:
+                return {**answer_result(existing, participant, question), 'reused': True}
+            session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+            if session['status'] != 'in_progress':
+                raise QuizError('conflict', 'Game session is not active')
+            if participant['is_finished']:
+                raise QuizError('conflict', 'Participant is finished')
+            if participant['current_question_index'] != question_row['position'] or participant['question_started_at'] is None:
+                raise QuizError('conflict', 'Question has not been activated')
+            elapsed = max(0.0, time.time() - participant['question_started_at'])
+            is_correct = elapsed < question['time_limit_seconds'] and check_question_answer(question, user_answer)
+            points = calculate_speed_points(question['points'], question['time_limit_seconds'], elapsed, participant['streak'] + 1) if is_correct else 0
+            await db.execute('''INSERT INTO quiz_answers
+                (session_id, participant_id, question_id, user_answer, is_correct, time_taken_seconds, points_awarded)
+                VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (session_id, participant_id, question_id, user_answer, int(is_correct), elapsed, points))
+            await db.execute('''UPDATE quiz_participants SET score = score + ?, streak = ?,
+                correct_count = correct_count + ?, total_answered = total_answered + 1,
+                last_active_at = CURRENT_TIMESTAMP WHERE session_id = ? AND id = ?''',
+                (points, participant['streak'] + 1 if is_correct else 0, int(is_correct), session_id, participant_id))
+            participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
+            return {**answer_result({'is_correct': is_correct, 'points_awarded': points}, participant, question), 'reused': False}
+
+    async def set_participant_finished(self, session_id, participant_id, participant_token):
+        async with self._write_transaction() as db:
+            participant = await self._token_participant(db, session_id, participant_token, participant_id)
+            question_count = await self._row(db, 'SELECT COUNT(*) AS n FROM quiz_session_questions WHERE session_id = ?', (session_id,))
+            answer_count = await self._row(db, 'SELECT COUNT(*) AS n FROM quiz_answers WHERE session_id = ? AND participant_id = ?', (session_id, participant_id))
+            if answer_count['n'] != question_count['n']:
+                raise QuizError('conflict', 'Not all questions have been answered')
+            await db.execute('UPDATE quiz_participants SET is_finished = 1 WHERE session_id = ? AND id = ?', (session_id, participant['id']))
+
+    async def get_session_leaderboard(self, session_id):
+        return await self.list_participants(session_id)
+
+    async def get_session_stats(self, session_id):
+        leaderboard = await self.get_session_leaderboard(session_id)
+        async with self._connection() as db:
+            questions = await self._snapshot_questions(db, session_id)
+            stats = []
+            for question in questions:
+                row = await self._row(db, '''SELECT COUNT(*) AS total_answers,
+                    COALESCE(SUM(is_correct), 0) AS correct_answers, AVG(time_taken_seconds) AS avg_time
+                    FROM quiz_answers WHERE session_id = ? AND question_id = ?''', (session_id, question['id']))
+                stats.append({'question_id': question['id'], 'question_text': question['question_text'],
+                              'sort_order': question['sort_order'], **row})
+        return {'session_id': session_id, 'total_players': len(leaderboard),
+                'leaderboard': leaderboard, 'podium': leaderboard[:3], 'question_stats': stats}

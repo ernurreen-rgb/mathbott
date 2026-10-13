@@ -34,8 +34,8 @@ export default function QuizDetailPage({ params }: PageProps) {
       setLoading(true);
       try {
         const [quizRes, questionsRes] = await Promise.all([
-          getQuiz(quizId),
-          getQuizQuestions(quizId),
+          getQuiz(quizId, session?.user?.email || undefined),
+          getQuizQuestions(quizId, session?.user?.email || undefined),
         ]);
 
         if (quizRes.data) {
@@ -56,7 +56,7 @@ export default function QuizDetailPage({ params }: PageProps) {
     };
 
     fetchData();
-  }, [quizId]);
+  }, [quizId, session?.user?.email]);
 
   const handleStartLiveGame = async () => {
     if (questions.length === 0) {
@@ -86,7 +86,8 @@ export default function QuizDetailPage({ params }: PageProps) {
   const handleDeleteQuiz = async () => {
     if (!confirm("Бұл квизді өшіргіңіз келетініне сенімдісіз бе?")) return;
     try {
-      await deleteQuiz(quizId, session?.user?.email || undefined);
+      const result = await deleteQuiz(quizId, session?.user?.email || undefined);
+      if (result.error) { toast.error(result.error); return; }
       toast.success("Квиз өшірілді");
       router.push("/quizzes");
     } catch {
@@ -194,7 +195,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                 <span>Тікелей ойынды бастау</span>
               </button>
 
-              <div className="flex items-center justify-end gap-2">
+              {quiz.can_manage && <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => setShowAnswers(!showAnswers)}
                   className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
@@ -210,7 +211,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-              </div>
+              </div>}
             </div>
           </div>
         </div>

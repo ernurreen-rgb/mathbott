@@ -127,6 +127,19 @@ async def require_internal_identity(
     return enriched_user
 
 
+async def optional_internal_identity(request: Request, db: Database = Depends(get_db)) -> Optional[dict]:
+    """Resolve a signed account when present, without disabling guest workflows."""
+    if has_proxy_signature_headers(request):
+        valid, email, _ = verify_proxy_signature(request)
+        if not valid:
+            raise HTTPException(status_code=401, detail="Invalid trusted proxy signature.")
+        return await db.users.get_user_by_email(email) if email else None
+    if get_settings().is_production:
+        return None
+    email = _resolve_legacy_email(email=None, request=request)
+    return await db.users.get_user_by_email(email) if email else None
+
+
 async def require_admin(
     email: Optional[str] = None,
     request: Request = None,

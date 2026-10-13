@@ -1,17 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  getQuizSession,
-  getSessionQuestions,
-  submitQuizAnswer,
-  completeQuizParticipant,
-  getQuizLeaderboard,
-} from "@/lib/api/quizzes";
-import { resolveWebSocketBase } from "@/lib/websocket-url";
-import { QuizSession, QuizQuestion, QuizAnswerResult, QuizParticipant } from "@/types/quiz";
+import { useQuizPlayer } from "@/lib/use-quiz-player";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
 
@@ -51,222 +43,24 @@ export default function PlayQuizPage({ params }: PageProps) {
   const sessionId = parseInt(resolvedParams.sessionId, 10);
   const router = useRouter();
 
-  // Participant info from session storage
-  const [participantId, setParticipantId] = useState<number | null>(null);
-  const [nickname, setNickname] = useState<string>("");
-  const [avatarColor, setAvatarColor] = useState<string>("#8b5cf6");
-
-  // Game state
-  const [sessionData, setSessionData] = useState<QuizSession | null>(null);
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // Per-question state
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [timerTotal, setTimerTotal] = useState(30);
+  const game = useQuizPlayer(sessionId);
+  const { credentials, progress, sessionData, loading, submitting, rank, timeLeft, submitAnswer } = game;
+  const participantId = credentials?.participantId;
+  const nickname = progress?.participant.nickname || credentials?.nickname || "";
+  const avatarColor = progress?.participant.avatar_color || credentials?.avatarColor || "#8b5cf6";
+  const currentQIndex = progress?.current_question_index || 0;
+  const questionCount = progress?.question_count || 0;
+  const timerTotal = progress?.current_question?.time_limit_seconds || 30;
+  const lastResult = progress?.result || null;
+  const isAnswered = !!lastResult;
+  const totalScore = progress?.participant.score || 0;
+  const streak = progress?.participant.streak || 0;
+  const correctCount = progress?.participant.correct_count || 0;
+  const isFinished = progress?.status === "finished" || !!progress?.participant.is_finished;
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [inputAnswer, setInputAnswer] = useState("");
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [lastResult, setLastResult] = useState<QuizAnswerResult | null>(null);
-
-  // Score & Streak
-  const [totalScore, setTotalScore] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [isFinished, setIsFinished] = useState(false);
-  const [rank, setRank] = useState<number | null>(null);
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(Date.now());
-  const socketRef = useRef<WebSocket | null>(null);
-
-  // 1. Load participant details from session storage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedPid = sessionStorage.getItem("quiz_participant_id");
-      const storedNick = sessionStorage.getItem("quiz_nickname");
-      const storedColor = sessionStorage.getItem("quiz_avatar_color");
-
-      if (storedPid) {
-        setParticipantId(parseInt(storedPid, 10));
-      }
-      if (storedNick) {
-        setNickname(storedNick);
-      }
-      if (storedColor) {
-        setAvatarColor(storedColor);
-      }
-    }
-  }, []);
-
-  // 2. Fetch session and questions
-  useEffect(() => {
-    if (!sessionId) return;
-
-    const loadGame = async () => {
-      setLoading(true);
-      try {
-        const [sessRes, qRes] = await Promise.all([
-          getQuizSession(sessionId),
-          getSessionQuestions(sessionId, false),
-        ]);
-
-        if (sessRes.data) {
-          setSessionData(sessRes.data);
-          if (sessRes.data.status === "finished") {
-            setIsFinished(true);
-          }
-        }
-
-        if (qRes.data) {
-          setQuestions(qRes.data);
-        }
-      } catch (err) {
-        console.error("Load game error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadGame();
-  }, [sessionId]);
-
-  // 3. Connect to WebSocket
-  useEffect(() => {
-    if (!sessionId) return;
-    const wsBase = resolveWebSocketBase();
-    if (!wsBase) return;
-
-    const ws = new WebSocket(`${wsBase}/ws/quiz/${sessionId}`);
-    socketRef.current = ws;
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "game_started") {
-          setSessionData((prev) => (prev ? { ...prev, status: "in_progress" } : null));
-          toast("Ойын басталды! Сәттілік!", { icon: "🚀" });
-        } else if (msg.type === "game_finished" || msg.type === "game_over") {
-          setSessionData((prev) => (prev ? { ...prev, status: "finished" } : null));
-          setIsFinished(true);
-        }
-      } catch (e) {
-        console.error("WS error:", e);
-      }
-    };
-
-    return () => {
-      ws.close();
-    };
-  }, [sessionId]);
-
-  const submitAnswer = async (answerValue: string) => {
-    if (isAnswered || submitting || !participantId) return;
-
-    const currentQ = questions[currentQIndex];
-    if (!currentQ) return;
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    setIsAnswered(true);
-    setSubmitting(true);
-
-    const elapsed = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
-
-    try {
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-
-      const res = await submitQuizAnswer(sessionId, {
-        participant_id: participantId,
-        question_id: currentQ.id,
-        answer: answerValue,
-        time_taken_seconds: elapsed,
-      });
-
-      if (res.data) {
-        setLastResult(res.data);
-        setTotalScore(res.data.total_score);
-        setStreak(res.data.streak);
-        if (res.data.is_correct) {
-          setCorrectCount((prev) => prev + 1);
-        }
-      }
-    } catch (e) {
-      console.error("Submit answer error:", e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitAnswerRef = useRef(submitAnswer);
-  submitAnswerRef.current = submitAnswer;
-
-  const sessionStatus = sessionData?.status;
-
-  // 4. Timer management per question
-  useEffect(() => {
-    if (
-      sessionStatus !== "in_progress" ||
-      isFinished ||
-      isAnswered ||
-      questions.length === 0
-    ) {
-      return;
-    }
-
-    const currentQ = questions[currentQIndex];
-    if (!currentQ) return;
-
-    const totalSecs = currentQ.time_limit_seconds || 30;
-    setTimerTotal(totalSecs);
-    setTimeLeft(totalSecs);
-    startTimeRef.current = Date.now();
-
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          submitAnswerRef.current("__timeout__");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [currentQIndex, sessionStatus, isFinished, isAnswered, questions]);
-
-  const handleNextQuestion = async () => {
-    setIsAnswered(false);
-    setLastResult(null);
-    setSelectedMulti([]);
-    setInputAnswer("");
-
-    if (currentQIndex + 1 < questions.length) {
-      setCurrentQIndex((prev) => prev + 1);
-    } else {
-      // Finished all questions
-      setIsFinished(true);
-      if (participantId) {
-        await completeQuizParticipant(sessionId, participantId);
-        // Fetch rank
-        const lbRes = await getQuizLeaderboard(sessionId);
-        if (lbRes.data) {
-          const myIndex = lbRes.data.findIndex((p) => p.id === participantId);
-          if (myIndex !== -1) {
-            setRank(myIndex + 1);
-          }
-        }
-      }
-    }
-  };
+  useEffect(() => { setSelectedMulti([]); setInputAnswer(""); }, [currentQIndex]);
+  const handleNextQuestion = () => void game.advance();
 
   const handleMultiSubmit = () => {
     if (selectedMulti.length === 0) {
@@ -282,7 +76,7 @@ export default function PlayQuizPage({ params }: PageProps) {
     );
   };
 
-  if (loading) {
+  if (loading || (credentials && !progress && !game.error)) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800">
         <div className="text-center">
@@ -352,8 +146,8 @@ export default function PlayQuizPage({ params }: PageProps) {
   }
 
   // STATE C: FINISHED (PLAYER SUMMARY)
-  if (isFinished || currentQIndex >= questions.length) {
-    const accuracy = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+  if (progress && (isFinished || (questionCount > 0 && currentQIndex >= questionCount))) {
+    const accuracy = questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
@@ -397,7 +191,7 @@ export default function PlayQuizPage({ params }: PageProps) {
           </div>
 
           <div className="text-xs text-gray-500 mb-6">
-            Дұрыс жауаптар: <strong className="text-gray-900">{correctCount}</strong> / {questions.length}
+            Дұрыс жауаптар: <strong className="text-gray-900">{correctCount}</strong> / {questionCount}
           </div>
 
           <Link
@@ -412,7 +206,14 @@ export default function PlayQuizPage({ params }: PageProps) {
   }
 
   // STATE B: IN-GAME QUESTION
-  const currentQ = questions[currentQIndex];
+  const currentQ = progress?.current_question;
+  if (!currentQ) return (
+    <div className="p-8 text-center">
+      <p>{game.error || "Сұрақ жүктелуде..."}</p>
+      <button onClick={() => void game.refresh()} className="mt-4 rounded bg-purple-600 px-4 py-2 text-white">Қайта жүктеу</button>
+      <Link className="block mt-4" href="/join">Ойынға қайта қосылу</Link>
+    </div>
+  );
   const timerPercent = timerTotal > 0 ? (timeLeft / timerTotal) * 100 : 0;
 
   return (
@@ -428,7 +229,7 @@ export default function PlayQuizPage({ params }: PageProps) {
           </div>
           <div>
             <span className="text-xs font-bold text-gray-800 block">
-              Сұрақ {currentQIndex + 1} / {questions.length}
+              Сұрақ {currentQIndex + 1} / {questionCount}
             </span>
             <span className="text-[10px] text-gray-500">{nickname}</span>
           </div>
@@ -454,6 +255,13 @@ export default function PlayQuizPage({ params }: PageProps) {
         </div>
       </header>
 
+      {game.error && (
+        <div role="alert" className="bg-red-50 p-4 text-center text-red-800">
+          <p>{game.error}</p>
+          <button disabled={submitting} onClick={isAnswered ? () => void game.advance() : game.retryAnswer}
+            className="mt-2 rounded bg-purple-600 px-4 py-2 text-white disabled:opacity-50">Қайта жіберу</button>
+        </div>
+      )}
       {/* Animated Timer Progress Bar */}
       <div className="w-full bg-gray-200 h-2.5 overflow-hidden">
         <div
@@ -516,6 +324,7 @@ export default function PlayQuizPage({ params }: PageProps) {
 
             <button
               onClick={handleNextQuestion}
+              disabled={submitting}
               className="mt-4 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black text-sm shadow-xl hover:scale-105 active:scale-95 transition-all"
             >
               Келесі сұраққа өту →

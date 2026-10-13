@@ -14,7 +14,29 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0007_quizizz_service"
+HEAD_REVISION = "0008_quiz_secure_sessions"
+
+
+def test_quiz_upgrade_preserves_scores_and_detaches_question_fk(tmp_path):
+    from alembic import command
+    from migrations.runner import _build_config
+    path = str(tmp_path / 'legacy-quiz.db')
+    command.upgrade(_build_config(path), '0007_quizizz_service')
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO users (id, email) VALUES (1, 'migration@example.com')")
+        conn.execute("INSERT INTO quizzes (id, title, created_by) VALUES (1, 'Legacy', 1)")
+        conn.execute("INSERT INTO quiz_questions (id, quiz_id, question_text, correct_answer) VALUES (1, 1, 'Original', 'A')")
+        conn.execute("INSERT INTO quiz_sessions (id, quiz_id, host_id, pin_code, status) VALUES (1, 1, 1, '123456', 'in_progress')")
+        conn.execute("INSERT INTO quiz_participants (id, session_id, nickname, score, total_answered) VALUES (1, 1, 'Guest', 950, 1)")
+        conn.execute("INSERT INTO quiz_answers (session_id, participant_id, question_id, user_answer, is_correct, points_awarded) VALUES (1, 1, 1, 'A', 1, 950)")
+    run_migrations(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute('PRAGMA foreign_keys = ON')
+        assert conn.execute('SELECT score, token_hash FROM quiz_participants WHERE id = 1').fetchone() == (950, None)
+        conn.execute('DELETE FROM quiz_questions WHERE id = 1')
+        assert conn.execute('SELECT COUNT(*) FROM quiz_answers').fetchone()[0] == 1
+        assert 'Original' in conn.execute('SELECT snapshot_json FROM quiz_session_questions').fetchone()[0]
+        assert not conn.execute('PRAGMA foreign_key_check').fetchall()
 
 
 def _load_baseline_ddl():

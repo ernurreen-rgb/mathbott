@@ -4,7 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { joinQuizSession } from "@/lib/api/quizzes";
+import { joinQuizSession, getQuizSessionByPin } from "@/lib/api/quizzes";
+import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
 import toast from "react-hot-toast";
 
 const AVATAR_COLORS = [
@@ -54,11 +55,19 @@ function JoinForm() {
     setLoading(true);
     try {
       const email = session?.user?.email || undefined;
+      const lobby = await getQuizSessionByPin(cleanPin);
+      if (!lobby.data) {
+        toast.error(lobby.error || "Ойын табылмады");
+        setLoading(false);
+        return;
+      }
+      const saved = readQuizPlayer(lobby.data.id);
       const { data, error } = await joinQuizSession(
         cleanPin,
         cleanNick,
         email,
-        selectedColor
+        selectedColor,
+        saved?.nickname === cleanNick ? saved.token : undefined
       );
 
       if (error || !data) {
@@ -69,10 +78,8 @@ function JoinForm() {
 
       // Store in session storage for student play page
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("quiz_participant_id", String(data.participant.id));
-        sessionStorage.setItem("quiz_session_id", String(data.session.id));
-        sessionStorage.setItem("quiz_nickname", data.participant.nickname);
-        sessionStorage.setItem("quiz_avatar_color", data.participant.avatar_color);
+        saveQuizPlayer({ sessionId: data.session.id, participantId: data.participant.id,
+          token: data.participant_token, nickname: data.participant.nickname, avatarColor: data.participant.avatar_color });
       }
 
       toast.success("Сәтті қосылдыңыз!");

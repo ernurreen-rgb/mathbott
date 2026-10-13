@@ -201,7 +201,7 @@ export async function fetchWithErrorHandling<T>(
   };
 
   // GET dedupe + short cache
-  if (method === "GET") {
+  if (method === "GET" && options?.cache !== "no-store") {
     const cached = getCache.get(url);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.value as FetchResult<T>;

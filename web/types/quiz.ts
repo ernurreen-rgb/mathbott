@@ -22,6 +22,7 @@ export interface QuizQuestion {
 }
 
 export interface Quiz {
+  can_manage?: boolean;
   id: number;
   title: string;
   description: string;
@@ -89,4 +90,28 @@ export interface QuizSessionStats {
   leaderboard: QuizParticipant[];
   podium: QuizParticipant[];
   question_stats: QuestionAccuracyStat[];
+}
+
+export interface QuizAuth {
+  email?: string;
+  participantToken?: string;
+}
+
+export interface QuizPlayerCredentials {
+  sessionId: number;
+  participantId: number;
+  token: string;
+  nickname: string;
+  avatarColor: string;
+}
+
+export interface QuizPlayerProgress {
+  status: QuizSession["status"];
+  participant: QuizParticipant;
+  question_count: number;
+  current_question_index: number;
+  current_question: QuizQuestion | null;
+  deadline_at: number | null;
+  server_now: number;
+  result: QuizAnswerResult | null;
 }

@@ -1,4 +1,4 @@
-import { apiPath, fetchWithErrorHandling, FetchResult } from "./client";
+import { apiPath, fetchWithErrorHandling as fetchBase, FetchResult } from "./client";
 import {
   Quiz,
   QuizQuestion,
@@ -6,7 +6,16 @@ import {
   QuizParticipant,
   QuizAnswerResult,
   QuizSessionStats,
+  QuizAuth,
+  QuizPlayerProgress,
 } from "@/types/quiz";
+
+// Quiz reads carry changing state and guest capabilities; never reuse URL-only caches.
+const fetchWithErrorHandling = <T>(url: string, options?: RequestInit) =>
+  fetchBase<T>(url, { ...options, cache: "no-store" });
+const authQuery = (auth?: QuizAuth) => auth?.email ? `?email=${encodeURIComponent(auth.email)}` : "";
+const authHeaders = (auth?: QuizAuth): Record<string, string> =>
+  auth?.participantToken ? { "X-Quiz-Participant-Token": auth.participantToken } : {};
 
 export async function getQuizzes(
   myOnly: boolean = false,
@@ -19,16 +28,16 @@ export async function getQuizzes(
   return fetchWithErrorHandling<Quiz[]>(`${apiPath("quizzes")}${qs}`);
 }
 
-export async function getQuiz(quizId: number): Promise<FetchResult<Quiz>> {
-  return fetchWithErrorHandling<Quiz>(apiPath(`quizzes/${quizId}`));
+export async function getQuiz(quizId: number, email?: string): Promise<FetchResult<Quiz>> {
+  return fetchWithErrorHandling<Quiz>(`${apiPath(`quizzes/${quizId}`)}${authQuery({ email })}`);
 }
 
-export async function getQuizQuestions(quizId: number): Promise<FetchResult<QuizQuestion[]>> {
-  return fetchWithErrorHandling<QuizQuestion[]>(apiPath(`quizzes/${quizId}/questions`));
+export async function getQuizQuestions(quizId: number, email?: string): Promise<FetchResult<QuizQuestion[]>> {
+  return fetchWithErrorHandling<QuizQuestion[]>(`${apiPath(`quizzes/${quizId}/questions`)}${authQuery({ email })}`);
 }
 
 export async function createQuiz(
-  payload: { title: string; description?: string; cover_image?: string; is_public?: boolean },
+  payload: { title: string; description?: string; cover_image?: string; is_public?: boolean; questions?: Partial<QuizQuestion>[] },
   email?: string
 ): Promise<FetchResult<Quiz>> {
   const qs = email ? `?email=${encodeURIComponent(email)}` : "";
@@ -121,8 +130,8 @@ export async function createQuizSession(
   });
 }
 
-export async function getQuizSession(sessionId: number): Promise<FetchResult<QuizSession>> {
-  return fetchWithErrorHandling<QuizSession>(apiPath(`quiz-sessions/${sessionId}`));
+export async function getQuizSession(sessionId: number, auth?: QuizAuth): Promise<FetchResult<QuizSession>> {
+  return fetchWithErrorHandling<QuizSession>(`${apiPath(`quiz-sessions/${sessionId}`)}${authQuery(auth)}`, { headers: authHeaders(auth) });
 }
 
 export async function getQuizSessionByPin(pinCode: string): Promise<FetchResult<QuizSession>> {
@@ -133,9 +142,10 @@ export async function joinQuizSession(
   pinCode: string,
   nickname: string,
   email?: string,
-  avatarColor?: string
-): Promise<FetchResult<{ session: QuizSession; participant: QuizParticipant }>> {
-  return fetchWithErrorHandling<{ session: QuizSession; participant: QuizParticipant }>(
+  avatarColor?: string,
+  participantToken?: string
+): Promise<FetchResult<{ session: QuizSession; participant: QuizParticipant; participant_token: string }>> {
+  return fetchWithErrorHandling<{ session: QuizSession; participant: QuizParticipant; participant_token: string }>(
     apiPath("quiz-sessions/join"),
     {
       method: "POST",
@@ -145,6 +155,7 @@ export async function joinQuizSession(
         nickname,
         email: email || undefined,
         avatar_color: avatarColor || undefined,
+        participant_token: participantToken || undefined,
       }),
     }
   );
@@ -175,10 +186,12 @@ export async function finishQuizSession(
 
 export async function getSessionQuestions(
   sessionId: number,
-  isHost: boolean = false
+  isHost: boolean = false,
+  auth?: QuizAuth
 ): Promise<FetchResult<QuizQuestion[]>> {
   return fetchWithErrorHandling<QuizQuestion[]>(
-    `${apiPath(`quiz-sessions/${sessionId}/questions`)}?is_host=${isHost}`
+    `${apiPath(`quiz-sessions/${sessionId}/questions`)}?is_host=${isHost}${auth?.email ? `&email=${encodeURIComponent(auth.email)}` : ""}`,
+    { headers: authHeaders(auth) }
   );
 }
 
@@ -188,14 +201,15 @@ export async function submitQuizAnswer(
     participant_id: number;
     question_id: number;
     answer: string;
-    time_taken_seconds: number;
-  }
+    time_taken_seconds?: number;
+  },
+  auth?: QuizAuth
 ): Promise<FetchResult<QuizAnswerResult>> {
   return fetchWithErrorHandling<QuizAnswerResult>(
     apiPath(`quiz-sessions/${sessionId}/answers`),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders(auth) },
       body: JSON.stringify(payload),
     }
   );
@@ -203,30 +217,49 @@ export async function submitQuizAnswer(
 
 export async function completeQuizParticipant(
   sessionId: number,
-  participantId: number
+  participantId: number,
+  auth?: QuizAuth
 ): Promise<FetchResult<{ success: boolean }>> {
   return fetchWithErrorHandling<{ success: boolean }>(
     apiPath(`quiz-sessions/${sessionId}/complete`),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders(auth) },
       body: JSON.stringify({ participant_id: participantId }),
     }
   );
 }
 
 export async function getQuizLeaderboard(
-  sessionId: number
+  sessionId: number, auth?: QuizAuth
 ): Promise<FetchResult<QuizParticipant[]>> {
   return fetchWithErrorHandling<QuizParticipant[]>(
-    apiPath(`quiz-sessions/${sessionId}/leaderboard`)
+    `${apiPath(`quiz-sessions/${sessionId}/leaderboard`)}${authQuery(auth)}`,
+    { headers: authHeaders(auth) }
   );
 }
 
 export async function getQuizSessionStats(
-  sessionId: number
+  sessionId: number, auth?: QuizAuth
 ): Promise<FetchResult<QuizSessionStats>> {
   return fetchWithErrorHandling<QuizSessionStats>(
-    apiPath(`quiz-sessions/${sessionId}/stats`)
+    `${apiPath(`quiz-sessions/${sessionId}/stats`)}${authQuery(auth)}`,
+    { headers: authHeaders(auth) }
   );
+}
+
+export function getQuizProgress(sessionId: number, auth: QuizAuth) {
+  return fetchWithErrorHandling<QuizPlayerProgress>(apiPath(`quiz-sessions/${sessionId}/progress`), { headers: authHeaders(auth) });
+}
+
+export function activateQuizQuestion(sessionId: number, auth: QuizAuth, advance = false, questionId?: number) {
+  return fetchWithErrorHandling<QuizPlayerProgress>(apiPath(`quiz-sessions/${sessionId}/${advance ? "next" : "current-question"}`), {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(auth) },
+    body: advance ? JSON.stringify({ question_id: questionId }) : undefined,
+  });
+}
+
+export function getQuizWsToken(sessionId: number, auth: QuizAuth) {
+  return fetchWithErrorHandling<{ token: string; expires_in: number }>(
+    `${apiPath(`quiz-sessions/${sessionId}/ws-token`)}${authQuery(auth)}`, { headers: authHeaders(auth) });
 }

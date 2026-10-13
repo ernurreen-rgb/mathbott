@@ -148,6 +148,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     )
     assert join1_resp.status_code == 200
     p1 = join1_resp.json()["participant"]
+    h1 = {"X-Quiz-Participant-Token": join1_resp.json()["participant_token"]}
 
     join2_resp = client.post(
         "/api/quiz-sessions/join",
@@ -155,10 +156,12 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     )
     assert join2_resp.status_code == 200
     p2 = join2_resp.json()["participant"]
+    h2 = {"X-Quiz-Participant-Token": join2_resp.json()["participant_token"]}
 
     # 3.5. Premature answer rejection: answering while in "lobby" must return 400
     lobby_ans_resp = client.post(
         f"/api/quiz-sessions/{session_id}/answers",
+        headers=h1,
         json={
             "participant_id": p1["id"],
             "question_id": q1["id"],
@@ -166,7 +169,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
             "time_taken_seconds": 5.0,
         },
     )
-    assert lobby_ans_resp.status_code == 400
+    assert lobby_ans_resp.status_code == 409
     assert "not active" in str(lobby_ans_resp.json())
 
     # 4. Host starts the game
@@ -176,12 +179,14 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     )
     assert start_resp.status_code == 200
     assert start_resp.json()["status"] == "in_progress"
+    for player_headers in (h1, h2):
+        assert client.post(f"/api/quiz-sessions/{session_id}/current-question", headers=player_headers).status_code == 200
 
     # 5. Player fetches questions: verify correct_answer is hidden for security!
-    play_questions_resp = client.get(f"/api/quiz-sessions/{session_id}/questions?is_host=false")
+    play_questions_resp = client.get(f"/api/quiz-sessions/{session_id}/questions?is_host=false", headers=h1)
     assert play_questions_resp.status_code == 200
     play_questions = play_questions_resp.json()
-    assert len(play_questions) == 2
+    assert len(play_questions) == 1
     for pq in play_questions:
         assert "correct_answer" not in pq
         assert "accepted_answers" not in pq
@@ -189,6 +194,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     # 6. Player 1 answers Q1 correctly and fast (time_taken = 5 sec out of 30 sec)
     ans1_resp = client.post(
         f"/api/quiz-sessions/{session_id}/answers",
+        headers=h1,
         json={
             "participant_id": p1["id"],
             "question_id": q1["id"],
@@ -207,6 +213,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     # 6.5. Double-submission protection: submitting Q1 again must not increase score
     ans1_duplicate = client.post(
         f"/api/quiz-sessions/{session_id}/answers",
+        headers=h1,
         json={
             "participant_id": p1["id"],
             "question_id": q1["id"],
@@ -220,6 +227,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     # 7. Player 2 answers Q1 incorrectly
     ans2_resp = client.post(
         f"/api/quiz-sessions/{session_id}/answers",
+        headers=h2,
         json={
             "participant_id": p2["id"],
             "question_id": q1["id"],
@@ -234,8 +242,10 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
 
     # 8. Player 1 answers Q2 (Math formula: entered "1/2", correct is "0.5")
     # Math engine should recognize 1/2 == 0.5!
+    assert client.post(f"/api/quiz-sessions/{session_id}/next", headers=h1, json={"question_id": q1["id"]}).status_code == 200
     ans3_resp = client.post(
         f"/api/quiz-sessions/{session_id}/answers",
+        headers=h1,
         json={
             "participant_id": p1["id"],
             "question_id": q2["id"],
@@ -248,7 +258,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert ans3_resp.json()["streak"] == 2  # Streak increased!
 
     # 9. Verify Leaderboard
-    lb_resp = client.get(f"/api/quiz-sessions/{session_id}/leaderboard")
+    lb_resp = client.get(f"/api/quiz-sessions/{session_id}/leaderboard", headers=h1)
     assert lb_resp.status_code == 200
     leaderboard = lb_resp.json()
     assert leaderboard[0]["nickname"] == "Алихан"

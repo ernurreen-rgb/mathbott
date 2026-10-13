@@ -1,38 +1,36 @@
-"""
-Live Quiz game session routes & WebSocket manager (Quizizz-like live game)
-"""
+"""Live quiz HTTP and WebSocket boundaries for hosts and guest capabilities."""
 import json
 import logging
+from uuid import uuid4
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
-
-from dependencies import get_db, require_internal_identity
+from dependencies import get_db, require_internal_identity, optional_internal_identity
 from database import Database
-from utils.validation import is_task_answer_correct
+from utils.quiz import QuizError, public_question, public_participant
+from utils.quiz_ws_auth import issue_quiz_ws_ticket, verify_quiz_ws_ticket, QUIZ_WS_TTL
 
 logger = logging.getLogger(__name__)
 
-
 class CreateSessionRequest(BaseModel):
-    quiz_id: int
+    quiz_id: int = Field(gt=0)
     settings: Optional[Dict[str, Any]] = None
 
-
 class JoinSessionRequest(BaseModel):
-    pin_code: str = Field(min_length=6, max_length=6)
+    pin_code: str = Field(pattern=r"^[0-9]{6}$")
     nickname: str = Field(min_length=1, max_length=30)
     email: Optional[str] = None
     avatar_color: Optional[str] = None
-
+    participant_token: Optional[str] = Field(default=None, max_length=256)
 
 class SubmitAnswerRequest(BaseModel):
-    participant_id: int
-    question_id: int
+    participant_id: int = Field(gt=0)
+    question_id: int = Field(gt=0)
     answer: str = Field(max_length=5000)
-    time_taken_seconds: float = Field(ge=0.0, le=600.0)
-
+    # Accepted for older clients, never used to calculate scores or deadlines.
+    time_taken_seconds: Optional[float] = Field(default=None, ge=0, le=600)
 
 class QuizConnectionManager:
     """In-memory WebSocket connection manager for live quiz sessions."""
@@ -68,373 +66,174 @@ class QuizConnectionManager:
 quiz_manager = QuizConnectionManager()
 
 
-def calculate_speed_points(
-    base_points: int,
-    time_limit: int,
-    time_taken: float,
-    current_streak: int,
-) -> int:
-    """Quizizz-style scoring formula with time fraction and streak multiplier."""
-    total_time = max(1.0, float(time_limit))
-    time_remaining = max(0.0, min(total_time, total_time - time_taken))
-    fraction = time_remaining / total_time
-
-    # Base * (0.5 + 0.5 * time_fraction)
-    points = int(base_points * (0.5 + 0.5 * fraction))
-    # Streak bonus: +100 per streak level after the first, capped at 500
-    streak_bonus = min(500, max(0, (current_streak - 1) * 100)) if current_streak > 1 else 0
-    return max(100, points + streak_bonus)
-
-
-def check_question_answer(question: Dict[str, Any], user_answer: Any) -> bool:
-    """Validate answer using Mathbott's robust math validation engine."""
-    qt = (question.get("question_type") or "mcq").strip().lower()
-    task_mock = {
-        "question_type": qt if qt in {"mcq", "tf", "input"} else ("select" if qt == "multi_select" else "input"),
-        "answer": question.get("correct_answer"),
-        "options": question.get("options"),
-        "accepted_answers": question.get("accepted_answers"),
-    }
-    return is_task_answer_correct(task_mock, user_answer)
-
-
 def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
-    """Setup live game sessions & WebSocket endpoints."""
+    @app.exception_handler(QuizError)
+    async def handle_quiz_error(request: Request, exc: QuizError):
+        codes = {'unauthorized': 401, 'forbidden': 403, 'not_found': 404, 'conflict': 409, 'invalid': 400}
+        return JSONResponse({'detail': str(exc)}, status_code=codes.get(exc.kind, 400))
 
-    @app.post("/api/quiz-sessions")
-    async def create_game_session(
-        payload: CreateSessionRequest,
-        current_user: dict = Depends(require_internal_identity),
-        db: Database = Depends(get_db),
-    ):
-        """Host launches a new game room."""
-        quiz = await db.quizzes.get_quiz_by_id(payload.quiz_id)
-        if not quiz:
-            raise HTTPException(status_code=404, detail="Quiz not found")
+    def token(request: Request):
+        return request.headers.get('X-Quiz-Participant-Token', '')
 
-        questions = await db.quizzes.get_quiz_questions(payload.quiz_id)
-        if not questions:
-            raise HTTPException(status_code=400, detail="Quiz has no questions. Add questions before hosting.")
-
-        session = await db.quizzes.create_session(
-            quiz_id=payload.quiz_id,
-            host_id=current_user["id"],
-            settings=payload.settings or {},
-        )
-        return session
-
-    @app.get("/api/quiz-sessions/{session_id}")
-    async def get_game_session(
-        session_id: int,
-        db: Database = Depends(get_db),
-    ):
-        """Get session details (title, PIN, status, participants)."""
+    async def access(session_id, request, user, db, host_only=False):
         session = await db.quizzes.get_session_by_id(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        participants = await db.quizzes.list_participants(session_id)
-        session["participants"] = participants
-        return session
+            raise HTTPException(404, 'Session not found')
+        if user and (session['host_id'] == user['id'] or user.get('is_admin')):
+            return session, None
+        if host_only:
+            raise HTTPException(403, 'Only the host may access this operation')
+        participant = await db.quizzes.authenticate_participant(session_id, token(request))
+        return session, participant
 
-    @app.get("/api/quiz-sessions/pin/{pin_code}")
-    async def get_game_session_by_pin(
-        pin_code: str,
-        db: Database = Depends(get_db),
-    ):
-        """Lookup active lobby by 6-digit PIN."""
+    async def broadcast_scores(session_id, db, event='answer_submitted'):
+        await quiz_manager.broadcast(session_id, {'type': event, 'session_id': session_id,
+            'leaderboard': await db.quizzes.get_session_leaderboard(session_id)})
+
+    @app.post('/api/quiz-sessions')
+    async def create_game_session(payload: CreateSessionRequest,
+                                  current_user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
+        return await db.quizzes.create_session(payload.quiz_id, current_user['id'], payload.settings)
+
+    @app.get('/api/quiz-sessions/pin/{pin_code}')
+    async def lookup_session(pin_code: str, db: Database = Depends(get_db)):
         session = await db.quizzes.get_session_by_pin(pin_code)
         if not session:
-            raise HTTPException(status_code=404, detail="Game session with this PIN not found or already finished")
-        return session
+            raise HTTPException(404, 'Session not found')
+        return {k: session[k] for k in ('id', 'pin_code', 'quiz_title', 'status')}
 
-    @app.post("/api/quiz-sessions/join")
-    async def join_game_session(
-        payload: JoinSessionRequest,
-        db: Database = Depends(get_db),
-    ):
-        """Join a game room by PIN code."""
+    @app.post('/api/quiz-sessions/join')
+    async def join_game_session(payload: JoinSessionRequest,
+                                user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         session = await db.quizzes.get_session_by_pin(payload.pin_code)
         if not session:
-            raise HTTPException(status_code=404, detail="Invalid PIN or game already finished")
+            raise HTTPException(404, 'Invalid PIN or finished game')
+        joined = await db.quizzes.join_session(session['id'], payload.nickname,
+            user_id=user['id'] if user else None, avatar_color=payload.avatar_color, participant_token=payload.participant_token)
+        credential = joined.pop('participant_token')
+        await quiz_manager.broadcast(session['id'], {'type': 'participant_joined', 'participant': joined})
+        return {'session': session, 'participant': joined, 'participant_token': credential}
 
-        user_id = None
-        if payload.email:
-            user = await db.users.get_user_by_email(payload.email)
-            if user:
-                user_id = user["id"]
+    @app.get('/api/quiz-sessions/{session_id}')
+    async def get_game_session(session_id: int, request: Request,
+                               user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        session, _ = await access(session_id, request, user, db)
+        return {**session, 'participants': await db.quizzes.list_participants(session_id)}
 
-        participant = await db.quizzes.join_session(
-            session_id=session["id"],
-            nickname=payload.nickname.strip(),
-            user_id=user_id,
-            avatar_color=payload.avatar_color,
-        )
+    @app.post('/api/quiz-sessions/{session_id}/start')
+    async def start_game_session(session_id: int, request: Request,
+                                 user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
+        await access(session_id, request, user, db, host_only=True)
+        session = await db.quizzes.update_session_status(session_id, 'in_progress')
+        await quiz_manager.broadcast(session_id, {'type': 'game_started', 'session_id': session_id})
+        return session
 
-        # Notify host and lobby participants via WebSocket
-        await quiz_manager.broadcast(
-            session["id"],
-            {
-                "type": "participant_joined",
-                "participant": participant,
-            },
-        )
-        return {
-            "session": session,
-            "participant": participant,
-        }
-
-    @app.post("/api/quiz-sessions/{session_id}/start")
-    async def start_game_session(
-        session_id: int,
-        current_user: dict = Depends(require_internal_identity),
-        db: Database = Depends(get_db),
-    ):
-        """Host starts the live game."""
-        session = await db.quizzes.get_session_by_id(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        is_admin = bool(current_user.get("is_admin"))
-        if session["host_id"] != current_user["id"] and not is_admin:
-            raise HTTPException(status_code=403, detail="Forbidden: Only host can start game")
-
-        updated = await db.quizzes.update_session_status(session_id, "in_progress")
-
-        # Broadcast game start to all waiting players
-        await quiz_manager.broadcast(
-            session_id,
-            {
-                "type": "game_started",
-                "session_id": session_id,
-            },
-        )
-        return updated
-
-    @app.post("/api/quiz-sessions/{session_id}/finish")
-    async def finish_game_session(
-        session_id: int,
-        current_user: dict = Depends(require_internal_identity),
-        db: Database = Depends(get_db),
-    ):
-        """Host ends the live game and locks final scores."""
-        session = await db.quizzes.get_session_by_id(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        is_admin = bool(current_user.get("is_admin"))
-        if session["host_id"] != current_user["id"] and not is_admin:
-            raise HTTPException(status_code=403, detail="Forbidden: Only host can finish game")
-
-        await db.quizzes.update_session_status(session_id, "finished")
+    @app.post('/api/quiz-sessions/{session_id}/finish')
+    async def finish_game_session(session_id: int, request: Request,
+                                  user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
+        await access(session_id, request, user, db, host_only=True)
+        await db.quizzes.update_session_status(session_id, 'finished')
         stats = await db.quizzes.get_session_stats(session_id)
-
-        # Broadcast game over and podium to everyone
-        await quiz_manager.broadcast(
-            session_id,
-            {
-                "type": "game_finished",
-                "session_id": session_id,
-                "stats": stats,
-            },
-        )
+        await quiz_manager.broadcast(session_id, {'type': 'game_finished', 'session_id': session_id, 'stats': stats})
         return stats
 
-    @app.get("/api/quiz-sessions/{session_id}/questions")
-    async def get_session_questions_for_play(
-        session_id: int,
-        is_host: bool = Query(False),
-        db: Database = Depends(get_db),
-    ):
-        """
-        Get questions for playing.
-        If player: correct answers and explanations are stripped to prevent inspection cheating!
-        """
-        session = await db.quizzes.get_session_by_id(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+    @app.get('/api/quiz-sessions/{session_id}/questions')
+    async def session_questions(session_id: int, request: Request, is_host: bool = Query(False),
+                                 user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        _, participant = await access(session_id, request, user, db, host_only=is_host)
+        if participant:
+            # Only already-activated questions are released to players; this GET never resets clocks.
+            progress = await db.quizzes.get_player_progress(session_id, token(request))
+            return [progress['current_question']] if progress['current_question'] else []
+        questions = await db.quizzes.get_session_questions(session_id)
+        return questions if is_host else [public_question(q) for q in questions]
 
-        questions = await db.quizzes.get_quiz_questions(session["quiz_id"])
-        if is_host:
-            return questions
+    @app.get('/api/quiz-sessions/{session_id}/progress')
+    async def player_progress(session_id: int, request: Request, db: Database = Depends(get_db)):
+        return await db.quizzes.get_player_progress(session_id, token(request))
 
-        # Sanitize for students during gameplay
-        sanitized = []
-        for q in questions:
-            item = dict(q)
-            # Remove answer key for student device
-            item.pop("correct_answer", None)
-            item.pop("accepted_answers", None)
-            item.pop("explanation", None)
-            # Clean options: remove is_correct flags
-            clean_options = []
-            for opt in (item.get("options") or []):
-                clean_opt = {k: v for k, v in opt.items() if k != "is_correct"}
-                clean_options.append(clean_opt)
-            item["options"] = clean_options
-            sanitized.append(item)
+    @app.post('/api/quiz-sessions/{session_id}/current-question')
+    async def current_question(session_id: int, request: Request, db: Database = Depends(get_db)):
+        return await db.quizzes.activate_question(session_id, token(request))
 
-        return sanitized
+    @app.post('/api/quiz-sessions/{session_id}/next')
+    async def next_question(session_id: int, request: Request, question_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
+        progress = await db.quizzes.activate_question(session_id, token(request), advance=True, question_id=question_id)
+        if progress['participant']['is_finished']:
+            await broadcast_scores(session_id, db, 'participant_finished')
+        return progress
 
-    @app.post("/api/quiz-sessions/{session_id}/answers")
-    async def submit_question_answer(
-        session_id: int,
-        payload: SubmitAnswerRequest,
-        db: Database = Depends(get_db),
-    ):
-        """Submit answer for a question with speed score calculation."""
-        session = await db.quizzes.get_session_by_id(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if session["status"] != "in_progress":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Game session is not active (current status: {session['status']})",
-            )
+    @app.post('/api/quiz-sessions/{session_id}/answers')
+    async def submit_answer(session_id: int, payload: SubmitAnswerRequest, request: Request, db: Database = Depends(get_db)):
+        result = await db.quizzes.record_answer(session_id, payload.participant_id, payload.question_id,
+                                                payload.answer, token(request))
+        if not result.pop('reused'):
+            await broadcast_scores(session_id, db)
+        return result
 
-        participant = await db.quizzes.get_participant(session_id, payload.participant_id)
-        if not participant:
-            raise HTTPException(status_code=404, detail="Participant not found")
+    @app.post('/api/quiz-sessions/{session_id}/complete')
+    async def complete(session_id: int, request: Request, participant_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
+        await db.quizzes.set_participant_finished(session_id, participant_id, token(request))
+        await broadcast_scores(session_id, db, 'participant_finished')
+        return {'success': True}
 
-        question = await db.quizzes.get_question_by_id(payload.question_id)
-        if not question or question["quiz_id"] != session["quiz_id"]:
-            raise HTTPException(status_code=404, detail="Question not found in this quiz")
-
-        # Double-submission protection: if already answered, return existing result without re-scoring
-        existing_answer = await db.quizzes.get_participant_answer(
-            session_id, payload.participant_id, payload.question_id
-        )
-        if existing_answer:
-            is_prev_correct = bool(existing_answer["is_correct"])
-            return {
-                "is_correct": is_prev_correct,
-                "points_awarded": existing_answer["points_awarded"],
-                "streak": participant.get("streak", 0),
-                "total_score": participant.get("score", 0),
-                "correct_answer": question.get("correct_answer") if not is_prev_correct else None,
-                "explanation": question.get("explanation"),
-            }
-
-        # Validate answer via math engine
-        is_correct = check_question_answer(question, payload.answer)
-
-        # Calculate points
-        points_awarded = 0
-        current_streak = participant.get("streak", 0)
-        if is_correct:
-            points_awarded = calculate_speed_points(
-                base_points=question.get("points", 1000),
-                time_limit=question.get("time_limit_seconds", 30),
-                time_taken=payload.time_taken_seconds,
-                current_streak=current_streak + 1,
-            )
-
-        updated_participant = await db.quizzes.record_answer(
-            session_id=session_id,
-            participant_id=payload.participant_id,
-            question_id=payload.question_id,
-            user_answer=payload.answer,
-            is_correct=is_correct,
-            time_taken_seconds=payload.time_taken_seconds,
-            points_awarded=points_awarded,
-        )
-
-        leaderboard = await db.quizzes.get_session_leaderboard(session_id)
-
-        # Broadcast live leaderboard update to Host and all players
-        await quiz_manager.broadcast(
-            session_id,
-            {
-                "type": "answer_submitted",
-                "session_id": session_id,
-                "participant_id": payload.participant_id,
-                "score": updated_participant.get("score", 0),
-                "streak": updated_participant.get("streak", 0),
-                "is_correct": is_correct,
-                "points_awarded": points_awarded,
-                "leaderboard": leaderboard,
-                "last_answer": {
-                    "participant_id": payload.participant_id,
-                    "nickname": participant["nickname"],
-                    "is_correct": is_correct,
-                    "points_awarded": points_awarded,
-                },
-            },
-        )
-
-        return {
-            "is_correct": is_correct,
-            "points_awarded": points_awarded,
-            "streak": updated_participant.get("streak", 0),
-            "total_score": updated_participant.get("score", 0),
-            "correct_answer": question.get("correct_answer") if not is_correct else None,
-            "explanation": question.get("explanation"),
-        }
-
-    @app.post("/api/quiz-sessions/{session_id}/complete")
-    async def mark_participant_completed(
-        session_id: int,
-        participant_id: int = Body(..., embed=True),
-        db: Database = Depends(get_db),
-    ):
-        """Mark that a participant finished all questions."""
-        await db.quizzes.set_participant_finished(session_id, participant_id)
-        leaderboard = await db.quizzes.get_session_leaderboard(session_id)
-
-        await quiz_manager.broadcast(
-            session_id,
-            {
-                "type": "participant_finished",
-                "participant_id": participant_id,
-                "leaderboard": leaderboard,
-            },
-        )
-        return {"success": True}
-
-    @app.get("/api/quiz-sessions/{session_id}/leaderboard")
-    async def get_session_leaderboard_endpoint(
-        session_id: int,
-        db: Database = Depends(get_db),
-    ):
-        """Get current live leaderboard."""
+    @app.get('/api/quiz-sessions/{session_id}/leaderboard')
+    async def leaderboard(session_id: int, request: Request,
+                          user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        await access(session_id, request, user, db)
         return await db.quizzes.get_session_leaderboard(session_id)
 
-    @app.get("/api/quiz-sessions/{session_id}/stats")
-    async def get_session_stats_endpoint(
-        session_id: int,
-        db: Database = Depends(get_db),
-    ):
-        """Get post-game stats, podium and question-by-question breakdown."""
+    @app.get('/api/quiz-sessions/{session_id}/stats')
+    async def stats(session_id: int, request: Request,
+                     user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        session, participant = await access(session_id, request, user, db)
+        if participant and session['status'] != 'finished':
+            raise HTTPException(403, 'Stats are available after the game finishes')
         return await db.quizzes.get_session_stats(session_id)
 
-    # --- WebSocket live sync endpoint ---
-
-    @app.websocket("/ws/quiz/{session_id}")
-    async def quiz_websocket_endpoint(
-        websocket: WebSocket,
-        session_id: int,
-        client_id: Optional[str] = Query(None),
-        role: Optional[str] = Query("player"),
-    ):
-        """
-        WebSocket endpoint for live game sync.
-        Host and players connect to receive real-time player joins, answers, and leaderboard movement.
-        """
-        c_id = client_id or f"{role}_{id(websocket)}"
-        await quiz_manager.connect(session_id, c_id, websocket)
-
+    @app.get('/api/quiz-sessions/{session_id}/ws-token')
+    async def ws_ticket(session_id: int, request: Request,
+                         user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        _, participant = await access(session_id, request, user, db)
         try:
+            ticket = issue_quiz_ws_ticket(session_id, 'player' if participant else 'host',
+                participant['id'] if participant else user['id'], participant['token_hash'] if participant else '')
+        except ValueError:
+            raise HTTPException(503, 'WebSocket signing is not configured')
+        return {'token': ticket, 'expires_in': QUIZ_WS_TTL}
+
+    @app.websocket('/ws/quiz/{session_id}')
+    async def quiz_socket(websocket: WebSocket, session_id: int):
+        claims = verify_quiz_ws_ticket(session_id, websocket.query_params.get('token', ''))
+        session = await db.quizzes.get_session_by_id(session_id)
+        if not claims or not session:
+            await websocket.close(code=1008)
+            return
+        if claims['role'] == 'host':
+            user = await db.users.get_user_by_id(claims['actor_id'])
+            allowed = user and (session['host_id'] == user['id'] or user.get('is_admin'))
+        else:
+            participant = await db.quizzes.get_participant(session_id, claims['actor_id'])
+            allowed = participant and participant['token_hash'] == claims.get('credential')
+        if not allowed:
+            await websocket.close(code=1008)
+            return
+        client_id = str(uuid4())
+        await quiz_manager.connect(session_id, client_id, websocket)
+        try:
+            await websocket.send_json({'type': 'session_state', 'status': session['status']})
             while True:
                 data = await websocket.receive_text()
-                # WebSocket client messages (e.g. heartbeat / ping)
+                if len(data) > 1024:
+                    await websocket.close(code=1009)
+                    break
                 try:
                     payload = json.loads(data)
-                    msg_type = payload.get("type")
-                    if msg_type == "ping":
-                        await websocket.send_text(json.dumps({"type": "pong"}))
-                except Exception:
+                    if isinstance(payload, dict) and payload.get('type') == 'ping':
+                        await websocket.send_json({'type': 'pong'})
+                except ValueError:
                     continue
         except WebSocketDisconnect:
-            quiz_manager.disconnect(session_id, c_id)
-        except Exception as e:
-            quiz_manager.disconnect(session_id, c_id)
-            logger.debug(f"Quiz WS disconnect for {c_id}: {e}")
+            pass
+        finally:
+            quiz_manager.disconnect(session_id, client_id)

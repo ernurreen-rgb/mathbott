@@ -352,15 +352,16 @@ async function proxyRequest(
       bodyHasEmail;
 
     let proxyUserEmail = "";
-    if (requiresProxyUserEmail) {
+    const hasOptionalQuizIdentity = ["quizzes", "quiz-sessions"].includes(effectivePathSegments[0]);
+    if (requiresProxyUserEmail || hasOptionalQuizIdentity) {
       const sessionEmail = await getProxyUserEmail(request);
-      if (!sessionEmail) {
+      if (!sessionEmail && requiresProxyUserEmail) {
         return NextResponse.json(
           { detail: "Authenticated session is required" },
           { status: 401 }
         );
       }
-      proxyUserEmail = sessionEmail;
+      proxyUserEmail = sessionEmail || "";
       if (hasEmailSearchParam(searchParams)) {
         searchParams.set("email", proxyUserEmail);
       }

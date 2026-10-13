@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import MathRender from "@/components/ui/MathRender";
-import { createQuiz, addQuizQuestion } from "@/lib/api/quizzes";
+import { createQuiz } from "@/lib/api/quizzes";
 import { QuestionType, QuizOption } from "@/types/quiz";
 import toast from "react-hot-toast";
 
@@ -219,6 +219,11 @@ export default function CreateQuizPage() {
           title: title.trim(),
           description: description.trim(),
           is_public: isPublic,
+          questions: questions.map((q, index) => ({
+            question_text: q.question_text.trim(), question_type: q.question_type, options: q.options,
+            correct_answer: q.correct_answer.trim(), time_limit_seconds: q.time_limit_seconds,
+            points: q.points, sort_order: index + 1, explanation: q.explanation.trim(),
+          })),
         },
         email
       );
@@ -227,30 +232,6 @@ export default function CreateQuizPage() {
         toast.error(quizErr || "Квизді сақтау мүмкін болмады");
         setSubmitting(false);
         return;
-      }
-
-      // Add questions in order
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const payload: any = {
-          question_text: q.question_text.trim(),
-          question_type: q.question_type,
-          options: q.options,
-          correct_answer: q.correct_answer.trim(),
-          time_limit_seconds: q.time_limit_seconds,
-          points: q.points,
-          sort_order: i + 1,
-          explanation: q.explanation.trim() || undefined,
-        };
-
-        if (q.question_type === "input") {
-          payload.accepted_answers = [q.correct_answer.trim()];
-        }
-
-        const { error: qErr } = await addQuizQuestion(newQuiz.id, payload, email);
-        if (qErr) {
-          console.error(`Error saving question ${i + 1}:`, qErr);
-        }
       }
 
       toast.success("Квиз сәтті сақталды!");

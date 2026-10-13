@@ -42,7 +42,8 @@ export default function QuizzesCatalogPage() {
     e.stopPropagation();
     if (!confirm("Бұл квизді өшіргіңіз келетініне сенімдісіз бе?")) return;
     try {
-      await deleteQuiz(quizId, session?.user?.email || undefined);
+      const result = await deleteQuiz(quizId, session?.user?.email || undefined);
+      if (result.error) { setError(result.error); return; }
       setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
     } catch {
       alert("Квизді өшіру мүмкін болмады");

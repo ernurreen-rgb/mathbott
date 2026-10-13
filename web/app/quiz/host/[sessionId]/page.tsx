@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -12,7 +12,7 @@ import {
   getQuizLeaderboard,
   getQuizSessionStats,
 } from "@/lib/api/quizzes";
-import { resolveWebSocketBase } from "@/lib/websocket-url";
+import { useQuizConnection } from "@/lib/use-quiz-connection";
 import { QuizSession, QuizParticipant, QuizSessionStats } from "@/types/quiz";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
@@ -25,7 +25,7 @@ export default function HostQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const sessionId = parseInt(resolvedParams.sessionId, 10);
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status: authStatus } = useSession();
 
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [participants, setParticipants] = useState<QuizParticipant[]>([]);
@@ -35,7 +35,7 @@ export default function HostQuizPage({ params }: PageProps) {
   const [joinUrl, setJoinUrl] = useState("");
   const [activeTab, setActiveTab] = useState<"podium" | "questions">("podium");
 
-  const socketRef = useRef<WebSocket | null>(null);
+  const email = session?.user?.email || undefined;
 
   // Set Join URL on mount
   useEffect(() => {
@@ -44,125 +44,22 @@ export default function HostQuizPage({ params }: PageProps) {
     }
   }, [quizSession?.pin_code]);
 
-  // Initial load
-  useEffect(() => {
-    if (!sessionId) return;
-
-    const fetchSession = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await getQuizSession(sessionId);
-        if (error || !data) {
-          toast.error("Сессия табылмады");
-          return;
-        }
-        setQuizSession(data);
-        if (data.participants) {
-          setParticipants(data.participants);
-        }
-
-        if (data.status === "finished") {
-          const statsRes = await getQuizSessionStats(sessionId);
-          if (statsRes.data) {
-            setStats(statsRes.data);
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+  const refreshSession = useCallback(async () => {
+    if (!sessionId || !email) return;
+    const auth = { email };
+    const result = await getQuizSession(sessionId, auth);
+    if (result.data) {
+      setQuizSession(result.data);
+      setParticipants(result.data.participants || []);
+      if (result.data.status === "finished") {
+        const report = await getQuizSessionStats(sessionId, auth);
+        if (report.data) setStats(report.data);
       }
-    };
-
-    fetchSession();
-  }, [sessionId]);
-
-  // WebSocket Connection
-  useEffect(() => {
-    if (!sessionId) return;
-    const wsBase = resolveWebSocketBase();
-    if (!wsBase) return;
-
-    const wsUrl = `${wsBase}/ws/quiz/${sessionId}`;
-    const ws = new WebSocket(wsUrl);
-    socketRef.current = ws;
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "participant_joined" || msg.type === "player_joined") {
-          setParticipants((prev) => {
-            const exists = prev.some((p) => p.id === msg.participant.id);
-            if (exists) return prev;
-            return [...prev, msg.participant];
-          });
-        } else if (msg.type === "game_started") {
-          setQuizSession((prev) => (prev ? { ...prev, status: "in_progress" } : null));
-        } else if (msg.type === "answer_submitted" || msg.type === "leaderboard_update") {
-          if (msg.leaderboard && Array.isArray(msg.leaderboard)) {
-            setParticipants(msg.leaderboard);
-          } else {
-            setParticipants((prev) =>
-              prev.map((p) =>
-                p.id === msg.participant_id
-                  ? {
-                      ...p,
-                      score: msg.score ?? p.score,
-                      streak: msg.streak ?? p.streak,
-                      total_answered: p.total_answered + 1,
-                      correct_count: msg.is_correct ? p.correct_count + 1 : p.correct_count,
-                    }
-                  : p
-              )
-            );
-          }
-        } else if (msg.type === "participant_finished" || msg.type === "player_finished") {
-          if (msg.leaderboard && Array.isArray(msg.leaderboard)) {
-            setParticipants(msg.leaderboard);
-          } else {
-            setParticipants((prev) =>
-              prev.map((p) =>
-                p.id === msg.participant_id ? { ...p, is_finished: true } : p
-              )
-            );
-          }
-        } else if (msg.type === "game_finished" || msg.type === "game_over") {
-          setQuizSession((prev) => (prev ? { ...prev, status: "finished" } : null));
-          if (msg.stats) {
-            setStats(msg.stats);
-          }
-        }
-      } catch (e) {
-        console.error("WS error:", e);
-      }
-    };
-
-    // Heartbeat ping
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "ping" }));
-      }
-    }, 20000);
-
-    return () => {
-      clearInterval(pingInterval);
-      ws.close();
-    };
-  }, [sessionId]);
-
-  // Polling fallback when in_progress to keep scores strictly accurate
-  useEffect(() => {
-    if (!sessionId || quizSession?.status !== "in_progress") return;
-
-    const interval = setInterval(async () => {
-      const res = await getQuizLeaderboard(sessionId);
-      if (res.data) {
-        setParticipants(res.data);
-      }
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [sessionId, quizSession?.status]);
+    } else if (result.error) toast.error(result.error);
+    setLoading(false);
+  }, [sessionId, email]);
+  useEffect(() => { void refreshSession(); }, [refreshSession]);
+  useQuizConnection(sessionId, { email }, () => void refreshSession(), !!email);
 
   const handleStartGame = async () => {
     if (participants.length === 0) {
@@ -217,6 +114,9 @@ export default function HostQuizPage({ params }: PageProps) {
     toast.success("Сілтеме көшірілді!");
   };
 
+  if (authStatus === "unauthenticated") {
+    return <div className="p-8 text-center"><Link href="/">Жүргізуші ретінде кіру</Link></div>;
+  }
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800">
