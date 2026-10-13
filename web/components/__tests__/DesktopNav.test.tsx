@@ -62,8 +62,8 @@ describe("DesktopNav collapse functionality", () => {
     expect(document.body.classList.contains("desktop-nav-collapsed")).toBe(true);
     expect(localStorage.getItem("mathbot_desktop_nav_collapsed")).toBe("true");
 
-    const nav = screen.getByRole("navigation", { hidden: true });
-    expect(nav.className).toContain("-translate-x-full");
+    const nav = screen.getByRole("navigation");
+    expect(nav.className).toContain("w-16");
   });
 
   it("reopens navigation when reopen button is clicked", async () => {
@@ -86,7 +86,7 @@ describe("DesktopNav collapse functionality", () => {
     expect(localStorage.getItem("mathbot_desktop_nav_collapsed")).toBe("false");
 
     const nav = screen.getByRole("navigation");
-    expect(nav.className).toContain("translate-x-0");
+    expect(nav.className).toContain("w-64");
   });
 
   it("toggles navigation using Ctrl+B shortcut", async () => {
@@ -105,6 +105,26 @@ describe("DesktopNav collapse functionality", () => {
 
     // Press Ctrl+B again to reopen
     fireEvent.keyDown(document, { key: "b", ctrlKey: true });
+    expect(screen.queryByLabelText("Навигацияны ашу")).not.toBeInTheDocument();
+    expect(document.body.classList.contains("desktop-nav-collapsed")).toBe(false);
+  });
+
+  it("toggles navigation using Ctrl+Shift+S shortcut (ChatGPT style)", async () => {
+    await act(async () => {
+      render(
+        <DesktopNavProvider>
+          <DesktopNav />
+        </DesktopNavProvider>
+      );
+    });
+
+    // Press Ctrl+Shift+S to collapse
+    fireEvent.keyDown(document, { key: "s", ctrlKey: true, shiftKey: true });
+    expect(screen.getByLabelText("Навигацияны ашу")).toBeInTheDocument();
+    expect(document.body.classList.contains("desktop-nav-collapsed")).toBe(true);
+
+    // Press Ctrl+Shift+S again to reopen
+    fireEvent.keyDown(document, { key: "s", ctrlKey: true, shiftKey: true });
     expect(screen.queryByLabelText("Навигацияны ашу")).not.toBeInTheDocument();
     expect(document.body.classList.contains("desktop-nav-collapsed")).toBe(false);
   });

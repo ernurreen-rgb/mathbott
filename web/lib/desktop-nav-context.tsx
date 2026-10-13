@@ -75,24 +75,31 @@ export function DesktopNavProvider({ children }: { children: React.ReactNode }) 
     });
   }, []);
 
-  // Keyboard shortcut Ctrl+B or Cmd+B to toggle navigation on desktop
+  // Keyboard shortcut Ctrl+B/Cmd+B or Ctrl+Shift+S (like ChatGPT) to toggle navigation on desktop
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === "b") {
-        const target = e.target as HTMLElement | null;
-        const tagName = target?.tagName ? target.tagName.toLowerCase() : "";
-        if (
-          tagName === "input" ||
-          tagName === "textarea" ||
-          tagName === "select" ||
-          tagName.includes("math-field") ||
-          Boolean(target?.isContentEditable)
-        ) {
-          return;
-        }
-        e.preventDefault();
-        toggleNav();
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (!isCtrlOrCmd || !e.key) return;
+
+      const key = e.key.toLowerCase();
+      const isCtrlB = key === "b" && !e.shiftKey;
+      const isCtrlShiftS = key === "s" && e.shiftKey;
+
+      if (!isCtrlB && !isCtrlShiftS) return;
+
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName ? target.tagName.toLowerCase() : "";
+      if (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        tagName.includes("math-field") ||
+        Boolean(target?.isContentEditable)
+      ) {
+        return;
       }
+      e.preventDefault();
+      toggleNav();
     };
 
     document.addEventListener("keydown", handleKeyDown);

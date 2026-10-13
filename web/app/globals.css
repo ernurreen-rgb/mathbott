@@ -102,19 +102,26 @@ math-field.student-math-answer-input[read-only] {
   .md\:ml-64 {
     transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
+  .md\:pl-64 {
+    transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
   .md\:left-64 {
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   body.desktop-nav-collapsed .md\:ml-64 {
-    margin-left: 0 !important;
+    margin-left: 4rem !important;
+  }
+  body.desktop-nav-collapsed .md\:pl-64 {
+    padding-left: 4rem !important;
   }
   body.desktop-nav-collapsed .md\:left-64 {
-    left: 0 !important;
+    left: 4rem !important;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .md\:ml-64,
+  .md\:pl-64,
   .md\:left-64 {
     transition: none !important;
   }
