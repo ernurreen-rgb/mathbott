@@ -119,7 +119,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
 
   return (
     <nav
-      className={`hidden md:flex fixed left-0 top-0 h-full glass border-r border-gray-200/50 shadow-xl z-30 flex-col py-3 select-none transition-[width] duration-300 ease-in-out motion-reduce:transition-none ${
+      className={`hidden md:flex fixed left-0 top-0 h-full bg-white/95 backdrop-blur-md border-r border-gray-200/80 shadow-sm z-30 flex-col py-3 select-none transition-[width] duration-300 ease-in-out motion-reduce:transition-none ${
         isCollapsed ? "w-16" : "w-64"
       }`}
       role="navigation"

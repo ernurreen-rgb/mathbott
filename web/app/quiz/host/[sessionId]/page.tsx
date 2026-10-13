@@ -148,7 +148,7 @@ export default function HostQuizPage({ params }: PageProps) {
   const sortedLeaderboard = [...participants].sort((a, b) => b.score - a.score);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50/80 via-purple-50/40 to-pink-50/50 text-gray-900 flex flex-col select-none">
+    <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col select-none">
       {/* Top Presentation Bar */}
       <header className="h-20 border-b border-purple-100 bg-white/90 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-4">

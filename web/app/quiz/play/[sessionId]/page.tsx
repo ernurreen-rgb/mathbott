@@ -110,7 +110,7 @@ export default function PlayQuizPage({ params }: PageProps) {
   // STATE A: LOBBY (WAITING FOR HOST TO START)
   if (sessionData?.status === "lobby") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50/80 via-purple-50/50 to-pink-50/60 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
+      <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
         <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-2xl flex flex-col items-center">
           {/* Avatar Icon */}
           <div
@@ -150,7 +150,7 @@ export default function PlayQuizPage({ params }: PageProps) {
     const accuracy = questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
+      <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
         <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-2xl flex flex-col items-center">
           <span className="text-5xl animate-bounce mb-3">🎉</span>
           <h1 className="text-3xl font-black text-gray-900 mb-1">
@@ -217,7 +217,7 @@ export default function PlayQuizPage({ params }: PageProps) {
   const timerPercent = timerTotal > 0 ? (timeLeft / timerTotal) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50/60 via-purple-50/30 to-pink-50/40 text-gray-900 flex flex-col justify-between select-none">
+    <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col justify-between select-none">
       {/* Top Header Bar */}
       <header className="px-4 py-3 bg-white/90 backdrop-blur border-b border-purple-100 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">

@@ -243,7 +243,7 @@ export default function CreateQuizPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50/80 via-purple-50/40 to-pink-50/50 text-gray-900 flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col">
       {/* Top Bar */}
       <header className="h-16 border-b border-purple-100 bg-white/90 backdrop-blur px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">

@@ -79,7 +79,7 @@ function PageLoader({ label }: { label: string }) {
     <div
       role="status"
       aria-label={label}
-      className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100"
+      className="flex min-h-screen items-center justify-center bg-slate-50"
     >
       <div className="h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
     </div>
@@ -280,7 +280,7 @@ export default function ModuleDetailPage() {
 
   if (!session) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-3xl border border-white/80 bg-white/85 p-8 text-center shadow-2xl">
           <div className="text-5xl">🔐</div>
           <h1 className="mt-4 text-2xl font-black text-slate-900">
@@ -295,7 +295,7 @@ export default function ModuleDetailPage() {
 
   if (error || !module) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-violet-100 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div
           role="alert"
           className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-7 text-center shadow-xl"
@@ -325,15 +325,7 @@ export default function ModuleDetailPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-gradient-to-br from-[#fff9f4] via-[#fff1f8] to-[#ebe9ff] pb-24 md:pb-12">
-      <div
-        aria-hidden="true"
-        className="fixed -left-32 top-12 h-96 w-96 rounded-full bg-fuchsia-200/30 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="fixed -right-28 top-72 h-[28rem] w-[28rem] rounded-full bg-blue-200/35 blur-3xl"
-      />
+    <div className="relative min-h-screen overflow-x-clip bg-slate-50 pb-24 md:pb-12">
       <MountainBackdrop />
       <DesktopNav />
 

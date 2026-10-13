@@ -195,7 +195,7 @@ function JoinForm() {
 
 export default function JoinQuizPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50/50 to-pink-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
       <Suspense
         fallback={
           <div className="w-full max-w-md bg-white/90 rounded-3xl p-8 text-center text-gray-600">

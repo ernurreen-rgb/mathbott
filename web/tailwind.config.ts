@@ -35,8 +35,8 @@ const config: Config = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'gradient-math': 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
-        'gradient-vibrant': 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+        'gradient-math': 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+        'gradient-vibrant': 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
         'gradient-sunset': 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
         'gradient-ocean': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         'gradient-forest': 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',

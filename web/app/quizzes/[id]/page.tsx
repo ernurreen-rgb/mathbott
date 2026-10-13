@@ -97,7 +97,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50/40 to-pink-50 pb-20 md:pb-8 md:pl-64 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 pb-20 md:pb-8 md:pl-64 flex items-center justify-center">
         <DesktopNav currentPage="quizzes" />
         <MobileNav currentPage="quizzes" />
         <div className="text-center">
@@ -110,7 +110,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
   if (!quiz) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50/40 to-pink-50 pb-20 md:pb-8 md:pl-64 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 pb-20 md:pb-8 md:pl-64 flex items-center justify-center">
         <DesktopNav currentPage="quizzes" />
         <MobileNav currentPage="quizzes" />
         <div className="text-center p-8 bg-white rounded-3xl shadow-md border border-gray-100 max-w-sm">
@@ -128,7 +128,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50/40 to-pink-50 pb-20 md:pb-8 md:pl-64">
+    <div className="min-h-screen bg-slate-50 pb-20 md:pb-8 md:pl-64">
       <DesktopNav currentPage="quizzes" />
       <MobileNav currentPage="quizzes" />
 

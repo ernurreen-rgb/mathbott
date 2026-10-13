@@ -70,7 +70,7 @@ export default function ModulesPage() {
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="h-11 w-11 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
       </div>
     );
@@ -78,7 +78,7 @@ export default function ModulesPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
           <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
             Модульдерді көру үшін кіріңіз
