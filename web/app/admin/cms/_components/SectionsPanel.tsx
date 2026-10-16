@@ -1,6 +1,8 @@
 "use client";
+import styles from "../CmsWorkspace.module.css";
+import CurriculumList from "./CurriculumList";
 import type { Dispatch, SetStateAction } from "react";
-import { MiniLesson, MiniLessonTask, Section } from "./model";
+import { Section } from "./model";
 
 type Props = {
   selectedModule: number | null;
@@ -8,13 +10,7 @@ type Props = {
   sectionForm: { name: string; description: string; sort_order: number; };
   setSectionForm: Dispatch<SetStateAction<{ name: string; description: string; sort_order: number; }>>;
   sections: Section[];
-  selectedSection: number | null;
   editingSection: number | null;
-  setSelectedSection: Dispatch<SetStateAction<number | null>>;
-  setSelectedLesson: Dispatch<SetStateAction<number | null>>;
-  setMiniLessons: Dispatch<SetStateAction<MiniLesson[]>>;
-  setSelectedMiniLesson: Dispatch<SetStateAction<number | null>>;
-  setMiniTasks: Dispatch<SetStateAction<MiniLessonTask[]>>;
   updateSection: (e: React.FormEvent) => Promise<void>;
   editSectionForm: { name: string; description: string; sort_order: number; };
   setEditSectionForm: Dispatch<SetStateAction<{ name: string; description: string; sort_order: number; }>>;
@@ -29,13 +25,7 @@ export default function SectionsPanel({
   sectionForm,
   setSectionForm,
   sections,
-  selectedSection,
   editingSection,
-  setSelectedSection,
-  setSelectedLesson,
-  setMiniLessons,
-  setSelectedMiniLesson,
-  setMiniTasks,
   updateSection,
   editSectionForm,
   setEditSectionForm,
@@ -44,162 +34,32 @@ export default function SectionsPanel({
   deleteSection,
 }: Props) {
   return (
-    <>
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-gray-800">Бөлімдер</h2>
-
-        {selectedModule ? (
-          <>
-            <form onSubmit={createSection} className="glass rounded-xl p-4 border border-white/20 space-y-2">
-              <input
-                type="text"
-                placeholder="Бөлім атауы"
-                value={sectionForm.name}
-                onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
-                className="w-full p-2 rounded border"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Қысқаша сипаттама (мысалы: бөлім не туралы)"
-                value={sectionForm.description}
-                onChange={(e) => setSectionForm({ ...sectionForm, description: e.target.value })}
-                className="w-full p-2 rounded border text-sm"
-              />
-              <input
-                type="number"
-                placeholder="Сұрыптау тәртібі"
-                value={sectionForm.sort_order}
-                onChange={(e) => setSectionForm({ ...sectionForm, sort_order: parseInt(e.target.value) || 0 })}
-                className="w-full p-2 rounded border"
-                required
-              />
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-2 px-4 rounded hover:from-purple-700 hover:to-blue-700"
-              >
-                Бөлім құру
-              </button>
-            </form>
-
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {sections.map((section) => (
-                <div
-                  key={section.id}
-                  className={`p-3 rounded border transition-all ${selectedSection === section.id
-                    ? "bg-purple-100 border-purple-500"
-                    : "bg-white/50 border-gray-200 hover:border-purple-300"
-                    } ${editingSection === section.id ? "" : "cursor-pointer"}`}
-                  onClick={() => {
-                    if (editingSection !== section.id) {
-                      setSelectedSection(section.id);
-                      setSelectedLesson(null);
-                      setMiniLessons([]);
-                      setSelectedMiniLesson(null);
-                      setMiniTasks([]);
-                    }
-                  }}
-                >
-                  {editingSection === section.id ? (
-                    <form onSubmit={updateSection} className="space-y-2">
-                      <input
-                        type="text"
-                        value={editSectionForm.name}
-                        onChange={(e) => setEditSectionForm({ ...editSectionForm, name: e.target.value })}
-                        className="w-full p-2 rounded border text-sm"
-                        placeholder="Бөлім атауы"
-                        required
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <textarea
-                        value={editSectionForm.description}
-                        onChange={(e) =>
-                          setEditSectionForm({ ...editSectionForm, description: e.target.value })
-                        }
-                        className="w-full p-2 rounded border text-xs"
-                        placeholder="Қысқаша сипаттама"
-                        rows={2}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <input
-                        type="number"
-                        value={editSectionForm.sort_order}
-                        onChange={(e) =>
-                          setEditSectionForm({
-                            ...editSectionForm,
-                            sort_order: parseInt(e.target.value) || 0,
-                          })
-                        }
-                        className="w-full p-2 rounded border text-sm"
-                        placeholder="Қатар"
-                        required
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-1 px-2 rounded"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          ✓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            cancelEditSection();
-                          }}
-                          className="flex-1 bg-gray-600 hover:bg-gray-700 text-white text-sm py-1 px-2 rounded"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="flex justify-between items-center">
-                      <div className="min-w-0">
-                        <div className="font-bold">{section.name}</div>
-                        {section.description && (
-                          <div className="text-xs text-gray-600 truncate max-w-[220px]">
-                            {section.description}
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-500 mt-0.5">Қатар: {section.sort_order}</div>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditSection(section);
-                          }}
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Өңдеу"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteSection(section.id);
-                          }}
-                          className="text-red-600 hover:text-red-800"
-                          title="Жою"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            Бөлімдерді басқару үшін модульді таңдаңыз
-          </div>
-        )}
-      </div>
-    </>
+    <section className={styles.levelPanel}>
+      <div className={styles.panelHeading}><h2 className={styles.panelTitle}>Бөлімдер</h2><span className={styles.count}>{sections.length}</span></div>
+      {editingSection !== null && <form onSubmit={updateSection} className={styles.form}>
+        <h3 className={styles.panelTitle}>Бөлімді өңдеу</h3>
+        <label className={styles.field}>Атауы<input required value={editSectionForm.name} onChange={(event) => setEditSectionForm({ ...editSectionForm, name: event.target.value })} /></label>
+        <label className={styles.field}>Сипаттамасы<textarea rows={2} value={editSectionForm.description} onChange={(event) => setEditSectionForm({ ...editSectionForm, description: event.target.value })} /></label>
+        <label className={styles.field}>Реті<input type="number" value={editSectionForm.sort_order} onChange={(event) => setEditSectionForm({ ...editSectionForm, sort_order: Number(event.target.value) || 0 })} /></label>
+        <div className={styles.actions}><button type="submit" className={styles.primaryButton}>Сақтау</button><button type="button" className={styles.secondaryButton} onClick={cancelEditSection}>Бас тарту</button></div>
+      </form>}
+      {selectedModule && <details className={styles.disclosure}>
+        <summary>Бөлім қосу</summary>
+        <form onSubmit={createSection} className={styles.form}>
+          <label className={styles.field}>Бөлім атауы<input required value={sectionForm.name} placeholder="Бөлім атауы" onChange={(event) => setSectionForm({ ...sectionForm, name: event.target.value })} /></label>
+          <label className={styles.field}>Сипаттамасы<textarea rows={2} value={sectionForm.description} onChange={(event) => setSectionForm({ ...sectionForm, description: event.target.value })} /></label>
+          <label className={styles.field}>Реті<input type="number" value={sectionForm.sort_order} onChange={(event) => setSectionForm({ ...sectionForm, sort_order: Number(event.target.value) || 0 })} /></label>
+          <button type="submit" className={styles.primaryButton}>Бөлім құру</button>
+        </form>
+      </details>}
+      <CurriculumList openLabel="Сабақтарды ашу"
+        items={[...sections].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((section) => ({
+          id: section.id, title: section.name, description: section.description,
+          href: `/admin/cms/modules/${selectedModule}/sections/${section.id}`,
+        }))}
+        onEdit={(id) => { const section = sections.find((item) => item.id === id); if (section) startEditSection(section); }}
+        onDelete={deleteSection} />
+      {sections.length === 0 && <p className={styles.hint}>Бұл модульде бөлімдер әлі жоқ.</p>}
+    </section>
   );
 }

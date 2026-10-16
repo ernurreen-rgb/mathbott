@@ -15,6 +15,7 @@ import { AnswerMode } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
 import type { CreateTaskFormState } from "./model";
 import { TASK_TEXT_SCALE_OPTIONS } from "./model";
+import styles from "../CmsWorkspace.module.css";
 
 type Props = {
   createMiniLessonTask: (e: React.FormEvent) => Promise<void>;
@@ -37,7 +38,7 @@ export default function CreateTaskForm({
 }: Props) {
   return (
     <>
-      <form onSubmit={createMiniLessonTask} onPaste={handlePasteImageCreate} className="space-y-3">
+      <form onSubmit={createMiniLessonTask} onPaste={handlePasteImageCreate} className={`${styles.taskForm} space-y-3`}>
         <textarea
           value={taskForm.text}
           onChange={(e) => setTaskForm({ ...taskForm, text: e.target.value })}
@@ -76,8 +77,8 @@ export default function CreateTaskForm({
             Бұл тек БАНК-тегі бар тапсырмаға сілтеме жасайды. Төмендегі мәтін/нұсқа өрістері еленбейді.
           </div>
         )}
-        <div className="rounded-lg border border-gray-200 bg-white/60 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Мәтін өлшемі</div>
+        <div className={styles.taskSettings}>
+          <div className={styles.field}>Мәтін өлшемі</div>
           <div className="mt-2 flex gap-2">
             {TASK_TEXT_SCALE_OPTIONS.map((option) => {
               const active = taskForm.text_scale === option.value;
@@ -86,10 +87,8 @@ export default function CreateTaskForm({
                   key={option.value}
                   type="button"
                   onClick={() => setTaskForm({ ...taskForm, text_scale: option.value })}
-                  className={`rounded-md px-3 py-1 text-sm font-semibold transition ${active
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "bg-white text-gray-700 border border-gray-200 hover:border-purple-300"
-                    }`}
+                  aria-pressed={active}
+                  className={`${styles.choiceButton} ${active ? styles.choiceButtonActive : ""}`}
                   disabled={createUsesBank}
                 >
                   {option.label}
@@ -184,8 +183,8 @@ export default function CreateTaskForm({
                         };
                       })
                     }
-                    className={`h-9 min-w-9 rounded border px-2 text-sm font-bold ${isSelected ? "border-purple-700 bg-purple-600 text-white" : "border-gray-300 bg-white text-gray-800"
-                      }`}
+                    aria-pressed={isSelected}
+                    className={`${styles.choiceButton} ${isSelected ? styles.choiceButtonActive : ""}`}
                   >
                     {label}
                   </button>
@@ -305,7 +304,7 @@ export default function CreateTaskForm({
 
         <button
           type="submit"
-          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-2 px-4 rounded hover:from-purple-700 hover:to-blue-700"
+          className={styles.primaryButton}
         >
           Есеп қосу
         </button>

@@ -147,8 +147,11 @@ export function createTaskActions({
         correctSub2: "A",
       });
       setTaskAnswerMode("choices");
+      setError(null);
+      return true;
     } catch (err: any) {
       setError(err.message);
+      return false;
     }
   };
 

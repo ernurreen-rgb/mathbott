@@ -15,6 +15,7 @@ import { AnswerMode } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
 import type { EditTaskFormState } from "./model";
 import { TASK_TEXT_SCALE_OPTIONS } from "./model";
+import styles from "../CmsWorkspace.module.css";
 
 type Props = {
   updateMiniLessonTask: (e: React.FormEvent) => Promise<void>;
@@ -39,7 +40,7 @@ export default function EditTaskForm({
 }: Props) {
   return (
     <>
-      <form onSubmit={updateMiniLessonTask} onPaste={handlePasteImageEdit} className="space-y-2">
+      <form onSubmit={updateMiniLessonTask} onPaste={handlePasteImageEdit} className={`${styles.taskForm} space-y-3`}>
         <textarea
           value={editTaskForm.text}
           onChange={(e) => setEditTaskForm({ ...editTaskForm, text: e.target.value })}
@@ -76,8 +77,8 @@ export default function EditTaskForm({
             ����-��� ��������� ��? ��� ��������: ������������ ����������� ?�����.
           </div>
         )}
-        <div className="rounded-lg border border-gray-200 bg-white/60 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Мәтін өлшемі</div>
+        <div className={styles.taskSettings}>
+          <div className={styles.field}>Мәтін өлшемі</div>
           <div className="mt-2 flex gap-2">
             {TASK_TEXT_SCALE_OPTIONS.map((option) => {
               const active = editTaskForm.text_scale === option.value;
@@ -86,10 +87,8 @@ export default function EditTaskForm({
                   key={option.value}
                   type="button"
                   onClick={() => setEditTaskForm({ ...editTaskForm, text_scale: option.value })}
-                  className={`rounded-md px-3 py-1 text-sm font-semibold transition ${active
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "bg-white text-gray-700 border border-gray-200 hover:border-purple-300"
-                    }`}
+                  aria-pressed={active}
+                  className={`${styles.choiceButton} ${active ? styles.choiceButtonActive : ""}`}
                 >
                   {option.label}
                 </button>
@@ -177,8 +176,8 @@ export default function EditTaskForm({
                         };
                       })
                     }
-                    className={`h-9 min-w-9 rounded border px-2 text-sm font-bold ${isSelected ? "border-purple-700 bg-purple-600 text-white" : "border-gray-300 bg-white text-gray-800"
-                      }`}
+                    aria-pressed={isSelected}
+                    className={`${styles.choiceButton} ${isSelected ? styles.choiceButtonActive : ""}`}
                   >
                     {label}
                   </button>
@@ -301,16 +300,16 @@ export default function EditTaskForm({
         <div className="flex gap-2">
           <button
             type="submit"
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-1 px-2 rounded"
+            className={styles.primaryButton}
           >
-            ✓
+            Сақтау
           </button>
           <button
             type="button"
             onClick={cancelEditMiniLessonTask}
-            className="flex-1 bg-gray-600 hover:bg-gray-700 text-white text-sm py-1 px-2 rounded"
+            className={styles.secondaryButton}
           >
-            ✕
+            Бас тарту
           </button>
         </div>
       </form>

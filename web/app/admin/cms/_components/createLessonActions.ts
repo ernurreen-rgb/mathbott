@@ -129,8 +129,11 @@ export function createLessonActions({
       });
       if (!response.ok) throw new Error("Кіші сабақты жаңарту мүмкін болмады");
       if (selectedLesson) await fetchMiniLessons(selectedLesson);
+      setError(null);
+      return true;
     } catch (err: any) {
       setError(err.message);
+      return false;
     }
   };
   return { createLesson, deleteLesson, startEditLesson, cancelEditLesson, updateLesson, updateMiniLessonTitle };

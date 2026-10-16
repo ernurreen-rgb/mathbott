@@ -1,5 +1,6 @@
 "use client";
 import { TrashTask } from "./model";
+import styles from "../CmsWorkspace.module.css";
 
 type Props = {
   trashOpen: boolean;
@@ -13,14 +14,14 @@ export default function TrashPanel({ trashOpen, emptyTrash, trashLoading, trashT
   return (
     <>
       {trashOpen && (
-        <div className="mb-4 rounded-2xl border border-white/30 bg-white/80 p-4 shadow-inner">
+        <div>
           <div className="flex items-center justify-between mb-3">
             <div className="font-semibold text-gray-800">Жуырда жойылған тапсырмалар</div>
             <button
               type="button"
               onClick={emptyTrash}
               disabled={trashLoading || trashTasks.length === 0}
-              className="text-xs px-3 py-1 rounded-full border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`${styles.dangerButton} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               Себетті тазалау
             </button>
@@ -30,7 +31,7 @@ export default function TrashPanel({ trashOpen, emptyTrash, trashLoading, trashT
           ) : trashTasks.length === 0 ? (
             <div className="text-sm text-gray-500">Себет бос.</div>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className={styles.taskList}>
               {trashTasks
                 .slice()
                 .sort((a, b) => {
@@ -41,7 +42,7 @@ export default function TrashPanel({ trashOpen, emptyTrash, trashLoading, trashT
                 .map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-white/90 p-3"
+                    className={styles.taskRow}
                   >
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-gray-800 truncate">
@@ -58,7 +59,7 @@ export default function TrashPanel({ trashOpen, emptyTrash, trashLoading, trashT
                       <button
                         type="button"
                         onClick={() => void restoreTaskFromTrash(t.id)}
-                        className="px-3 py-1 rounded-full bg-green-600 hover:bg-green-700 text-white text-xs"
+                        className={styles.secondaryButton}
                       >
                         Қайтару
                       </button>

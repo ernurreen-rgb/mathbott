@@ -34,6 +34,11 @@ export interface MiniLesson {
   sort_order: number;
 }
 
+export const formatMiniLessonTitle = (mini: MiniLesson): string => {
+  const title = mini.title?.trim();
+  return title && title !== String(mini.mini_index) ? title : `${mini.mini_index}-кіші сабақ`;
+};
+
 export interface MiniLessonTask {
   id: number;
   text: string;

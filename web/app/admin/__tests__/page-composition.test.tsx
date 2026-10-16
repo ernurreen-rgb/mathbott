@@ -21,11 +21,11 @@ beforeEach(() => {
 });
 afterEach(() => { global.fetch = originalFetch; });
 
-it("composes CMS actions and curriculum panels after loading", async () => {
+it("shows only the module level on the CMS entry page", async () => {
   await act(async () => { render(<CMSPage />); });
   expect(screen.getByRole("heading", { name: "Модульдер" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Бөлімдер" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Сабақтар" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Бөлімдер" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Сабақтар" })).not.toBeInTheDocument();
   expect(global.fetch).toHaveBeenCalledWith("/api/backend/admin/modules?email=editor%40example.com");
 });
 
