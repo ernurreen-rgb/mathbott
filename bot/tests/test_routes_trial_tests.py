@@ -12,7 +12,7 @@ from tests.route_helpers import _FakePresenceWebSocket
 
 
 @pytest.mark.asyncio
-async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(client, test_db, test_user):
+async def test_trial_test_retakes_save_separate_results_without_duplicate_rewards(client, test_db, test_user):
     trial_test = await test_db.trial_tests.create_trial_test("Points Trial", sort_order=0, created_by=test_user["id"])
 
     bank_task_a = await test_db.bank_tasks.create_task(
@@ -82,7 +82,11 @@ async def test_trial_test_submit_awards_points_by_difficulty_and_no_repeat(clien
     assert user_after_first["total_solved"] == 3
 
     second = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
-    assert second.status_code == 409
+    assert second.status_code == 200
+    assert second.json()["result_id"] != first_json["result_id"]
+    results = await test_db.trial_tests.get_user_trial_test_results(test_user["id"], trial_test["id"])
+    assert len(results) == 2
+    assert results[0]["id"] == second.json()["result_id"]
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_second["total_points"] == 45
@@ -107,7 +111,8 @@ async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as async_client:
-            payload = {"email": test_user["email"], "answers": {str(trial_task["id"]): "42"}}
+            payload = {"email": test_user["email"], "answers": {str(trial_task["id"]): "42"},
+                       "attempt_id": "same-attempt"}
             first, second = await asyncio.gather(
                 async_client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload),
                 async_client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload),
@@ -116,7 +121,8 @@ async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test
         app.dependency_overrides.pop(get_db, None)
 
     statuses = sorted([first.status_code, second.status_code])
-    assert statuses == [200, 409]
+    assert statuses == [200, 200]
+    assert first.json()["result_id"] == second.json()["result_id"]
 
     results = await test_db.trial_tests.get_user_trial_test_results(test_user["id"], trial_test_id=trial_test["id"])
     assert len(results) == 1
@@ -124,6 +130,45 @@ async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test
     user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
     assert user_after_submit["total_points"] == 15
     assert user_after_submit["total_solved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trial_test_retry_reuses_attempt_but_retake_preserves_both_scores(client, test_db, test_user):
+    trial = await test_db.trial_tests.create_trial_test("Retake", created_by=test_user["id"])
+    task = await test_db.trial_tests.create_trial_test_task(trial["id"], "Answer", "42")
+    path = f"/api/trial-tests/{trial['id']}/submit"
+    payload = {"email": test_user["email"], "attempt_id": "first-attempt",
+               "answers": {str(task["id"]): "wrong"}}
+    first = client.post(path, json=payload)
+    assert first.status_code == 200
+    assert first.json()["score"] == 0
+
+    history = client.get("/api/trial-tests", params={"email": test_user["email"], "attempted_only": True})
+    assert [item["id"] for item in history.json()] == [trial["id"]]
+
+    retry = client.post(path, json={**payload, "answers": {str(task["id"]): "42"}})
+    assert retry.status_code == 200
+    assert retry.json() == first.json()
+    assert (await test_db.users.get_user_by_id(test_user["id"]))["total_points"] == 0
+
+    retake = client.post(path, json={**payload, "attempt_id": "second-attempt",
+                                   "answers": {str(task["id"]): "42"}})
+    assert retake.status_code == 200
+    assert retake.json()["score"] == 1
+    assert retake.json()["result_id"] != first.json()["result_id"]
+    results = client.get(f"/api/trial-tests/{trial['id']}/results", params={"email": test_user["email"]}).json()
+    assert [result["score"] for result in results] == [1, 0]
+    assert results[1]["answers"][str(task["id"])]["answer"] == "wrong"
+    assert (await test_db.users.get_user_by_id(test_user["id"]))["total_points"] == 15
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("attempt_id", ["", "x" * 65, 7, "invalid id"])
+async def test_trial_test_rejects_invalid_attempt_id(client, test_user, attempt_id):
+    response = client.post("/api/trial-tests/1/submit", json={
+        "email": test_user["email"], "answers": {}, "attempt_id": attempt_id,
+    })
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio

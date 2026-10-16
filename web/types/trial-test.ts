@@ -21,6 +21,8 @@ export interface TrialTestDetails extends TrialTest {
 export interface TrialTestResult {
   id: number;
   trial_test_id: number;
+  submit_mode?: "solo" | "coop";
+  attempt_id?: string | null;
   score: number;
   total: number;
   percentage: number;
@@ -32,10 +34,13 @@ export interface TrialTestResult {
 export interface TrialTestSubmitRequest {
   email: string;
   answers: Record<number, string>; // {task_id: answer}
+  attempt_id?: string;
 }
 
 
 export interface TrialTestSubmitResponse {
+  result_id?: number;
+  attempt_id?: string;
   score: number;
   total: number;
   percentage: number;

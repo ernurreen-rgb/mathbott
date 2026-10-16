@@ -11,7 +11,7 @@ import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
-import { inviteFriendToCoopTest, getTrialTestDetails, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
+import { inviteFriendToCoopTest, getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
@@ -80,6 +80,23 @@ export default function TrialTestPage() {
   const saveAbortRef = useRef<AbortController | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDraftSignatureRef = useRef("");
+  const writableDraftKeyRef = useRef<string | null>(null);
+  const submittedRef = useRef(false);
+  const attemptIdRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
+
+  const openSavedResult = useCallback((resultId?: number) => {
+    writableDraftKeyRef.current = null;
+    submittedRef.current = true;
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = null;
+    setLoading(true);
+    router.replace(`/trial-test/${testId}/results${resultId ? `?attempt=${resultId}` : ""}`);
+  }, [router, testId]);
 
   const buildDraftSnapshot = useCallback((snapshot = draftRef.current) => {
     const { email: e, testId: id, answers: a, currentTaskIndex: idx } = snapshot;
@@ -97,6 +114,7 @@ export default function TrialTestPage() {
 
   const sendDraftSnapshot = useCallback(
     async (snapshot = draftRef.current, options?: { keepalive?: boolean }) => {
+      if (writableDraftKeyRef.current !== `${snapshot.email}:${snapshot.testId}`) return;
       const request = buildDraftSnapshot(snapshot);
       if (!request || request.signature === lastSavedDraftSignatureRef.current) return;
 
@@ -133,21 +151,31 @@ export default function TrialTestPage() {
 
   const fetchTest = useCallback(async () => {
     if (!email || !testId) return;
+    const generation = ++loadGenerationRef.current;
+    const isCurrentLoad = () => loadGenerationRef.current === generation;
+    writableDraftKeyRef.current = null;
+    submittedRef.current = false;
+    attemptIdRef.current = null;
     setLoading(true);
     setError(null);
+    setTest(null);
+    setAnswers({});
+    setCurrentTaskIndex(0);
     try {
       const { data, error: err } = await getTrialTestDetails(testId, email);
+      if (!isCurrentLoad()) return;
       if (err) {
         setError(err);
-        setLoading(false);
         return;
       }
       if (data) {
-        setTest(data);
         const { data: draft, error: draftErr } = await getTrialTestDraft(testId, email);
-        if (draftErr) {
-          console.warn("[trial-draft] load draft error:", draftErr);
-        } else if (draft && data.tasks?.length) {
+        if (!isCurrentLoad()) return;
+        if (draftErr || !draft) {
+          setError("Сақталған жауаптарды жүктеу мүмкін болмады. Бетті қайта жүктеңіз.");
+          return;
+        }
+        if (data.tasks?.length) {
           const taskIds = new Set(data.tasks.map((t) => t.id));
           const filtered: Record<number, string> = {};
           for (const [k, v] of Object.entries(draft.answers)) {
@@ -157,7 +185,7 @@ export default function TrialTestPage() {
           const idx = Math.min(Math.max(0, draft.current_task_index), data.tasks.length - 1);
           setAnswers(filtered);
           setCurrentTaskIndex(idx);
-          draftRef.current = { ...draftRef.current, answers: filtered, currentTaskIndex: idx };
+          draftRef.current = { answers: filtered, currentTaskIndex: idx, email, testId };
           const snapshot = buildDraftSnapshot({
             answers: filtered,
             currentTaskIndex: idx,
@@ -174,11 +202,13 @@ export default function TrialTestPage() {
           });
           lastSavedDraftSignatureRef.current = snapshot?.signature || "";
         }
+        writableDraftKeyRef.current = `${email}:${testId}`;
+        setTest(data);
       }
     } catch (e: any) {
-      setError(e?.message || "Тестті жүктеу қатесі");
+      if (isCurrentLoad()) setError(e?.message || "Тестті жүктеу қатесі");
     } finally {
-      setLoading(false);
+      if (isCurrentLoad() && !submittedRef.current) setLoading(false);
     }
   }, [buildDraftSnapshot, email, testId]);
 
@@ -220,6 +250,10 @@ export default function TrialTestPage() {
     if (email && testId) {
       void fetchTest();
     }
+    return () => {
+      loadGenerationRef.current += 1;
+      writableDraftKeyRef.current = null;
+    };
   }, [email, testId, fetchTest]);
 
   useEffect(() => {
@@ -238,7 +272,7 @@ export default function TrialTestPage() {
   // Отправить черновик из ref (keepalive — не отменяется при unload)
   // Сохранение черновика при изменении; при отмене запроса сразу шлём keepalive, чтобы не потерять данные
   useEffect(() => {
-    if (!test || !email || submitting) return;
+    if (loading || !test || !email || submitting) return;
     const snapshot = buildDraftSnapshot({ answers, currentTaskIndex, email, testId });
     if (!snapshot || snapshot.signature === lastSavedDraftSignatureRef.current) return;
 
@@ -253,7 +287,7 @@ export default function TrialTestPage() {
         saveTimeoutRef.current = null;
       }
     };
-  }, [answers, buildDraftSnapshot, currentTaskIndex, email, sendDraftSnapshot, submitting, test, testId]);
+  }, [answers, buildDraftSnapshot, currentTaskIndex, email, loading, sendDraftSnapshot, submitting, test, testId]);
 
   // Сохранение при уходе со страницы (обновление, закрытие вкладки)
   useEffect(() => {
@@ -379,6 +413,7 @@ export default function TrialTestPage() {
       }
     });
 
+    writableDraftKeyRef.current = null;
     setSubmitting(true);
     try {
       if (saveTimeoutRef.current) {
@@ -393,17 +428,28 @@ export default function TrialTestPage() {
       const { data, error: err } = await submitTrialTest(testId, {
         email,
         answers: allAnswers,
+        attempt_id: attemptIdRef.current ??= Array.from(
+          crypto.getRandomValues(new Uint8Array(16)),
+          (byte) => byte.toString(16).padStart(2, "0")
+        ).join(""),
       });
       
       if (err) {
-        setError(err);
+        // Recover only this attempt; older results must not swallow a failed retake.
+        const savedResults = await getTrialTestResults(testId, email);
+        const savedAttempt = savedResults.data?.find((result) => result.attempt_id === attemptIdRef.current);
+        if (savedAttempt) {
+          openSavedResult(savedAttempt.id);
+        } else {
+          setError(err);
+        }
       } else if (data) {
-        // Redirect to results page
-        router.push(`/trial-test/${testId}/results`);
+        openSavedResult(data.result_id);
       }
     } catch (e: any) {
       setError(e?.message || "Тестті жіберу қатесі");
     } finally {
+      if (!submittedRef.current) writableDraftKeyRef.current = `${email}:${testId}`;
       setSubmitting(false);
     }
   };

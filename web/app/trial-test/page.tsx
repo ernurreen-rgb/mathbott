@@ -229,7 +229,7 @@ export default function TrialTestListPage() {
                         {test.task_count || 0} тапсырма
                       </span>
                       <span className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${draftTestIds.has(test.id) ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}>
-                        {draftTestIds.has(test.id) ? "Продолжить →" : "Бастау →"}
+                        {draftTestIds.has(test.id) ? "Жалғастыру →" : "Бастау →"}
                       </span>
                     </div>
                   </Link>

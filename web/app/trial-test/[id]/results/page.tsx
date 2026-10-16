@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
@@ -14,6 +14,7 @@ export default function TrialTestResultsPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const testId = parseInt(params.id as string, 10);
 
   const [test, setTest] = useState<TrialTestDetails | null>(null);
@@ -23,12 +24,13 @@ export default function TrialTestResultsPage() {
 
   const email = session?.user?.email || null;
 
-  const latestResult = useMemo<TrialTestResult | null>(() => {
-    if (resultsList.length === 0) return null;
-    return resultsList.reduce((latest, item) =>
-      new Date(item.completed_at) > new Date(latest.completed_at) ? item : latest
+  const orderedResults = useMemo(() => {
+    return [...resultsList].sort((left, right) =>
+      new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime() || right.id - left.id
     );
   }, [resultsList]);
+  const requestedResultId = Number(searchParams.get("attempt"));
+  const selectedResult = orderedResults.find((result) => result.id === requestedResultId) || orderedResults[0] || null;
 
   const fetchData = useCallback(async () => {
     if (!email || !testId) return;
@@ -90,8 +92,8 @@ export default function TrialTestResultsPage() {
     );
   }
 
-  const displayScore = latestResult?.score ?? 0;
-  const displayPercentage = latestResult?.percentage ?? 0;
+  const displayScore = selectedResult?.score ?? 0;
+  const displayPercentage = selectedResult?.percentage ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
@@ -109,9 +111,26 @@ export default function TrialTestResultsPage() {
               {test.description && <p className="text-gray-600">{test.description}</p>}
             </div>
 
-            {latestResult ? (
+            {selectedResult ? (
               <>
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Соңғы нәтиже</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Тест нәтижесі</h2>
+                {orderedResults.length > 1 && (
+                  <label className="mb-4 block text-sm font-semibold text-gray-700">
+                    Тапсыру әрекеті
+                    <select
+                      aria-label="Тапсыру әрекеті"
+                      value={selectedResult.id}
+                      onChange={(event) => router.replace(`/trial-test/${testId}/results?attempt=${event.target.value}`)}
+                      className="mt-2 block w-full rounded-lg border border-gray-300 bg-white p-2"
+                    >
+                      {orderedResults.map((result, index) => (
+                        <option key={result.id} value={result.id}>
+                          {orderedResults.length - index}-әрекет — {result.score}/{result.total} ({result.percentage.toFixed(1)}%)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
 
                 <div className="bg-white/70 rounded-2xl p-6 border border-white/40 mb-6">
                   <div className="text-center mb-4">
@@ -119,7 +138,7 @@ export default function TrialTestResultsPage() {
                       {displayPercentage >= 80 ? "A" : displayPercentage >= 60 ? "B" : "C"}
                     </div>
                     <div className="text-4xl font-bold text-gray-900 mb-2">
-                      {displayScore} / {latestResult.total}
+                      {displayScore} / {selectedResult.total}
                     </div>
                     <div className="text-2xl font-bold text-gray-700">{displayPercentage.toFixed(1)}%</div>
                   </div>
@@ -138,7 +157,7 @@ export default function TrialTestResultsPage() {
                   </div>
 
                   <div className="text-center text-sm text-gray-600">
-                    {new Date(latestResult.completed_at).toLocaleString("kk-KZ", {
+                    {new Date(selectedResult.completed_at).toLocaleString("kk-KZ", {
                       year: "numeric",
                       month: "2-digit",
                       day: "2-digit",
@@ -152,7 +171,7 @@ export default function TrialTestResultsPage() {
 
                 <TrialTestDetailedReview
                   tasks={test.tasks}
-                  answers={latestResult.answers}
+                  answers={selectedResult.answers}
                   title="Тапсырмалар бойынша талдау"
                   accentColor="purple"
                 />

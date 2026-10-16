@@ -5,6 +5,7 @@ import storage as db_driver
 import json
 import logging
 from typing import Optional, List, Dict, Any
+from uuid import uuid4
 
 from .base import BaseRepository
 from utils.scoring import calculate_next_streak
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class TrialTestAlreadySubmitted(Exception):
-    """Raised when a solo trial test already has a saved result for the user."""
+    """Raised when a cooperative participant can no longer submit."""
 
 
 class TrialTestRepository(BaseRepository):
@@ -430,17 +431,14 @@ class TrialTestRepository(BaseRepository):
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
                 answers_json = json.dumps(answers)
-                try:
-                    await db.execute(
-                        """
-                        INSERT INTO trial_test_results
-                        (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
-                        VALUES (?, ?, ?, ?, ?, ?, 'solo')
-                        """,
-                        (user_id, trial_test_id, score, total, percentage, answers_json),
-                    )
-                except db_driver.IntegrityError as exc:
-                    raise TrialTestAlreadySubmitted() from exc
+                await db.execute(
+                    """
+                    INSERT INTO trial_test_results
+                    (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
+                    VALUES (?, ?, ?, ?, ?, ?, 'solo')
+                    """,
+                    (user_id, trial_test_id, score, total, percentage, answers_json),
+                )
                 await db.commit()
                 async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
                     row = await cursor.fetchone()
@@ -462,8 +460,11 @@ class TrialTestRepository(BaseRepository):
         delete_draft: bool = True,
         submit_mode: str = "solo",
         coop_session_id: Optional[int] = None,
+        attempt_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Persist a trial-test submit in one transaction to minimize SQLite lock windows."""
+        normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
+        normalized_attempt_id = (attempt_id or uuid4().hex) if normalized_submit_mode == "solo" else None
 
         async def operation() -> Dict[str, Any]:
             async with self._connection() as db:
@@ -472,6 +473,19 @@ class TrialTestRepository(BaseRepository):
                     await db.execute("BEGIN IMMEDIATE")
 
                     session_status = None
+                    if normalized_attempt_id is not None:
+                        async with db.execute(
+                            """SELECT * FROM trial_test_results
+                               WHERE user_id = ? AND trial_test_id = ?
+                                 AND submit_mode = 'solo' AND attempt_id = ?""",
+                            (user_id, trial_test_id, normalized_attempt_id),
+                        ) as saved_cursor:
+                            saved = await saved_cursor.fetchone()
+                        if saved:
+                            await db.rollback()
+                            return {"result": dict(saved), "awarded_any": False,
+                                    "streak_milestone": None, "reused": True,
+                                    "session_status": None}
                     if coop_session_id is not None:
                         async with db.execute(
                             """SELECT p.is_finished, s.status FROM trial_test_coop_participants p
@@ -498,28 +512,15 @@ class TrialTestRepository(BaseRepository):
                             raise TrialTestAlreadySubmitted()
 
                     answers_json = json.dumps(answers)
-                    normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
-                    try:
-                        cursor = await db.execute(
-                            """
-                            INSERT INTO trial_test_results
-                            (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                user_id,
-                                trial_test_id,
-                                score,
-                                total,
-                                percentage,
-                                answers_json,
-                                normalized_submit_mode,
-                            ),
-                        )
-                    except db_driver.IntegrityError as exc:
-                        if normalized_submit_mode == "solo":
-                            raise TrialTestAlreadySubmitted() from exc
-                        raise
+                    cursor = await db.execute(
+                        """
+                        INSERT INTO trial_test_results
+                        (user_id, trial_test_id, score, total, percentage, answers, submit_mode, attempt_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (user_id, trial_test_id, score, total, percentage, answers_json,
+                         normalized_submit_mode, normalized_attempt_id),
+                    )
                     result_id = int(cursor.lastrowid)
 
                     awarded_any = False
@@ -640,7 +641,7 @@ class TrialTestRepository(BaseRepository):
                     """
                     SELECT * FROM trial_test_results
                     WHERE user_id = ? AND trial_test_id = ?
-                    ORDER BY completed_at DESC
+                    ORDER BY completed_at DESC, id DESC
                     """,
                     (user_id, trial_test_id),
                 ) as cursor:
@@ -650,7 +651,7 @@ class TrialTestRepository(BaseRepository):
                 """
                 SELECT * FROM trial_test_results
                 WHERE user_id = ?
-                ORDER BY completed_at DESC
+                ORDER BY completed_at DESC, id DESC
                 """,
                 (user_id,),
             ) as cursor:

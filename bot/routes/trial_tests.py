@@ -4,13 +4,13 @@ Trial tests роуты (публичные)
 import asyncio
 import json
 import logging
+import re
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Body, Depends
 from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
-from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.cache import cache
 from utils.public_payload import public_subquestions, task_review_snapshot
 from utils.scoring import build_reward_identity
@@ -52,16 +52,11 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 if not user:
                     raise HTTPException(status_code=404, detail="User not found")
                 results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=None)
-                # Только тесты, которые пользователь прошёл (хотя бы одна попытка с процентом >= 50%)
-                PASS_PERCENT = 50.0
-                passed_ids = {
-                    r["trial_test_id"] for r in results
-                    if (r.get("percentage") or 0) >= PASS_PERCENT
-                }
-                if not passed_ids:
+                attempted_ids = {r["trial_test_id"] for r in results}
+                if not attempted_ids:
                     return []
                 all_tests = await db.trial_tests.get_trial_tests()
-                return [t for t in all_tests if t.get("id") in passed_ids]
+                return [t for t in all_tests if t.get("id") in attempted_ids]
             tests = await db.trial_tests.get_trial_tests()
             return tests
         except HTTPException:
@@ -181,6 +176,12 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             email = request.get("email")
             answers = request.get("answers", {})
+            attempt_id = request.get("attempt_id")
+            if attempt_id is not None and (
+                not isinstance(attempt_id, str)
+                or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", attempt_id) is None
+            ):
+                raise HTTPException(status_code=400, detail="Invalid attempt_id")
             
             if not email:
                 raise HTTPException(status_code=400, detail="Email is required")
@@ -198,13 +199,6 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=404, detail="No tasks found in trial test")
             
             async with _get_trial_test_write_lock(user["id"], test_id):
-                previous_results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=test_id)
-                if any(result.get("submit_mode", "solo") == "solo" for result in previous_results):
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Trial test has already been submitted. Review the saved result instead.",
-                    )
-
                 results = {}
                 score = 0
                 total = len(tasks)
@@ -251,24 +245,19 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         }
                     )
 
-                try:
-                    submit_result = await db.trial_tests.submit_trial_test_attempt(
-                        user_id=user["id"],
-                        trial_test_id=test_id,
-                        score=score,
-                        total=total,
-                        percentage=percentage,
-                        answers=answers_for_db,
-                        rewards=rewards,
-                        should_update_streak=had_any_correct,
-                        delete_draft=True,
-                        submit_mode="solo",
-                    )
-                except TrialTestAlreadySubmitted:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Trial test has already been submitted. Review the saved result instead.",
-                    )
+                submit_result = await db.trial_tests.submit_trial_test_attempt(
+                    user_id=user["id"],
+                    trial_test_id=test_id,
+                    score=score,
+                    total=total,
+                    percentage=percentage,
+                    answers=answers_for_db,
+                    rewards=rewards,
+                    should_update_streak=had_any_correct,
+                    delete_draft=True,
+                    submit_mode="solo",
+                    attempt_id=attempt_id,
+                )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
 
                 if submit_result.get("streak_milestone") and user.get("email"):
@@ -286,11 +275,15 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
                 cache.invalidate_pattern(f"user:stats:{email}")
 
+                saved_result = submit_result["result"]
+                saved_answers = saved_result.get("answers") or "{}"
                 return {
-                    "score": score,
-                    "total": total,
-                    "percentage": round(percentage, 2),
-                    "results": results
+                    "result_id": saved_result["id"],
+                    "attempt_id": saved_result.get("attempt_id"),
+                    "score": saved_result["score"],
+                    "total": saved_result["total"],
+                    "percentage": round(saved_result["percentage"], 2),
+                    "results": json.loads(saved_answers) if isinstance(saved_answers, str) else saved_answers,
                 }
         except HTTPException:
             raise

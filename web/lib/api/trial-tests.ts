@@ -37,7 +37,8 @@ export async function submitTrialTest(testId: number, request: TrialTestSubmitRe
 
 export async function getTrialTestResults(testId: number, email: string): Promise<{ data: TrialTestResult[] | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTestResult[]>(
-    `${apiPath(`trial-tests/${testId}/results`)}?email=${encodeURIComponent(email)}`
+    `${apiPath(`trial-tests/${testId}/results`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
   );
 }
 
@@ -47,7 +48,8 @@ export type TrialTestDraft = { answers: Record<number, string>; current_task_ind
 
 export async function getTrialTestDraft(testId: number, email: string): Promise<{ data: TrialTestDraft | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTestDraft>(
-    `${apiPath(`trial-tests/${testId}/draft`)}?email=${encodeURIComponent(email)}`
+    `${apiPath(`trial-tests/${testId}/draft`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
   );
 }
 
