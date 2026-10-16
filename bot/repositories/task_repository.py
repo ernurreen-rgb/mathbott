@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Optional, Dict, Any, List
 
-import aiosqlite
+import storage as db_driver
 
 from .base import BaseRepository
 from .bank_task_repository import BankTaskRepository
@@ -71,7 +71,7 @@ class TaskRepository(BaseRepository):
 
     async def _create_bank_task(
         self,
-        db: aiosqlite.Connection,
+        db: db_driver.Connection,
         *,
         text: str,
         answer: str,
@@ -124,7 +124,7 @@ class TaskRepository(BaseRepository):
     async def get_task_by_id(self, task_id: int) -> Optional[Dict[str, Any]]:
         """Get task placement by id with joined bank content."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TASK_SELECT} WHERE t.id = ?",
                 (task_id,),
@@ -135,7 +135,7 @@ class TaskRepository(BaseRepository):
     async def get_random_task(self, exclude_ids: Optional[List[int]] = None) -> Optional[Dict[str, Any]]:
         """Get random active placement task with bank content."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             if exclude_ids:
                 placeholders = ",".join("?" * len(exclude_ids))
                 query = (
@@ -172,7 +172,7 @@ class TaskRepository(BaseRepository):
     ) -> Dict[str, Any]:
         """Create a task placement. If bank_task_id is missing, create a bank task first."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
                 resolved_bank_task_id = await self._create_bank_task(
@@ -228,7 +228,7 @@ class TaskRepository(BaseRepository):
     ) -> None:
         """Update placement fields and linked bank task content."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT id, bank_task_id FROM tasks WHERE id = ?",
                 (task_id,),
@@ -289,7 +289,7 @@ class TaskRepository(BaseRepository):
     async def get_all_tasks(self) -> List[Dict[str, Any]]:
         """Get all placements with joined bank content."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TASK_SELECT} ORDER BY t.id DESC"
             ) as cursor:
@@ -305,7 +305,7 @@ class TaskRepository(BaseRepository):
     ) -> List[Dict[str, Any]]:
         """Get placement tasks created by a user."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = "t.created_by = ?"
             if not include_deleted:
                 where += " AND t.deleted_at IS NULL"
@@ -333,7 +333,7 @@ class TaskRepository(BaseRepository):
     async def get_deleted_tasks_by_creator(self, creator_id: int) -> List[Dict[str, Any]]:
         """Get soft-deleted placements for a creator."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TASK_SELECT} "
                 "WHERE t.created_by = ? AND t.deleted_at IS NOT NULL "
@@ -395,7 +395,7 @@ class TaskRepository(BaseRepository):
 
     async def get_tasks_by_section(self, section_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TASK_SELECT} "
                 "WHERE t.section_id = ? AND t.deleted_at IS NULL "
@@ -407,7 +407,7 @@ class TaskRepository(BaseRepository):
 
     async def get_tasks_by_mini_lesson(self, mini_lesson_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TASK_SELECT} "
                 "WHERE t.mini_lesson_id = ? AND t.deleted_at IS NULL "

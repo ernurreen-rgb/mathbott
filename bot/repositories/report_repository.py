@@ -1,7 +1,7 @@
 """
 Report repository
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import Optional, List, Dict, Any
 from .base import BaseRepository
@@ -14,7 +14,7 @@ class ReportRepository(BaseRepository):
     
     async def create_report(self, user_id: int, task_id: int, message: str) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """INSERT INTO reports (user_id, task_id, message, status)
                    VALUES (?, ?, ?, 'pending')""",
@@ -36,7 +36,7 @@ class ReportRepository(BaseRepository):
 
     async def get_user_reports(self, user_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT r.*, bt.text as task_text, bt.answer as task_answer, bt.question_type as task_question_type
                    FROM reports r
@@ -51,7 +51,7 @@ class ReportRepository(BaseRepository):
 
     async def get_all_reports(self, status_filter: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             query = """
                 SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                        bt.text as task_text, bt.answer as task_answer,
@@ -83,7 +83,7 @@ class ReportRepository(BaseRepository):
 
     async def get_report_by_id(self, report_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                           bt.text as task_text, bt.answer as task_answer,

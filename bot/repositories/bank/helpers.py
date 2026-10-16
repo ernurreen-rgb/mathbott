@@ -3,7 +3,7 @@ Shared constants, normalisation and row/snapshot helpers.
 """
 from typing import Optional, List, Dict, Any
 import json
-import aiosqlite
+import storage as db_driver
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
 
@@ -105,7 +105,7 @@ class BankTaskHelpersMixin:
                 changed.append(field)
         return changed
 
-    def _serialize_task_row(self, row: aiosqlite.Row, topics: Optional[List[str]] = None) -> Dict[str, Any]:
+    def _serialize_task_row(self, row: db_driver.Row, topics: Optional[List[str]] = None) -> Dict[str, Any]:
         item = dict(row)
         item["options"] = self._parse_json_field(item.get("options"))
         item["subquestions"] = self._parse_json_field(item.get("subquestions"))
@@ -115,7 +115,7 @@ class BankTaskHelpersMixin:
         item["topics"] = topics or []
         return item
 
-    async def _fetch_topics_map(self, db: aiosqlite.Connection, task_ids: List[int]) -> Dict[int, List[str]]:
+    async def _fetch_topics_map(self, db: db_driver.Connection, task_ids: List[int]) -> Dict[int, List[str]]:
         if not task_ids:
             return {}
         placeholders = ",".join(["?"] * len(task_ids))
@@ -124,7 +124,7 @@ class BankTaskHelpersMixin:
             FROM bank_task_topic_map m
             JOIN bank_topics t ON t.id = m.topic_id
             WHERE m.bank_task_id IN ({placeholders})
-            ORDER BY t.name COLLATE NOCASE ASC
+            ORDER BY LOWER(t.name) ASC
         """
         topics_map: Dict[int, List[str]] = {task_id: [] for task_id in task_ids}
         async with db.execute(query, task_ids) as cursor:
@@ -133,16 +133,16 @@ class BankTaskHelpersMixin:
                 topics_map[row["bank_task_id"]].append(row["name"])
         return topics_map
 
-    async def _fetch_topics_for_task(self, db: aiosqlite.Connection, task_id: int) -> List[str]:
+    async def _fetch_topics_for_task(self, db: db_driver.Connection, task_id: int) -> List[str]:
         topics_map = await self._fetch_topics_map(db, [task_id])
         return topics_map.get(task_id, [])
 
-    async def _fetch_task_row(self, db: aiosqlite.Connection, task_id: int) -> Optional[Dict[str, Any]]:
+    async def _fetch_task_row(self, db: db_driver.Connection, task_id: int) -> Optional[Dict[str, Any]]:
         async with db.execute("SELECT * FROM bank_tasks WHERE id = ?", (task_id,)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-    async def _set_task_topics(self, db: aiosqlite.Connection, task_id: int, topics: List[str]) -> None:
+    async def _set_task_topics(self, db: db_driver.Connection, task_id: int, topics: List[str]) -> None:
         await db.execute("DELETE FROM bank_task_topic_map WHERE bank_task_id = ?", (task_id,))
         normalized_topics = self._normalize_topics(topics)
         if not normalized_topics:

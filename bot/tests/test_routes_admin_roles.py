@@ -1,6 +1,6 @@
 """Route tests: admin roles."""
 import pytest
-import aiosqlite
+import storage as aiosqlite
 from tests.route_helpers import _extract_http_detail
 
 

@@ -16,6 +16,7 @@ from routes import register_routes
 from slowapi import Limiter
 from fastapi.testclient import TestClient
 from utils.cache import cache
+from tests.postgres_support import postgres_test_db  # noqa: F401
 
 # Migrating every per-test database from scratch is slow (~0.2s each).
 # Run Alembic once into a template file and copy it for each test;
@@ -42,8 +43,11 @@ def event_loop():
 
 
 @pytest.fixture
-def test_db():
+def test_db(request):
     """Create a temporary test database"""
+    if os.environ.get("MATHBOT_TEST_DATABASE_URL"):
+        yield request.getfixturevalue("postgres_test_db")
+        return
     # Create temporary database file from the pre-migrated template
     fd, db_path = tempfile.mkstemp(suffix='.db')
     os.close(fd)

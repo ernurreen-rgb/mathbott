@@ -3,7 +3,7 @@ Repository for Quizzes (Quizizz-like game service)
 """
 import json
 import logging
-import aiosqlite
+import storage as db_driver
 from typing import Dict, Any, List, Optional
 
 from .base import BaseRepository
@@ -41,7 +41,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
 
     async def get_quiz_by_id(self, quiz_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT q.*, u.nickname as author_nickname,
@@ -125,7 +125,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
         params.extend([limit, offset])
 
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
@@ -168,7 +168,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
 
     async def get_question_by_id(self, question_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM quiz_questions WHERE id = ?", (question_id,)
             ) as cursor:
@@ -182,7 +182,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
 
     async def get_quiz_questions(self, quiz_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY sort_order ASC, id ASC",
                 (quiz_id,),

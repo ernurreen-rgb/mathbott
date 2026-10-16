@@ -1,0 +1,6 @@
+.env
+.env.*
+.playwright-cli/
+output/
+coverage/
+*.tsbuildinfo

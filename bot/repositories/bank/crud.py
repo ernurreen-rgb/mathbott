@@ -3,7 +3,7 @@ Core CRUD, listing, export, usage and trial-test copy.
 """
 from typing import Optional, List, Dict, Any
 import json
-import aiosqlite
+import storage as db_driver
 from utils.file_storage import delete_image_file
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
@@ -21,7 +21,7 @@ class BankTaskCrudMixin:
         offset: int = 0,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = ["bt.deleted_at IS NOT NULL" if include_deleted else "bt.deleted_at IS NULL"]
             params: List[Any] = []
 
@@ -97,7 +97,7 @@ class BankTaskCrudMixin:
         include_deleted: bool = False,
     ) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
 
             where_clause = ""
             if not include_deleted:
@@ -126,7 +126,7 @@ class BankTaskCrudMixin:
 
     async def get_task_by_id(self, task_id: int, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = "id = ?" if include_deleted else "id = ? AND deleted_at IS NULL"
             async with db.execute(
                 f"SELECT * FROM bank_tasks WHERE {where}",
@@ -162,7 +162,7 @@ class BankTaskCrudMixin:
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             answer_mode = normalize_answer_mode(answer_mode, question_type)
             cursor = await db.execute(
                 """
@@ -229,7 +229,7 @@ class BankTaskCrudMixin:
 
         created_ids: List[int] = []
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             try:
                 for payload in tasks:
                     question_type = payload.get("question_type", "input")
@@ -326,7 +326,7 @@ class BankTaskCrudMixin:
         expected_current_version: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         async with self._write_transaction() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
                 return None
@@ -456,7 +456,7 @@ class BankTaskCrudMixin:
         reason: Optional[str] = None,
     ) -> bool:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
                 return False
@@ -493,7 +493,7 @@ class BankTaskCrudMixin:
         reason: Optional[str] = None,
     ) -> bool:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
                 return False
@@ -531,7 +531,7 @@ class BankTaskCrudMixin:
     ) -> bool:
         """Permanently delete task from trash."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
                 return False
@@ -595,7 +595,7 @@ class BankTaskCrudMixin:
     async def cleanup_old_deleted_tasks(self, days: int = 30) -> int:
         """Permanently delete bank tasks that stayed in trash longer than N days."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT id, image_filename
@@ -641,7 +641,7 @@ class BankTaskCrudMixin:
                     SELECT name
                     FROM bank_topics
                     WHERE name_norm LIKE ? ESCAPE '\\'
-                    ORDER BY name COLLATE NOCASE ASC
+                    ORDER BY LOWER(name) ASC
                     LIMIT ?
                 """
                 params: List[Any] = [like_value, limit]
@@ -649,7 +649,7 @@ class BankTaskCrudMixin:
                 sql = """
                     SELECT name
                     FROM bank_topics
-                    ORDER BY name COLLATE NOCASE ASC
+                    ORDER BY LOWER(name) ASC
                     LIMIT ?
                 """
                 params = [limit]
@@ -659,7 +659,7 @@ class BankTaskCrudMixin:
 
     async def get_task_usage(self, task_id: int, include_deleted: bool = False) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             task_filter = "t.deleted_at IS NULL" if not include_deleted else "1=1"
             trial_filter = "ttt.deleted_at IS NULL" if not include_deleted else "1=1"
 
@@ -748,7 +748,7 @@ class BankTaskCrudMixin:
                 "items": items,
             }
 
-    async def _fetch_active_usage_counts(self, db: aiosqlite.Connection, task_ids: List[int]) -> Dict[int, int]:
+    async def _fetch_active_usage_counts(self, db: db_driver.Connection, task_ids: List[int]) -> Dict[int, int]:
         if not task_ids:
             return {}
         placeholders = ",".join(["?"] * len(task_ids))
@@ -806,7 +806,7 @@ class BankTaskCrudMixin:
             }
 
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             placeholders = ",".join(["?"] * len(ordered_unique_ids))
             async with db.execute(
                 f"SELECT * FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NULL",
@@ -860,7 +860,7 @@ class BankTaskCrudMixin:
                     )
                     created_task_ids.append(int(insert_cursor.lastrowid))
                     next_sort_order += 1
-                except aiosqlite.IntegrityError:
+                except db_driver.IntegrityError:
                     skipped_existing_ids.append(bank_task_id)
 
             await db.commit()

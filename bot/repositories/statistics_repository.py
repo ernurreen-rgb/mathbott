@@ -1,7 +1,7 @@
 """
 Statistics repository for admin statistics
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -17,7 +17,7 @@ class StatisticsRepository(BaseRepository):
         """Get comprehensive admin statistics"""
         try:
             async with self._connection() as db:
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 
                 stats = {}
             
@@ -113,8 +113,8 @@ class StatisticsRepository(BaseRepository):
                 
                 async with db.execute("""SELECT task_id, COUNT(*) as total,
                        SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct
-                       FROM solutions GROUP BY task_id HAVING total >= 5
-                       ORDER BY (CAST(correct AS REAL) / total) ASC LIMIT 10""") as cursor:
+                       FROM solutions GROUP BY task_id HAVING COUNT(*) >= 5
+                       ORDER BY (CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)) ASC LIMIT 10""") as cursor:
                     difficult_tasks = []
                     for row in await cursor.fetchall():
                         task = await task_repo.get_task_by_id(row[0])
@@ -131,8 +131,8 @@ class StatisticsRepository(BaseRepository):
                 
                 async with db.execute("""SELECT task_id, COUNT(*) as total,
                        SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct
-                       FROM solutions GROUP BY task_id HAVING total >= 5
-                       ORDER BY (CAST(correct AS REAL) / total) DESC LIMIT 10""") as cursor:
+                       FROM solutions GROUP BY task_id HAVING COUNT(*) >= 5
+                       ORDER BY (CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)) DESC LIMIT 10""") as cursor:
                     easy_tasks = []
                     for row in await cursor.fetchall():
                         task = await task_repo.get_task_by_id(row[0])
@@ -166,11 +166,12 @@ class StatisticsRepository(BaseRepository):
                     stats["question_type_stats"] = question_type_stats
                 
                 # 4. Activity Statistics
-                async with db.execute("""SELECT CASE CAST(strftime('%w', created_at) AS INTEGER)
+                async with db.execute("""SELECT day_name, COUNT(*) as count FROM (
+                       SELECT CASE CAST(strftime('%w', created_at) AS INTEGER)
                          WHEN 0 THEN 'Sunday' WHEN 1 THEN 'Monday' WHEN 2 THEN 'Tuesday'
                          WHEN 3 THEN 'Wednesday' WHEN 4 THEN 'Thursday' WHEN 5 THEN 'Friday'
-                         WHEN 6 THEN 'Saturday' END as day_name, COUNT(*) as count
-                       FROM solutions GROUP BY day_name ORDER BY 
+                         WHEN 6 THEN 'Saturday' END as day_name FROM solutions
+                       ) activity GROUP BY day_name ORDER BY
                          CASE day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2
                          WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5
                          WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 END""") as cursor:

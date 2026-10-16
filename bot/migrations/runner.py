@@ -177,5 +177,10 @@ def run_migrations(db_path: str) -> None:
     logger.debug("Database migrations applied (head)")
 
 
-async def run_migrations_async(db_path: str) -> None:
-    await asyncio.to_thread(run_migrations, db_path)
+async def run_migrations_async(db_path: str, *, migration_url: str = "") -> None:
+    from storage import is_postgres
+    if is_postgres(db_path):
+        from migrations.postgres_runner import run_postgres_migrations
+        await asyncio.to_thread(run_postgres_migrations, migration_url or db_path)
+    else:
+        await asyncio.to_thread(run_migrations, db_path)

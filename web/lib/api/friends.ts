@@ -198,3 +198,11 @@ export async function listBlockedUsers(
     `${apiPath('friends/blocks')}?email=${encodeURIComponent(email)}`
   );
 }
+
+
+export async function heartbeatPresence(email: string) {
+  return fetchWithErrorHandling<{ type: string; users: { id: number; nickname?: string | null }[] }>(
+    `${apiPath("presence/heartbeat")}?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+}

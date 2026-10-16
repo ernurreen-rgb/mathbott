@@ -5,7 +5,7 @@ Routes access repositories directly (db.users, db.bank_tasks, ...) or through
 the per-repository providers in dependencies.py. The only methods kept on this
 class are init/shutdown plumbing and operations that span multiple repositories.
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import Optional, List, Dict, Any
 
@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 class Database:
-    def __init__(self, db_path: str = "mathbot.db", use_pool: bool = True):
+    def __init__(self, db_path: str = "mathbot.db", use_pool: bool = True, migration_url: str = "", auto_migrate: bool = True):
         self.db_path = db_path
+        self.migration_url = migration_url
+        self.auto_migrate = auto_migrate
+        self.is_postgres = db_driver.is_postgres(db_path)
         self.sqlite_timeout_seconds = 30
         self.sqlite_busy_timeout_ms = 8000
         self.use_pool = use_pool
@@ -44,8 +47,8 @@ class Database:
         if use_pool:
             self.connection_pool = ConnectionPool(
                 db_path=db_path,
-                min_size=2,
-                max_size=10,
+                min_size=0 if self.is_postgres else 2,
+                max_size=2 if self.is_postgres else 10,
                 timeout=self.sqlite_timeout_seconds,
                 busy_timeout_ms=self.sqlite_busy_timeout_ms
             )
@@ -68,7 +71,7 @@ class Database:
         self.onboarding = OnboardingRepository(db_path, connection_pool=self.connection_pool)
         self.quizzes = QuizRepository(db_path, connection_pool=self.connection_pool)
 
-    async def _configure_connection(self, db: aiosqlite.Connection) -> None:
+    async def _configure_connection(self, db: db_driver.Connection) -> None:
         # Improve concurrency (readers don't block writers as much)
         await db.execute("PRAGMA foreign_keys = ON")
         try:
@@ -84,11 +87,11 @@ class Database:
 
     async def init(self):
         """Initialize database: apply Alembic migrations, then idempotent seeds"""
-        await run_migrations_async(self.db_path)
-
-        async with aiosqlite.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
-            await self._configure_connection(db)
-            await run_seeds(db)
+        if self.auto_migrate:
+            await run_migrations_async(self.db_path, migration_url=self.migration_url)
+            async with db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
+                await self._configure_connection(db)
+                await run_seeds(db)
 
         # Initialize connection pool if enabled
         if self.connection_pool:

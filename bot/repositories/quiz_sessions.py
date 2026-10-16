@@ -3,7 +3,7 @@ import json
 import random
 import secrets
 import time
-import aiosqlite
+import storage as db_driver
 
 from utils.quiz import (QuizError, token_hash, public_participant, public_question,
                         answer_result, check_question_answer, calculate_speed_points)
@@ -12,14 +12,14 @@ from utils.quiz import (QuizError, token_hash, public_participant, public_questi
 class QuizSessionsMixin:
     @staticmethod
     async def _row(db, sql, args=()):
-        db.row_factory = aiosqlite.Row
+        db.row_factory = db_driver.Row
         async with db.execute(sql, args) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     @staticmethod
     async def _snapshot_questions(db, session_id):
-        db.row_factory = aiosqlite.Row
+        db.row_factory = db_driver.Row
         async with db.execute(
             "SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? ORDER BY position",
             (session_id,),
@@ -134,7 +134,7 @@ class QuizSessionsMixin:
 
     async def list_participants(self, session_id: int):
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute('SELECT * FROM quiz_participants WHERE session_id = ? ORDER BY score DESC, correct_count DESC, id', (session_id,)) as cursor:
                 return [public_participant(dict(row)) for row in await cursor.fetchall()]
 

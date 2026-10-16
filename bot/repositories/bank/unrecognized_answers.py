@@ -2,7 +2,7 @@
 from collections import Counter
 from typing import Any, Dict, List
 
-import aiosqlite
+import storage as db_driver
 
 from utils.validation import (
     is_task_answer_correct,
@@ -14,7 +14,7 @@ from utils.validation import (
 class BankTaskUnrecognizedAnswersMixin:
     _UNRECOGNIZED_EVENT_LIMIT = 5000
 
-    def _answer_event_task(self, row: aiosqlite.Row) -> Dict[str, Any]:
+    def _answer_event_task(self, row: db_driver.Row) -> Dict[str, Any]:
         return {
             "id": int(row["bank_task_id"]),
             "text": row["task_text"] or "",
@@ -39,7 +39,7 @@ class BankTaskUnrecognizedAnswersMixin:
         disappears as soon as an administrator adds it to ``accepted_answers``.
         """
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT

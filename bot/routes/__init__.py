@@ -20,6 +20,7 @@ from routes import friends
 from routes import presence
 from routes import quizzes
 from routes import quiz_game
+from routes.maintenance import setup_maintenance_routes
 
 
 def register_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -33,6 +34,7 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     """
     # Базовые роуты
     core.setup_core_routes(app, db, limiter)
+    setup_maintenance_routes(app)
     
     # Публичные роуты
     modules.setup_modules_routes(app, db, limiter)

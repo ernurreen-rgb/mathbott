@@ -1,7 +1,7 @@
 """
 User repository for user-related database operations
 """
-import aiosqlite
+import storage as db_driver
 import json
 import logging
 import time
@@ -47,7 +47,7 @@ class UserRepository(BaseRepository):
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM users WHERE email = ?", (email,)
             ) as cursor:
@@ -57,7 +57,7 @@ class UserRepository(BaseRepository):
     async def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM users WHERE id = ?", (user_id,)
             ) as cursor:
@@ -67,7 +67,7 @@ class UserRepository(BaseRepository):
     async def create_user_by_email(self, email: str, check_admin_email: Optional[str] = None) -> Dict[str, Any]:
         """Create new user by email (for web users without telegram_id)"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             # Check if user already exists
             async with db.execute(
                 "SELECT * FROM users WHERE email = ?", (email,)
@@ -123,7 +123,7 @@ class UserRepository(BaseRepository):
     async def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute("SELECT * FROM users ORDER BY id") as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
@@ -177,7 +177,7 @@ class UserRepository(BaseRepository):
     ) -> Dict[str, Any]:
         """List admin users with RBAC roles."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             roles = sorted(ALLOWED_ADMIN_ROLES)
             where = [
                 "is_admin = 1",
@@ -233,7 +233,7 @@ class UserRepository(BaseRepository):
     async def get_admin_audit_log_by_id(self, audit_id: int) -> Optional[Dict[str, Any]]:
         """Get one admin audit row by id."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT id, domain, action, entity_type, entity_id, actor_user_id, actor_email,
@@ -411,7 +411,7 @@ class UserRepository(BaseRepository):
         normalized_actor_email = " ".join((actor_email or "").strip().split()).lower() or "unknown"
 
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             try:
                 async with db.execute(
                     "SELECT id, email, is_admin, admin_role FROM users WHERE email = ?",
@@ -588,7 +588,7 @@ class UserRepository(BaseRepository):
                             source_ref_id,
                         ),
                     )
-                except aiosqlite.IntegrityError:
+                except db_driver.IntegrityError:
                     return {"awarded": False, "points": 0}
 
                 await db.execute(

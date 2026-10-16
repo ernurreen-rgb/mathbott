@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "regions": ["cle1"],
+  "functions": {
+    "main.py": {
+      "maxDuration": 60,
+      "includeFiles": "migrations/postgres/**"
+    }
+  },
+  "crons": [
+    { "path": "/api/maintenance", "schedule": "0 22 * * *" }
+  ]
+}

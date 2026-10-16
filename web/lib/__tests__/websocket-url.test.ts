@@ -1,12 +1,21 @@
 import { resolveWebSocketBase } from "../websocket-url";
+const originalTransport = process.env.NEXT_PUBLIC_REALTIME_TRANSPORT;
 
 const originalApi = process.env.NEXT_PUBLIC_API_URL;
 const originalWs = process.env.NEXT_PUBLIC_WS_API_URL;
 afterEach(() => {
+  if (originalTransport === undefined) delete process.env.NEXT_PUBLIC_REALTIME_TRANSPORT;
+  else process.env.NEXT_PUBLIC_REALTIME_TRANSPORT = originalTransport;
   if (originalApi === undefined) delete process.env.NEXT_PUBLIC_API_URL;
   else process.env.NEXT_PUBLIC_API_URL = originalApi;
   if (originalWs === undefined) delete process.env.NEXT_PUBLIC_WS_API_URL;
   else process.env.NEXT_PUBLIC_WS_API_URL = originalWs;
+});
+
+it("uses HTTP polling when configured for a hosted backend", () => {
+  process.env.NEXT_PUBLIC_REALTIME_TRANSPORT = "polling";
+  process.env.NEXT_PUBLIC_WS_API_URL = "https://backend.example.com";
+  expect(resolveWebSocketBase()).toBeNull();
 });
 
 it("uses the site origin when HTTP uses the authenticated relative proxy", () => {

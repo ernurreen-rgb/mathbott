@@ -1,7 +1,7 @@
 """
 Achievement repository for user achievements
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import List, Dict, Any
 from .base import BaseRepository
@@ -71,7 +71,7 @@ class AchievementRepository(BaseRepository):
     async def get_user_achievements(self, user_id: int) -> List[Dict[str, Any]]:
         """Get all achievements for user"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT achievement_id, unlocked_at 
                    FROM user_achievements 

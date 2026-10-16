@@ -3,7 +3,7 @@ Content-quality reports (dead, untopiced, duplicate clusters).
 """
 from typing import Optional, List, Dict, Any
 from difflib import SequenceMatcher
-import aiosqlite
+import storage as db_driver
 
 
 class BankTaskQualityMixin:
@@ -70,7 +70,7 @@ class BankTaskQualityMixin:
         offset: int = 0,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = list(base_where)
             params: List[Any] = []
 
@@ -192,7 +192,7 @@ class BankTaskQualityMixin:
         offset: int = 0,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = ["bt.deleted_at IS NULL"]
             params: List[Any] = []
 

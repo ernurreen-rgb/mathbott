@@ -1,7 +1,7 @@
 """
 Curriculum repository for modules, sections, lessons, and mini-lessons
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import Optional, Dict, Any, List
 from .base import BaseRepository
@@ -16,7 +16,7 @@ class CurriculumRepository(BaseRepository):
     async def create_module(self, name: str, description: Optional[str] = None, icon: Optional[str] = None, sort_order: int = 0) -> Dict[str, Any]:
         """Create a new module"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO modules (name, description, icon, sort_order)
                    VALUES (?, ?, ?, ?)""",
@@ -32,7 +32,7 @@ class CurriculumRepository(BaseRepository):
     async def get_all_modules(self) -> List[Dict[str, Any]]:
         """Get all modules ordered by sort_order"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM modules ORDER BY sort_order ASC, id ASC"
             ) as cursor:
@@ -42,7 +42,7 @@ class CurriculumRepository(BaseRepository):
     async def get_module_by_id(self, module_id: int) -> Optional[Dict[str, Any]]:
         """Get module by ID"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM modules WHERE id = ?", (module_id,)
             ) as cursor:
@@ -85,7 +85,7 @@ class CurriculumRepository(BaseRepository):
     async def create_section(self, module_id: int, name: str, sort_order: int = 0, description: Optional[str] = None) -> Dict[str, Any]:
         """Create a new section"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO sections (module_id, name, sort_order, description)
                    VALUES (?, ?, ?, ?)""",
@@ -101,7 +101,7 @@ class CurriculumRepository(BaseRepository):
     async def get_sections_by_module(self, module_id: int) -> List[Dict[str, Any]]:
         """Get all sections for a module ordered by sort_order"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM sections WHERE module_id = ? ORDER BY sort_order ASC, id ASC",
                 (module_id,)
@@ -112,7 +112,7 @@ class CurriculumRepository(BaseRepository):
     async def get_section_by_id(self, section_id: int) -> Optional[Dict[str, Any]]:
         """Get section by ID"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM sections WHERE id = ?", (section_id,)
             ) as cursor:
@@ -162,7 +162,7 @@ class CurriculumRepository(BaseRepository):
         """Create a lesson in a section and ensure 4 mini-lessons exist."""
         async with self._connection() as db:
             await db.execute("PRAGMA foreign_keys = ON")
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO lessons (section_id, lesson_number, title, sort_order)
                    VALUES (?, ?, ?, ?)""",
@@ -203,7 +203,7 @@ class CurriculumRepository(BaseRepository):
     async def get_lessons_by_section(self, section_id: int) -> List[Dict[str, Any]]:
         """Get lessons for section ordered by sort_order, lesson_number."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT * FROM lessons
                    WHERE section_id = ?
@@ -215,7 +215,7 @@ class CurriculumRepository(BaseRepository):
 
     async def get_lesson_by_id(self, lesson_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute("SELECT * FROM lessons WHERE id = ?", (lesson_id,)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
@@ -261,7 +261,7 @@ class CurriculumRepository(BaseRepository):
     async def get_mini_lessons_by_lesson(self, lesson_id: int) -> List[Dict[str, Any]]:
         """Get 4 mini-lessons for a lesson ordered by mini_index."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT * FROM mini_lessons
                    WHERE lesson_id = ?
@@ -273,7 +273,7 @@ class CurriculumRepository(BaseRepository):
 
     async def get_mini_lesson_by_id(self, mini_lesson_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute("SELECT * FROM mini_lessons WHERE id = ?", (mini_lesson_id,)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
@@ -316,7 +316,7 @@ class CurriculumRepository(BaseRepository):
     ) -> Dict[str, Any]:
         """Create a task placement in a mini-lesson."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO tasks (mini_lesson_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -345,7 +345,7 @@ class CurriculumRepository(BaseRepository):
     ) -> Dict[str, Any]:
         """Create a task placement in a section (legacy endpoint support)."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO tasks (section_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",

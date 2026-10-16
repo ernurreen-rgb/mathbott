@@ -43,6 +43,38 @@ jobs:
         pip install pip-audit
         pip-audit --desc -r requirements.txt
 
+  backend-postgres-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mathbot
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: mathbot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mathbot -d mathbot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MATHBOT_TEST_DATABASE_URL: postgresql://mathbot:ci-only-password@localhost:5432/mathbot_test
+      SENTRY_DSN: ""
+      ALERTS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        working-directory: ./bot
+        run: pip install -r requirements.txt
+      - name: Test repositories and routes against PostgreSQL
+        working-directory: ./bot
+        run: pytest tests/ -q --tb=short
+
   frontend-tests:
     runs-on: ubuntu-latest
     

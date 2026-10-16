@@ -8,6 +8,7 @@ from httpx2 import AsyncClient, ASGITransport
 from starlette.websockets import WebSocketDisconnect
 from tests.route_helpers import _proxy_headers
 from utils.quiz import QuizError
+from tests.database_helpers import create_reject_trigger
 
 SECRET = 'quiz-test-proxy-secret-not-for-deployment'
 
@@ -219,7 +220,7 @@ async def test_finished_pin_collision_retries_and_exhaustion_is_clean(test_db, t
 async def test_batch_creation_is_atomic(client, test_db, test_user):
     # Fail at the DB boundary after the quiz insert, rather than mocking validation.
     async with test_db.quizzes._connection() as db:
-        await db.execute("CREATE TRIGGER reject_question BEFORE INSERT ON quiz_questions BEGIN SELECT RAISE(ABORT, 'reject'); END")
+        await create_reject_trigger(db, "quiz_questions", "reject_question", "reject")
         await db.commit()
     with pytest.raises(sqlite3.IntegrityError):
         await test_db.quizzes.create_quiz('Must rollback', test_user['id'], questions=[{'question_text': 'Q', 'correct_answer': '4'}])

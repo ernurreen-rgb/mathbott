@@ -2,20 +2,22 @@
 File storage helpers for uploaded images.
 """
 import logging
+import asyncio
 import mimetypes
+import os
 import re
 import shutil
 import uuid
 from pathlib import Path
 from typing import Optional
+from functools import lru_cache
 
 from fastapi import HTTPException, UploadFile
 
 from settings import get_settings
 
 
-_IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
-_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+_IMAGES_DIR = Path(os.environ.get("IMAGES_DIR", Path(__file__).resolve().parents[2] / "images"))
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,49 @@ def _detect_image_type(content: bytes) -> tuple[Optional[str], Optional[str]]:
 
 def get_images_dir() -> Path:
     return _IMAGES_DIR
+
+
+def uses_object_storage() -> bool:
+    return get_settings().image_storage_backend == "s3"
+
+
+@lru_cache(maxsize=4)
+def _make_s3_client(endpoint, region, access_key, secret_key):
+    import boto3
+    from botocore.config import Config
+    return boto3.client(
+        "s3", endpoint_url=endpoint or None, region_name=region,
+        aws_access_key_id=access_key or None, aws_secret_access_key=secret_key or None,
+        config=Config(signature_version="s3v4", connect_timeout=10, read_timeout=15,
+                      retries={"max_attempts": 2}, s3={"addressing_style": "path"}),
+    )
+
+
+def get_s3_client():
+    settings = get_settings()
+    return _make_s3_client(settings.s3_endpoint_url, settings.s3_region,
+                           settings.s3_access_key_id, settings.s3_secret_access_key)
+
+
+async def read_object_image(filename: str):
+    """Read from a private bucket without exposing credentials or signed URLs."""
+    safe_filename = normalize_stored_image_filename(filename)
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid image filename")
+    def read():
+        from botocore.exceptions import ClientError
+        try:
+            result = get_s3_client().get_object(Bucket=get_settings().s3_bucket, Key=safe_filename)
+            body = result["Body"]
+            try:
+                return body.read(), result.get("ContentType", "application/octet-stream")
+            finally:
+                body.close()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+                raise HTTPException(status_code=404, detail="Image not found") from exc
+            raise HTTPException(status_code=503, detail="Image storage is temporarily unavailable") from exc
+    return await asyncio.to_thread(read)
 
 
 def normalize_stored_image_filename(filename: str) -> Optional[str]:
@@ -108,10 +153,17 @@ async def save_image_upload(image: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="Unsupported image extension")
 
     filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = _IMAGES_DIR / filename
-
-    with open(file_path, "wb") as f:
-        f.write(content)
+    if uses_object_storage():
+        try:
+            await asyncio.to_thread(get_s3_client().put_object, Bucket=get_settings().s3_bucket,
+                                    Key=filename, Body=content, ContentType=detected_content_type)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Image storage is temporarily unavailable") from exc
+    else:
+        _IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = _IMAGES_DIR / filename
+        with open(file_path, "wb") as f:
+            f.write(content)
 
     logger.info(
         "Image saved: filename=%s, bytes=%s",
@@ -124,6 +176,14 @@ async def save_image_upload(image: UploadFile) -> str:
 
 def delete_image_file(filename: str) -> None:
     """Delete an image file from the images directory."""
+    if uses_object_storage():
+        safe_filename = normalize_stored_image_filename(filename)
+        if safe_filename:
+            try:
+                get_s3_client().delete_object(Bucket=get_settings().s3_bucket, Key=safe_filename)
+            except Exception:
+                logger.warning("Image deletion in object storage failed")
+        return
     file_path = _resolve_image_path(filename)
     if file_path is None:
         logger.warning("Refusing to delete unsafe image filename: %s", filename)
@@ -139,6 +199,19 @@ def delete_image_file(filename: str) -> None:
 
 def copy_image_file(filename: str) -> Optional[str]:
     """Create a physical copy of an existing image and return new filename."""
+    if uses_object_storage():
+        safe_filename = normalize_stored_image_filename(filename)
+        if not safe_filename:
+            return None
+        new_filename = f"{uuid.uuid4().hex}{Path(safe_filename).suffix.lower()}"
+        try:
+            bucket = get_settings().s3_bucket
+            get_s3_client().copy_object(Bucket=bucket, Key=new_filename,
+                                       CopySource={"Bucket": bucket, "Key": safe_filename})
+            return new_filename
+        except Exception:
+            logger.warning("Image copy in object storage failed")
+            return None
     src_path = _resolve_image_path(filename)
     if src_path is None:
         logger.warning("Refusing to copy unsafe image filename: %s", filename)

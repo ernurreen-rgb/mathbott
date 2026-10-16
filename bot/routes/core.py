@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import FileResponse
 from slowapi import Limiter
 
-from utils.file_storage import get_images_dir
+from utils.file_storage import get_images_dir, read_object_image, uses_object_storage
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,10 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
     @app.get("/api/images/{filename}")
     async def get_image(filename: str):
         """Serve uploaded task images"""
+        if uses_object_storage():
+            content, content_type = await read_object_image(filename)
+            return Response(content=content, media_type=content_type,
+                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
         images_dir = get_images_dir().resolve()
         file_path = (images_dir / filename).resolve()
         if images_dir not in file_path.parents:

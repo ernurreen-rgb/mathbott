@@ -3,7 +3,7 @@ Near-duplicate detection for bank tasks.
 """
 from typing import Optional, List, Dict, Any
 from difflib import SequenceMatcher
-import aiosqlite
+import storage as db_driver
 
 
 class BankTaskSimilarityMixin:
@@ -52,7 +52,7 @@ class BankTaskSimilarityMixin:
 
         scan_limit = max(limit * 25, 250)
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where_parts = ["deleted_at IS NULL"]
             params: List[Any] = []
             if exclude_task_id is not None:

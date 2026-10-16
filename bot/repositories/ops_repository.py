@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
-import aiosqlite
+import storage as db_driver
 
 from .base import BaseRepository
 
@@ -66,7 +66,7 @@ class OpsRepository(BaseRepository):
 
     async def get_latest_health_sample(self) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT
@@ -86,11 +86,16 @@ class OpsRepository(BaseRepository):
 
     async def list_health_timeseries(self, *, range_sql: str, step_seconds: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"""
+                WITH samples AS (
+                    SELECT *, CAST(strftime('%s', collected_at) AS BIGINT) / ? AS bucket
+                    FROM ops_health_samples
+                    WHERE collected_at >= datetime('now', ?)
+                )
                 SELECT
-                    datetime((CAST(strftime('%s', collected_at) AS INTEGER) / ?) * ?, 'unixepoch') AS ts,
+                    datetime(bucket * ?, 'unixepoch') AS ts,
                     SUM(requests_5m) AS requests,
                     SUM(errors_5m) AS errors,
                     CASE
@@ -103,12 +108,11 @@ class OpsRepository(BaseRepository):
                         WHEN SUM(CASE WHEN database_status = 'ok' THEN 1 ELSE 0 END) = COUNT(*) THEN 1
                         ELSE 0
                     END AS db_ok
-                FROM ops_health_samples
-                WHERE collected_at >= datetime('now', ?)
-                GROUP BY (CAST(strftime('%s', collected_at) AS INTEGER) / ?)
+                FROM samples
+                GROUP BY bucket
                 ORDER BY ts ASC
                 """,
-                (step_seconds, step_seconds, range_sql, step_seconds),
+                (step_seconds, range_sql, step_seconds),
             ) as cursor:
                 rows = await cursor.fetchall()
 
@@ -137,7 +141,7 @@ class OpsRepository(BaseRepository):
 
     async def get_open_incident_by_fingerprint(self, fingerprint: str) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT *
@@ -166,7 +170,7 @@ class OpsRepository(BaseRepository):
     ) -> Dict[str, Any]:
         async def operation() -> Dict[str, Any]:
             async with self._connection() as db:
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 async with db.execute(
                     """
                     SELECT id, occurrences
@@ -287,7 +291,7 @@ class OpsRepository(BaseRepository):
     ) -> Optional[Dict[str, Any]]:
         async def operation() -> Optional[Dict[str, Any]]:
             async with self._connection() as db:
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 async with db.execute(
                     """
                     SELECT *
@@ -354,7 +358,7 @@ class OpsRepository(BaseRepository):
         offset: int = 0,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where: List[str] = []
             params: List[Any] = []
 
@@ -435,7 +439,7 @@ class OpsRepository(BaseRepository):
     async def probe_database(self) -> bool:
         """Lightweight DB liveness probe (always opens a fresh connection)."""
         try:
-            async with aiosqlite.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
+            async with db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
                 await self._configure_connection(db)
                 async with db.execute("SELECT 1") as cursor:
                     row = await cursor.fetchone()

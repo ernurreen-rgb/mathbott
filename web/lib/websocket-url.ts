@@ -1,4 +1,5 @@
 export function resolveWebSocketBase(): string | null {
+  if (process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === "polling") return null;
   const configured = process.env.NEXT_PUBLIC_WS_API_URL?.trim();
   const api = process.env.NEXT_PUBLIC_API_URL?.trim();
   const base = configured && !configured.startsWith("/") ? configured

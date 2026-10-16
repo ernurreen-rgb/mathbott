@@ -1,7 +1,7 @@
 """
 Repository for friends, invites, and blocks
 """
-import aiosqlite
+import storage as db_driver
 import logging
 import secrets
 from datetime import datetime
@@ -15,11 +15,25 @@ logger = logging.getLogger(__name__)
 class FriendsRepository(BaseRepository):
     """Repository for friends and invite operations"""
 
+    async def heartbeat_presence(self, user_id: int) -> List[Dict[str, Any]]:
+        """Persist activity so hosted instances share the same online roster."""
+        async def operation():
+            async with self._connection() as db:
+                db.row_factory = db_driver.Row
+                await db.execute("UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+                async with db.execute("""SELECT id, nickname FROM users
+                    WHERE datetime(last_active) >= datetime('now', '-70 seconds')
+                    ORDER BY id""") as cursor:
+                    users = [dict(row) for row in await cursor.fetchall()]
+                await db.commit()
+                return users
+        return await self._run_with_lock_retry(operation)
+
     async def _fetch_one(self, query: str, params: tuple) -> Optional[Dict[str, Any]]:
         conn = await self._get_connection()
         try:
             await self._configure_connection(conn)
-            conn.row_factory = aiosqlite.Row
+            conn.row_factory = db_driver.Row
             async with conn.execute(query, params) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
@@ -30,7 +44,7 @@ class FriendsRepository(BaseRepository):
         conn = await self._get_connection()
         try:
             await self._configure_connection(conn)
-            conn.row_factory = aiosqlite.Row
+            conn.row_factory = db_driver.Row
             async with conn.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
@@ -178,7 +192,7 @@ class FriendsRepository(BaseRepository):
             FROM friendships f
             JOIN users u ON u.id = f.friend_id
             WHERE f.user_id = ?
-            ORDER BY COALESCE(u.nickname, '') COLLATE NOCASE ASC, u.id ASC
+            ORDER BY LOWER(COALESCE(u.nickname, '')) ASC, u.id ASC
         """
         return await self._fetch_all(query, (user_id,))
 

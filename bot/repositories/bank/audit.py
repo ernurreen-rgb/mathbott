@@ -3,13 +3,13 @@ Admin audit log writing and listing.
 """
 from typing import Optional, List, Dict, Any
 import json
-import aiosqlite
+import storage as db_driver
 
 
 class BankTaskAuditMixin:
     async def _record_admin_audit_event(
         self,
-        db: aiosqlite.Connection,
+        db: db_driver.Connection,
         *,
         action: str,
         entity_type: str,
@@ -57,7 +57,7 @@ class BankTaskAuditMixin:
         offset: int = 0,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             where = ["domain = ?"]
             params: List[Any] = [self.AUDIT_DOMAIN_BANK]
 

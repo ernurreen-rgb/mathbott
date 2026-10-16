@@ -1,7 +1,7 @@
 """Route tests: admin content."""
 import pytest
 import json
-import aiosqlite
+import storage as aiosqlite
 
 
 @pytest.mark.asyncio

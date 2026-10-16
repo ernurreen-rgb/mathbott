@@ -1,7 +1,7 @@
 """
 Trial test report repository
 """
-import aiosqlite
+import storage as db_driver
 import logging
 import json
 from typing import Optional, List, Dict, Any
@@ -21,7 +21,7 @@ class TrialTestReportRepository(BaseRepository):
         message: str,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """INSERT INTO trial_test_reports (user_id, trial_test_id, trial_test_task_id, message, status)
                    VALUES (?, ?, ?, ?, 'pending')""",
@@ -48,7 +48,7 @@ class TrialTestReportRepository(BaseRepository):
 
     async def get_user_trial_test_reports(self, user_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT r.*, tt.title as trial_test_title,
                           bt.text as task_text, bt.answer as task_answer,
@@ -69,7 +69,7 @@ class TrialTestReportRepository(BaseRepository):
         self, status_filter: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             query = """
                 SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                        tt.title as trial_test_title,
@@ -96,7 +96,7 @@ class TrialTestReportRepository(BaseRepository):
 
     async def get_trial_test_report_by_id(self, report_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                           tt.title as trial_test_title,

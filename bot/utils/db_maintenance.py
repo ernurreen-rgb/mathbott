@@ -1,7 +1,7 @@
 """
 Database maintenance utilities
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import Optional
 from datetime import datetime, timedelta
@@ -33,7 +33,7 @@ class DatabaseMaintenance:
             bool: True if successful
         """
         try:
-            async with aiosqlite.connect(self.db_path, timeout=self.timeout) as db:
+            async with db_driver.connect(self.db_path, timeout=self.timeout) as db:
                 await db.execute("ANALYZE")
                 await db.commit()
             self.last_analyze = datetime.utcnow()
@@ -53,8 +53,11 @@ class DatabaseMaintenance:
         Note:
             VACUUM can take a long time and locks the database
         """
+        if db_driver.is_postgres(self.db_path):
+            # PostgreSQL/Neon owns autovacuum; VACUUM cannot run in a transaction.
+            return True
         try:
-            async with aiosqlite.connect(self.db_path, timeout=self.timeout * 10) as db:
+            async with db_driver.connect(self.db_path, timeout=self.timeout * 10) as db:
                 await db.execute("VACUUM")
                 await db.commit()
             self.last_vacuum = datetime.utcnow()
@@ -90,5 +93,5 @@ class DatabaseMaintenance:
         return {
             "last_analyze": self.last_analyze.isoformat() if self.last_analyze else None,
             "last_vacuum": self.last_vacuum.isoformat() if self.last_vacuum else None,
-            "db_path": self.db_path
+            "db_path": "[PostgreSQL]" if db_driver.is_postgres(self.db_path) else self.db_path
         }

@@ -3,7 +3,7 @@ Version history: recording, listing, rollback and deletion.
 """
 from typing import Optional, List, Dict, Any
 import json
-import aiosqlite
+import storage as db_driver
 from utils.validation import normalize_answer_mode
 
 
@@ -19,7 +19,7 @@ class BankTaskVersionDeleteError(Exception):
 class BankTaskVersionsMixin:
     async def _record_version_event(
         self,
-        db: aiosqlite.Connection,
+        db: db_driver.Connection,
         *,
         task_id: int,
         event_type: str,
@@ -71,7 +71,7 @@ class BankTaskVersionsMixin:
 
     async def list_task_versions(self, task_id: int, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT COUNT(*) FROM bank_task_versions WHERE bank_task_id = ?",
                 (task_id,),
@@ -108,7 +108,7 @@ class BankTaskVersionsMixin:
 
     async def get_task_version(self, task_id: int, version_no: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT id, bank_task_id, version_no, event_type, source, actor_user_id,
@@ -137,7 +137,7 @@ class BankTaskVersionsMixin:
         actor_email: Optional[str] = None,
     ) -> bool:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             task_row = await self._fetch_task_row(db, task_id)
             if not task_row:
                 return False
@@ -243,7 +243,7 @@ class BankTaskVersionsMixin:
         expected_current_version: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         async with self._write_transaction() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             current_row = await self._fetch_task_row(db, task_id)
             if not current_row or current_row.get("deleted_at") is not None:
                 return None

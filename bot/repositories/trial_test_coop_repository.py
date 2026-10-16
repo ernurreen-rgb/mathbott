@@ -1,7 +1,7 @@
 """
 Trial test coop repository
 """
-import aiosqlite
+import storage as db_driver
 import logging
 from typing import Optional, List, Dict, Any
 
@@ -15,7 +15,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def create_session(self, trial_test_id: int, owner_id: int) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """
                 INSERT INTO trial_test_coop_sessions (trial_test_id, owner_id)
@@ -32,7 +32,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM trial_test_coop_sessions WHERE id = ?",
                 (session_id,)
@@ -50,7 +50,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def add_participant(self, session_id: int, user_id: int, color: str) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """
                 INSERT OR IGNORE INTO trial_test_coop_participants (session_id, user_id, color)
@@ -71,7 +71,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def get_participant(self, session_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT * FROM trial_test_coop_participants
@@ -84,7 +84,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def list_participants(self, session_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT p.*, u.nickname
@@ -113,7 +113,7 @@ class TrialTestCoopRepository(BaseRepository):
     async def save_answers(self, session_id: int, user_id: int, answers: Dict[int, str]) -> Dict[str, Any]:
         """Save a batch while the participant is active; serialize with finishing."""
         async with self._write_transaction() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT p.color, p.is_finished, s.status, s.trial_test_id
                    FROM trial_test_coop_participants p JOIN trial_test_coop_sessions s ON s.id = p.session_id
@@ -141,7 +141,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def list_answers_for_user(self, session_id: int, user_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT * FROM trial_test_coop_answers
@@ -154,7 +154,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def create_result_link(self, session_id: int, user_id: int, trial_test_result_id: int) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """
                 INSERT OR REPLACE INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
@@ -175,7 +175,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def get_results_for_session(self, session_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT r.*, tr.score, tr.total, tr.percentage, tr.answers, tr.completed_at,
@@ -193,7 +193,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def create_invite(self, session_id: int, sender_id: int, receiver_id: int) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """
                 INSERT OR IGNORE INTO trial_test_coop_invites (session_id, sender_id, receiver_id)
@@ -214,7 +214,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def get_invite(self, session_id: int, receiver_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT * FROM trial_test_coop_invites
@@ -239,7 +239,7 @@ class TrialTestCoopRepository(BaseRepository):
 
     async def list_incoming_invites(self, receiver_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT i.*, s.trial_test_id, s.owner_id, u.nickname as sender_nickname, t.title as test_title

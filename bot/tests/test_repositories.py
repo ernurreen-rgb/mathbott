@@ -243,7 +243,7 @@ async def test_user_repository_change_admin_role_with_audit(test_db):
     assert same["changed"] is False
     assert same["audit_id"] is None
 
-    import aiosqlite
+    import storage as aiosqlite
     async with aiosqlite.connect(test_db.db_path) as db_conn:
         async with db_conn.execute(
             "SELECT COUNT(*) FROM admin_audit_logs WHERE action = 'role_change' AND entity_type = 'admin_user' AND entity_id = ?",

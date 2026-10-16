@@ -1,7 +1,7 @@
 """
 Trial test repository (placement model with bank_tasks as content source).
 """
-import aiosqlite
+import storage as db_driver
 import json
 import logging
 from typing import Optional, List, Dict, Any
@@ -57,7 +57,7 @@ class TrialTestRepository(BaseRepository):
 
     async def _create_bank_task_for_inline(
         self,
-        db: aiosqlite.Connection,
+        db: db_driver.Connection,
         *,
         text: str,
         answer: str,
@@ -102,7 +102,7 @@ class TrialTestRepository(BaseRepository):
         expected_tasks_count: int = 40,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             await db.execute(
                 """
                 INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by)
@@ -117,7 +117,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_trial_tests(self) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT t.*, COUNT(tt.id) AS task_count
@@ -134,7 +134,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_trial_test_by_id(self, test_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute("SELECT * FROM trial_tests WHERE id = ?", (test_id,)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
@@ -198,7 +198,7 @@ class TrialTestRepository(BaseRepository):
         If bank_task_id is omitted, create a bank task inline first.
         """
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
                 resolved_bank_task_id = await self._create_bank_task_for_inline(
@@ -225,7 +225,7 @@ class TrialTestRepository(BaseRepository):
                     """,
                     (trial_test_id, resolved_bank_task_id, sort_order, created_by),
                 )
-            except aiosqlite.IntegrityError:
+            except db_driver.IntegrityError:
                 async with db.execute(
                     """
                     SELECT COALESCE(MAX(sort_order), -1)
@@ -252,7 +252,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_trial_test_task(self, task_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TRIAL_TASK_SELECT} WHERE ttt.id = ? AND ttt.deleted_at IS NULL",
                 (task_id,),
@@ -274,7 +274,7 @@ class TrialTestRepository(BaseRepository):
         solution_filename: Optional[str] = None,
     ) -> None:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT id, bank_task_id FROM trial_test_tasks WHERE id = ? AND deleted_at IS NULL",
                 (task_id,),
@@ -342,7 +342,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_trial_test_tasks(self, trial_test_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 f"{self._TRIAL_TASK_SELECT} "
                 "WHERE ttt.trial_test_id = ? AND ttt.deleted_at IS NULL "
@@ -366,7 +366,7 @@ class TrialTestRepository(BaseRepository):
         """
         sort_order = max(0, int(slot_index) - 1)
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT id FROM trial_test_tasks
@@ -428,7 +428,7 @@ class TrialTestRepository(BaseRepository):
     ) -> Dict[str, Any]:
         async def operation() -> Dict[str, Any]:
             async with self._connection() as db:
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 answers_json = json.dumps(answers)
                 try:
                     await db.execute(
@@ -439,7 +439,7 @@ class TrialTestRepository(BaseRepository):
                         """,
                         (user_id, trial_test_id, score, total, percentage, answers_json),
                     )
-                except aiosqlite.IntegrityError as exc:
+                except db_driver.IntegrityError as exc:
                     raise TrialTestAlreadySubmitted() from exc
                 await db.commit()
                 async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
@@ -467,7 +467,7 @@ class TrialTestRepository(BaseRepository):
 
         async def operation() -> Dict[str, Any]:
             async with self._connection() as db:
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 try:
                     await db.execute("BEGIN IMMEDIATE")
 
@@ -516,7 +516,7 @@ class TrialTestRepository(BaseRepository):
                                 normalized_submit_mode,
                             ),
                         )
-                    except aiosqlite.IntegrityError as exc:
+                    except db_driver.IntegrityError as exc:
                         if normalized_submit_mode == "solo":
                             raise TrialTestAlreadySubmitted() from exc
                         raise
@@ -634,7 +634,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_user_trial_test_results(self, user_id: int, trial_test_id: Optional[int] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             if trial_test_id:
                 async with db.execute(
                     """
@@ -659,7 +659,7 @@ class TrialTestRepository(BaseRepository):
 
     async def get_trial_test_draft(self, user_id: int, trial_test_id: int) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT answers, current_task_index FROM trial_test_drafts

@@ -1,7 +1,7 @@
 """
 Progress repository for user progress tracking
 """
-import aiosqlite
+import storage as db_driver
 import json
 import logging
 import sqlite3
@@ -50,7 +50,7 @@ class ProgressRepository(BaseRepository):
     async def get_user_task_progress(self, user_id: int, task_id: int) -> Optional[Dict[str, Any]]:
         """Get user progress for a specific task"""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT * FROM user_progress WHERE user_id = ? AND task_id = ?",
                 (user_id, task_id)
@@ -181,7 +181,7 @@ class ProgressRepository(BaseRepository):
         EXPECTED_LESSONS_PER_SECTION = 10
         
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             
             async with db.execute(
                 "SELECT COUNT(*) as count FROM lessons WHERE section_id = ?",
@@ -236,7 +236,7 @@ class ProgressRepository(BaseRepository):
                 }
 
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             
             async with db.execute(
                 "SELECT COUNT(*) as count FROM tasks WHERE section_id = ? AND deleted_at IS NULL",
@@ -294,7 +294,7 @@ class ProgressRepository(BaseRepository):
             return {"completed": False, "total_sections": 0, "completed_sections": 0, "progress": 0.0}
         
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             
             placeholders = ','.join('?' * len(section_ids))
             async with db.execute(
@@ -375,7 +375,7 @@ class ProgressRepository(BaseRepository):
     async def get_task_questions(self, task_id: int) -> List[Dict[str, Any]]:
         """Get legacy question-list payload for a placement task."""
         async with self._connection() as db:
-            db.row_factory = aiosqlite.Row
+            db.row_factory = db_driver.Row
             async with db.execute(
                 """
                 SELECT bt.options

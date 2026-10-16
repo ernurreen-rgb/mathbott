@@ -103,16 +103,16 @@ def setup_export_routes(app, db):
         if format == "csv":
             # Stream CSV data
             async def generate_csv():
-                import aiosqlite
+                import storage as db_driver
                 conn = await db._get_connection() if hasattr(db, '_get_connection') else None
                 use_pool = conn is not None
                 
                 if not use_pool:
-                    conn = await aiosqlite.connect(db.db_path)
+                    conn = await db_driver.connect(db.db_path)
                     await db._configure_connection(conn)
                 
                 try:
-                    conn.row_factory = aiosqlite.Row
+                    conn.row_factory = db_driver.Row
                     
                     # Yield CSV header and user info
                     yield _csv_line(["Field", "Value"])
@@ -156,16 +156,16 @@ def setup_export_routes(app, db):
         else:
             # For JSON, use streaming for large datasets
             async def generate_json():
-                import aiosqlite
+                import storage as db_driver
                 conn = await db._get_connection() if hasattr(db, '_get_connection') else None
                 use_pool = conn is not None
                 
                 if not use_pool:
-                    conn = await aiosqlite.connect(db.db_path)
+                    conn = await db_driver.connect(db.db_path)
                     await db._configure_connection(conn)
                 
                 try:
-                    conn.row_factory = aiosqlite.Row
+                    conn.row_factory = db_driver.Row
                     
                     # Start JSON object
                     yield '{\n  "user": {\n'
@@ -254,10 +254,10 @@ def setup_export_routes(app, db):
         - 500: Internal server error
         """
         # Get statistics
-        import aiosqlite
-        async with aiosqlite.connect(db.db_path) as conn:
+        import storage as db_driver
+        async with db_driver.connect(db.db_path) as conn:
             await db._configure_connection(conn)
-            conn.row_factory = aiosqlite.Row
+            conn.row_factory = db_driver.Row
             
             # Total users
             async with conn.execute("SELECT COUNT(*) as count FROM users") as cursor:

@@ -9,6 +9,7 @@ from httpx2 import ASGITransport, AsyncClient
 from database import Database
 from repositories.bank.versions import BankTaskVersionConflictError
 from tests.route_helpers import _proxy_headers
+from tests.database_helpers import create_reject_trigger, drop_reject_trigger
 
 
 async def make_trial(db, user):
@@ -75,8 +76,7 @@ async def test_failed_progress_write_rolls_back_solution_and_reward(client, test
     _, _, _, minis = await make_lesson(test_db)
     task = await test_db.create_task_in_mini_lesson(minis[0]["id"], "2+2", "4", test_user["id"])
     async with test_db.tasks._connection() as conn:
-        await conn.execute("""CREATE TRIGGER reject_progress BEFORE INSERT ON user_progress
-                              BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END""")
+        await create_reject_trigger(conn, "user_progress", "reject_progress")
         await conn.commit()
     response = client.post("/api/task/check", json={"email": test_user["email"], "task_id": task["id"], "answer": "4"})
     assert response.status_code == 503
@@ -84,7 +84,7 @@ async def test_failed_progress_write_rolls_back_solution_and_reward(client, test
         for table in ("solutions", "user_progress", "user_task_rewards"):
             async with conn.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (test_user["id"],)) as cursor:
                 assert (await cursor.fetchone())[0] == 0
-        await conn.execute("DROP TRIGGER reject_progress")
+        await drop_reject_trigger(conn, "user_progress", "reject_progress")
         await conn.commit()
     for _ in range(2):
         assert client.post("/api/task/check", json={"email": test_user["email"], "task_id": task["id"], "answer": "4"}).status_code == 200

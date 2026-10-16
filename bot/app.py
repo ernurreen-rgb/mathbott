@@ -63,7 +63,8 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     
     # Инициализировать базу данных и лимитер
     settings = get_settings()
-    db = Database(db_path=settings.db_path)
+    db = Database(db_path=settings.database_target, migration_url=settings.database_migration_url,
+                  auto_migrate=settings.migrate_on_startup)
     limiter = Limiter(key_func=get_rate_limit_key)
     
     # Сохранить в app.state для доступа через dependencies

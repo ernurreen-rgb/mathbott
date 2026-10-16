@@ -1,7 +1,7 @@
 """
 Connection pool for SQLite database connections
 """
-import aiosqlite
+import storage as db_driver
 import asyncio
 import logging
 
@@ -35,14 +35,14 @@ class ConnectionPool:
         self.timeout = timeout
         self.busy_timeout_ms = busy_timeout_ms
         
-        self._pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue(maxsize=max_size)
+        self._pool: asyncio.Queue[db_driver.Connection] = asyncio.Queue(maxsize=max_size)
         self._created = 0
         self._lock = asyncio.Lock()
         self._closed = False
     
-    async def _create_connection(self) -> aiosqlite.Connection:
+    async def _create_connection(self) -> db_driver.Connection:
         """Create a new database connection"""
-        conn = await aiosqlite.connect(self.db_path, timeout=self.timeout)
+        conn = await db_driver.connect(self.db_path, timeout=self.timeout)
         try:
             await self._configure_connection(conn)
         except Exception:
@@ -52,7 +52,7 @@ class ConnectionPool:
         logger.debug(f"Created new connection (total: {self._created})")
         return conn
     
-    async def _configure_connection(self, conn: aiosqlite.Connection) -> None:
+    async def _configure_connection(self, conn: db_driver.Connection) -> None:
         """Configure connection settings"""
         await conn.execute("PRAGMA foreign_keys = ON")
         try:
@@ -65,12 +65,12 @@ class ConnectionPool:
         except Exception:
             pass
     
-    async def acquire(self) -> aiosqlite.Connection:
+    async def acquire(self) -> db_driver.Connection:
         """
         Acquire a connection from the pool
         
         Returns:
-            aiosqlite.Connection: Database connection
+            db_driver.Connection: Database connection
         """
         if self._closed:
             raise RuntimeError("Connection pool is closed")
@@ -101,7 +101,7 @@ class ConnectionPool:
             raise RuntimeError("Connection pool is closed")
         return conn
     
-    async def release(self, conn: aiosqlite.Connection) -> None:
+    async def release(self, conn: db_driver.Connection) -> None:
         """
         Release a connection back to the pool
         

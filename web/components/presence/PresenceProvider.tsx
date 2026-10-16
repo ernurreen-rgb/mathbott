@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { getPresenceWsToken } from "@/lib/api";
+import { getPresenceWsToken, heartbeatPresence } from "@/lib/api";
 import { resolveWebSocketBase } from "@/lib/websocket-url";
 
 type PresenceStatus = "connecting" | "connected" | "disconnected";
@@ -74,6 +74,33 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       setUsers([]);
       setStatus("disconnected");
       return;
+    }
+
+    if (process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === "polling") {
+      let disposed = false;
+      let busy = false;
+      const refresh = async () => {
+        if (busy || disposed) return;
+        busy = true;
+        try {
+          const { data, error } = await heartbeatPresence(email);
+          if (disposed) return;
+          if (error || !data) setStatus("disconnected");
+          else {
+            setUsers(sortPresenceUsers(data.users.map(normalizePresenceUser).filter(Boolean) as PresenceUser[]));
+            setStatus("connected");
+          }
+        } finally {
+          busy = false;
+        }
+      };
+      setStatus("connecting");
+      void refresh();
+      const timer = setInterval(() => void refresh(), 25000);
+      return () => {
+        disposed = true;
+        clearInterval(timer);
+      };
     }
 
     let closed = false;

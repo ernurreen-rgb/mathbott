@@ -4,7 +4,7 @@ Repository for user onboarding data and statistics.
 import logging
 from typing import Any, Dict
 
-import aiosqlite
+import storage as db_driver
 
 from repositories.base import BaseRepository
 
@@ -55,7 +55,7 @@ class OnboardingRepository(BaseRepository):
         try:
             async with self._connection() as db:
                 old_row_factory = db.row_factory
-                db.row_factory = aiosqlite.Row
+                db.row_factory = db_driver.Row
                 try:
                     # Check if table exists
                     async with db.execute(

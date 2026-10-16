@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     port: int = 8000
     db_path: str = "mathbot.db"
+    database_url: str = ""
+    database_migration_url: str = ""
+    database_auto_migrate: Optional[bool] = None
+    background_tasks_enabled: Optional[bool] = None
+    cron_secret: str = ""
+    image_storage_backend: str = "local"
+    s3_bucket: str = ""
+    s3_endpoint_url: str = ""
+    s3_region: str = "auto"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
 
     # CORS / CSRF
     allowed_origins: str = ""
@@ -141,6 +152,24 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def database_target(self) -> str:
+        return self.database_url.strip() or self.db_path
+
+    @property
+    def run_background_tasks(self) -> bool:
+        import os
+        if self.background_tasks_enabled is not None:
+            return self.background_tasks_enabled
+        return os.environ.get("VERCEL") != "1"
+
+    @property
+    def migrate_on_startup(self) -> bool:
+        import os
+        if self.database_auto_migrate is not None:
+            return self.database_auto_migrate
+        return os.environ.get("VERCEL") != "1"
 
     @property
     def image_upload_limit_bytes(self) -> int:

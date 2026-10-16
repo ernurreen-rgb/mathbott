@@ -42,7 +42,7 @@ async def bootstrap_bank_task_versions(db) -> None:
             FROM bank_task_topic_map m
             JOIN bank_topics t ON t.id = m.topic_id
             WHERE m.bank_task_id = ?
-            ORDER BY t.name COLLATE NOCASE ASC
+            ORDER BY LOWER(t.name) ASC
             """,
             (task_id,),
         ) as topics_cursor:

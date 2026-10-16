@@ -103,6 +103,10 @@ class PresenceConnectionManager:
 def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = PresenceConnectionManager()
 
+    @app.post("/api/presence/heartbeat")
+    async def heartbeat(user: dict = Depends(require_internal_identity), database: Database = Depends(get_db)):
+        return {"type": "presence_snapshot", "users": await database.friends.heartbeat_presence(user["id"])}
+
     @app.get("/api/presence/ws-token")
     async def get_presence_ws_token(
         user: dict = Depends(require_internal_identity),

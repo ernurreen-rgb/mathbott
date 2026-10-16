@@ -1,0 +1,25 @@
+# Runtime secrets and local data
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+
+# Node / Vercel
+node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
+coverage/
+.playwright-cli/
+web/output/

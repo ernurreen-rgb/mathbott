@@ -2,7 +2,7 @@
 Base repository with common database connection methods
 """
 import asyncio
-import aiosqlite
+import storage as db_driver
 import logging
 import sqlite3
 from typing import Optional, Dict
@@ -35,7 +35,7 @@ class BaseRepository:
         # Prepared statements cache (simple dict-based cache)
         self._statement_cache: Dict[str, str] = {}
 
-    async def _configure_connection(self, db: aiosqlite.Connection) -> None:
+    async def _configure_connection(self, db: db_driver.Connection) -> None:
         """Configure database connection settings"""
         await db.execute("PRAGMA foreign_keys = ON")
         try:
@@ -54,17 +54,17 @@ class BaseRepository:
         Get a database connection, using pool if available
         
         Returns:
-            aiosqlite.Connection: Database connection
+            db_driver.Connection: Database connection
         """
         if self.connection_pool:
             return await self.connection_pool.acquire()
         else:
             # Fallback to creating new connection
-            conn = await aiosqlite.connect(self.db_path, timeout=self.sqlite_timeout_seconds)
+            conn = await db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds)
             await self._configure_connection(conn)
             return conn
     
-    async def _release_connection(self, conn: aiosqlite.Connection) -> None:
+    async def _release_connection(self, conn: db_driver.Connection) -> None:
         """
         Release a database connection back to pool or close it
         
@@ -108,7 +108,7 @@ class BaseRepository:
         table: str,
         columns: list,
         values: list,
-        conn: Optional[aiosqlite.Connection] = None
+        conn: Optional[db_driver.Connection] = None
     ) -> None:
         """
         Batch insert multiple rows into a table
@@ -149,7 +149,7 @@ class BaseRepository:
         table: str,
         updates: list,
         where_column: str,
-        conn: Optional[aiosqlite.Connection] = None
+        conn: Optional[db_driver.Connection] = None
     ) -> None:
         """
         Batch update multiple rows in a table

@@ -2,6 +2,7 @@
 Configuration and setup utilities
 """
 import logging
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -37,6 +38,17 @@ def validate_configuration():
     settings = get_settings()
     errors = []
     warnings = []
+    if settings.database_url and not settings.database_url.startswith(("postgres://", "postgresql://")):
+        errors.append("DATABASE_URL must be a PostgreSQL connection URL")
+    if settings.image_storage_backend not in {"local", "s3"}:
+        errors.append("IMAGE_STORAGE_BACKEND must be local or s3")
+    if settings.image_storage_backend == "s3" and not settings.s3_bucket:
+        errors.append("S3_BUCKET is required for S3 image storage")
+    if os.environ.get("VERCEL") == "1":
+        if not settings.database_url:
+            errors.append("DATABASE_URL is required on Vercel; a local SQLite file is not persistent")
+        if settings.image_storage_backend != "s3":
+            errors.append("Vercel requires IMAGE_STORAGE_BACKEND=s3 for durable image uploads")
 
     # Trusted proxy secret for signed backend requests
     if settings.is_production:

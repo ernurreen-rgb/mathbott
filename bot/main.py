@@ -4,7 +4,7 @@ Entry point для запуска приложения
 """
 import logging
 import asyncio
-import aiosqlite
+import storage as db_driver
 import uvicorn
 from contextlib import asynccontextmanager
 
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
 
     try:
-        async with aiosqlite.connect(db.db_path) as conn:
+        async with db_driver.connect(db.db_path) as conn:
             async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='subtasks'") as cursor:
                 result = await cursor.fetchone()
                 if result:
@@ -46,33 +46,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error checking subtasks table: {e}")
 
-    try:
-        deleted_count = await db.tasks.cleanup_old_deleted_tasks(days=10)
-        if deleted_count > 0:
-            logger.info(f"Cleaned up {deleted_count} old deleted tasks")
-    except Exception as e:
-        logger.error(f"Error cleaning up old tasks: {e}")
-
-    try:
-        deleted_bank_count = await db.bank_tasks.cleanup_old_deleted_tasks(days=BANK_TRASH_RETENTION_DAYS)
-        if deleted_bank_count > 0:
-            logger.info(
-                f"Cleaned up {deleted_bank_count} bank tasks older than {BANK_TRASH_RETENTION_DAYS} days"
-            )
-    except Exception as e:
-        logger.error(f"Error cleaning up old bank tasks: {e}")
-
     ops_monitor = OpsMonitor(db)
     app.state.ops_monitor = ops_monitor
-    try:
-        await ops_monitor.run_cycle()
-    except Exception as e:
-        logger.error(f"Initial ops monitor cycle failed: {e}", exc_info=True)
-
-    task_maint = asyncio.create_task(run_db_maintenance(db, BANK_TRASH_RETENTION_DAYS, ops_monitor))
-    task_ops = asyncio.create_task(ops_monitor.run_loop())
-    logger.info("Database maintenance started (runs daily at 03:00)")
-    logger.info("Ops monitor started (runs every 60 seconds)")
+    background_tasks = []
+    if get_settings().run_background_tasks:
+        from services.maintenance import run_maintenance_cycle
+        try:
+            await run_maintenance_cycle(db, ops_monitor)
+        except Exception as e:
+            logger.error(f"Initial maintenance cycle failed: {e}", exc_info=True)
+        background_tasks = [
+            asyncio.create_task(run_db_maintenance(db, BANK_TRASH_RETENTION_DAYS, ops_monitor)),
+            asyncio.create_task(ops_monitor.run_loop()),
+        ]
+        logger.info("Database maintenance and ops monitor started")
+    else:
+        logger.info("Background loops disabled; maintenance is invoked by scheduled HTTP requests")
 
     admin_email = get_settings().admin_email
     if admin_email:
@@ -91,9 +80,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # === shutdown ===
-    task_maint.cancel()
-    task_ops.cancel()
-    await asyncio.gather(task_maint, task_ops, return_exceptions=True)
+    for task in background_tasks:
+        task.cancel()
+    await asyncio.gather(*background_tasks, return_exceptions=True)
     if db.connection_pool:
         await db.connection_pool.close()
         logger.info("Connection pool closed")
