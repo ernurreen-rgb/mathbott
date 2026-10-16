@@ -44,6 +44,16 @@ describe("normalizeLatexForMathDisplay", () => {
 });
 
 describe("normalizeMathFieldValueForStorage", () => {
+  it.each([
+    [String.raw`\frac12`, String.raw`\frac{1}{2}`],
+    [String.raw`\dfrac34+\tfrac56`, String.raw`\dfrac{3}{4}+\tfrac{5}{6}`],
+    [String.raw`\sqrt4+\sqrt[3]8`, String.raw`\sqrt{4}+\sqrt[3]{8}`],
+    [String.raw`\frac{\sqrt4}{2}`, String.raw`\frac{\sqrt{4}}{2}`],
+    [String.raw`\frac{12}{34}+\sqrt{16}`, String.raw`\frac{12}{34}+\sqrt{16}`],
+  ])("stores numeric MathLive arguments in groups: %s", (input, expected) => {
+    expect(normalizeMathFieldValueForStorage(input)).toBe(expected);
+  });
+
   it("normalizes MathLive text spaces back to regular spaces", () => {
     expect(
       normalizeMathFieldValueForStorage(

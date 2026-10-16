@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { createQuiz } from "@/lib/api/quizzes";
+import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { QuestionType, QuizOption } from "@/types/quiz";
 import toast from "react-hot-toast";
 
@@ -221,7 +223,7 @@ export default function CreateQuizPage() {
           is_public: isPublic,
           questions: questions.map((q, index) => ({
             question_text: q.question_text.trim(), question_type: q.question_type, options: q.options,
-            correct_answer: q.correct_answer.trim(), time_limit_seconds: q.time_limit_seconds,
+            correct_answer: normalizeMathFieldValueForStorage(q.correct_answer), time_limit_seconds: q.time_limit_seconds,
             points: q.points, sort_order: index + 1, explanation: q.explanation.trim(),
           })),
         },
@@ -399,7 +401,7 @@ export default function CreateQuizPage() {
         {/* Main Editor Canvas */}
         <main className="flex-1 p-4 lg:p-8 overflow-y-auto max-w-4xl mx-auto w-full">
           {currentQ && (
-            <div className="space-y-6">
+            <div key={`${currentQ.id}-${currentQ.question_type}`} className="space-y-6">
               {/* Question Control Settings Toolbar */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-purple-100 shadow-sm">
                 <div className="flex items-center gap-2">
@@ -456,19 +458,22 @@ export default function CreateQuizPage() {
               <div className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-gray-700">
-                    Сұрақ мәтіні (LaTeX формулаларын $...$ ішіне жазуға болады)
+                    Сұрақ мәтіні
                   </label>
                   <span className="text-xs text-purple-600 font-mono font-bold">
                     Сұрақ #{activeQuestionIndex + 1}
                   </span>
                 </div>
-                <textarea
-                  rows={3}
-                  placeholder="Мысалы: Теңдеуді шешіңіз: $x^2 - 5x + 6 = 0$. x мәндері қандай?"
+                <MathFieldInput
+                  ariaLabel="Сұрақ мәтіні"
+                  placeholder={String.raw`\text{Мысалы: Теңдеуді шешіңіз: }x^2-5x+6=0`}
                   value={currentQ.question_text}
-                  onChange={(e) => updateCurrentQuestion({ question_text: e.target.value })}
-                  className="w-full bg-gray-50/70 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl p-3 text-base text-gray-900 placeholder-gray-400 focus:outline-none transition-all"
+                  onChange={(value) => updateCurrentQuestion({ question_text: value })}
+                  className="w-full text-base text-gray-900"
                 />
+                <p className="mt-2 text-xs text-gray-500">
+                  Өрісті басып, мәтін мен формулаларды математикалық пернетақтамен енгізіңіз.
+                </p>
 
                 {/* Live Preview */}
                 {currentQ.question_text && (
@@ -493,12 +498,14 @@ export default function CreateQuizPage() {
                   <p className="text-xs text-gray-500 mb-4">
                     Оқушының енгізген жауабы Mathbott математикалық қозғалтқышы арқылы тексеріледі (мысалы, 1/2 мен 0.5 екеуі де дұрыс деп қабылданады).
                   </p>
-                  <input
-                    type="text"
-                    placeholder="Мысалы: 2 немесе x+3 немесе 3/4"
+                  <MathFieldInput
+                    ariaLabel="Дұрыс математикалық жауап"
+                    placeholder={String.raw`\text{Мысалы: 2 немесе x+3 немесе 3/4}`}
                     value={currentQ.correct_answer}
-                    onChange={(e) => updateCurrentQuestion({ correct_answer: e.target.value })}
-                    className="w-full bg-gray-50 border-2 border-emerald-300 focus:bg-white rounded-xl px-4 py-3 text-lg font-mono text-emerald-700 font-bold focus:outline-none focus:border-emerald-500"
+                    onChange={(value) => updateCurrentQuestion({ correct_answer: value })}
+                    defaultMode="math"
+                    smartMode={false}
+                    className="w-full text-lg text-emerald-700 font-bold"
                   />
                   {currentQ.correct_answer && (
                     <div className="mt-3 text-sm text-gray-700 flex items-center gap-2">
@@ -572,12 +579,12 @@ export default function CreateQuizPage() {
                             )}
                           </div>
 
-                          <textarea
-                            rows={2}
-                            placeholder={`${opt.id} нұсқасын жазыңыз...`}
+                          <MathFieldInput
+                            ariaLabel={`${opt.id} жауап нұсқасы`}
+                            placeholder={`\\text{${opt.id} нұсқасын жазыңыз...}`}
                             value={opt.text}
-                            onChange={(e) => updateOptionText(opt.id, e.target.value)}
-                            className="w-full bg-white border border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl p-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none resize-none transition-all shadow-sm"
+                            onChange={(value) => updateOptionText(opt.id, value)}
+                            className="w-full text-sm text-gray-900 shadow-sm"
                           />
 
                           {opt.text && (
@@ -597,13 +604,18 @@ export default function CreateQuizPage() {
                 <label className="text-xs font-bold text-gray-700 block mb-1">
                   Түсіндірме (Оқушылар жауап бергеннен кейін көретін шешім жолы, міндетті емес)
                 </label>
-                <textarea
-                  rows={2}
-                  placeholder="Шешімнің қадамдары..."
+                <MathFieldInput
+                  ariaLabel="Түсіндірме"
+                  placeholder={String.raw`\text{Шешімнің қадамдары...}`}
                   value={currentQ.explanation}
-                  onChange={(e) => updateCurrentQuestion({ explanation: e.target.value })}
-                  className="w-full bg-gray-50/70 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl p-2.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none transition-all"
+                  onChange={(value) => updateCurrentQuestion({ explanation: value })}
+                  className="w-full text-sm text-gray-900"
                 />
+                {currentQ.explanation && (
+                  <div className="mt-3 text-sm text-gray-700">
+                    <MathRender latex={currentQ.explanation} />
+                  </div>
+                )}
               </div>
             </div>
           )}

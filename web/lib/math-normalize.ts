@@ -58,6 +58,9 @@ export const normalizeMathFieldValueForStorage = (value: string): string => {
   if (!value) return "";
 
   return normalizeLatexForMathDisplay(value)
+    // MathLive omits braces around single digits; the answer checker expects groups.
+    .replace(/\\(dfrac|tfrac|frac)([0-9])([0-9])/g, "\\$1{$2}{$3}")
+    .replace(/\\sqrt(\[[^\]]+\])?([0-9])/g, "\\sqrt$1{$2}")
     .replace(SIMPLE_TEXT_COMMAND_RE, (_match, inner: string) => inner)
     .replace(LATEX_SPACING_COMMAND_RE, "$1 ")
     .replace(/[ \t]{2,}/g, " ")
