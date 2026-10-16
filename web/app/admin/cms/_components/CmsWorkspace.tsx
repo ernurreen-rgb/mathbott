@@ -7,6 +7,8 @@ import SectionsPanel from "./SectionsPanel";
 import TrashPanel from "./TrashPanel";
 import CmsDialog from "./CmsDialog";
 import MiniLessonTabs from "./MiniLessonTabs";
+import { useCmsCache } from "./CmsCache";
+import CmsSkeleton from "./CmsSkeleton";
 import styles from "../CmsWorkspace.module.css";
 import { createLessonActions } from "./createLessonActions";
 import { createModuleActions } from "./createModuleActions";
@@ -16,8 +18,6 @@ import { createTrashActions } from "./createTrashActions";
 import { formatMiniLessonTitle, formatQuestionTypeLabel, Lesson, MiniLesson, MiniLessonTask, Module, parseBankTaskId, Section, TrashTask } from "./model";
 
 import Link from "next/link";
-import DesktopNav from "@/components/DesktopNav";
-import MobileNav from "@/components/MobileNav";
 import VisualTaskEditor from "@/components/admin/VisualTaskEditor";
 import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api";
@@ -25,7 +25,6 @@ import {
   McqOptionLabel
 } from "@/lib/question-options";
 import { normalizeTaskTextScale } from "@/lib/task-text-scale";
-import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { AnswerMode, TaskTextScale } from "@/types";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -38,19 +37,25 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const sectionPath = `${modulePath}/sections/${sectionId}`;
   const lessonPath = `${sectionPath}/lessons/${lessonId}`;
 
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const sessionEmail = session?.user?.email || null;
-  const { loading: accessLoading } = useAdminPageAccess("content", status, sessionEmail);
-  const [modules, setModules] = useState<Module[]>([]);
+  const cache = useCmsCache(sessionEmail);
+  const modulesKey = "admin/modules";
+  const sectionsKey = `admin/modules/${moduleId}/sections`;
+  const lessonsKey = `admin/sections/${sectionId}/lessons`;
+  const minisKey = `admin/lessons/${lessonId}/mini-lessons`;
+  const cachedMinis = cache.read<MiniLesson>(minisKey);
+  const initialMiniId = miniLessonId ?? (cachedMinis && [...cachedMinis].sort((a, b) => a.mini_index - b.mini_index || a.id - b.id)[0]?.id) ?? null;
+  const [modules, setModules] = useState<Module[]>(() => cache.read<Module>(modulesKey) ?? []);
   const [selectedModule, setSelectedModule] = useState<number | null>(moduleId ?? null);
-  const [sections, setSections] = useState<Section[]>([]);
+  const [sections, setSections] = useState<Section[]>(() => cache.read<Section>(sectionsKey) ?? []);
   const [selectedSection, setSelectedSection] = useState<number | null>(sectionId ?? null);
 
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>(() => cache.read<Lesson>(lessonsKey) ?? []);
   const [selectedLesson, setSelectedLesson] = useState<number | null>(lessonId ?? null);
-  const [miniLessons, setMiniLessons] = useState<MiniLesson[]>([]);
-  const [selectedMiniLesson, setSelectedMiniLesson] = useState<number | null>(miniLessonId ?? null);
-  const [miniTasks, setMiniTasks] = useState<MiniLessonTask[]>([]);
+  const [miniLessons, setMiniLessons] = useState<MiniLesson[]>(() => cachedMinis ?? []);
+  const [selectedMiniLesson, setSelectedMiniLesson] = useState<number | null>(initialMiniId);
+  const [miniTasks, setMiniTasks] = useState<MiniLessonTask[]>(() => cache.read<MiniLessonTask>(`admin/mini-lessons/${initialMiniId}/tasks`) ?? []);
 
   // Trash for deleted tasks
   const [trashOpen, setTrashOpen] = useState(false);
@@ -58,8 +63,10 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const [trashLoading, setTrashLoading] = useState(false);
   const [useVisualEditor, setUseVisualEditor] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-  const [tasksLoading, setTasksLoading] = useState(pageKind === "tasks");
-  const [navigationLoading, setNavigationLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(pageKind === "tasks" && !cache.read(`admin/mini-lessons/${initialMiniId}/tasks`));
+  const [navigationLoading, setNavigationLoading] = useState(() => !cache.read(
+    pageKind === "modules" ? modulesKey : pageKind === "sections" ? sectionsKey : pageKind === "lessons" ? lessonsKey : minisKey
+  ));
   const [taskAnswerMode, setTaskAnswerMode] = useState<AnswerMode>("choices");
   const [editTaskAnswerMode, setEditTaskAnswerMode] = useState<AnswerMode>("choices");
 
@@ -135,7 +142,12 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const editHasLinkedBankTask = parseBankTaskId(editTaskForm.bank_task_id) !== null;
   const selectionRef = useRef({ module: selectedModule, section: selectedSection, lesson: selectedLesson, mini: selectedMiniLesson });
   selectionRef.current = { module: selectedModule, section: selectedSection, lesson: selectedLesson, mini: selectedMiniLesson };
-  const requestVersions = useRef({ sections: 0, lessons: 0, minis: 0, tasks: 0 });
+  const requestVersions = useRef({ modules: 0, sections: 0, lessons: 0, minis: 0, tasks: 0 });
+
+  useEffect(() => () => {
+    const versions = requestVersions.current;
+    for (const key of Object.keys(versions) as Array<keyof typeof versions>) versions[key] += 1;
+  }, []);
 
   useEffect(() => {
     if (!sessionEmail) return;
@@ -175,6 +187,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
 
   const fetchModules = useCallback(async () => {
     if (!sessionEmail) return;
+    const version = ++requestVersions.current.modules;
     setLoading(true);
     setError(null);
     try {
@@ -184,15 +197,20 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
         throw new Error(errorData.detail || `HTTP ${response.status}: Модульдерді жүктеу мүмкін болмады`);
       }
       const data = await response.json();
+      if (version !== requestVersions.current.modules) return;
+      cache.write("admin/modules", data);
       setModules(data);
     } catch (err: any) {
+      if (version !== requestVersions.current.modules) return;
       console.error("Error fetching modules:", err);
       setError(err.message || "Модульдерді жүктеу мүмкін болмады. Толығырақ консольде.");
     } finally {
-      setLoading(false);
-      if (pageKind === "modules") setNavigationLoading(false);
+      if (version === requestVersions.current.modules) {
+        setLoading(false);
+        if (pageKind === "modules") setNavigationLoading(false);
+      }
     }
-  }, [pageKind, sessionEmail]);
+  }, [cache, pageKind, sessionEmail]);
 
   const fetchSections = useCallback(async (moduleId: number) => {
     if (!sessionEmail) return;
@@ -202,13 +220,14 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
       if (!response.ok) throw new Error("Бөлімдерді жүктеу мүмкін болмады");
       const data = await response.json();
       if (version !== requestVersions.current.sections || selectionRef.current.module !== moduleId) return;
+      cache.write(`admin/modules/${moduleId}/sections`, data);
       setSections(data);
     } catch (err: any) {
       if (version === requestVersions.current.sections && selectionRef.current.module === moduleId) setError(err.message);
     } finally {
       if (pageKind === "sections" && version === requestVersions.current.sections && selectionRef.current.module === moduleId) setNavigationLoading(false);
     }
-  }, [pageKind, sessionEmail]);
+  }, [cache, pageKind, sessionEmail]);
 
   useEffect(() => {
     if (sessionEmail) {
@@ -230,6 +249,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
       if (!response.ok) throw new Error("Сабақтарды жүктеу мүмкін болмады");
       const data = await response.json();
       if (version !== requestVersions.current.lessons || selectionRef.current.section !== sectionId) return;
+      cache.write(`admin/sections/${sectionId}/lessons`, data);
       setLessons(data);
     } catch (err: any) {
       if (version === requestVersions.current.lessons && selectionRef.current.section === sectionId) setError(err.message);
@@ -246,6 +266,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
       if (!response.ok) throw new Error("Кіші сабақтарды жүктеу мүмкін болмады");
       const data = await response.json();
       if (version !== requestVersions.current.minis || selectionRef.current.lesson !== lessonId) return;
+      cache.write(`admin/lessons/${lessonId}/mini-lessons`, data);
       setMiniLessons(data);
       if (!miniLessonId) {
         setSelectedMiniLesson((current) => data.some((mini: MiniLesson) => mini.id === current)
@@ -262,12 +283,13 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const fetchMiniTasks = async (miniLessonId: number) => {
     if (!session?.user?.email) return;
     const version = ++requestVersions.current.tasks;
-    setTasksLoading(true);
+    if (!cache.read(`admin/mini-lessons/${miniLessonId}/tasks`)) setTasksLoading(true);
     try {
       const response = await fetch(`${apiPath(`admin/mini-lessons/${miniLessonId}/tasks`)}?email=${encodeURIComponent(session.user.email)}`);
       if (!response.ok) throw new Error("Кіші сабақ тапсырмаларын жүктеу мүмкін болмады");
       const data = await response.json();
       if (version !== requestVersions.current.tasks || selectionRef.current.mini !== miniLessonId) return;
+      cache.write(`admin/mini-lessons/${miniLessonId}/tasks`, data);
       setMiniTasks(data);
     } catch (err: any) {
       if (version === requestVersions.current.tasks && selectionRef.current.mini === miniLessonId) setError(err.message);
@@ -398,49 +420,31 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const currentLesson = lessons.find((item) => item.id === selectedLesson);
   const currentMini = miniLessons.find((item) => item.id === selectedMiniLesson);
   const lessonLabel = currentLesson ? (currentLesson.title || `${currentLesson.lesson_number}-сабақ`) : "Сабақ";
-  const pageTitle = pageKind === "modules" ? "Оқу материалдары" : pageKind === "sections" ? (currentModule?.name || "Бөлімдер")
-    : pageKind === "lessons" ? (currentSection?.name || "Сабақтар") : (currentMini ? formatMiniLessonTitle(currentMini) : lessonLabel);
+  const pageTitle = pageKind === "modules" ? "Оқу материалдары" : pageKind === "sections" ? currentModule?.name
+    : pageKind === "lessons" ? currentSection?.name : (currentMini ? formatMiniLessonTitle(currentMini) : currentLesson ? lessonLabel : undefined);
   const parentPath = pageKind === "modules" ? null : pageKind === "sections" ? "/admin/cms" : pageKind === "lessons" ? modulePath : sectionPath;
   const parentLabel = pageKind === "sections" ? "Модульдер" : pageKind === "lessons" ? "Бөлімдер" : "Сабақтар";
   const breadcrumbs = [
     { label: "Модульдер", href: "/admin/cms" },
-    ...(moduleId ? [{ label: currentModule?.name || "Модуль", href: modulePath }] : []),
-    ...(sectionId ? [{ label: currentSection?.name || "Бөлім", href: sectionPath }] : []),
-    ...(lessonId ? [{ label: lessonLabel, href: lessonPath }] : []),
-    ...(selectedMiniLesson ? [{ label: currentMini ? formatMiniLessonTitle(currentMini) : "Кіші сабақ", href: `${lessonPath}/mini-lessons/${selectedMiniLesson}` }] : []),
+    ...(moduleId ? [{ label: currentModule?.name, href: modulePath }] : []),
+    ...(sectionId ? [{ label: currentSection?.name, href: sectionPath }] : []),
+    ...(lessonId ? [{ label: currentLesson ? lessonLabel : undefined, href: lessonPath }] : []),
+    ...(selectedMiniLesson ? [{ label: currentMini ? formatMiniLessonTitle(currentMini) : undefined, href: `${lessonPath}/mini-lessons/${selectedMiniLesson}` }] : []),
   ];
 
 
 
-  if (status === "loading" || accessLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Жүктелуде...</div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">CMS-ке қол жеткізу үшін кіріңіз</div>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.page}>
-      <DesktopNav />
-      <main className={`${styles.main} md:ml-64`}>
-        <div className={styles.shell}>
+    <>
           <nav aria-label="Мазмұн жолы" className={styles.breadcrumbs}>
             {breadcrumbs.map((crumb, index) => <span key={crumb.href}>
               {index > 0 && <span className={styles.breadcrumbSeparator} aria-hidden="true">/</span>}
-              {index === breadcrumbs.length - 1 ? <span aria-current="page">{crumb.label}</span> : <Link href={crumb.href}>{crumb.label}</Link>}
+              {!crumb.label ? <span aria-hidden="true" className={`${styles.skeletonBar} ${styles.skeletonCrumb}`} />
+                : index === breadcrumbs.length - 1 ? <span aria-current="page">{crumb.label}</span> : <Link href={crumb.href}>{crumb.label}</Link>}
             </span>)}
           </nav>
           <header className={styles.header}>
-            <h1 className={styles.title}>{pageTitle}</h1>
+            <h1 className={styles.title}>{pageTitle || <><span className="sr-only">Оқу материалдары</span><span aria-hidden="true" className={`${styles.skeletonBar} ${styles.skeletonTitle}`} /></>}</h1>
             <div className={styles.actions}>
               {parentPath && <Link href={parentPath} className={styles.textButton}>← {parentLabel}</Link>}
               <button type="button" onClick={toggleTrash} className={styles.textButton}>Себет</button>
@@ -451,7 +455,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
             <TrashPanel trashOpen={trashOpen} emptyTrash={emptyTrash} trashLoading={trashLoading}
               trashTasks={trashTasks} restoreTaskFromTrash={restoreTaskFromTrash} />
           </CmsDialog>
-          {navigationLoading && <div className={styles.levelPanel} role="status">Мазмұн жүктелуде...</div>}
+          {navigationLoading && <CmsSkeleton />}
           {pageKind === "modules" && !navigationLoading && (
               <ModulesPanel
                 createModule={createModule}
@@ -670,7 +674,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                       )}
 
                       {!useVisualEditor && <div className={styles.taskList}>
-                        {tasksLoading ? <p className={styles.hint}>Тапсырмалар жүктелуде...</p> :
+                        {tasksLoading ? <CmsSkeleton kind="tasks" label="Тапсырмалар жүктелуде..." /> :
                           [...miniTasks].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((task, index) => (
                             <article key={task.id} className={styles.taskRow}>
                               <div className="min-w-0 flex-1">
@@ -702,9 +706,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                 </div>
               )}
           </div>}
-        </div>
-      </main>
-      <MobileNav currentPage="admin" />
-    </div>
+    </>
   );
 }

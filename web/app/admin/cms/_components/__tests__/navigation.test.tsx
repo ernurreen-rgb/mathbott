@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import CmsWorkspace from "../CmsWorkspace";
+import { CmsCacheProvider } from "../CmsCache";
 
 let mockAuthenticated = true;
 jest.mock("next-auth/react", () => ({ useSession: () => mockAuthenticated
@@ -168,4 +169,95 @@ it("keeps the task URL's selection while the login session is loading on refresh
   expect(screen.getByText("2+2")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Тапсырма қосу/ })).toBeInTheDocument();
   expect(within(screen.getByRole("navigation", { name: "Мазмұн жолы" })).getByText("Қайталау")).toBeInTheDocument();
+});
+
+it("keeps visited lists visible during revalidation and remembers the refreshed content", async () => {
+  const page = (key: string, moduleId?: number) => <CmsCacheProvider><CmsWorkspace key={key} moduleId={moduleId} /></CmsCacheProvider>;
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(page("module", 1)); });
+  await act(async () => { view.rerender(page("root")); });
+
+  const original = global.fetch;
+  let resolveSections!: (value: unknown) => void;
+  const pending = new Promise((resolve) => { resolveSections = resolve; });
+  global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => String(input).includes("/modules/1/sections")
+    ? pending : original(input, options)) as typeof fetch;
+  await act(async () => { view.rerender(page("module-again", 1)); });
+  expect(screen.getByRole("heading", { name: "Алгебра" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Теңдеулер/ })).toHaveAttribute("href", section);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+  await act(async () => { resolveSections({ ok: true, json: async () => [
+    { id: 2, module_id: 1, name: "Жаңа бөлім", sort_order: 0 },
+  ] }); });
+  expect(screen.getByRole("link", { name: /Жаңа бөлім/ })).toBeInTheDocument();
+  await act(async () => { view.rerender(page("root-again")); });
+  global.fetch = jest.fn(() => new Promise(() => {})) as typeof fetch;
+  await act(async () => { view.rerender(page("module-third-time", 1)); });
+  expect(screen.getByRole("link", { name: /Жаңа бөлім/ })).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+it("preserves mini-lesson tabs while new tasks load and immediately restores previously opened tasks", async () => {
+  const original = global.fetch;
+  global.fetch = jest.fn(async (input: RequestInfo | URL, options?: RequestInit) => String(input).includes("/lessons/3/mini-lessons")
+    ? { ok: true, json: async () => [
+      { id: 4, lesson_id: 3, mini_index: 1, title: "Қайталау", sort_order: 0 },
+      { id: 8, lesson_id: 3, mini_index: 2, title: "Жаттығу", sort_order: 0 },
+    ] } as Response : original(input, options)) as typeof fetch;
+  const page = (mini: number) => <CmsCacheProvider><CmsWorkspace key={mini} moduleId={1} sectionId={2} lessonId={3} miniLessonId={mini} /></CmsCacheProvider>;
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(page(4)); });
+  expect(screen.getByText("2+2")).toBeInTheDocument();
+
+  global.fetch = jest.fn(() => new Promise(() => {})) as typeof fetch;
+  await act(async () => { view.rerender(page(8)); });
+  const tabs = screen.getByRole("navigation", { name: "Кіші сабақтар" });
+  expect(within(tabs).getByRole("link", { name: "Жаттығу" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("heading", { name: "Жаттығу" })).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveAccessibleName("Тапсырмалар жүктелуде...");
+  expect(screen.queryByText("2+2")).not.toBeInTheDocument();
+
+  await act(async () => { view.rerender(page(4)); });
+  expect(screen.getByText("2+2")).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+it("does not reuse expired content while waiting for a fresh response", async () => {
+  const page = (key: string) => <CmsCacheProvider><CmsWorkspace key={key} /></CmsCacheProvider>;
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(page("first")); });
+  const now = jest.spyOn(Date, "now").mockReturnValue(Date.now() + 120_000);
+  try {
+    global.fetch = jest.fn(() => new Promise(() => {})) as typeof fetch;
+    await act(async () => { view.rerender(page("later")); });
+    expect(screen.queryByRole("link", { name: /Алгебра/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAccessibleName("Мазмұн жүктелуде...");
+  } finally { now.mockRestore(); }
+});
+
+it("ignores late responses from a page that has already been left", async () => {
+  const original = global.fetch;
+  let resolveOld!: (value: Response) => void;
+  let sectionRequests = 0;
+  global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+    if (!String(input).includes("/modules/1/sections")) return original(input, options);
+    sectionRequests += 1;
+    if (sectionRequests === 1) return new Promise((resolve) => { resolveOld = resolve; });
+    if (sectionRequests === 2) return Promise.resolve({ ok: true, json: async () => [
+      { id: 2, module_id: 1, name: "Ағымдағы бөлім", sort_order: 0 },
+    ] } as Response);
+    return new Promise(() => {});
+  }) as typeof fetch;
+  const page = (key: string) => <CmsCacheProvider><CmsWorkspace key={key} moduleId={1} /></CmsCacheProvider>;
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(page("first")); });
+  await act(async () => { view.rerender(page("second")); });
+  expect(screen.getByRole("link", { name: /Ағымдағы бөлім/ })).toBeInTheDocument();
+  await act(async () => { resolveOld({ ok: true, json: async () => [
+    { id: 2, module_id: 1, name: "Ескі бөлім", sort_order: 0 },
+  ] } as Response); });
+  await act(async () => { view.rerender(page("third")); });
+  expect(screen.getByRole("link", { name: /Ағымдағы бөлім/ })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Ескі бөлім/ })).not.toBeInTheDocument();
 });

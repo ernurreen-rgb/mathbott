@@ -144,6 +144,17 @@
 .dialogHeader p { margin-top: 5px; color: #777e89; font-size: 13px; }
 .dialogBody { max-height: calc(100dvh - 160px); overflow-y: auto; padding: 24px; }
 
+.skeleton { min-width: 0; }
+.skeletonBar { display: inline-block; flex-shrink: 0; max-width: 100%; height: 12px; border-radius: 3px; background: #edf0f3; }
+.skeletonCrumb { width: 76px; height: 12px; }
+.skeletonTitle { display: block; width: 220px; height: 28px; margin: 4px 0; }
+.skeletonToolbar { display: flex; justify-content: space-between; align-items: center; height: 36px; margin-bottom: 18px; }
+.skeletonButton { width: 104px; height: 34px; }
+.skeletonLabel { width: 100px; }
+.skeletonText { width: 180px; }
+.skeletonListHeading { height: 37px; border-block: 1px solid #e1e4e8; background: #f7f8fa; }
+.skeletonRow { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 67px; padding: 14px 16px; border-bottom: 1px solid #e8eaed; }
+
 @media (max-width: 1000px) {
   .main { padding: 28px 24px 48px; }
   .itemLink { gap: 16px; }
