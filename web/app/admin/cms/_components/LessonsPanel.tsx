@@ -55,7 +55,7 @@ export default function LessonsPanel({
           <label className={styles.field}>Реті<input type="number" value={editLessonForm.sort_order} onChange={(event) => setEditLessonForm({ ...editLessonForm, sort_order: Number(event.target.value) || 0 })} /></label>
           <div className={styles.actions}><button type="submit" className={styles.primaryButton}>Сақтау</button><button type="button" className={styles.secondaryButton} onClick={cancelEditLesson}>Бас тарту</button></div>
         </form>}
-        <CurriculumList openLabel="Кіші сабақтарды ашу"
+        <CurriculumList openLabel="Тапсырмаларды ашу"
           items={[...lessons].sort((a, b) => a.sort_order - b.sort_order || a.lesson_number - b.lesson_number || a.id - b.id).map((lesson) => ({
             id: lesson.id, title: lesson.title || `${lesson.lesson_number}-сабақ`, meta: lesson.title ? `${lesson.lesson_number}-сабақ` : undefined,
             href: `${basePath}/lessons/${lesson.id}`,

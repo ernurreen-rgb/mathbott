@@ -109,8 +109,8 @@
 .rowActions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; width: 142px; flex-shrink: 0; padding: 10px 8px 10px 4px; }
 
 .content { min-width: 0; }
-.miniPanel { margin: -10px 0 26px; border-bottom: 1px solid #e1e4e8; }
-.miniTabs { display: flex; flex-wrap: wrap; gap: 24px; }
+.miniPanel { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 24px; margin: -10px 0 26px; border-bottom: 1px solid #e1e4e8; }
+.miniTabs { display: flex; flex-wrap: wrap; gap: 0 24px; }
 .miniTab { display: flex; align-items: center; min-height: 42px; padding: 8px 0; border-bottom: 2px solid transparent; color: #747b87; font-size: 13px; }
 .miniTab:hover { color: #2457a7; }
 .miniTabActive { border-bottom-color: #303640; color: #252a34; font-weight: 500; }

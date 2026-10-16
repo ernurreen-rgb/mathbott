@@ -33,7 +33,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Props = { moduleId?: number; sectionId?: number; lessonId?: number; miniLessonId?: number };
 
 export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLessonId }: Props) {
-  const pageKind = miniLessonId ? "tasks" : lessonId ? "minis" : sectionId ? "lessons" : moduleId ? "sections" : "modules";
+  const pageKind = lessonId ? "tasks" : sectionId ? "lessons" : moduleId ? "sections" : "modules";
   const modulePath = `/admin/cms/modules/${moduleId}`;
   const sectionPath = `${modulePath}/sections/${sectionId}`;
   const lessonPath = `${sectionPath}/lessons/${lessonId}`;
@@ -59,7 +59,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const [useVisualEditor, setUseVisualEditor] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(pageKind === "tasks");
-  const [navigationLoading, setNavigationLoading] = useState(pageKind !== "tasks");
+  const [navigationLoading, setNavigationLoading] = useState(true);
   const [taskAnswerMode, setTaskAnswerMode] = useState<AnswerMode>("choices");
   const [editTaskAnswerMode, setEditTaskAnswerMode] = useState<AnswerMode>("choices");
 
@@ -247,11 +247,15 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
       const data = await response.json();
       if (version !== requestVersions.current.minis || selectionRef.current.lesson !== lessonId) return;
       setMiniLessons(data);
-
+      if (!miniLessonId) {
+        setSelectedMiniLesson((current) => data.some((mini: MiniLesson) => mini.id === current)
+          ? current
+          : [...data].sort((left: MiniLesson, right: MiniLesson) => left.mini_index - right.mini_index || left.id - right.id)[0]?.id ?? null);
+      }
     } catch (err: any) {
       if (version === requestVersions.current.minis && selectionRef.current.lesson === lessonId) setError(err.message);
     } finally {
-      if (pageKind === "minis" && version === requestVersions.current.minis && selectionRef.current.lesson === lessonId) setNavigationLoading(false);
+      if (pageKind === "tasks" && version === requestVersions.current.minis && selectionRef.current.lesson === lessonId) setNavigationLoading(false);
     }
   };
 
@@ -395,15 +399,15 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const currentMini = miniLessons.find((item) => item.id === selectedMiniLesson);
   const lessonLabel = currentLesson ? (currentLesson.title || `${currentLesson.lesson_number}-сабақ`) : "Сабақ";
   const pageTitle = pageKind === "modules" ? "Оқу материалдары" : pageKind === "sections" ? (currentModule?.name || "Бөлімдер")
-    : pageKind === "lessons" ? (currentSection?.name || "Сабақтар") : pageKind === "minis" ? lessonLabel : (currentMini ? formatMiniLessonTitle(currentMini) : "Тапсырмалар");
-  const parentPath = pageKind === "modules" ? null : pageKind === "sections" ? "/admin/cms" : pageKind === "lessons" ? modulePath : pageKind === "minis" ? sectionPath : lessonPath;
-  const parentLabel = pageKind === "sections" ? "Модульдер" : pageKind === "lessons" ? "Бөлімдер" : pageKind === "minis" ? "Сабақтар" : "Кіші сабақтар";
+    : pageKind === "lessons" ? (currentSection?.name || "Сабақтар") : (currentMini ? formatMiniLessonTitle(currentMini) : lessonLabel);
+  const parentPath = pageKind === "modules" ? null : pageKind === "sections" ? "/admin/cms" : pageKind === "lessons" ? modulePath : sectionPath;
+  const parentLabel = pageKind === "sections" ? "Модульдер" : pageKind === "lessons" ? "Бөлімдер" : "Сабақтар";
   const breadcrumbs = [
     { label: "Модульдер", href: "/admin/cms" },
     ...(moduleId ? [{ label: currentModule?.name || "Модуль", href: modulePath }] : []),
     ...(sectionId ? [{ label: currentSection?.name || "Бөлім", href: sectionPath }] : []),
     ...(lessonId ? [{ label: lessonLabel, href: lessonPath }] : []),
-    ...(miniLessonId ? [{ label: currentMini ? formatMiniLessonTitle(currentMini) : "Кіші сабақ", href: `${lessonPath}/mini-lessons/${miniLessonId}` }] : []),
+    ...(selectedMiniLesson ? [{ label: currentMini ? formatMiniLessonTitle(currentMini) : "Кіші сабақ", href: `${lessonPath}/mini-lessons/${selectedMiniLesson}` }] : []),
   ];
 
 
@@ -495,12 +499,11 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                 deleteLesson={deleteLesson}
               />
           )}
-          {pageKind === "minis" && !navigationLoading && <MiniLessonTabs miniLessons={miniLessons} selectedMiniLesson={null}
-            basePath={lessonPath} variant="list" onRename={updateMiniLessonTitle} />}
-          {pageKind === "tasks" && <div className={styles.content}>
+          {pageKind === "tasks" && !navigationLoading && <div className={styles.content}>
 
               <MiniLessonTabs miniLessons={miniLessons} selectedMiniLesson={selectedMiniLesson}
-                basePath={lessonPath} variant="tabs" onRename={updateMiniLessonTitle} />
+                basePath={lessonPath} onRename={updateMiniLessonTitle} />
+              {miniLessons.length === 0 && !error && <p className={styles.hint}>Бұл сабақта кіші сабақтар жоқ.</p>}
 
               {selectedMiniLesson && (
                 <div className={styles.taskPanel}>
