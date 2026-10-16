@@ -449,7 +449,7 @@ class ProgressRepository(BaseRepository):
         """Check if all questions in a task are completed correctly"""
         questions = await self.get_task_questions(task_id)
         if not questions:
-            return True
+            return False
         progress = await self.get_user_task_question_progress(user_id, task_id)
         if len(progress) < len(questions):
             return False

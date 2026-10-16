@@ -65,9 +65,15 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=404, detail="User not found")
             
             task = await db.tasks.get_task_by_id(task_id)
-            if not task:
+            if not task or task.get("deleted_at"):
                 logger.warning(f"Task not found: {task_id}")
                 raise HTTPException(status_code=404, detail="Task not found")
+
+            questions = await db.progress.get_task_questions(task_id)
+            if not questions:
+                raise HTTPException(status_code=400, detail="Task has no legacy questions")
+            if question_index < 0 or question_index >= len(questions):
+                raise HTTPException(status_code=400, detail="Invalid question index")
             
             logger.info(f"Checking question answer for task {task_id}, question {question_index}")
             is_correct = await db.progress.check_task_question_answer(task_id, question_index, answer)
@@ -107,7 +113,7 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             
             questions = await db.progress.get_task_questions(task_id)
             correct_answer = None
-            if not is_correct and question_index < len(questions):
+            if not is_correct and 0 <= question_index < len(questions):
                 correct_answer = questions[question_index].get("answer")
             
             result = {

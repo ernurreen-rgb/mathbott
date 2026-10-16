@@ -700,19 +700,6 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                 parsed_topics = []
             topics_value = _validate_bank_topics(parsed_topics)
 
-        remove_image_flag = str(remove_image).lower() in ("true", "1", "yes") if remove_image else False
-        old_image_filename = existing.get("image_filename")
-        if remove_image_flag:
-            if old_image_filename:
-                delete_image_file(old_image_filename)
-            image_filename = ""
-        elif image:
-            if old_image_filename:
-                delete_image_file(old_image_filename)
-            image_filename = await save_image_upload(image)
-        else:
-            image_filename = None
-
         dedup_flag = _parse_bool_flag(dedup_confirmed)
         effective_text = text if text is not None else (existing.get("text") or "")
         effective_question_type = question_type if question_type is not None else (existing.get("question_type") or "input")
@@ -727,6 +714,18 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         )
         if similar_tasks and not dedup_flag:
             raise HTTPException(status_code=409, detail=_build_similar_conflict_payload(similar_tasks))
+
+        # Older versions and saved results can still reference the current file.
+        # Removing/replacing an image changes the pointer, never its old bytes.
+        remove_image_flag = str(remove_image).lower() in ("true", "1", "yes") if remove_image else False
+        uploaded_filename = None
+        if remove_image_flag:
+            image_filename = ""
+        elif image:
+            uploaded_filename = await save_image_upload(image)
+            image_filename = uploaded_filename
+        else:
+            image_filename = None
 
         try:
             updated = await db.bank_tasks.update_task(
@@ -748,8 +747,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                 expected_current_version=expected_current_version,
             )
         except BankTaskVersionConflictError as exc:
+            if uploaded_filename:
+                delete_image_file(uploaded_filename)
             raise _raise_version_conflict_from_exception(exc)
         if not updated:
+            if uploaded_filename:
+                delete_image_file(uploaded_filename)
             raise HTTPException(status_code=404, detail="Bank task not found")
         return updated
 

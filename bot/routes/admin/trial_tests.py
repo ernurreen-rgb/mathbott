@@ -423,14 +423,10 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale_value = _normalize_text_scale(text_scale)
         topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=None)
 
-        old_image_filename = task.get("image_filename")
+        # Keep files referenced by bank history, other placements and results.
         if remove_image_flag:
-            if old_image_filename:
-                delete_image_file(old_image_filename)
             image_filename = ""
         elif image:
-            if old_image_filename:
-                delete_image_file(old_image_filename)
             image_filename = await save_image_upload(image)
         else:
             image_filename = None
