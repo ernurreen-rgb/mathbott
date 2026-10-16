@@ -7,7 +7,7 @@ import type { QuizPlayerProgress } from "@/types/quiz";
 jest.mock("../use-quiz-connection", () => ({ useQuizConnection: jest.fn() }));
 jest.mock("../api/quizzes", () => ({
   activateQuizQuestion: jest.fn(), getQuizLeaderboard: jest.fn(), getQuizProgress: jest.fn(),
-  getQuizSession: jest.fn(), submitQuizAnswer: jest.fn(),
+  getQuizSession: jest.fn(), submitQuizAnswer: jest.fn(), updateQuizParticipantAvatar: jest.fn(),
 }));
 
 const credentials = { sessionId: 1, participantId: 7, token: "t".repeat(43), nickname: "Player", avatarColor: "#123456" };
@@ -61,6 +61,24 @@ it("keeps failed answers retryable and recovers an accepted retry", async () => 
   expect(result.current.progress?.participant.score).toBe(1850);
   expect(result.current.progress?.participant.correct_count).toBe(2);
   expect(result.current.error).toBeNull();
+});
+
+it("updates avatar in lobby and persists to sessionStorage", async () => {
+  (api.updateQuizParticipantAvatar as jest.Mock).mockResolvedValue({
+    data: { ...active.participant, avatar_color: "#ec4899:cat" },
+    error: null,
+  });
+  const { result } = renderHook(() => useQuizPlayer(1));
+  await waitFor(() => expect(result.current.progress).not.toBeNull());
+  await act(async () => {
+    await result.current.updateAvatar("#ec4899:cat");
+  });
+  expect(api.updateQuizParticipantAvatar).toHaveBeenCalledWith(
+    1,
+    "#ec4899:cat",
+    { participantToken: credentials.token }
+  );
+  expect(readQuizPlayer(1)?.avatarColor).toBe("#ec4899:cat");
 });
 
 it("does not reuse credentials from a different game or legacy global storage", () => {

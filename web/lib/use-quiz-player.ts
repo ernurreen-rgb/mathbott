@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { activateQuizQuestion, getQuizLeaderboard, getQuizProgress, getQuizSession, submitQuizAnswer } from "@/lib/api/quizzes";
-import { readQuizPlayer } from "@/lib/quiz-player-storage";
+import { activateQuizQuestion, getQuizLeaderboard, getQuizProgress, getQuizSession, submitQuizAnswer, updateQuizParticipantAvatar } from "@/lib/api/quizzes";
+import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
 import { useQuizConnection } from "@/lib/use-quiz-connection";
 import type { QuizPlayerCredentials, QuizPlayerProgress, QuizSession } from "@/types/quiz";
 
@@ -150,6 +150,34 @@ export function useQuizPlayer(sessionId: number) {
     return () => clearInterval(timer);
   }, [progress]);
 
+  const updateAvatar = useCallback(async (avatarColor: string) => {
+    if (!credentials) return false;
+    const nextCreds = { ...credentials, avatarColor };
+    setCredentials(nextCreds);
+    saveQuizPlayer(nextCreds);
+    setProgress((prev) =>
+      prev ? { ...prev, participant: { ...prev.participant, avatar_color: avatarColor } } : prev
+    );
+    setSessionData((prev) =>
+      prev
+        ? {
+            ...prev,
+            participants: prev.participants?.map((p) =>
+              p.id === credentials.participantId ? { ...p, avatar_color: avatarColor } : p
+            ),
+          }
+        : prev
+    );
+    const res = await updateQuizParticipantAvatar(sessionId, avatarColor, {
+      participantToken: credentials.token,
+    });
+    if (res.data) {
+      void refresh();
+      return true;
+    }
+    return false;
+  }, [credentials, sessionId, refresh]);
+
   return { credentials, progress, sessionData, loading, submitting, error, rank, timeLeft,
-    submitAnswer, advance, refresh, retryAnswer: () => void submitAnswer(pendingAnswer.current ?? "__timeout__") };
+    submitAnswer, advance, refresh, updateAvatar, retryAnswer: () => void submitAnswer(pendingAnswer.current ?? "__timeout__") };
 }

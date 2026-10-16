@@ -144,11 +144,21 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     # 3. Two players join (Player 1 guest, Player 2 registered)
     join1_resp = client.post(
         "/api/quiz-sessions/join",
-        json={"pin_code": pin_code, "nickname": "Алихан", "avatar_color": "#ef4444"},
+        json={"pin_code": pin_code, "nickname": "Алихан", "avatar_color": "#ef4444:fox"},
     )
     assert join1_resp.status_code == 200
     p1 = join1_resp.json()["participant"]
+    assert p1["avatar_color"] == "#ef4444:fox"
     h1 = {"X-Quiz-Participant-Token": join1_resp.json()["participant_token"]}
+
+    # Player 1 updates avatar in lobby
+    avatar_resp = client.patch(
+        f"/api/quiz-sessions/{session_id}/avatar",
+        headers=h1,
+        json={"avatar_color": "#8b5cf6:robot"},
+    )
+    assert avatar_resp.status_code == 200
+    assert avatar_resp.json()["avatar_color"] == "#8b5cf6:robot"
 
     join2_resp = client.post(
         "/api/quiz-sessions/join",
@@ -156,6 +166,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     )
     assert join2_resp.status_code == 200
     p2 = join2_resp.json()["participant"]
+    assert ":" in p2["avatar_color"]
     h2 = {"X-Quiz-Participant-Token": join2_resp.json()["participant_token"]}
 
     # 3.5. Premature answer rejection: answering while in "lobby" must return 400

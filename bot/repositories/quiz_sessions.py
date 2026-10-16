@@ -86,10 +86,17 @@ class QuizSessionsMixin:
                 raise QuizError('conflict', 'Invalid session status transition')
         return await self.get_session_by_id(session_id)
 
+    DEFAULT_AVATARS = (
+        '#8b5cf6:fox', '#3b82f6:robot', '#ec4899:cat', '#f97316:lion',
+        '#10b981:owl', '#06b6d4:astro', '#f59e0b:dragon', '#f43f5e:panda',
+        '#6366f1:wolf', '#a855f7:unicorn', '#14b8a6:alien', '#e11d48:wizard',
+    )
+
     async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None):
         nickname = nickname.strip()
         if not nickname:
             raise QuizError('invalid', 'Nickname is required')
+        clean_avatar = (avatar_color or '').strip()[:64] or None
         async with self._write_transaction() as db:
             session = await self._row(db, 'SELECT * FROM quiz_sessions WHERE id = ?', (session_id,))
             if not session or session['status'] == 'finished':
@@ -107,15 +114,33 @@ class QuizSessionsMixin:
                     # Authenticated account recovery also handles legacy records.
                     issued_token = secrets.token_urlsafe(32)
                     await db.execute('UPDATE quiz_participants SET token_hash = ? WHERE id = ?', (token_hash(issued_token), participant_id))
+                if clean_avatar:
+                    await db.execute('UPDATE quiz_participants SET avatar_color = ? WHERE id = ?', (clean_avatar, participant_id))
             else:
                 issued_token = secrets.token_urlsafe(32)
-                color = avatar_color or random.choice(['#ef4444', '#22c55e', '#3b82f6', '#8b5cf6'])
+                color = clean_avatar or random.choice(self.DEFAULT_AVATARS)
                 cursor = await db.execute('''INSERT INTO quiz_participants
                     (session_id, user_id, nickname, avatar_color, token_hash) VALUES (?, ?, ?, ?, ?)''',
                     (session_id, user_id, nickname, color, token_hash(issued_token)))
                 participant_id = cursor.lastrowid
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
         return {**public_participant(participant), 'participant_token': issued_token}
+
+    async def update_participant_avatar(self, session_id: int, avatar_color: str, participant_token: str):
+        clean_avatar = (avatar_color or '').strip()
+        if not clean_avatar or len(clean_avatar) > 64:
+            raise QuizError('invalid', 'Avatar is required')
+        async with self._write_transaction() as db:
+            participant = await self._token_participant(db, session_id, participant_token)
+            session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+            if not session or session['status'] == 'finished':
+                raise QuizError('conflict', 'Session is not accepting updates')
+            await db.execute(
+                'UPDATE quiz_participants SET avatar_color = ?, last_active_at = CURRENT_TIMESTAMP WHERE session_id = ? AND id = ?',
+                (clean_avatar, session_id, participant['id']),
+            )
+            updated = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant['id'],))
+        return public_participant(updated)
 
     async def get_participant(self, session_id: int, participant_id: int):
         async with self._connection() as db:

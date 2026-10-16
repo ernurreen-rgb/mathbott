@@ -22,8 +22,11 @@ class JoinSessionRequest(BaseModel):
     pin_code: str = Field(pattern=r"^[0-9]{6}$")
     nickname: str = Field(min_length=1, max_length=30)
     email: Optional[str] = None
-    avatar_color: Optional[str] = None
+    avatar_color: Optional[str] = Field(default=None, max_length=64)
     participant_token: Optional[str] = Field(default=None, max_length=256)
+
+class UpdateAvatarRequest(BaseModel):
+    avatar_color: str = Field(min_length=1, max_length=64)
 
 class SubmitAnswerRequest(BaseModel):
     participant_id: int = Field(gt=0)
@@ -113,6 +116,13 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         credential = joined.pop('participant_token')
         await quiz_manager.broadcast(session['id'], {'type': 'participant_joined', 'participant': joined})
         return {'session': session, 'participant': joined, 'participant_token': credential}
+
+    @app.patch('/api/quiz-sessions/{session_id}/avatar')
+    async def update_participant_avatar(session_id: int, payload: UpdateAvatarRequest, request: Request,
+                                        db: Database = Depends(get_db)):
+        participant = await db.quizzes.update_participant_avatar(session_id, payload.avatar_color, token(request))
+        await quiz_manager.broadcast(session_id, {'type': 'participant_updated', 'participant': participant})
+        return participant
 
     @app.get('/api/quiz-sessions/{session_id}')
     async def get_game_session(session_id: int, request: Request,

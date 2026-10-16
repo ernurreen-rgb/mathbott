@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuizPlayer } from "@/lib/use-quiz-player";
+import {
+  QuizAvatar,
+  QuizAvatarPicker,
+  parseQuizAvatar,
+} from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
 
@@ -41,13 +45,23 @@ const MCQ_THEMES = [
 export default function PlayQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const sessionId = parseInt(resolvedParams.sessionId, 10);
-  const router = useRouter();
 
   const game = useQuizPlayer(sessionId);
-  const { credentials, progress, sessionData, loading, submitting, rank, timeLeft, submitAnswer } = game;
+  const {
+    credentials,
+    progress,
+    sessionData,
+    loading,
+    submitting,
+    rank,
+    timeLeft,
+    submitAnswer,
+    updateAvatar,
+  } = game;
   const participantId = credentials?.participantId;
   const nickname = progress?.participant.nickname || credentials?.nickname || "";
-  const avatarColor = progress?.participant.avatar_color || credentials?.avatarColor || "#8b5cf6";
+  const avatarColor =
+    progress?.participant.avatar_color || credentials?.avatarColor || "#8b5cf6:fox";
   const currentQIndex = progress?.current_question_index || 0;
   const questionCount = progress?.question_count || 0;
   const timerTotal = progress?.current_question?.time_limit_seconds || 30;
@@ -57,9 +71,16 @@ export default function PlayQuizPage({ params }: PageProps) {
   const streak = progress?.participant.streak || 0;
   const correctCount = progress?.participant.correct_count || 0;
   const isFinished = progress?.status === "finished" || !!progress?.participant.is_finished;
+
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [inputAnswer, setInputAnswer] = useState("");
-  useEffect(() => { setSelectedMulti([]); setInputAnswer(""); }, [currentQIndex]);
+  const [editingAvatar, setEditingAvatar] = useState(false);
+
+  useEffect(() => {
+    setSelectedMulti([]);
+    setInputAnswer("");
+  }, [currentQIndex]);
+
   const handleNextQuestion = () => void game.advance();
 
   const handleMultiSubmit = () => {
@@ -107,38 +128,130 @@ export default function PlayQuizPage({ params }: PageProps) {
     );
   }
 
+  const myParsedAvatar = parseQuizAvatar(avatarColor, nickname);
+  const lobbyParticipants = sessionData?.participants || (progress?.participant ? [progress.participant] : []);
+
   // STATE A: LOBBY (WAITING FOR HOST TO START)
   if (sessionData?.status === "lobby") {
     return (
-      <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
-        <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-2xl flex flex-col items-center">
-          {/* Avatar Icon */}
-          <div
-            className="w-24 h-24 rounded-3xl flex items-center justify-center text-white text-4xl font-black shadow-xl ring-4 ring-purple-100 mb-4 animate-bounce"
-            style={{ backgroundColor: avatarColor }}
-          >
-            {nickname.charAt(0).toUpperCase()}
-          </div>
-
-          <h2 className="text-2xl font-black text-gray-900 mb-1">{nickname}</h2>
-          <span className="text-xs font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-200 mb-6">
-            Ойынға дайынсыз
-          </span>
-
-          <div className="w-full bg-purple-50/60 rounded-2xl p-4 border border-purple-100 mb-6">
-            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto mb-2 animate-spin">
-              ⌛
+      <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col items-center justify-center p-4 sm:p-6 select-none">
+        <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Card: Student's Own Hero Card & Avatar Customizer */}
+          <div className="lg:col-span-5 bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-xl flex flex-col items-center text-center">
+            <div className="relative mb-3">
+              <QuizAvatar
+                avatarColor={avatarColor}
+                nickname={nickname}
+                size="2xl"
+                className="ring-4 ring-purple-100 shadow-xl animate-bounce"
+              />
+              <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-0.5 rounded-full bg-purple-600 text-white text-xs font-extrabold shadow-md">
+                {myParsedAvatar.character.emoji} {myParsedAvatar.character.name}
+              </span>
             </div>
-            <h3 className="text-sm font-bold text-gray-800 mb-1">
-              Мұғалім ойынды бастаған сәтте...
-            </h3>
-            <p className="text-xs text-gray-500">
-              Сұрақтар автоматты түрде экраныңызда пайда болады. Тақтаға назар аударыңыз!
-            </p>
+
+            <h2 className="text-2xl font-black text-gray-900 mt-2 mb-1">{nickname}</h2>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 mb-4">
+              ✓ Ойынға дайынсыз
+            </span>
+
+            {/* Toggle Avatar Customizer */}
+            <button
+              type="button"
+              onClick={() => setEditingAvatar((prev) => !prev)}
+              className="mb-5 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <span>🎨</span>
+              <span>{editingAvatar ? "Дайын (Жабу)" : "Аватарды өзгерту"}</span>
+            </button>
+
+            {editingAvatar && (
+              <div className="w-full p-4 rounded-2xl bg-slate-50 border border-purple-100 mb-5 animate-fadeIn">
+                <QuizAvatarPicker
+                  value={myParsedAvatar.encoded}
+                  nickname={nickname}
+                  compact
+                  onChange={(nextAvatar) => {
+                    void updateAvatar(nextAvatar);
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="w-full bg-purple-50/60 rounded-2xl p-4 border border-purple-100 mb-4">
+              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto mb-2 animate-spin">
+                ⌛
+              </div>
+              <h3 className="text-sm font-bold text-gray-800 mb-1">
+                Мұғалім ойынды бастаған сәтте...
+              </h3>
+              <p className="text-xs text-gray-500">
+                Сұрақтар автоматты түрде экраныңызда пайда болады. Тақтаға назар аударыңыз!
+              </p>
+            </div>
+
+            <div className="text-xs text-gray-500">
+              PIN коды:{" "}
+              <strong className="text-purple-700 font-mono text-sm">
+                {sessionData.pin_code}
+              </strong>
+            </div>
           </div>
 
-          <div className="text-xs text-gray-500">
-            PIN коды: <strong className="text-purple-700 font-mono text-sm">{sessionData.pin_code}</strong>
+          {/* Right Card: Live Joined Classmates Arena */}
+          <div className="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-xl flex flex-col min-h-[380px]">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
+              <div>
+                <h3 className="text-xl font-black text-gray-900">
+                  Лоббидегі оқушылар
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Қосылған сыныптастарыңыз нақты уақытта көрінеді
+                </p>
+              </div>
+              <div className="px-3.5 py-1.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-800 font-extrabold text-sm flex items-center gap-2 shadow-sm">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                <span>{lobbyParticipants.length} ойыншы</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 content-start overflow-y-auto max-h-[420px] pr-1">
+              {lobbyParticipants.map((p) => {
+                const isMe = p.id === participantId;
+                const pAvatar = parseQuizAvatar(p.avatar_color, p.nickname);
+                return (
+                  <div
+                    key={p.id}
+                    className={`p-3 rounded-2xl border transition-all flex items-center gap-3 animate-fadeIn ${
+                      isMe
+                        ? "bg-purple-50/90 border-purple-400 shadow-md ring-2 ring-purple-200"
+                        : "bg-white border-purple-100/80 shadow-sm hover:scale-[1.02]"
+                    }`}
+                  >
+                    <QuizAvatar
+                      avatarColor={p.avatar_color}
+                      nickname={p.nickname}
+                      size="lg"
+                    />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-sm text-gray-900 truncate">
+                          {p.nickname}
+                        </span>
+                        {isMe && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-purple-600 text-white text-[9px] font-black uppercase shrink-0">
+                            Сіз
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-semibold text-gray-500 block truncate">
+                        {pAvatar.character.emoji} {pAvatar.character.name}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -152,7 +265,15 @@ export default function PlayQuizPage({ params }: PageProps) {
     return (
       <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col items-center justify-center p-6 text-center select-none">
         <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-2xl flex flex-col items-center">
-          <span className="text-5xl animate-bounce mb-3">🎉</span>
+          <div className="relative mb-3">
+            <QuizAvatar
+              avatarColor={avatarColor}
+              nickname={nickname}
+              size="xl"
+              className="ring-4 ring-amber-300 shadow-xl"
+            />
+            <span className="absolute -top-2 -right-2 text-2xl animate-bounce">🎉</span>
+          </div>
           <h1 className="text-3xl font-black text-gray-900 mb-1">
             Тамаша нәтиже!
           </h1>
@@ -221,12 +342,11 @@ export default function PlayQuizPage({ params }: PageProps) {
       {/* Top Header Bar */}
       <header className="px-4 py-3 bg-white/90 backdrop-blur border-b border-purple-100 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs text-white shadow"
-            style={{ backgroundColor: avatarColor }}
-          >
-            {nickname.charAt(0).toUpperCase()}
-          </div>
+          <QuizAvatar
+            avatarColor={avatarColor}
+            nickname={nickname}
+            size="sm"
+          />
           <div>
             <span className="text-xs font-bold text-gray-800 block">
               Сұрақ {currentQIndex + 1} / {questionCount}

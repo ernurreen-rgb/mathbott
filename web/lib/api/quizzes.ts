@@ -161,6 +161,21 @@ export async function joinQuizSession(
   );
 }
 
+export async function updateQuizParticipantAvatar(
+  sessionId: number,
+  avatarColor: string,
+  auth?: QuizAuth
+): Promise<FetchResult<QuizParticipant>> {
+  return fetchWithErrorHandling<QuizParticipant>(
+    apiPath(`quiz-sessions/${sessionId}/avatar`),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders(auth) },
+      body: JSON.stringify({ avatar_color: avatarColor }),
+    }
+  );
+}
+
 export async function startQuizSession(
   sessionId: number,
   email?: string

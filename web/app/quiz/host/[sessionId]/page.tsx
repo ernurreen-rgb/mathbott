@@ -9,11 +9,11 @@ import {
   getQuizSession,
   startQuizSession,
   finishQuizSession,
-  getQuizLeaderboard,
   getQuizSessionStats,
 } from "@/lib/api/quizzes";
 import { useQuizConnection } from "@/lib/use-quiz-connection";
 import { QuizSession, QuizParticipant, QuizSessionStats } from "@/types/quiz";
+import { QuizAvatar, parseQuizAvatar } from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
 
@@ -301,27 +301,34 @@ export default function HostQuizPage({ params }: PageProps) {
                   Қатысушыларды күтуде...
                 </h3>
                 <p className="text-xs text-gray-500 max-w-xs">
-                  Студенттер телефондарынан экрандағы PIN-кодты енгізген кезде, олардың есімдері осында шығады.
+                  Студенттер телефондарынан экрандағы PIN-кодты енгізген кезде, олардың кейіпкерлері мен есімдері осында шығады.
                 </p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 content-start">
-                {participants.map((p) => (
-                  <div
-                    key={p.id}
-                    className="p-3 rounded-2xl bg-white border border-purple-100/80 shadow-sm flex items-center gap-3 animate-fadeIn transition-transform hover:scale-105"
-                  >
+              <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start">
+                {participants.map((p) => {
+                  const pAvatar = parseQuizAvatar(p.avatar_color, p.nickname);
+                  return (
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-md"
-                      style={{ backgroundColor: p.avatar_color || "#8b5cf6" }}
+                      key={p.id}
+                      className="p-3.5 rounded-2xl bg-white border border-purple-100/90 shadow-sm hover:shadow-md flex items-center gap-3 animate-fadeIn transition-all hover:scale-105"
                     >
-                      {p.nickname.charAt(0).toUpperCase()}
+                      <QuizAvatar
+                        avatarColor={p.avatar_color}
+                        nickname={p.nickname}
+                        size="lg"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-extrabold text-sm text-gray-900 truncate block">
+                          {p.nickname}
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 truncate block">
+                          {pAvatar.character.emoji} {pAvatar.character.name}
+                        </span>
+                      </div>
                     </div>
-                    <span className="font-bold text-sm text-gray-800 truncate">
-                      {p.nickname}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -358,6 +365,7 @@ export default function HostQuizPage({ params }: PageProps) {
               {sortedLeaderboard.map((p, idx) => {
                 const maxScore = sortedLeaderboard[0]?.score || 1;
                 const percentage = Math.min(100, Math.max(8, (p.score / (maxScore || 1)) * 100));
+                const pAvatar = parseQuizAvatar(p.avatar_color, p.nickname);
 
                 return (
                   <div
@@ -395,17 +403,19 @@ export default function HostQuizPage({ params }: PageProps) {
                       </span>
 
                       {/* Avatar */}
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-base shadow"
-                        style={{ backgroundColor: p.avatar_color || "#8b5cf6" }}
-                      >
-                        {p.nickname.charAt(0).toUpperCase()}
-                      </div>
+                      <QuizAvatar
+                        avatarColor={p.avatar_color}
+                        nickname={p.nickname}
+                        size="md"
+                      />
 
                       {/* Nickname & streak */}
                       <div>
                         <div className="font-extrabold text-base text-gray-900 flex items-center gap-2">
                           <span>{p.nickname}</span>
+                          <span className="text-xs font-semibold text-gray-400 hidden sm:inline">
+                            ({pAvatar.character.emoji} {pAvatar.character.name})
+                          </span>
                           {p.streak > 1 && (
                             <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-orange-100 text-orange-700 border border-orange-300 flex items-center gap-1">
                               🔥 {p.streak}
@@ -478,13 +488,13 @@ export default function HostQuizPage({ params }: PageProps) {
                 {/* 2nd Place (Silver) */}
                 <div className="flex-1 flex flex-col items-center">
                   {sortedLeaderboard[1] && (
-                    <div className="text-center mb-3">
-                      <div
-                        className="w-14 h-14 rounded-2xl mx-auto mb-2 flex items-center justify-center text-white text-xl font-black shadow-lg"
-                        style={{ backgroundColor: sortedLeaderboard[1].avatar_color || "#3b82f6" }}
-                      >
-                        {sortedLeaderboard[1].nickname.charAt(0).toUpperCase()}
-                      </div>
+                    <div className="text-center mb-3 flex flex-col items-center">
+                      <QuizAvatar
+                        avatarColor={sortedLeaderboard[1].avatar_color}
+                        nickname={sortedLeaderboard[1].nickname}
+                        size="xl"
+                        className="mb-2 ring-4 ring-slate-300 shadow-lg"
+                      />
                       <div className="font-extrabold text-sm text-gray-800 truncate max-w-[120px]">
                         {sortedLeaderboard[1].nickname}
                       </div>
@@ -502,14 +512,14 @@ export default function HostQuizPage({ params }: PageProps) {
                 {/* 1st Place (Gold) */}
                 <div className="flex-1 flex flex-col items-center">
                   {sortedLeaderboard[0] && (
-                    <div className="text-center mb-3">
+                    <div className="text-center mb-3 flex flex-col items-center">
                       <span className="text-3xl animate-bounce block mb-1">👑</span>
-                      <div
-                        className="w-16 h-16 rounded-2xl mx-auto mb-2 flex items-center justify-center text-white text-2xl font-black shadow-xl ring-4 ring-amber-400"
-                        style={{ backgroundColor: sortedLeaderboard[0].avatar_color || "#f59e0b" }}
-                      >
-                        {sortedLeaderboard[0].nickname.charAt(0).toUpperCase()}
-                      </div>
+                      <QuizAvatar
+                        avatarColor={sortedLeaderboard[0].avatar_color}
+                        nickname={sortedLeaderboard[0].nickname}
+                        size="xl"
+                        className="mb-2 ring-4 ring-amber-400 shadow-xl"
+                      />
                       <div className="font-black text-base text-gray-900 truncate max-w-[140px]">
                         {sortedLeaderboard[0].nickname}
                       </div>
@@ -527,13 +537,13 @@ export default function HostQuizPage({ params }: PageProps) {
                 {/* 3rd Place (Bronze) */}
                 <div className="flex-1 flex flex-col items-center">
                   {sortedLeaderboard[2] && (
-                    <div className="text-center mb-3">
-                      <div
-                        className="w-14 h-14 rounded-2xl mx-auto mb-2 flex items-center justify-center text-white text-xl font-black shadow-lg"
-                        style={{ backgroundColor: sortedLeaderboard[2].avatar_color || "#f97316" }}
-                      >
-                        {sortedLeaderboard[2].nickname.charAt(0).toUpperCase()}
-                      </div>
+                    <div className="text-center mb-3 flex flex-col items-center">
+                      <QuizAvatar
+                        avatarColor={sortedLeaderboard[2].avatar_color}
+                        nickname={sortedLeaderboard[2].nickname}
+                        size="xl"
+                        className="mb-2 ring-4 ring-orange-300 shadow-lg"
+                      />
                       <div className="font-extrabold text-sm text-gray-800 truncate max-w-[120px]">
                         {sortedLeaderboard[2].nickname}
                       </div>

@@ -6,16 +6,15 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { joinQuizSession, getQuizSessionByPin } from "@/lib/api/quizzes";
 import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
+import {
+  QuizAvatar,
+  QuizAvatarPicker,
+  encodeQuizAvatar,
+  parseQuizAvatar,
+  QUIZ_AVATAR_COLORS,
+  QUIZ_AVATAR_CHARACTERS,
+} from "@/components/quiz/QuizAvatar";
 import toast from "react-hot-toast";
-
-const AVATAR_COLORS = [
-  { name: "Күлгін", hex: "#8b5cf6", bg: "bg-purple-500" },
-  { name: "Көк", hex: "#3b82f6", bg: "bg-blue-500" },
-  { name: "Қызғылт", hex: "#ec4899", bg: "bg-pink-500" },
-  { name: "Сәбіз", hex: "#f97316", bg: "bg-orange-500" },
-  { name: "Жасыл", hex: "#10b981", bg: "bg-emerald-500" },
-  { name: "Көгілдір", hex: "#06b6d4", bg: "bg-cyan-500" },
-];
 
 function JoinForm() {
   const router = useRouter();
@@ -24,7 +23,9 @@ function JoinForm() {
 
   const [pinCode, setPinCode] = useState("");
   const [nickname, setNickname] = useState("");
-  const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0].hex);
+  const [selectedAvatar, setSelectedAvatar] = useState(() =>
+    encodeQuizAvatar(QUIZ_AVATAR_COLORS[0].hex, QUIZ_AVATAR_CHARACTERS[0].id)
+  );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,8 @@ function JoinForm() {
       setNickname(session.user.name);
     }
   }, [searchParams, session]);
+
+  const parsedAvatar = parseQuizAvatar(selectedAvatar, nickname || "Ойыншы");
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +69,7 @@ function JoinForm() {
         cleanPin,
         cleanNick,
         email,
-        selectedColor,
+        selectedAvatar,
         saved?.nickname === cleanNick ? saved.token : undefined
       );
 
@@ -78,8 +81,13 @@ function JoinForm() {
 
       // Store in session storage for student play page
       if (typeof window !== "undefined") {
-        saveQuizPlayer({ sessionId: data.session.id, participantId: data.participant.id,
-          token: data.participant_token, nickname: data.participant.nickname, avatarColor: data.participant.avatar_color });
+        saveQuizPlayer({
+          sessionId: data.session.id,
+          participantId: data.participant.id,
+          token: data.participant_token,
+          nickname: data.participant.nickname,
+          avatarColor: data.participant.avatar_color,
+        });
       }
 
       toast.success("Сәтті қосылдыңыз!");
@@ -91,18 +99,24 @@ function JoinForm() {
   };
 
   return (
-    <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-white/80 shadow-2xl shadow-purple-900/10">
+    <div className="w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-white/80 shadow-2xl shadow-purple-900/10">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-purple-500/30">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-          </svg>
+        <div className="relative inline-block mb-3">
+          <QuizAvatar
+            avatarColor={selectedAvatar}
+            nickname={nickname || "Ойыншы"}
+            size="xl"
+            className="ring-4 ring-purple-100 shadow-xl"
+          />
+          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-extrabold shadow">
+            {parsedAvatar.character.emoji} {parsedAvatar.character.name}
+          </span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-2">
           Ойынға қосылу
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Мұғалімнің экранындағы 6 таңбалы кодты енгізіңіз
+          Мұғалімнің экранындағы 6 таңбалы кодты енгізіп, кейіпкеріңізді таңдаңыз
         </p>
       </div>
 
@@ -138,30 +152,13 @@ function JoinForm() {
           />
         </div>
 
-        {/* Avatar Color Picker */}
-        <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-            Түсіңізді таңдаңыз
-          </label>
-          <div className="flex items-center justify-between gap-2">
-            {AVATAR_COLORS.map((c) => (
-              <button
-                type="button"
-                key={c.hex}
-                onClick={() => setSelectedColor(c.hex)}
-                className={`w-9 h-9 rounded-full ${c.bg} transition-all flex items-center justify-center ${
-                  selectedColor === c.hex
-                    ? "ring-4 ring-offset-2 ring-purple-600 scale-110 shadow-md"
-                    : "opacity-80 hover:opacity-100 hover:scale-105"
-                }`}
-                title={c.name}
-              >
-                {selectedColor === c.hex && (
-                  <span className="w-2 h-2 rounded-full bg-white" />
-                )}
-              </button>
-            ))}
-          </div>
+        {/* Avatar Character & Color Picker */}
+        <div className="p-4 rounded-2xl bg-slate-50/80 border border-purple-100/80">
+          <QuizAvatarPicker
+            value={selectedAvatar}
+            nickname={nickname || "Ойыншы"}
+            onChange={setSelectedAvatar}
+          />
         </div>
 
         {/* Submit Button */}
@@ -198,7 +195,7 @@ export default function JoinQuizPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
       <Suspense
         fallback={
-          <div className="w-full max-w-md bg-white/90 rounded-3xl p-8 text-center text-gray-600">
+          <div className="w-full max-w-lg bg-white/90 rounded-3xl p-8 text-center text-gray-600">
             Жүктелуде...
           </div>
         }
