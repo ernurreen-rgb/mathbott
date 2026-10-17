@@ -8,6 +8,7 @@ import {
   submitQuizAnswer,
   finishQuizSession,
   getQuizLeaderboard,
+  updateQuiz,
 } from "../api/quizzes";
 
 global.fetch = jest.fn();
@@ -32,6 +33,35 @@ describe("Quizzes API Client", () => {
     expect(callUrl).toContain("my_only=true");
     expect(callUrl).toContain("email=user%40test.kz");
     expect(res.data).toEqual([{ id: 1, title: "Тест 1" }]);
+  });
+
+  it("fetches quizzes with is_public parameter and updates quiz privacy", async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () => JSON.stringify([{ id: 2, title: "Private Quiz", is_public: false }]),
+    });
+
+    const res = await getQuizzes(true, "user@test.kz", false);
+    const callUrl = (global.fetch as jest.Mock).mock.calls[0][0];
+    expect(callUrl).toContain("is_public=false");
+    expect(res.data?.[0]?.is_public).toBe(false);
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () => JSON.stringify({ id: 2, title: "Private Quiz", is_public: true }),
+    });
+
+    const updateRes = await updateQuiz(2, { is_public: true }, "user@test.kz");
+    const updateUrl = (global.fetch as jest.Mock).mock.calls[1][0];
+    const updateOpts = (global.fetch as jest.Mock).mock.calls[1][1];
+    expect(updateUrl).toContain("quizzes/2?email=user%40test.kz");
+    expect(updateOpts.method).toBe("PUT");
+    expect(JSON.parse(updateOpts.body)).toEqual({ is_public: true });
+    expect(updateRes.data?.is_public).toBe(true);
   });
 
   it("fetches single quiz and its questions", async () => {

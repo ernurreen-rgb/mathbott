@@ -7,7 +7,7 @@ import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import MathRender from "@/components/ui/MathRender";
-import { getQuiz, getQuizQuestions, createQuizSession, deleteQuiz } from "@/lib/api/quizzes";
+import { getQuiz, getQuizQuestions, createQuizSession, deleteQuiz, updateQuiz } from "@/lib/api/quizzes";
 import { Quiz, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
 
@@ -25,6 +25,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [startingSession, setStartingSession] = useState(false);
+  const [togglingPrivacy, setTogglingPrivacy] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
 
   useEffect(() => {
@@ -95,6 +96,33 @@ export default function QuizDetailPage({ params }: PageProps) {
     }
   };
 
+  const handleTogglePrivacy = async () => {
+    if (!quiz) return;
+    setTogglingPrivacy(true);
+    const nextPublic = !quiz.is_public;
+    try {
+      const result = await updateQuiz(
+        quizId,
+        { is_public: nextPublic },
+        session?.user?.email || undefined
+      );
+      if (result.error || !result.data) {
+        toast.error(result.error || "Квиз мәртебесін өзгерту сәтсіз аяқталды");
+      } else {
+        setQuiz((prev) => (prev ? { ...prev, is_public: nextPublic } : null));
+        toast.success(
+          nextPublic
+            ? "Квиз енді баршаға ашық (Public)"
+            : "Квиз жеке форматқа ауыстырылды (Private)"
+        );
+      }
+    } catch {
+      toast.error("Қате орын алды");
+    } finally {
+      setTogglingPrivacy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 pb-20 md:pb-8 md:pl-64 flex items-center justify-center">
@@ -147,13 +175,19 @@ export default function QuizDetailPage({ params }: PageProps) {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-700">
-                  {quiz.is_public ? "Ашық квиз" : "Жеке квиз"}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${quiz.is_public ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                  {quiz.is_public ? "🌐 Ашық квиз (Public)" : "🔒 Жеке квиз (Private)"}
                 </span>
                 <span className="text-xs text-gray-500 font-medium">
                   {questions.length} сұрақ
                 </span>
               </div>
+              {!quiz.is_public && (
+                <div className="mb-3 p-2.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-start gap-2 text-xs text-amber-900">
+                  <span className="text-sm">🔒</span>
+                  <span><strong>Жеке квиз (Private):</strong> Каталогта басқаларға көрінбейді. Бірақ ойын бастап, PIN-код беріп ойната аласыз.</span>
+                </div>
+              )}
 
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-2">
                 {quiz.title}
@@ -195,7 +229,23 @@ export default function QuizDetailPage({ params }: PageProps) {
                 <span>Тікелей ойынды бастау</span>
               </button>
 
-              {quiz.can_manage && <div className="flex items-center justify-end gap-2">
+              {quiz.can_manage && <div className="flex items-center justify-end gap-2 flex-wrap">
+                <button
+                  onClick={handleTogglePrivacy}
+                  disabled={togglingPrivacy}
+                  title={quiz.is_public ? "Квизді жеке ету (каталогтан жасыру)" : "Квизді ашық ету (баршаға қолжетімді)"}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    quiz.is_public
+                      ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  } disabled:opacity-50`}
+                >
+                  {togglingPrivacy ? (
+                    <span className="animate-spin text-xs">⏳</span>
+                  ) : (
+                    <span>{quiz.is_public ? "🔒 Жеке ету" : "🌐 Ашық ету"}</span>
+                  )}
+                </button>
                 <button
                   onClick={() => setShowAnswers(!showAnswers)}
                   className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"

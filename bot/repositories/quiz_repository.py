@@ -108,7 +108,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
         if created_by is not None:
             conditions.append("q.created_by = ?")
             params.append(created_by)
-        elif is_public is not None:
+        if is_public is not None:
             conditions.append("q.is_public = ?")
             params.append(1 if is_public else 0)
 

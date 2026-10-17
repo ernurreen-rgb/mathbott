@@ -285,3 +285,68 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     stats = finish_resp.json()
     assert stats["total_players"] == 2
     assert stats["podium"][0]["nickname"] == "Алихан"
+
+
+@pytest.mark.asyncio
+async def test_quiz_public_private_visibility(client, test_db, test_user):
+    owner_email = test_user["email"]
+
+    # 1. Create a private quiz
+    create_resp = client.post(
+        "/api/quizzes",
+        json={"title": "Жеке квиз", "is_public": False},
+        params={"email": owner_email},
+    )
+    assert create_resp.status_code == 200
+    quiz = create_resp.json()
+    assert quiz["is_public"] is False
+    quiz_id = quiz["id"]
+
+    # 2. Public catalog must NOT include the private quiz
+    public_list = client.get("/api/quizzes").json()
+    assert not any(q["id"] == quiz_id for q in public_list)
+
+    # 3. Owner's list ("my_only") MUST include the private quiz
+    my_list = client.get("/api/quizzes", params={"my_only": "true", "email": owner_email}).json()
+    assert any(q["id"] == quiz_id for q in my_list)
+
+    # 4. Filter my quizzes by is_public
+    my_private = client.get("/api/quizzes", params={"my_only": "true", "is_public": "false", "email": owner_email}).json()
+    assert any(q["id"] == quiz_id for q in my_private)
+
+    my_public = client.get("/api/quizzes", params={"my_only": "true", "is_public": "true", "email": owner_email}).json()
+    assert not any(q["id"] == quiz_id for q in my_public)
+
+    # 5. Non-owner (no identity or other user) cannot view the private quiz
+    assert client.get(f"/api/quizzes/{quiz_id}").status_code == 404
+
+    # 6. Owner CAN view their private quiz
+    owner_get = client.get(f"/api/quizzes/{quiz_id}", params={"email": owner_email})
+    assert owner_get.status_code == 200
+    assert owner_get.json()["is_public"] is False
+
+    # 7. Owner can change private quiz to public
+    update_resp = client.put(
+        f"/api/quizzes/{quiz_id}",
+        json={"is_public": True},
+        params={"email": owner_email},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["is_public"] is True
+
+    # Now it appears in public catalog
+    public_list_after = client.get("/api/quizzes").json()
+    assert any(q["id"] == quiz_id for q in public_list_after)
+
+    # 8. Owner can change it back to private
+    update_back = client.put(
+        f"/api/quizzes/{quiz_id}",
+        json={"is_public": False},
+        params={"email": owner_email},
+    )
+    assert update_back.status_code == 200
+    assert update_back.json()["is_public"] is False
+
+    # Hidden from public catalog again
+    public_list_final = client.get("/api/quizzes").json()
+    assert not any(q["id"] == quiz_id for q in public_list_final)

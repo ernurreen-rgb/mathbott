@@ -68,6 +68,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.get("/api/quizzes")
     async def list_quizzes_endpoint(
         my_only: bool = Query(False),
+        is_public: Optional[bool] = Query(None),
         email: Optional[str] = Query(None),
         limit: int = Query(50, ge=1, le=100),
         offset: int = Query(0, ge=0),
@@ -80,11 +81,11 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if my_only:
             if not user_id:
                 return []
-            quizzes = await db.quizzes.list_quizzes(created_by=user_id, limit=limit, offset=offset)
+            quizzes = await db.quizzes.list_quizzes(created_by=user_id, is_public=is_public, limit=limit, offset=offset)
         else:
             quizzes = await db.quizzes.list_quizzes(is_public=True, limit=limit, offset=offset)
 
-        return [{**quiz, 'can_manage': can_manage(quiz, current_user)} for quiz in quizzes]
+        return [{**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': can_manage(quiz, current_user)} for quiz in quizzes]
 
     @app.get("/api/quizzes/{quiz_id}")
     async def get_quiz_endpoint(
@@ -95,7 +96,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         """Get a single quiz details."""
         quiz = await db.quizzes.get_quiz_by_id(quiz_id)
         ensure_visible(quiz, current_user)
-        return {**quiz, 'can_manage': can_manage(quiz, current_user)}
+        return {**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': can_manage(quiz, current_user)}
 
     @app.get("/api/quizzes/{quiz_id}/questions")
     async def get_quiz_questions_endpoint(
@@ -124,7 +125,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             is_public=payload.is_public,
             questions=[q.model_dump() for q in payload.questions],
         )
-        return quiz
+        return {**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': True}
 
     @app.put("/api/quizzes/{quiz_id}")
     async def update_quiz_endpoint(
@@ -149,7 +150,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             cover_image=payload.cover_image,
             is_public=payload.is_public,
         )
-        return updated
+        return {**updated, 'is_public': bool(updated['is_public']), 'can_manage': can_manage(updated, current_user)}
 
     @app.delete("/api/quizzes/{quiz_id}")
     async def delete_quiz_endpoint(

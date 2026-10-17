@@ -118,3 +118,26 @@ it("keeps formulas when switching and duplicating questions and saves a math inp
     ],
   }), "owner@example.com");
 });
+
+it("submits quiz with is_public: false when user selects private privacy option", async () => {
+  (createQuiz as jest.Mock).mockResolvedValue({ data: { id: 15 }, error: null });
+  render(<CreateQuizPage />);
+  fireEvent.change(screen.getByPlaceholderText("Мысалы: 9-сынып Теңдеулер жарысы"), { target: { value: "Жеке квиз" } });
+  fireEvent.change(screen.getByPlaceholderText(/Мысалы: Теңдеуді шешіңіз/), { target: { value: "Сұрақ" } });
+  for (const label of ["A", "B", "C", "D"]) {
+    fireEvent.change(screen.getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
+  }
+
+  fireEvent.click(screen.getByRole("button", { name: /Жеке/ }));
+
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Сақтау және дайын/ })); });
+  expect(createQuiz).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Жеке квиз",
+      is_public: false,
+    }),
+    "owner@example.com"
+  );
+  expect(mockPush).toHaveBeenCalledWith("/quizzes/15");
+});
+

@@ -311,15 +311,66 @@ export default function CreateQuizPage() {
               className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-3 py-1.5 text-xs text-gray-900 transition-all focus:outline-none"
             />
 
-            <label className="flex items-center gap-2 mt-3 cursor-pointer text-xs font-semibold text-gray-700 select-none">
-              <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={(e) => setIsPublic(e.target.checked)}
-                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-gray-300"
-              />
-              Баршаға ашық (Public)
-            </label>
+            <div className="mt-4 pt-3 border-t border-gray-100">
+              <label className="text-xs font-bold text-gray-700 block mb-2">
+                Қолжетімділік түрі (Privacy)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPublic(true)}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                    isPublic
+                      ? "bg-purple-50/80 border-purple-500 ring-1 ring-purple-500 text-purple-900"
+                      : "bg-white border-gray-200 hover:border-gray-300 text-gray-600"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span>🌐</span>
+                      <span>Ашық</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="quiz_privacy"
+                      checked={isPublic}
+                      onChange={() => setIsPublic(true)}
+                      className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500"
+                    />
+                  </div>
+                  <span className="text-[10px] leading-tight text-gray-500">
+                    Каталогта баршаға көрінеді
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPublic(false)}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                    !isPublic
+                      ? "bg-amber-50/80 border-amber-500 ring-1 ring-amber-500 text-amber-900"
+                      : "bg-white border-gray-200 hover:border-gray-300 text-gray-600"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span>🔒</span>
+                      <span>Жеке</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="quiz_privacy"
+                      checked={!isPublic}
+                      onChange={() => setIsPublic(false)}
+                      className="w-3.5 h-3.5 text-amber-600 focus:ring-amber-500"
+                    />
+                  </div>
+                  <span className="text-[10px] leading-tight text-gray-500">
+                    Тек маған, PIN-кодпен ойнатылады
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Question cards list */}

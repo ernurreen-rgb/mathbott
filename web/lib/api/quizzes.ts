@@ -19,11 +19,13 @@ const authHeaders = (auth?: QuizAuth): Record<string, string> =>
 
 export async function getQuizzes(
   myOnly: boolean = false,
-  email?: string
+  email?: string,
+  isPublic?: boolean
 ): Promise<FetchResult<Quiz[]>> {
   const params = new URLSearchParams();
   if (myOnly) params.set("my_only", "true");
   if (email) params.set("email", email);
+  if (isPublic !== undefined) params.set("is_public", isPublic ? "true" : "false");
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchWithErrorHandling<Quiz[]>(`${apiPath("quizzes")}${qs}`);
 }
