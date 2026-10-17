@@ -138,9 +138,8 @@ export default function TrialTestListPage() {
         <div className="w-full max-w-6xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-3">
-                <span className="text-5xl">📝</span>
-                <span>Сынақ тесті</span>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                Сынақ тесті
               </h1>
               <Link
                 href="/trial-test/history"

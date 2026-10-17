@@ -96,9 +96,8 @@ export default function ModulesPage() {
         <div className="w-full max-w-6xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-3">
-                <span className="text-5xl">🗺️</span>
-                <span>Модуль картасы</span>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                Модуль картасы
               </h1>
             </div>
 
@@ -146,9 +145,6 @@ export default function ModulesPage() {
                         href={`/modules/${module.id}`}
                         className="glass rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all transform hover:scale-105 cursor-pointer"
                       >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="text-5xl">{module.icon || "📚"}</div>
-                        </div>
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{module.name}</h3>
                         {module.description && (
                           <p className="text-gray-600 text-sm mb-4 line-clamp-2">{module.description}</p>

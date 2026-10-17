@@ -349,7 +349,7 @@ export default function ModuleDetailPage() {
                 className="flex h-[3.75rem] flex-col justify-center"
               >
                 <div className="truncate text-xl font-black text-slate-900 sm:text-2xl">
-                  {module.icon || "📚"} {module.name}
+                  {module.name}
                 </div>
               </div>
 

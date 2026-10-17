@@ -3,12 +3,10 @@ import AcceptInvitePanel from "./_components/AcceptInvitePanel";
 import IncomingRequestsPanel from "./_components/IncomingRequestsPanel";
 import InviteDialog from "./_components/InviteDialog";
 import ProfileHeader from "./_components/ProfileHeader";
-import StatisticsPanel from "./_components/StatisticsPanel";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
 
 import MobileNav from "@/components/MobileNav";
 import { signOut, useSession } from "next-auth/react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
@@ -540,51 +538,6 @@ function ProfilePageContent() {
                 handleAcceptInvite={handleAcceptInvite}
                 inviteActionMessage={inviteActionMessage}
               />
-
-              {/* Statistics Section */}
-              <StatisticsPanel
-                userData={userData}
-              />
-
-              {/* Achievements Section */}
-              {userData?.achievements && userData.achievements.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">Жетістіктер</h3>
-                    <Link
-                      href={userData?.id ? `/achievements/${userData.id}` : "/achievements"}
-                      className="text-purple-600 hover:text-pink-600 font-bold text-sm flex items-center gap-1 transition-colors px-3 py-1 rounded-lg hover:bg-white/50"
-                    >
-                      Барлық жетістіктер
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  </div>
-                  <div className="glass rounded-2xl shadow-xl p-6 border border-white/30">
-                    <div className="grid grid-cols-3 gap-4">
-                      {userData.achievements.slice(0, 3).map((achievement) => (
-                        <div
-                          key={achievement.id}
-                          className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all transform hover:scale-110 ${achievement.unlocked
-                              ? "bg-gradient-to-br from-yellow-100 via-orange-50 to-pink-50 border-yellow-300 hover:border-yellow-400 shadow-lg hover:shadow-glow"
-                              : "bg-gray-100 border-gray-300 opacity-60 grayscale"
-                            }`}
-                          title={achievement.description}
-                        >
-                          <div className={`text-4xl mb-2 ${achievement.unlocked ? "" : "opacity-50"}`}>
-                            {achievement.icon}
-                          </div>
-                          <div className={`text-xs font-bold text-center ${achievement.unlocked ? "text-gray-800" : "text-gray-500"
-                            }`}>
-                            {achievement.name}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Friends Section */}
               <div>
