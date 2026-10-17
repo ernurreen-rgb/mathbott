@@ -1,7 +1,9 @@
 import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { apiPath } from "@/lib/api";
+import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import {
+  MCQ_OPTION_LABELS,
   McqOptionLabel,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels
@@ -12,6 +14,16 @@ import type { Session } from "next-auth";
 import type { Dispatch, SetStateAction } from "react";
 import type { CreateTaskFormState, EditTaskFormState } from "./model";
 import { MiniLessonTask, parseBankTaskId, parseBankTopicsRaw, stringifyTopics } from "./model";
+
+const getRequiredOptionError = (form: CreateTaskFormState | EditTaskFormState): string | null => {
+  if (!["mcq", "mcq6", "select"].includes(form.question_type)) return null;
+  const options = [form.optionA, form.optionB, form.optionC, form.optionD, form.optionE, form.optionF];
+  const emptyIndex = options.slice(0, form.question_type === "mcq6" ? 6 : 4).findIndex((text) => !text.trim());
+  return emptyIndex >= 0 ? `${MCQ_OPTION_LABELS[emptyIndex]} жауап нұсқасын толтырыңыз` : null;
+};
+
+const serializeMathOptions = (options: { label: string; text: string }[]) =>
+  JSON.stringify(options.map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) })));
 
 type Context = {
   session: Session | null;
@@ -56,6 +68,11 @@ export function createTaskActions({
       setError("БАНК тапсырма ID қате");
       return;
     }
+    const optionError = !linkedBankTaskId && getRequiredOptionError(taskForm);
+    if (optionError) {
+      setError(optionError);
+      return;
+    }
 
     const formData = new FormData();
     formData.append("sort_order", taskForm.sort_order.toString());
@@ -69,8 +86,8 @@ export function createTaskActions({
     if (linkedBankTaskId) {
       formData.append("bank_task_id", String(linkedBankTaskId));
     } else {
-      formData.append("text", taskForm.text || "");
-      formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(taskForm.accepted_answers)));
+      formData.append("text", normalizeMathFieldValueForStorage(taskForm.text));
+      formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(taskForm.accepted_answers.map(normalizeMathFieldValueForStorage))));
       if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") {
         const options = [
           { label: "A", text: taskForm.optionA },
@@ -84,7 +101,7 @@ export function createTaskActions({
             ]
             : []),
         ];
-        formData.append("options", JSON.stringify(options));
+        formData.append("options", serializeMathOptions(options));
         formData.append("answer", serializeMcqAnswerLabels(taskForm.correctOptions));
       } else if (taskForm.question_type === "select") {
         if (!taskForm.subQuestion1.trim() || !taskForm.subQuestion2.trim()) {
@@ -98,16 +115,16 @@ export function createTaskActions({
           { label: "D", text: taskForm.optionD },
         ];
         const subquestions = [
-          { text: taskForm.subQuestion1.trim(), correct: taskForm.correctSub1 },
-          { text: taskForm.subQuestion2.trim(), correct: taskForm.correctSub2 },
+          { text: normalizeMathFieldValueForStorage(taskForm.subQuestion1), correct: taskForm.correctSub1 },
+          { text: normalizeMathFieldValueForStorage(taskForm.subQuestion2), correct: taskForm.correctSub2 },
         ];
-        formData.append("options", JSON.stringify(options));
+        formData.append("options", serializeMathOptions(options));
         formData.append("subquestions", JSON.stringify(subquestions));
         formData.append("answer", JSON.stringify([taskForm.correctSub1, taskForm.correctSub2]));
       } else if (taskForm.question_type === "tf") {
         formData.append("answer", taskForm.correctTf);
       } else {
-        formData.append("answer", taskForm.answer || "");
+        formData.append("answer", normalizeMathFieldValueForStorage(taskForm.answer));
       }
 
       if (taskForm.imageFile) {
@@ -301,14 +318,20 @@ export function createTaskActions({
     e.preventDefault();
     if (!session?.user?.email || !editingMiniTask) return;
 
+    const optionError = getRequiredOptionError(editTaskForm);
+    if (optionError) {
+      setError(optionError);
+      return;
+    }
+
     const formData = new FormData();
-    formData.append("text", editTaskForm.text || "");
+    formData.append("text", normalizeMathFieldValueForStorage(editTaskForm.text));
     formData.append("sort_order", editTaskForm.sort_order.toString());
     formData.append("question_type", editTaskForm.question_type);
     formData.append("answer_mode", editTaskAnswerMode);
     formData.append("text_scale", editTaskForm.text_scale);
     formData.append("email", session.user.email);
-    formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(editTaskForm.accepted_answers)));
+    formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(editTaskForm.accepted_answers.map(normalizeMathFieldValueForStorage))));
     if (editTaskForm.bank_difficulty) {
       formData.append("bank_difficulty", editTaskForm.bank_difficulty);
     }
@@ -327,7 +350,7 @@ export function createTaskActions({
           ]
           : []),
       ];
-      formData.append("options", JSON.stringify(options));
+      formData.append("options", serializeMathOptions(options));
       formData.append("answer", serializeMcqAnswerLabels(editTaskForm.correctOptions));
     } else if (editTaskForm.question_type === "select") {
       if (!editTaskForm.subQuestion1.trim() || !editTaskForm.subQuestion2.trim()) {
@@ -341,17 +364,17 @@ export function createTaskActions({
         { label: "D", text: editTaskForm.optionD },
       ];
       const subquestions = [
-        { text: editTaskForm.subQuestion1.trim(), correct: editTaskForm.correctSub1 },
-        { text: editTaskForm.subQuestion2.trim(), correct: editTaskForm.correctSub2 },
+        { text: normalizeMathFieldValueForStorage(editTaskForm.subQuestion1), correct: editTaskForm.correctSub1 },
+        { text: normalizeMathFieldValueForStorage(editTaskForm.subQuestion2), correct: editTaskForm.correctSub2 },
       ];
-      formData.append("options", JSON.stringify(options));
+      formData.append("options", serializeMathOptions(options));
       formData.append("subquestions", JSON.stringify(subquestions));
       formData.append("answer", JSON.stringify([editTaskForm.correctSub1, editTaskForm.correctSub2]));
     } else if (editTaskForm.question_type === "tf") {
       formData.append("answer", editTaskForm.correctTf);
       formData.append("options", "");
     } else {
-      formData.append("answer", editTaskForm.answer || "");
+      formData.append("answer", normalizeMathFieldValueForStorage(editTaskForm.answer));
       formData.append("options", "");
     }
 

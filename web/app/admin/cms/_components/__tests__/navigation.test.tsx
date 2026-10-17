@@ -10,6 +10,13 @@ jest.mock("@/lib/use-admin-page-access", () => ({ useAdminPageAccess: () => ({ l
 jest.mock("@/components/DesktopNav", () => () => null);
 jest.mock("@/components/MobileNav", () => () => null);
 jest.mock("@/components/ui/MathRender", () => ({ __esModule: true, default: ({ latex }: { latex: string }) => <span>{latex}</span> }));
+jest.mock("mathlive", () => ({}));
+jest.mock("@/components/ui/MathFieldInput", () => ({
+  __esModule: true,
+  default: ({ value, onChange, ariaLabel, readOnly }: {
+    value: string; onChange: (value: string) => void; ariaLabel?: string; readOnly?: boolean;
+  }) => <input aria-label={ariaLabel} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />,
+}));
 jest.mock("@/lib/api", () => ({ apiPath: (path: string) => `/api/backend/${path}` }));
 
 const root = "/admin/cms/modules/1";
@@ -151,11 +158,87 @@ it("opens a separate task dialog and keeps it open when saving fails", async () 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Тапсырма қосу/ }));
   const dialog = screen.getByRole("dialog", { name: "Жаңа тапсырма" });
-  fireEvent.change(within(dialog).getByPlaceholderText("Тапсырма мәтіні"), { target: { value: "Жаңа есеп" } });
+  fireEvent.change(within(dialog).getByLabelText("Тапсырма мәтіні"), { target: { value: "Жаңа есеп" } });
+  for (const label of ["A", "B", "C", "D"]) {
+    fireEvent.change(within(dialog).getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
+  }
   await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Тапсырма құру мүмкін болмады");
-  expect(within(dialog).getByPlaceholderText("Тапсырма мәтіні")).toHaveValue("Жаңа есеп");
+  expect(within(dialog).getByLabelText("Тапсырма мәтіні")).toHaveValue("Жаңа есеп");
   fireEvent.click(within(dialog).getByRole("button", { name: "Терезені жабу" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it.each(["mcq", "mcq6", "select"])("submits MathLive formulas from %s fields without changing answer labels", async (questionType) => {
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  fireEvent.click(screen.getByRole("button", { name: "Тапсырма қосу" }));
+  const dialog = screen.getByRole("dialog", { name: "Жаңа тапсырма" });
+  fireEvent.change(within(dialog).getByLabelText("Тапсырма түрі"), { target: { value: questionType } });
+  fireEvent.change(within(dialog).getByLabelText("Тапсырма мәтіні"), { target: { value: String.raw`Есептеңіз: \sqrt4` } });
+  const labels = questionType === "mcq6" ? ["A", "B", "C", "D", "E", "F"] : ["A", "B", "C", "D"];
+  labels.forEach((label) => {
+    fireEvent.change(within(dialog).getByLabelText(`${label} жауап нұсқасы`), { target: { value: String.raw`\frac12` } });
+  });
+  if (questionType === "select") {
+    fireEvent.change(within(dialog).getByLabelText("1-қосымша сұрақ"), { target: { value: String.raw`x=\sqrt4` } });
+    fireEvent.change(within(dialog).getByLabelText("2-қосымша сұрақ"), { target: { value: String.raw`y=\frac12` } });
+  }
+  await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
+  const request = jest.mocked(global.fetch).mock.calls.find(([, options]) => options?.method === "POST");
+  const body = request?.[1]?.body as FormData;
+  expect(body.get("text")).toBe(String.raw`Есептеңіз: \sqrt{4}`);
+  expect(JSON.parse(body.get("options") as string)).toEqual(labels.map((label) => ({ label, text: String.raw`\frac{1}{2}` })));
+  expect(body.get("answer")).toBe(questionType === "select" ? '["A","A"]' : "A");
+  if (questionType === "select") {
+    expect(JSON.parse(body.get("subquestions") as string)).toEqual([
+      { text: String.raw`x=\sqrt{4}`, correct: "A" },
+      { text: String.raw`y=\frac{1}{2}`, correct: "A" },
+    ]);
+  }
+  expect(within(dialog).getByLabelText("Тапсырма мәтіні")).toHaveValue(String.raw`Есептеңіз: \sqrt4`);
+});
+
+it("keeps required option validation after replacing native inputs", async () => {
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  fireEvent.click(screen.getByRole("button", { name: "Тапсырма қосу" }));
+  const dialog = screen.getByRole("dialog", { name: "Жаңа тапсырма" });
+  for (const label of ["A", "B", "C"]) {
+    fireEvent.change(within(dialog).getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
+  }
+  await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("D жауап нұсқасын толтырыңыз");
+  expect(jest.mocked(global.fetch).mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+});
+
+it("keeps bank references read-only and does not require local math options", async () => {
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  fireEvent.click(screen.getByRole("button", { name: "Тапсырма қосу" }));
+  const dialog = screen.getByRole("dialog", { name: "Жаңа тапсырма" });
+  fireEvent.change(within(dialog).getByPlaceholderText("БАНК тапсырма ID (міндетті емес)"), { target: { value: "123" } });
+  expect(within(dialog).getByLabelText("Тапсырма мәтіні")).toHaveAttribute("readonly");
+  expect(within(dialog).queryByLabelText("A жауап нұсқасы")).not.toBeInTheDocument();
+  await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
+  const request = jest.mocked(global.fetch).mock.calls.find(([, options]) => options?.method === "POST");
+  const body = request?.[1]?.body as FormData;
+  expect(body.get("bank_task_id")).toBe("123");
+  expect(body.has("text")).toBe(false);
+  expect(body.has("options")).toBe(false);
+});
+
+it("loads and saves an existing math answer through the edit form", async () => {
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  fireEvent.click(screen.getByRole("button", { name: "Тапсырма #11 өңдеу" }));
+  const dialog = screen.getByRole("dialog", { name: "Тапсырманы өңдеу #11" });
+  expect(within(dialog).getByLabelText("Тапсырма мәтіні")).toHaveValue("2+2");
+  expect(within(dialog).getByLabelText("Дұрыс жауап")).toHaveValue("4");
+  fireEvent.change(within(dialog).getByLabelText("Тапсырма мәтіні"), { target: { value: String.raw`Есептеңіз: \sqrt4` } });
+  fireEvent.change(within(dialog).getByLabelText("Дұрыс жауап"), { target: { value: String.raw`\frac12` } });
+  await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
+  const request = jest.mocked(global.fetch).mock.calls.find(([, options]) => options?.method === "PUT");
+  expect(request?.[0]).toBe("/api/backend/admin/tasks/11");
+  const body = request?.[1]?.body as FormData;
+  expect(body.get("text")).toBe(String.raw`Есептеңіз: \sqrt{4}`);
+  expect(body.get("answer")).toBe(String.raw`\frac{1}{2}`);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 

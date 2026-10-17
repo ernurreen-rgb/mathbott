@@ -48,6 +48,7 @@ interface MathFieldInputProps {
 type MathVirtualKeyboard = {
   show?: () => void;
   hide?: () => void;
+  container?: HTMLElement | null;
   layouts: readonly ("default" | MathVirtualKeyboardLayout)[];
 };
 
@@ -84,6 +85,14 @@ type MathfieldElementStaticConfig = {
 const getVirtualKeyboard = (): MathVirtualKeyboard | undefined =>
   (globalThis as { mathVirtualKeyboard?: MathVirtualKeyboard }).mathVirtualKeyboard ??
   initializedVirtualKeyboard;
+
+const configureVirtualKeyboardContainer = (keyboard: MathVirtualKeyboard | undefined, field: HTMLElement) => {
+  if (!keyboard) return;
+  // Native modal dialogs make keyboard elements outside their top layer inert.
+  const container = field.closest("dialog[open]")
+    ?.querySelector<HTMLElement>("[data-math-virtual-keyboard-container]") ?? document.body;
+  if (keyboard.container !== container) keyboard.container = container;
+};
 
 let configuredKeyboard: MathVirtualKeyboard | undefined;
 let configuredKeyboardPreset: MathVirtualKeyboardPreset | undefined;
@@ -303,8 +312,10 @@ export default function MathFieldInput({
       mfe.plonkSound = null;
       mfe.keypressVibration = false;
 
-      if (document.activeElement === fieldRef.current) {
+      const focusedField = fieldRef.current;
+      if (focusedField && document.activeElement === focusedField) {
         configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPresetRef.current);
+        configureVirtualKeyboardContainer(getVirtualKeyboard(), focusedField);
       }
     });
 
@@ -448,6 +459,7 @@ export default function MathFieldInput({
       if (readOnly) return;
       const keyboard = getVirtualKeyboard();
       configureVirtualKeyboard(keyboard, virtualKeyboardPreset);
+      configureVirtualKeyboardContainer(keyboard, el);
       if (!openVirtualKeyboardOnFocus) return;
       if (keyboard) {
         keyboard.show?.();

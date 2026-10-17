@@ -1,6 +1,7 @@
 "use client";
 
 import AcceptedAnswersEditor from "@/components/admin/AcceptedAnswersEditor";
+import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
@@ -41,11 +42,12 @@ export default function EditTaskForm({
   return (
     <>
       <form onSubmit={updateMiniLessonTask} onPaste={handlePasteImageEdit} className={`${styles.taskForm} space-y-3`}>
-        <textarea
+        <MathFieldInput
           value={editTaskForm.text}
-          onChange={(e) => setEditTaskForm({ ...editTaskForm, text: e.target.value })}
-          className="w-full p-2 rounded border text-sm"
-          rows={3}
+          onChange={(text) => setEditTaskForm((prev) => ({ ...prev, text }))}
+          className={styles.taskTextInput}
+          ariaLabel="Тапсырма мәтіні"
+          placeholder={String.raw`\text{Тапсырма мәтіні}`}
         />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <input
@@ -108,6 +110,7 @@ export default function EditTaskForm({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <select
             value={editTaskForm.question_type}
+            aria-label="Тапсырма түрі"
             onChange={(e) => {
               const questionType = e.target.value as any;
               setEditTaskForm({ ...editTaskForm, question_type: questionType });
@@ -185,11 +188,13 @@ export default function EditTaskForm({
               })}
             </div>
           ) : (
-            <input
+            <MathFieldInput
               value={editTaskForm.answer}
-              onChange={(e) => setEditTaskForm({ ...editTaskForm, answer: e.target.value })}
-              className="p-2 rounded border text-sm"
-              placeholder="Жауап"
+              onChange={(answer) => setEditTaskForm((prev) => ({ ...prev, answer }))}
+              ariaLabel="Дұрыс жауап"
+              placeholder={String.raw`\text{Дұрыс жауап}`}
+              defaultMode="math"
+              smartMode={false}
             />
           )}
         </div>
@@ -205,49 +210,43 @@ export default function EditTaskForm({
 
         {(editTaskForm.question_type === "mcq" || editTaskForm.question_type === "mcq6" || editTaskForm.question_type === "select") && (
           <div className="grid grid-cols-1 gap-2">
-            <input
+            <MathFieldInput
               value={editTaskForm.optionA}
-              onChange={(e) => setEditTaskForm({ ...editTaskForm, optionA: e.target.value })}
-              className="p-2 rounded border text-sm"
+              onChange={(optionA) => setEditTaskForm((prev) => ({ ...prev, optionA }))}
+              ariaLabel="A жауап нұсқасы"
               placeholder="A"
-              required
             />
-            <input
+            <MathFieldInput
               value={editTaskForm.optionB}
-              onChange={(e) => setEditTaskForm({ ...editTaskForm, optionB: e.target.value })}
-              className="p-2 rounded border text-sm"
+              onChange={(optionB) => setEditTaskForm((prev) => ({ ...prev, optionB }))}
+              ariaLabel="B жауап нұсқасы"
               placeholder="B"
-              required
             />
-            <input
+            <MathFieldInput
               value={editTaskForm.optionC}
-              onChange={(e) => setEditTaskForm({ ...editTaskForm, optionC: e.target.value })}
-              className="p-2 rounded border text-sm"
+              onChange={(optionC) => setEditTaskForm((prev) => ({ ...prev, optionC }))}
+              ariaLabel="C жауап нұсқасы"
               placeholder="C"
-              required
             />
-            <input
+            <MathFieldInput
               value={editTaskForm.optionD}
-              onChange={(e) => setEditTaskForm({ ...editTaskForm, optionD: e.target.value })}
-              className="p-2 rounded border text-sm"
+              onChange={(optionD) => setEditTaskForm((prev) => ({ ...prev, optionD }))}
+              ariaLabel="D жауап нұсқасы"
               placeholder="D"
-              required
             />
             {editTaskForm.question_type === "mcq6" && (
               <>
-                <input
+                <MathFieldInput
                   value={editTaskForm.optionE}
-                  onChange={(e) => setEditTaskForm({ ...editTaskForm, optionE: e.target.value })}
-                  className="p-2 rounded border text-sm"
+                  onChange={(optionE) => setEditTaskForm((prev) => ({ ...prev, optionE }))}
+                  ariaLabel="E жауап нұсқасы"
                   placeholder="E"
-                  required
                 />
-                <input
+                <MathFieldInput
                   value={editTaskForm.optionF}
-                  onChange={(e) => setEditTaskForm({ ...editTaskForm, optionF: e.target.value })}
-                  className="p-2 rounded border text-sm"
+                  onChange={(optionF) => setEditTaskForm((prev) => ({ ...prev, optionF }))}
+                  ariaLabel="F жауап нұсқасы"
                   placeholder="F"
-                  required
                 />
               </>
             )}
@@ -257,12 +256,11 @@ export default function EditTaskForm({
         {editTaskForm.question_type === "select" && (
           <div className="space-y-2">
             <div className="grid grid-cols-1 gap-2">
-              <input
+              <MathFieldInput
                 value={editTaskForm.subQuestion1}
-                onChange={(e) => setEditTaskForm({ ...editTaskForm, subQuestion1: e.target.value })}
-                className="p-2 rounded border text-sm"
-                placeholder="1-қосымша сұрақ"
-                required
+                onChange={(subQuestion1) => setEditTaskForm((prev) => ({ ...prev, subQuestion1 }))}
+                ariaLabel="1-қосымша сұрақ"
+                placeholder={String.raw`\text{1-қосымша сұрақ}`}
               />
               <select
                 value={editTaskForm.correctSub1}
@@ -276,12 +274,11 @@ export default function EditTaskForm({
               </select>
             </div>
             <div className="grid grid-cols-1 gap-2">
-              <input
+              <MathFieldInput
                 value={editTaskForm.subQuestion2}
-                onChange={(e) => setEditTaskForm({ ...editTaskForm, subQuestion2: e.target.value })}
-                className="p-2 rounded border text-sm"
-                placeholder="2-қосымша сұрақ"
-                required
+                onChange={(subQuestion2) => setEditTaskForm((prev) => ({ ...prev, subQuestion2 }))}
+                ariaLabel="2-қосымша сұрақ"
+                placeholder={String.raw`\text{2-қосымша сұрақ}`}
               />
               <select
                 value={editTaskForm.correctSub2}

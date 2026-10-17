@@ -1,6 +1,7 @@
 "use client";
 
 import AcceptedAnswersEditor from "@/components/admin/AcceptedAnswersEditor";
+import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
@@ -39,13 +40,13 @@ export default function CreateTaskForm({
   return (
     <>
       <form onSubmit={createMiniLessonTask} onPaste={handlePasteImageCreate} className={`${styles.taskForm} space-y-3`}>
-        <textarea
+        <MathFieldInput
           value={taskForm.text}
-          onChange={(e) => setTaskForm({ ...taskForm, text: e.target.value })}
-          className="w-full p-3 rounded border resize-y min-h-[120px]"
-          placeholder={createUsesBank ? "БАНК тапсырма ID арқылы жасалуда" : "Тапсырма мәтіні"}
-          rows={6}
-          disabled={createUsesBank}
+          onChange={(text) => setTaskForm((prev) => ({ ...prev, text }))}
+          className={styles.taskTextInput}
+          ariaLabel="Тапсырма мәтіні"
+          placeholder={createUsesBank ? String.raw`\text{БАНК тапсырма ID арқылы жасалуда}` : String.raw`\text{Тапсырма мәтіні}`}
+          readOnly={createUsesBank}
         />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <input
@@ -109,6 +110,7 @@ export default function CreateTaskForm({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <select
             value={taskForm.question_type}
+            aria-label="Тапсырма түрі"
             onChange={(e) => {
               const questionType = e.target.value as any;
               setTaskForm({ ...taskForm, question_type: questionType });
@@ -192,11 +194,13 @@ export default function CreateTaskForm({
               })}
             </div>
           ) : (
-            <input
+            <MathFieldInput
               value={taskForm.answer}
-              onChange={(e) => setTaskForm({ ...taskForm, answer: e.target.value })}
-              className="p-2 rounded border"
-              placeholder="Дұрыс жауап"
+              onChange={(answer) => setTaskForm((prev) => ({ ...prev, answer }))}
+              ariaLabel="Дұрыс жауап"
+              placeholder={String.raw`\text{Дұрыс жауап}`}
+              defaultMode="math"
+              smartMode={false}
             />
           )}
         </div>
@@ -210,49 +214,43 @@ export default function CreateTaskForm({
 
         {!createUsesBank && (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "select") && (
           <div className="grid grid-cols-1 gap-2">
-            <input
+            <MathFieldInput
               value={taskForm.optionA}
-              onChange={(e) => setTaskForm({ ...taskForm, optionA: e.target.value })}
-              className="p-2 rounded border"
+              onChange={(optionA) => setTaskForm((prev) => ({ ...prev, optionA }))}
+              ariaLabel="A жауап нұсқасы"
               placeholder="A"
-              required
             />
-            <input
+            <MathFieldInput
               value={taskForm.optionB}
-              onChange={(e) => setTaskForm({ ...taskForm, optionB: e.target.value })}
-              className="p-2 rounded border"
+              onChange={(optionB) => setTaskForm((prev) => ({ ...prev, optionB }))}
+              ariaLabel="B жауап нұсқасы"
               placeholder="B"
-              required
             />
-            <input
+            <MathFieldInput
               value={taskForm.optionC}
-              onChange={(e) => setTaskForm({ ...taskForm, optionC: e.target.value })}
-              className="p-2 rounded border"
+              onChange={(optionC) => setTaskForm((prev) => ({ ...prev, optionC }))}
+              ariaLabel="C жауап нұсқасы"
               placeholder="C"
-              required
             />
-            <input
+            <MathFieldInput
               value={taskForm.optionD}
-              onChange={(e) => setTaskForm({ ...taskForm, optionD: e.target.value })}
-              className="p-2 rounded border"
+              onChange={(optionD) => setTaskForm((prev) => ({ ...prev, optionD }))}
+              ariaLabel="D жауап нұсқасы"
               placeholder="D"
-              required
             />
             {taskForm.question_type === "mcq6" && (
               <>
-                <input
+                <MathFieldInput
                   value={taskForm.optionE}
-                  onChange={(e) => setTaskForm({ ...taskForm, optionE: e.target.value })}
-                  className="p-2 rounded border"
+                  onChange={(optionE) => setTaskForm((prev) => ({ ...prev, optionE }))}
+                  ariaLabel="E жауап нұсқасы"
                   placeholder="E"
-                  required
                 />
-                <input
+                <MathFieldInput
                   value={taskForm.optionF}
-                  onChange={(e) => setTaskForm({ ...taskForm, optionF: e.target.value })}
-                  className="p-2 rounded border"
+                  onChange={(optionF) => setTaskForm((prev) => ({ ...prev, optionF }))}
+                  ariaLabel="F жауап нұсқасы"
                   placeholder="F"
-                  required
                 />
               </>
             )}
@@ -262,12 +260,11 @@ export default function CreateTaskForm({
         {!createUsesBank && taskForm.question_type === "select" && (
           <div className="space-y-2">
             <div className="grid grid-cols-1 gap-2">
-              <input
+              <MathFieldInput
                 value={taskForm.subQuestion1}
-                onChange={(e) => setTaskForm({ ...taskForm, subQuestion1: e.target.value })}
-                className="p-2 rounded border"
-                placeholder="1-қосымша сұрақ"
-                required
+                onChange={(subQuestion1) => setTaskForm((prev) => ({ ...prev, subQuestion1 }))}
+                ariaLabel="1-қосымша сұрақ"
+                placeholder={String.raw`\text{1-қосымша сұрақ}`}
               />
               <select
                 value={taskForm.correctSub1}
@@ -281,12 +278,11 @@ export default function CreateTaskForm({
               </select>
             </div>
             <div className="grid grid-cols-1 gap-2">
-              <input
+              <MathFieldInput
                 value={taskForm.subQuestion2}
-                onChange={(e) => setTaskForm({ ...taskForm, subQuestion2: e.target.value })}
-                className="p-2 rounded border"
-                placeholder="2-қосымша сұрақ"
-                required
+                onChange={(subQuestion2) => setTaskForm((prev) => ({ ...prev, subQuestion2 }))}
+                ariaLabel="2-қосымша сұрақ"
+                placeholder={String.raw`\text{2-қосымша сұрақ}`}
               />
               <select
                 value={taskForm.correctSub2}
