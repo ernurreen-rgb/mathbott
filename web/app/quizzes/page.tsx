@@ -103,17 +103,9 @@ export default function QuizzesCatalogPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-700">
-                Quizizz Style
-              </span>
-            </div>
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+            <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
               Интерактивті квиздер
             </h1>
-            <p className="text-gray-600 text-sm mt-1">
-              Сыныппен немесе достарыңызбен нақты уақытта жарысып ойнаңыз
-            </p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
