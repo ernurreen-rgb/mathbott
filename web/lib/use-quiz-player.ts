@@ -3,12 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { activateQuizQuestion, getQuizLeaderboard, getQuizProgress, getQuizSession, submitQuizAnswer, updateQuizParticipantAvatar } from "@/lib/api/quizzes";
 import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
 import { useQuizConnection } from "@/lib/use-quiz-connection";
-import type { QuizPlayerCredentials, QuizPlayerProgress, QuizSession } from "@/types/quiz";
+import type { QuizPlayerCredentials, QuizPlayerProgress, QuizPlayerSession } from "@/types/quiz";
 
 export function useQuizPlayer(sessionId: number) {
   const [credentials, setCredentials] = useState<QuizPlayerCredentials | null>(null);
   const [progress, setProgress] = useState<QuizPlayerProgress | null>(null);
-  const [sessionData, setSessionData] = useState<QuizSession | null>(null);
+  const [sessionData, setSessionData] = useState<QuizPlayerSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +23,8 @@ export function useQuizPlayer(sessionId: number) {
   const mutationVersion = useRef(0);
   const activeSession = useRef(sessionId);
   activeSession.current = sessionId;
+  const participantToken = credentials?.sessionId === sessionId ? credentials.token : undefined;
+  const participantId = credentials?.sessionId === sessionId ? credentials.participantId : undefined;
   useEffect(() => {
     live.current = true;
     mutationVersion.current += 1;
@@ -44,32 +46,41 @@ export function useQuizPlayer(sessionId: number) {
     offset.current = data.server_now * 1000 - Date.now();
     setTimeLeft(Math.max(0, Math.ceil(((data.deadline_at || 0) - data.server_now))));
     setProgress(data);
+    setSessionData((previous) => data.session ?? (previous ? { ...previous, status: data.status,
+      participants: data.status === "lobby" ? previous.participants : undefined } : null));
+    if (data.rank !== undefined) setRank(data.rank);
     if (data.result) pendingAnswer.current = null;
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!credentials || credentials.sessionId !== sessionId || reading.current || busy.current) return;
+    if (!participantToken || reading.current || busy.current) return;
     reading.current = true;
     const version = mutationVersion.current;
-    const auth = { participantToken: credentials.token };
+    const auth = { participantToken };
     try {
-      const [state, session] = await Promise.all([getQuizProgress(sessionId, auth), getQuizSession(sessionId, auth)]);
+      const state = await getQuizProgress(sessionId, auth);
       if (!live.current || version !== mutationVersion.current) return;
-      if (session.data) setSessionData(session.data);
       if (!state.data) { setError(state.error || "Ойын күйін жүктеу мүмкін болмады"); return; }
       let data = state.data;
       if (data.status === "in_progress" && !data.participant.is_finished && !data.current_question) {
         const activated = await activateQuizQuestion(sessionId, auth);
+        if (!live.current || version !== mutationVersion.current) return;
         if (!activated.data) { setError(activated.error); return; }
         data = activated.data;
       }
       if (!live.current || version !== mutationVersion.current) return;
+      // Compatibility with a backend that has not received the combined response yet.
+      if (!data.session) {
+        const session = await getQuizSession(sessionId, auth);
+        if (!live.current || version !== mutationVersion.current) return;
+        if (session.data) data = { ...data, session: { ...session.data, status: data.status } };
+      }
       applyProgress(data);
       if (!pendingAnswer.current) setError(null);
-      if (data.status === "finished" || data.participant.is_finished) {
+      if (data.rank === undefined && (data.status === "finished" || data.participant.is_finished)) {
         const leaderboard = await getQuizLeaderboard(sessionId, auth);
-        const index = leaderboard.data?.findIndex((p) => p.id === credentials.participantId) ?? -1;
-        if (live.current && index >= 0) setRank(index + 1);
+        const index = leaderboard.data?.findIndex((p) => p.id === participantId) ?? -1;
+        if (live.current && version === mutationVersion.current && index >= 0) setRank(index + 1);
       }
     } finally {
       if (activeSession.current === sessionId) {
@@ -77,36 +88,42 @@ export function useQuizPlayer(sessionId: number) {
         if (live.current) setLoading(false);
       }
     }
-  }, [credentials, sessionId, applyProgress]);
-  useEffect(() => { if (credentials) { setLoading(true); void refresh(); } }, [credentials, refresh]);
-  useQuizConnection(sessionId, { participantToken: credentials?.token }, () => void refresh(), !!credentials);
+  }, [participantToken, participantId, sessionId, applyProgress]);
+  useEffect(() => { if (participantToken) { setLoading(true); void refresh(); } }, [participantToken, refresh]);
+  useQuizConnection(sessionId, { participantToken }, () => void refresh(), !!participantToken && progress?.status !== "finished");
 
   const submitAnswer = useCallback(async (answer: string) => {
     const question = progress?.current_question;
     if (!credentials || !question || progress.result || busy.current) return;
     busy.current = true;
-    mutationVersion.current += 1;
+    const version = ++mutationVersion.current;
     pendingAnswer.current = answer;
     setSubmitting(true);
     setError(null);
+    let recover = false;
     try {
       const result = await submitQuizAnswer(sessionId, {
         participant_id: credentials.participantId, question_id: question.id, answer,
       }, { participantToken: credentials.token });
-      if (!live.current || activeSession.current !== sessionId) return;
+      if (!live.current || version !== mutationVersion.current) return;
       if (result.data) {
         pendingAnswer.current = null;
-        const saved = await getQuizProgress(sessionId, { participantToken: credentials.token });
-        if (saved.data) applyProgress(saved.data);
+        const saved = result.data.progress ?? (await getQuizProgress(sessionId, { participantToken: credentials.token })).data;
+        if (!live.current || version !== mutationVersion.current) return;
+        if (saved) applyProgress(saved);
         else setProgress((p) => p ? { ...p, result: result.data,
           participant: { ...p.participant, score: result.data!.total_score, streak: result.data!.streak } } : p);
       } else {
+        recover = true;
         setError(result.error || "Жауап сақталмады. Қайта жіберіңіз.");
       }
     } finally {
-      if (activeSession.current === sessionId) {
+      if (activeSession.current === sessionId && version === mutationVersion.current) {
         busy.current = false;
-        if (live.current) { setSubmitting(false); void refresh(); }
+        if (live.current) {
+          setSubmitting(false);
+          if (recover) void refresh();
+        }
       }
     }
   }, [credentials, progress, sessionId, refresh, applyProgress]);
@@ -114,17 +131,16 @@ export function useQuizPlayer(sessionId: number) {
   const advance = useCallback(async () => {
     if (!credentials || !progress?.result || busy.current) return false;
     busy.current = true;
-    mutationVersion.current += 1;
+    const version = ++mutationVersion.current;
     setSubmitting(true);
     const result = await activateQuizQuestion(sessionId, { participantToken: credentials.token }, true, progress.current_question?.id);
+    if (!live.current || version !== mutationVersion.current) return false;
     busy.current = false;
-    if (!live.current) return false;
     setSubmitting(false);
     if (result.data) {
       applyProgress(result.data);
       setError(null);
       timeoutAttempt.current = null;
-      void refresh();
       return true;
     }
     setError(result.error || "Келесі сұрақ жүктелмеді");
@@ -172,11 +188,10 @@ export function useQuizPlayer(sessionId: number) {
       participantToken: credentials.token,
     });
     if (res.data) {
-      void refresh();
       return true;
     }
     return false;
-  }, [credentials, sessionId, refresh]);
+  }, [credentials, sessionId]);
 
   return { credentials, progress, sessionData, loading, submitting, error, rank, timeLeft,
     submitAnswer, advance, refresh, updateAvatar, retryAnswer: () => void submitAnswer(pendingAnswer.current ?? "__timeout__") };

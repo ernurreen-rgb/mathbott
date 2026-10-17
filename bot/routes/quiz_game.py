@@ -90,6 +90,8 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return session, participant
 
     async def broadcast_scores(session_id, db, event='answer_submitted'):
+        if not quiz_manager.sessions.get(session_id):
+            return  # Polling deployments have no WebSocket audience to build a leaderboard for.
         await quiz_manager.broadcast(session_id, {'type': event, 'session_id': session_id,
             'leaderboard': await db.quizzes.get_session_leaderboard(session_id)})
 

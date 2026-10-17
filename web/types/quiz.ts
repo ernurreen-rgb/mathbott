@@ -114,4 +114,15 @@ export interface QuizPlayerProgress {
   deadline_at: number | null;
   server_now: number;
   result: QuizAnswerResult | null;
+  // Optional while an older backend is still serving during a rolling deployment.
+  session?: QuizPlayerSession;
+  rank?: number | null;
+}
+
+export type QuizPlayerSession = Pick<QuizSession, "id" | "status" | "pin_code" | "quiz_title" | "host_nickname"> & {
+  participants?: QuizParticipant[];
+};
+
+export interface QuizAnswerResponse extends QuizAnswerResult {
+  progress?: QuizPlayerProgress;
 }

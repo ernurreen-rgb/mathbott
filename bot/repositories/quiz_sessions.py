@@ -87,9 +87,10 @@ class QuizSessionsMixin:
         return await self.get_session_by_id(session_id)
 
     DEFAULT_AVATARS = (
-        '#8b5cf6:fox', '#3b82f6:robot', '#ec4899:cat', '#f97316:lion',
-        '#10b981:owl', '#06b6d4:astro', '#f59e0b:dragon', '#f43f5e:panda',
-        '#6366f1:wolf', '#a855f7:unicorn', '#14b8a6:alien', '#e11d48:wizard',
+        '#f3f4f6:barys', '#f3f4f6:fox', '#f3f4f6:wolf', '#f3f4f6:eagle',
+        '#f3f4f6:panda', '#f3f4f6:owl', '#f3f4f6:tiger', '#f3f4f6:lion',
+        '#f3f4f6:raccoon', '#f3f4f6:bear', '#f3f4f6:cat', '#f3f4f6:penguin',
+        '#f3f4f6:rabbit', '#f3f4f6:koala', '#f3f4f6:pug', '#f3f4f6:dragon',
     )
 
     async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None):
@@ -159,9 +160,13 @@ class QuizSessionsMixin:
 
     async def list_participants(self, session_id: int):
         async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute('SELECT * FROM quiz_participants WHERE session_id = ? ORDER BY score DESC, correct_count DESC, id', (session_id,)) as cursor:
-                return [public_participant(dict(row)) for row in await cursor.fetchall()]
+            return await self._public_participants(db, session_id)
+
+    @staticmethod
+    async def _public_participants(db, session_id):
+        db.row_factory = db_driver.Row
+        async with db.execute('SELECT * FROM quiz_participants WHERE session_id = ? ORDER BY score DESC, correct_count DESC, id', (session_id,)) as cursor:
+            return [public_participant(dict(row)) for row in await cursor.fetchall()]
 
     async def get_session_questions(self, session_id):
         async with self._connection() as db:
@@ -173,19 +178,38 @@ class QuizSessionsMixin:
                                    (session_id, participant_id, question_id))
 
     async def _progress(self, db, session_id, participant, now):
-        session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
-        questions = await self._snapshot_questions(db, session_id)
+        session = await self._row(db, '''SELECT s.id, s.status, s.pin_code,
+            q.title AS quiz_title, u.nickname AS host_nickname,
+            (SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = s.id) AS question_count
+            FROM quiz_sessions s JOIN quizzes q ON q.id = s.quiz_id
+            JOIN users u ON u.id = s.host_id WHERE s.id = ?''', (session_id,))
         index = participant['current_question_index']
-        question = questions[index] if index < len(questions) else None
+        # Polls only need one immutable snapshot, regardless of the quiz length.
+        row = await self._row(db, 'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND position = ?',
+                              (session_id, index))
+        question = json.loads(row['snapshot_json']) if row else None
         answer = None
         if question:
             answer = await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
                                      (session_id, participant['id'], question['id']))
         started_at = participant['question_started_at']
         visible = question if started_at is not None or answer else None
+        question_count = session.pop('question_count')
+        if session['status'] == 'lobby':
+            session['participants'] = await self._public_participants(db, session_id)
+        rank = None
+        if participant['is_finished'] or session['status'] == 'finished':
+            # Match the host's leaderboard ordering without returning the entire class.
+            ranked = await self._row(db, '''SELECT COUNT(*) + 1 AS rank FROM quiz_participants
+                WHERE session_id = ? AND (score > ? OR (score = ? AND correct_count > ?)
+                    OR (score = ? AND correct_count = ? AND id < ?))''',
+                (session_id, participant['score'], participant['score'], participant['correct_count'],
+                 participant['score'], participant['correct_count'], participant['id']))
+            rank = ranked['rank']
         return {
             'status': session['status'], 'participant': public_participant(participant),
-            'question_count': len(questions), 'current_question_index': index,
+            'session': session, 'rank': rank,
+            'question_count': question_count, 'current_question_index': index,
             'current_question': public_question(visible) if visible else None,
             'deadline_at': started_at + question['time_limit_seconds'] if started_at is not None and question else None,
             'server_now': now, 'result': answer_result(answer, participant, question) if answer else None,
@@ -243,7 +267,8 @@ class QuizSessionsMixin:
             existing = await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
                                       (session_id, participant_id, question_id))
             if existing:
-                return {**answer_result(existing, participant, question), 'reused': True}
+                return {**answer_result(existing, participant, question), 'reused': True,
+                        'progress': await self._progress(db, session_id, participant, time.time())}
             session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
             if session['status'] != 'in_progress':
                 raise QuizError('conflict', 'Game session is not active')
@@ -263,7 +288,8 @@ class QuizSessionsMixin:
                 last_active_at = CURRENT_TIMESTAMP WHERE session_id = ? AND id = ?''',
                 (points, participant['streak'] + 1 if is_correct else 0, int(is_correct), session_id, participant_id))
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
-            return {**answer_result({'is_correct': is_correct, 'points_awarded': points}, participant, question), 'reused': False}
+            return {**answer_result({'is_correct': is_correct, 'points_awarded': points}, participant, question),
+                    'reused': False, 'progress': await self._progress(db, session_id, participant, time.time())}
 
     async def set_participant_finished(self, session_id, participant_id, participant_token):
         async with self._write_transaction() as db:

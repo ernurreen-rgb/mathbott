@@ -124,6 +124,34 @@ remain available for content rollback.
   use Vercel observability or a shared monitoring service; the daily maintenance
   invocation does not replace a continuous fleet-wide monitor.
 
+## Quiz request budget
+
+Players receive session details, their current question and their score from
+one `/progress` request every four seconds while the tab is visible. The
+class roster is included only in the lobby. During play the API reads just
+the current question snapshot instead of loading every frozen question.
+Completed players receive their rank as a number and keep refreshing until
+the host finishes, so later answers can still change their place.
+
+Answer responses include the persisted progress from the same transaction.
+Successful answer and next-question actions need no follow-up reads. Failed
+answers can still be reconciled or retried without awarding points twice.
+The browser supports older API responses during deployment by falling back
+to the previous read endpoints.
+
+Quiz polling and WebSocket connections pause in hidden tabs and recover
+immediately when the tab becomes visible. Player polling stops on the final
+game status; host polling stops once the final report has loaded. Polling
+deployments skip leaderboard queries for broadcasts with no WebSocket audience.
+
+For 200 visible player tabs over ten minutes, the periodic quiz state reads
+decrease from approximately 60,000 to 30,000 API requests. With the current
+Next.js proxy this corresponds to about 120,000 versus 60,000 Vercel function
+invocations. These are arithmetic estimates, not load-test results or a
+capacity guarantee. Joining, activating questions, answers, host updates,
+presence and retries are additional traffic. These changes require no schema
+migration; deploy the API before the frontend.
+
 ## Verification and deployment
 
 ```powershell

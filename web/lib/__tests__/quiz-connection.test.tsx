@@ -1,9 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { useQuizConnection } from "../use-quiz-connection";
 import { getQuizWsToken } from "../api/quizzes";
+import { resolveWebSocketBase } from "../websocket-url";
 
 jest.mock("../api/quizzes", () => ({ getQuizWsToken: jest.fn() }));
-jest.mock("../websocket-url", () => ({ resolveWebSocketBase: () => "ws://localhost:8000" }));
+jest.mock("../websocket-url", () => ({ resolveWebSocketBase: jest.fn() }));
 const sockets: FakeSocket[] = [];
 class FakeSocket {
   static OPEN = 1;
@@ -16,11 +17,22 @@ class FakeSocket {
   constructor(public url: string) { sockets.push(this); }
 }
 
-it("reconnects with a fresh ticket and refreshes state after lost events", async () => {
+const originalSocket = global.WebSocket;
+beforeEach(() => {
   jest.useFakeTimers();
-  const original = global.WebSocket;
+  jest.clearAllMocks();
+  sockets.length = 0;
   global.WebSocket = FakeSocket as unknown as typeof WebSocket;
+  (resolveWebSocketBase as jest.Mock).mockReturnValue("ws://localhost:8000");
   (getQuizWsToken as jest.Mock).mockResolvedValue({ data: { token: "ticket" }, error: null });
+});
+afterEach(() => {
+  global.WebSocket = originalSocket;
+  jest.restoreAllMocks();
+  jest.useRealTimers();
+});
+
+it("reconnects with a fresh ticket and refreshes state after lost events", async () => {
   const refresh = jest.fn();
   const view = renderHook(() => useQuizConnection(1, { participantToken: "secret" }, refresh));
   await act(async () => {});
@@ -39,6 +51,54 @@ it("reconnects with a fresh ticket and refreshes state after lost events", async
   const connectionCount = sockets.length;
   await act(async () => { jest.advanceTimersByTime(10000); });
   expect(sockets).toHaveLength(connectionCount);
-  global.WebSocket = original;
-  jest.useRealTimers();
+});
+
+it("pauses polling in hidden tabs, resumes immediately and stops when disabled", async () => {
+  (resolveWebSocketBase as jest.Mock).mockReturnValue(null);
+  const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  const refresh = jest.fn();
+  const view = renderHook(({ enabled }) => useQuizConnection(1, { participantToken: "secret" }, refresh, enabled),
+    { initialProps: { enabled: true } });
+  act(() => { jest.advanceTimersByTime(4000); });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  act(() => {
+    visibility.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    jest.advanceTimersByTime(60000);
+  });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  act(() => {
+    visibility.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  expect(refresh).toHaveBeenCalledTimes(2);
+  view.rerender({ enabled: false });
+  act(() => { jest.advanceTimersByTime(60000); document.dispatchEvent(new Event("visibilitychange")); });
+  expect(refresh).toHaveBeenCalledTimes(2);
+  expect(getQuizWsToken).not.toHaveBeenCalled();
+  view.unmount();
+});
+
+it("closes hidden sockets and gets a new ticket only when the tab becomes visible", async () => {
+  const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  const refresh = jest.fn();
+  const view = renderHook(() => useQuizConnection(1, { participantToken: "secret" }, refresh));
+  await act(async () => {});
+  act(() => {
+    visibility.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    jest.advanceTimersByTime(60000);
+  });
+  expect(sockets[0].close).toHaveBeenCalledTimes(1);
+  expect(sockets[0].send).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
+  expect(getQuizWsToken).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    visibility.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  expect(getQuizWsToken).toHaveBeenCalledTimes(2);
+  expect(sockets).toHaveLength(2);
+  expect(refresh).toHaveBeenCalledTimes(1);
+  view.unmount();
 });

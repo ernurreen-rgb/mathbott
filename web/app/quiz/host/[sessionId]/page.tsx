@@ -59,7 +59,8 @@ export default function HostQuizPage({ params }: PageProps) {
     setLoading(false);
   }, [sessionId, email]);
   useEffect(() => { void refreshSession(); }, [refreshSession]);
-  useQuizConnection(sessionId, { email }, () => void refreshSession(), !!email);
+  useQuizConnection(sessionId, { email }, () => void refreshSession(),
+    !!email && !(quizSession?.status === "finished" && stats));
 
   const handleStartGame = async () => {
     if (participants.length === 0) {

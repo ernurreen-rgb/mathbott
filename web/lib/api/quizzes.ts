@@ -4,7 +4,7 @@ import {
   QuizQuestion,
   QuizSession,
   QuizParticipant,
-  QuizAnswerResult,
+  QuizAnswerResponse,
   QuizSessionStats,
   QuizAuth,
   QuizPlayerProgress,
@@ -219,8 +219,8 @@ export async function submitQuizAnswer(
     time_taken_seconds?: number;
   },
   auth?: QuizAuth
-): Promise<FetchResult<QuizAnswerResult>> {
-  return fetchWithErrorHandling<QuizAnswerResult>(
+): Promise<FetchResult<QuizAnswerResponse>> {
+  return fetchWithErrorHandling<QuizAnswerResponse>(
     apiPath(`quiz-sessions/${sessionId}/answers`),
     {
       method: "POST",
