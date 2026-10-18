@@ -151,10 +151,6 @@ export default function ModulesPage() {
                         )}
                         {module.progress && (
                           <div className="mt-4">
-                            <div className="flex justify-between text-sm text-gray-600 mb-1">
-                              <span>Ілгерілеу</span>
-                              <span>{Math.round(module.progress.progress * 100)}%</span>
-                            </div>
                             <div className="w-full bg-gray-200 rounded-full h-2">
                               <div
                                 className={`h-2 rounded-full transition-all ${getProgressColor(module.progress)}`}

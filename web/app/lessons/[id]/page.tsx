@@ -547,7 +547,6 @@ export default function LessonPage() {
 
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <div className="text-sm text-gray-600">Сабақ {lesson.lesson_number ?? lesson.id}</div>
                 <h1 className="text-2xl font-bold text-gray-900">{lesson.title || "Атау жоқ"}</h1>
               </div>
               <div className="text-right">
@@ -600,7 +599,6 @@ export default function LessonPage() {
             <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div>
-                  <div className="text-sm text-gray-600">Кіші сабақ {selectedMini.mini_index}</div>
                   <div className="text-xl font-bold text-gray-900">{selectedMini.title}</div>
                 </div>
                 {selectedMini.progress && (

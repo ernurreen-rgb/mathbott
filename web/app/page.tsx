@@ -1,60 +1,24 @@
 "use client";
 
 import { useSession, signIn } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { apiPath } from "@/lib/api";
-import OnboardingSurvey from "@/components/OnboardingSurvey";
 
 export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
-  // Check onboarding status for authenticated users
   useEffect(() => {
-    const checkOnboarding = async () => {
-      if (status === "authenticated" && session?.user?.email) {
-        try {
-          const response = await fetch(`${apiPath("user/onboarding/status")}?email=${encodeURIComponent(session.user.email)}`);
-          if (response.ok) {
-            const data = await response.json();
-            setOnboardingCompleted(data.completed);
-            if (data.completed) {
-              router.push("/trial-test");
-            }
-          }
-        } catch (error) {
-          console.error("Error checking onboarding:", error);
-        } finally {
-          setCheckingOnboarding(false);
-        }
-      } else if (status === "unauthenticated") {
-        setCheckingOnboarding(false);
-      }
-    };
+    if (status === "authenticated") {
+      router.push("/trial-test");
+    }
+  }, [status, router]);
 
-    checkOnboarding();
-  }, [status, session?.user?.email, router]);
-
-  if (status === "loading" || checkingOnboarding) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-xl">Жүктелуде...</div>
       </div>
-    );
-  }
-
-  // Show onboarding if user is authenticated but hasn't completed onboarding
-  if (status === "authenticated" && !onboardingCompleted) {
-    return (
-      <OnboardingSurvey
-        onComplete={() => {
-          setOnboardingCompleted(true);
-          router.push("/trial-test");
-        }}
-      />
     );
   }
 
