@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import TrialTestPage from "../page";
 import TrialTestResultsPage from "../results/page";
 import { getTrialTestDetails, getTrialTestDraft, getTrialTestResults, submitTrialTest } from "@/lib/api";
@@ -165,4 +165,58 @@ it("shows the newest attempt when submissions share a timestamp and lets student
   mockSearch = "attempt=101";
   view.rerender(<TrialTestResultsPage />);
   expect(screen.getByTestId("review-answer")).toHaveTextContent("3");
+});
+
+const twoTaskDetails: TrialTestDetails = {
+  ...details,
+  tasks: [...details.tasks, { id: 8, text: "3 + 3", question_type: "input", sort_order: 1 }],
+};
+
+it("keeps a single set of navigation actions and preserves answers between tasks", async () => {
+  (getTrialTestDetails as jest.Mock).mockResolvedValue({ data: twoTaskDetails, error: null });
+  await openTest();
+  expect(screen.getAllByRole("button", { name: /Алдыңғы/ })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: /Келесі/ })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Тестті аяқтау" })).toHaveLength(1);
+  expect(screen.getByRole("button", { name: /Алдыңғы/ })).toBeDisabled();
+  expect(within(screen.getByRole("article", { name: "Тапсырма 1" })).getByText("2 + 2")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Жауап"), { target: { value: "4" } });
+  expect(screen.getByRole("progressbar", { name: "Тест барысы" })).toHaveAttribute("aria-valuenow", "50");
+  fireEvent.click(screen.getByRole("button", { name: /Келесі/ }));
+  expect(screen.getByRole("article", { name: "Тапсырма 2" })).toHaveTextContent("3 + 3");
+  expect(screen.getByRole("button", { name: /Келесі/ })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /Алдыңғы/ }));
+  expect(screen.getByLabelText("Жауап")).toHaveValue("4");
+});
+
+it("opens task numbers on demand, indicates answered tasks and closes after choosing one", async () => {
+  (getTrialTestDetails as jest.Mock).mockResolvedValue({ data: twoTaskDetails, error: null });
+  await openTest();
+  expect(screen.queryByRole("navigation", { name: "Тапсырма нөмірлері" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Жауап"), { target: { value: "4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Сұрақтар" }));
+  const navigator = screen.getByRole("navigation", { name: "Тапсырма нөмірлері" });
+  expect(within(navigator).getByRole("button", { name: "Тапсырма 1, жауап берілді" })).toHaveAttribute("aria-current", "step");
+  fireEvent.click(within(navigator).getByRole("button", { name: "Тапсырма 2" }));
+  expect(screen.getByRole("article", { name: "Тапсырма 2" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Сұрақтар" })).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("navigation", { name: "Тапсырма нөмірлері" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Сұрақтар" }));
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.getByRole("button", { name: "Сұрақтар" })).toHaveAttribute("aria-expanded", "false");
+});
+
+it("keeps report and back actions available while finishing jumps to the first unanswered task", async () => {
+  (getTrialTestDetails as jest.Mock).mockResolvedValue({ data: twoTaskDetails, error: null });
+  await openTest();
+  fireEvent.change(screen.getByLabelText("Жауап"), { target: { value: "4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Тестті аяқтау" }));
+  expect(screen.getByRole("article", { name: "Тапсырма 2" })).toBeInTheDocument();
+  expect(submitTrialTest).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Шағым" }));
+  expect(screen.getByRole("heading", { name: "Шағым жіберу" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Бас тарту" }));
+  expect(screen.queryByRole("heading", { name: "Шағым жіберу" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Артқа" }));
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
 });

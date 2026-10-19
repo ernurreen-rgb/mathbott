@@ -1,6 +1,7 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -15,10 +16,11 @@ import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerF
 import { inviteFriendToCoopTest, getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
+import styles from "./TrialTestWorkspace.module.css";
 
 const QRCode = dynamic(() => import("react-qr-code"), {
   ssr: false,
@@ -49,6 +51,26 @@ export default function TrialTestPage() {
   const [reportDialog, setReportDialog] = useState<{ taskId: number; show: boolean }>({ taskId: 0, show: false });
   const [reportMessage, setReportMessage] = useState("");
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [taskNavigatorOpen, setTaskNavigatorOpen] = useState(false);
+  const taskNavigatorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!taskNavigatorOpen) return;
+    const handleOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !taskNavigatorRef.current?.contains(event.target)) {
+        setTaskNavigatorOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTaskNavigatorOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [taskNavigatorOpen]);
 
   const email = session?.user?.email || null;
 
@@ -593,35 +615,75 @@ export default function TrialTestPage() {
   const allTasksAnswered = answeredTasksCount === test.tasks.length;
 
   return (
-    <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
-      <div className="absolute inset-0 bg-black/5"></div>
+    <div className={styles.page}>
       <DesktopNav />
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <div className="w-full max-w-4xl">
-          <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <button
-              onClick={() => router.back()}
-              className="text-gray-700 hover:text-gray-900 mb-4"
-            >
-              <Icon name="arrowLeft" /> Артқа
-            </button>
-
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{test.title}</h1>
+      <main className={`md:ml-64 ${styles.main}`}>
+        <div className={styles.workspace}>
+          <header className={styles.toolbar}>
+            <div className={styles.testInfo}>
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className={styles.backButton}
+                aria-label="Артқа"
+                title="Артқа"
+              >
+                <Icon name="arrowLeft" />
+              </button>
+              <div className={styles.testTitle}>
+                <h1 title={test.title}>{test.title}</h1>
                 {test.description && (
-                  <p className="text-gray-600 mt-1">{test.description}</p>
+                  <p title={test.description}>{test.description}</p>
                 )}
               </div>
-              <div className="text-right">
-                <div className="text-sm text-gray-700">Тапсырма</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {currentTaskIndex + 1} / {test.tasks.length}
-                </div>
-              </div>
             </div>
-
-            <div className={`flex items-center ${COOP_TEST_UI_ENABLED ? "justify-between" : "justify-end"} mb-4`}>
+            <div className={styles.toolbarActions}>
+              <span className={styles.taskCounter} aria-live="polite">
+                <span>Тапсырма</span>
+                <strong>
+                  {currentTaskIndex + 1} / {test.tasks.length}
+                </strong>
+              </span>
+              <div ref={taskNavigatorRef} className={styles.navigator}>
+                <button
+                  type="button"
+                  className={styles.navigatorToggle}
+                  onClick={() => setTaskNavigatorOpen((open) => !open)}
+                  aria-expanded={taskNavigatorOpen}
+                  aria-controls="trial-task-navigator"
+                >
+                  <Icon name="layers" /> Сұрақтар
+                </button>
+                {taskNavigatorOpen && (
+                  <nav id="trial-task-navigator" className={styles.navigatorPanel} aria-label="Тапсырма нөмірлері">
+                    <div className={styles.navigatorHeading}>
+                      <span>Тапсырмалар</span>
+                      <span>{answeredTasksCount} / {test.tasks.length} орындалды</span>
+                    </div>
+                    <div className={styles.taskNumbers}>
+                      {test.tasks.map((task, idx) => {
+                        const isAnswered = isTrialTaskAnswerComplete(task, answers[task.id]);
+                        const isCurrent = idx === currentTaskIndex;
+                        return (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => {
+                              setCurrentTaskIndexAndRef(idx);
+                              setTaskNavigatorOpen(false);
+                            }}
+                            className={`${styles.taskNumber} ${isCurrent ? styles.currentTaskNumber : isAnswered ? styles.answeredTaskNumber : ""}`}
+                            aria-current={isCurrent ? "step" : undefined}
+                            aria-label={`Тапсырма ${idx + 1}${isAnswered ? ", жауап берілді" : ""}`}
+                          >
+                            {idx + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </nav>
+                )}
+              </div>
               {COOP_TEST_UI_ENABLED && (
                 <button
                   onClick={handleStartCoop}
@@ -632,13 +694,26 @@ export default function TrialTestPage() {
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleFinishTest}
                 disabled={submitting}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
+                className={styles.finishButton}
               >
                 {submitting ? "Жіберілуде..." : "Тестті аяқтау"}
               </button>
             </div>
+            <div
+              className={styles.progress}
+              role="progressbar"
+              aria-label="Тест барысы"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={answerProgress}
+              aria-valuetext={`${answeredTasksCount} / ${test.tasks.length} орындалды`}
+            >
+              <div style={{ width: `${answerProgress}%` }} />
+            </div>
+          </header>
 
             {/* Friends Modal */}
             {showFriendsModal && (
@@ -750,124 +825,64 @@ export default function TrialTestPage() {
             )}
 
 
-            {/* Progress bar */}
-            <div className="mt-4 mb-6">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-purple-600 h-2 rounded-full transition-all"
-                  style={{ width: `${answerProgress}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Task navigation */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-              {test.tasks.map((task, idx) => {
-                const isAnswered = isTrialTaskAnswerComplete(task, answers[task.id]);
-                const isCurrent = idx === currentTaskIndex;
-                return (
-                  <button
-                    key={task.id}
-                    onClick={() => setCurrentTaskIndexAndRef(idx)}
-                    className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${
-                      isCurrent
-                        ? "bg-purple-600 border-purple-700 text-white"
-                        : isAnswered
-                        ? "bg-green-100 border-green-300 text-green-700"
-                        : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400"
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              {currentTaskIndex > 0 && (
-                <button
-                  onClick={() => setCurrentTaskIndexAndRef(currentTaskIndex - 1)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
-                >
-                  &lt; Алдыңғы сұрақ
-                </button>
-              )}
-              {currentTaskIndex < test.tasks.length - 1 && (
-                <div className="flex items-center gap-3 ml-auto">
-                  <button
-                    onClick={() => setCurrentTaskIndexAndRef(currentTaskIndex + 1)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
-                  >
-                    Келесі сұрақ &gt;
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Current task */}
           {currentTask && (
-            <div
+            <article
               key={`task-${currentTask.id}-${currentTaskIndex}`}
-              className="glass rounded-3xl shadow-2xl p-6 border border-white/30"
+              className={styles.taskCard}
+              aria-label={`Тапсырма ${currentTaskIndex + 1}`}
             >
-              <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
-                <div>
-                <div className="mb-4">
-                  <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))}`}>
-                    {currentTask.text ? (
-                      <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
-                    ) : (
-                      "Мәтіні жоқ есеп"
-                    )}
-                  </div>
+              <div className={styles.taskBody} data-has-image={Boolean(currentTask.image_filename)}>
+                <div className={styles.statement} data-text-scale={normalizeTaskTextScale(currentTask.text_scale)}>
+                  {currentTask.text ? (
+                    <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
+                  ) : (
+                    "Мәтіні жоқ есеп"
+                  )}
                 </div>
 
                 {currentTask.image_filename && (
-                  <div className="mb-4">
+                  <div>
                     <Image
                       src={apiPath(`images/${currentTask.image_filename}`)}
                       alt="Task"
                       width={1280}
                       height={720}
                       unoptimized
-                      className="max-h-64 w-auto max-w-full rounded-lg border border-gray-200"
+                      className={styles.taskImage}
                     />
                   </div>
                 )}
 
-                <div key={`task-controls-${currentTask.id}`}>{renderTaskControls(currentTask)}</div>
-                </div>
+                <div key={`task-controls-${currentTask.id}`} className={styles.answers}>{renderTaskControls(currentTask)}</div>
               </div>
 
-              {/* Navigation buttons */}
-              <div className="flex justify-between mt-6">
+              <nav className={styles.taskFooter} aria-label="Сұрақтар арасында өту">
                 <button
+                  type="button"
                   onClick={() => setCurrentTaskIndexAndRef(Math.max(0, currentTaskIndex - 1))}
                   disabled={currentTaskIndex === 0}
-                  className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:text-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                  className={styles.previousButton}
                 >
                   <Icon name="arrowLeft" /> Алдыңғы
                 </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleReportClick(currentTask.id)}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg"
-                  >
-                    Шағым
-                  </button>
-                  {currentTaskIndex < test.tasks.length - 1 ? (
-                    <button
-                      onClick={() => setCurrentTaskIndexAndRef(currentTaskIndex + 1)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
-                    >
-                      Келесі <Icon name="arrowRight" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => handleReportClick(currentTask.id)}
+                  className={styles.reportButton}
+                >
+                  <Icon name="report" /> Шағым
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentTaskIndexAndRef(currentTaskIndex + 1)}
+                  disabled={currentTaskIndex >= test.tasks.length - 1}
+                  className={styles.nextButton}
+                >
+                  Келесі <Icon name="arrowRight" />
+                </button>
+              </nav>
+            </article>
           )}
         </div>
       </main>
