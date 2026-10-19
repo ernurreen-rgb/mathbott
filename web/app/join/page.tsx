@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -109,7 +111,7 @@ function JoinForm() {
             className="ring-4 ring-purple-100 shadow-xl"
           />
           <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-extrabold shadow">
-            {parsedAvatar.character.emoji} {parsedAvatar.character.name}
+            {parsedAvatar.character.name}
           </span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-2">
@@ -173,7 +175,7 @@ function JoinForm() {
               Қосылуда...
             </span>
           ) : (
-            "Ойынға кіру 🚀"
+            <>Ойынға кіру <Icon name="rocket" /></>
           )}
         </button>
       </form>
@@ -183,7 +185,7 @@ function JoinForm() {
           href="/quizzes"
           className="text-xs font-bold text-gray-500 hover:text-purple-600 transition-colors"
         >
-          ← Квиздер каталогына оралу
+          <Icon name="arrowLeft" /> Квиздер каталогына оралу
         </Link>
       </div>
     </div>

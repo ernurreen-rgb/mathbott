@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import { LessonTask } from "@/types";
 
 type Props = {
@@ -81,7 +83,7 @@ export default function TaskImageUpload({ isEditing, tempImagePreview, taskData,
             ) : null}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            💡 Суретті Ctrl+V арқылы да қоюға болады
+            <Icon name="bulb" /> Суретті Ctrl+V арқылы да қоюға болады
           </div>
         </div>
       )}

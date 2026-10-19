@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -448,7 +450,7 @@ export default function TrialTestCoopPage() {
               onClick={() => router.back()}
               className="text-gray-700 hover:text-gray-900 mb-4"
             >
-              ← Артқа
+              <Icon name="arrowLeft" /> Артқа
             </button>
 
             <div className="flex items-start justify-between gap-4 mb-4">
@@ -563,7 +565,7 @@ export default function TrialTestCoopPage() {
                   disabled={currentTaskIndex === 0}
                   className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:text-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
                 >
-                  ← Алдыңғы
+                  <Icon name="arrowLeft" /> Алдыңғы
                 </button>
                 <div className="flex gap-2">
                   <button
@@ -578,7 +580,7 @@ export default function TrialTestCoopPage() {
                       onClick={() => setCurrentTaskIndex(currentTaskIndex + 1)}
                       className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
                     >
-                      Келесі →
+                      Келесі <Icon name="arrowRight" />
                     </button>
                   ) : (
                     <button

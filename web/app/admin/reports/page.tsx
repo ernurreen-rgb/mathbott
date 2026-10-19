@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useSession } from "next-auth/react";
 import { Suspense, useState, useEffect, useCallback } from "react";
@@ -313,9 +315,9 @@ function ReportsPageContent() {
                       <strong className="text-gray-900">Модуль/Бөлім:</strong>
                       <span className="break-words">
                         {report.module_name || "Белгісіз"}
-                        {report.section_name && ` → ${report.section_name}`}
-                        {report.lesson_title && ` → ${report.lesson_title}`}
-                        {report.mini_lesson_title && ` → ${report.mini_lesson_title}`}
+                        {report.section_name && <><Icon name="chevronRight" /> {report.section_name}</>}
+                        {report.lesson_title && <><Icon name="chevronRight" /> {report.lesson_title}</>}
+                        {report.mini_lesson_title && <><Icon name="chevronRight" /> {report.mini_lesson_title}</>}
                       </span>
                     </div>
                   )}
@@ -381,7 +383,7 @@ function ReportsPageContent() {
                     onClick={() => openTaskEditor(report)}
                     className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm flex-1 sm:flex-none min-w-0"
                   >
-                    ✏️ Өзгерту
+                    <Icon name="edit" /> Өзгерту
                   </button>
                 )}
                 <button
@@ -389,7 +391,7 @@ function ReportsPageContent() {
                   disabled={deletingReport === reportKey(report)}
                   className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50 flex-1 sm:flex-none min-w-0"
                 >
-                  {deletingReport === reportKey(report) ? "..." : "🗑️ Жою"}
+                  {deletingReport === reportKey(report) ? "..." : <><Icon name="trash" /> Жою</>}
                 </button>
               </div>
             </div>
@@ -534,10 +536,10 @@ function ReportsPageContent() {
                   <div className="text-sm text-blue-800">
                     <strong>Орналасқан жері:</strong>
                     <div className="mt-1">
-                      {editingTask.task.module_name && <div>📚 Модуль: {editingTask.task.module_name}</div>}
-                      {editingTask.task.section_name && <div>📖 Бөлім: {editingTask.task.section_name}</div>}
-                      {editingTask.task.lesson_title && <div>📋 Сабақ: {editingTask.task.lesson_title}</div>}
-                      {editingTask.task.mini_lesson_title && <div>📝 Мини-сабақ: {editingTask.task.mini_lesson_title}</div>}
+                      {editingTask.task.module_name && <div><Icon name="book" /> Модуль: {editingTask.task.module_name}</div>}
+                      {editingTask.task.section_name && <div><Icon name="book" /> Бөлім: {editingTask.task.section_name}</div>}
+                      {editingTask.task.lesson_title && <div><Icon name="test" /> Сабақ: {editingTask.task.lesson_title}</div>}
+                      {editingTask.task.mini_lesson_title && <div><Icon name="edit" /> Мини-сабақ: {editingTask.task.mini_lesson_title}</div>}
                     </div>
                   </div>
                 </div>

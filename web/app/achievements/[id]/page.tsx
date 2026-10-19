@@ -1,4 +1,6 @@
 "use client";
+import Icon, { ContentIcon } from "@/components/ui/Icon";
+
 
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
@@ -97,9 +99,7 @@ export default function PublicAchievementsPage() {
           <div className="w-full max-w-5xl">
             <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center">
               <div className="text-gray-400 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
               <div className="text-gray-600 text-lg mb-4">
                 {error || "Пайдаланушы табылмады"}
@@ -139,7 +139,7 @@ export default function PublicAchievementsPage() {
                 href={`/profile/${userData.id}`}
                 className="text-purple-600 hover:text-pink-600 font-bold text-sm flex items-center gap-1 transition-colors px-3 py-1 rounded-lg hover:bg-white/50"
               >
-                ← Профильге оралу
+                <Icon name="arrowLeft" /> Профильге оралу
               </Link>
             )}
           </div>
@@ -164,7 +164,7 @@ export default function PublicAchievementsPage() {
                   title={achievement.description}
                 >
                   <div className={`text-4xl mb-2 ${achievement.unlocked ? "" : "opacity-50"}`}>
-                    {achievement.icon}
+                    <ContentIcon value={achievement.icon} size={40} className={achievement.unlocked ? "text-amber-600" : "text-slate-400"} />
                   </div>
                   <div className={`text-sm font-semibold text-center ${
                     achievement.unlocked ? "text-gray-800" : "text-gray-500"
@@ -183,9 +183,7 @@ export default function PublicAchievementsPage() {
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center">
             <div className="text-gray-400 mb-4">
-              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
+              <Icon name="award" className="w-16 h-16 mx-auto" />
             </div>
             <div className="text-gray-600 text-lg">Жетістіктер әлі жүктеліп тұрған жоқ</div>
           </div>

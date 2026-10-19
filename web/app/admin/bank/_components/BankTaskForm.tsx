@@ -1,4 +1,5 @@
 "use client";
+import Icon from "@/components/ui/Icon";
 import AcceptedAnswersEditor from "@/components/admin/AcceptedAnswersEditor";
 import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
@@ -170,7 +171,7 @@ export default function BankTaskForm({
               <div className="flex flex-wrap gap-2 mb-2">
                 {form.topics.map((topic) => (
                   <button key={topic} type="button" onClick={() => removeFormTopic(topic)} className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                    {topic} x
+                    {topic} <Icon name="close" />
                   </button>
                 ))}
               </div>
@@ -188,7 +189,7 @@ export default function BankTaskForm({
                   placeholder="Тақырып қосу"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
-                <button type="button" onClick={() => addFormTopic(formTopicInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3">+</button>
+                <button aria-label="Тақырып қосу" type="button" onClick={() => addFormTopic(formTopicInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3"><Icon name="plus" /></button>
               </div>
               {formTopicSuggestions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">

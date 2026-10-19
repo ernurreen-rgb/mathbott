@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
@@ -113,18 +115,14 @@ export default function QuizzesCatalogPage() {
               href="/join"
               className="flex-1 sm:flex-none text-center px-4 py-2.5 rounded-xl font-bold text-sm bg-white border border-gray-200 text-gray-800 shadow-sm hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-              </svg>
+              <Icon name="logIn" className="w-4 h-4 text-purple-600" />
               PIN-кодпен қосылу
             </Link>
             <Link
               href="/quizzes/create"
               className="flex-1 sm:flex-none text-center px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:from-purple-700 hover:to-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon name="plus" className="w-4 h-4" />
               Жаңа квиз жасау
             </Link>
           </div>
@@ -177,7 +175,7 @@ export default function QuizzesCatalogPage() {
                     : "text-gray-600 hover:text-emerald-700"
                 }`}
               >
-                <span>🌐 Ашық</span>
+                <span><Icon name="globe" /> Ашық</span>
                 <span>({publicCount})</span>
               </button>
               <button
@@ -188,7 +186,7 @@ export default function QuizzesCatalogPage() {
                     : "text-gray-600 hover:text-amber-700"
                 }`}
               >
-                <span>🔒 Жеке</span>
+                <span><Icon name="lock" /> Жеке</span>
                 <span>({privateCount})</span>
               </button>
             </div>
@@ -215,9 +213,7 @@ export default function QuizzesCatalogPage() {
         ) : quizzes.length === 0 ? (
           <div className="text-center py-16 px-4 bg-white/70 backdrop-blur-sm rounded-3xl border border-white/60 shadow-sm">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+              <Icon name="layers" className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-gray-800 mb-1">
               {activeTab === "my" ? "Сізде әлі квиздер жоқ" : "Квиздер табылмады"}
@@ -234,7 +230,7 @@ export default function QuizzesCatalogPage() {
           </div>
         ) : displayedQuizzes.length === 0 ? (
           <div className="text-center py-12 px-4 bg-white/70 backdrop-blur-sm rounded-3xl border border-white/60 shadow-sm">
-            <div className="text-3xl mb-2">{privacyFilter === "public" ? "🌐" : "🔒"}</div>
+            <div className="text-3xl mb-2">{privacyFilter === "public" ? <><Icon name="globe" /></> : <><Icon name="lock" /></>}</div>
             <h3 className="text-base font-bold text-gray-800 mb-1">
               {privacyFilter === "public" ? "Ашық квиздер табылмады" : "Жеке квиздер табылмады"}
             </h3>
@@ -259,19 +255,17 @@ export default function QuizzesCatalogPage() {
                   <div className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-2 gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <Icon name="help" className="w-3.5 h-3.5" />
                         {quiz.question_count || 0} сұрақ
                       </span>
                       {quiz.is_public ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70" title="Баршаға ашық квиз">
-                          <span>🌐</span>
+                          <span><Icon name="globe" /></span>
                           <span>Ашық</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/70" title="Тек сізге көрінетін жеке квиз">
-                          <span>🔒</span>
+                          <span><Icon name="lock" /></span>
                           <span>Жеке</span>
                         </span>
                       )}
@@ -313,9 +307,9 @@ export default function QuizzesCatalogPage() {
                         } disabled:opacity-50`}
                       >
                         {togglingId === quiz.id ? (
-                          <span className="animate-spin text-xs">⏳</span>
+                          <span className="text-xs"><Icon name="loader" className="animate-spin" /></span>
                         ) : (
-                          <span>{quiz.is_public ? "🌐" : "🔒"}</span>
+                          <span>{quiz.is_public ? <><Icon name="globe" /></> : <><Icon name="lock" /></>}</span>
                         )}
                         <span className="text-[11px] hidden sm:inline">
                           {quiz.is_public ? "Ашық" : "Жеке"}
@@ -326,9 +320,7 @@ export default function QuizzesCatalogPage() {
                         title="Өшіру"
                         className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-xl hover:bg-red-50"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        <Icon name="trash" className="w-4 h-4" />
                       </button>
                     </>
                   )}

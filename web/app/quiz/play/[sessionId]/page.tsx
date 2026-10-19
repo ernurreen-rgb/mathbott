@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
@@ -20,27 +22,27 @@ const MCQ_THEMES = [
     id: "A",
     bg: "bg-red-500 hover:bg-red-600 active:bg-red-700",
     border: "border-red-600",
-    icon: "▲",
+    icon: "triangle",
   },
   {
     id: "B",
     bg: "bg-blue-500 hover:bg-blue-600 active:bg-blue-700",
     border: "border-blue-600",
-    icon: "◆",
+    icon: "diamond",
   },
   {
     id: "C",
     bg: "bg-amber-500 hover:bg-amber-600 active:bg-amber-700",
     border: "border-amber-600",
-    icon: "●",
+    icon: "circle",
   },
   {
     id: "D",
     bg: "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700",
     border: "border-emerald-600",
-    icon: "■",
+    icon: "square",
   },
-];
+] as const;
 
 export default function PlayQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
@@ -146,13 +148,13 @@ export default function PlayQuizPage({ params }: PageProps) {
                 className="ring-4 ring-purple-100 shadow-xl animate-bounce"
               />
               <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-0.5 rounded-full bg-purple-600 text-white text-xs font-extrabold shadow-md">
-                {myParsedAvatar.character.emoji} {myParsedAvatar.character.name}
+                {myParsedAvatar.character.name}
               </span>
             </div>
 
             <h2 className="text-2xl font-black text-gray-900 mt-2 mb-1">{nickname}</h2>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 mb-4">
-              ✓ Ойынға дайынсыз
+              <Icon name="check" /> Ойынға дайынсыз
             </span>
 
             {/* Toggle Avatar Customizer */}
@@ -161,7 +163,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               onClick={() => setEditingAvatar((prev) => !prev)}
               className="mb-5 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5"
             >
-              <span>🎨</span>
+              <span><Icon name="palette" /></span>
               <span>{editingAvatar ? "Дайын (Жабу)" : "Аватарды өзгерту"}</span>
             </button>
 
@@ -179,8 +181,8 @@ export default function PlayQuizPage({ params }: PageProps) {
             )}
 
             <div className="w-full bg-purple-50/60 rounded-2xl p-4 border border-purple-100 mb-4">
-              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto mb-2 animate-spin">
-                ⌛
+              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto mb-2">
+                <Icon name="loader" className="animate-spin" />
               </div>
               <h3 className="text-sm font-bold text-gray-800 mb-1">
                 Мұғалім ойынды бастаған сәтте...
@@ -245,7 +247,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                         )}
                       </div>
                       <span className="text-[11px] font-semibold text-gray-500 block truncate">
-                        {pAvatar.character.emoji} {pAvatar.character.name}
+                        {pAvatar.character.name}
                       </span>
                     </div>
                   </div>
@@ -272,7 +274,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               size="xl"
               className="ring-4 ring-amber-300 shadow-xl"
             />
-            <span className="absolute -top-2 -right-2 text-2xl animate-bounce">🎉</span>
+            <span className="absolute -top-2 -right-2 text-2xl animate-bounce"><Icon name="sparkles" /></span>
           </div>
           <h1 className="text-3xl font-black text-gray-900 mb-1">
             Тамаша нәтиже!
@@ -286,7 +288,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                 Сіздің орныңыз
               </span>
               <div className="text-3xl font-black text-amber-700">
-                🏆 #{rank}-орын
+                <Icon name="trophy" /> #{rank}-орын
               </div>
             </div>
           )}
@@ -359,7 +361,7 @@ export default function PlayQuizPage({ params }: PageProps) {
         <div className="flex items-center gap-3">
           {streak > 1 && (
             <div className="px-2.5 py-1 rounded-full bg-orange-100 border border-orange-300 text-orange-700 font-black text-xs flex items-center gap-1 animate-pulse">
-              🔥 {streak}x
+              <Icon name="flame" /> {streak}x
             </div>
           )}
 
@@ -417,7 +419,7 @@ export default function PlayQuizPage({ params }: PageProps) {
             }`}
           >
             <div className="text-4xl mb-2">
-              {lastResult.is_correct ? "🎉" : "❌"}
+              {lastResult.is_correct ? <><Icon name="sparkles" /></> : <><Icon name="closeCircle" /></>}
             </div>
             <h3 className="text-2xl font-black mb-1">
               {lastResult.is_correct ? "Дұрыс! Өте жақсы!" : "Қате жауап"}
@@ -447,7 +449,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               disabled={submitting}
               className="mt-4 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black text-sm shadow-xl hover:scale-105 active:scale-95 transition-all"
             >
-              Келесі сұраққа өту →
+              Келесі сұраққа өту <Icon name="arrowRight" />
             </button>
           </div>
         )}
@@ -468,7 +470,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                       className={`h-24 sm:h-28 rounded-2xl p-4 text-white font-extrabold text-base shadow-lg transition-all active:scale-95 flex items-center gap-4 text-left border-b-4 ${theme.bg} ${theme.border}`}
                     >
                       <span className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-black text-sm shrink-0">
-                        {theme.icon}
+                        <Icon name={theme.icon} size={20} />
                       </span>
                       <div className="flex-1 overflow-y-auto">
                         <MathRender latex={opt.text} />
@@ -487,7 +489,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   disabled={submitting}
                   className="h-28 rounded-2xl bg-blue-600 hover:bg-blue-500 border-b-4 border-blue-800 text-white font-black text-xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
                 >
-                  <span className="text-2xl">✓</span>
+                  <span className="text-2xl"><Icon name="check" /></span>
                   <span>Шын (True)</span>
                 </button>
                 <button
@@ -495,7 +497,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   disabled={submitting}
                   className="h-28 rounded-2xl bg-amber-600 hover:bg-amber-500 border-b-4 border-amber-800 text-white font-black text-xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
                 >
-                  <span className="text-2xl">✗</span>
+                  <span className="text-2xl"><Icon name="close" /></span>
                   <span>Жалған (False)</span>
                 </button>
               </div>
@@ -525,7 +527,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                               : "border-gray-300 bg-white text-transparent"
                           }`}
                         >
-                          ✓
+                          <Icon name="check" />
                         </div>
                         <div className="flex-1">
                           <MathRender latex={opt.text} />
@@ -569,7 +571,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   disabled={submitting || !inputAnswer.trim()}
                   className="w-full py-4 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-2xl font-black text-base shadow-xl disabled:opacity-50 transition-all active:scale-95"
                 >
-                  Жауапты жіберу 🚀
+                  Жауапты жіберу <Icon name="rocket" />
                 </button>
               </div>
             )}

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import React from "react";
 
@@ -743,7 +745,7 @@ export function QuizAvatarPicker({
             Кейіпкерді таңдаңыз
           </span>
           <span className="text-xs font-semibold text-purple-700">
-            {parsed.character.emoji} {parsed.character.name}
+            {parsed.character.name}
           </span>
         </div>
         <button
@@ -751,7 +753,7 @@ export function QuizAvatarPicker({
           onClick={handleRandomize}
           className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5"
         >
-          <span>🎲</span>
+          <span><Icon name="dice" /></span>
           <span>Кездейсоқ</span>
         </button>
       </div>

@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+.qm-icon { display: inline-block; flex-shrink: 0; vertical-align: -0.18em; overflow: visible; }
+@media (prefers-reduced-motion: reduce) { .qm-icon.animate-spin { animation: none; } }
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import CreateTaskForm from "./CreateTaskForm";
 import EditTaskForm from "./EditTaskForm";
 import LessonsPanel from "./LessonsPanel";
@@ -446,7 +448,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
           <header className={styles.header}>
             <h1 className={styles.title}>{pageTitle || <><span className="sr-only">Оқу материалдары</span><span aria-hidden="true" className={`${styles.skeletonBar} ${styles.skeletonTitle}`} /></>}</h1>
             <div className={styles.actions}>
-              {parentPath && <Link href={parentPath} className={styles.textButton}>← {parentLabel}</Link>}
+              {parentPath && <Link href={parentPath} className={styles.textButton}><Icon name="arrowLeft" /> {parentLabel}</Link>}
               <button type="button" onClick={toggleTrash} className={styles.textButton}>Себет</button>
             </div>
           </header>

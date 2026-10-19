@@ -14,7 +14,7 @@ describe("AcceptedAnswersEditor", () => {
     const onChange = jest.fn();
     const { rerender } = render(<AcceptedAnswersEditor value={[]} onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Жауап" }));
+    fireEvent.click(screen.getByRole("button", { name: "Жауап" }));
     expect(onChange).toHaveBeenLastCalledWith([""]);
 
     rerender(<AcceptedAnswersEditor value={["x=1"]} onChange={onChange} />);

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
@@ -146,7 +148,7 @@ export default function TrialTestListPage() {
                 className="text-purple-600 hover:text-purple-700 font-semibold whitespace-nowrap flex items-center gap-2"
               >
                 Өту тарихы
-                <span className="text-lg">→</span>
+                <span className="text-lg"><Icon name="arrowRight" /></span>
               </Link>
             </div>
 
@@ -196,12 +198,12 @@ export default function TrialTestListPage() {
 
             {loading ? (
               <div className="text-center py-12">
-                <div className="text-4xl mb-4 animate-spin">⏳</div>
+                <div className="text-4xl mb-4"><Icon name="loader" className="animate-spin" /></div>
                 <div className="text-gray-600">Тесттер жүктелуде...</div>
               </div>
             ) : tests.length === 0 ? (
               <div className="text-center py-12 text-gray-600">
-                <div className="text-6xl mb-4">📋</div>
+                <div className="text-6xl mb-4"><Icon name="test" /></div>
                 <div>Сынақ тесттері әлі құрылмаған</div>
               </div>
             ) : (
@@ -216,7 +218,7 @@ export default function TrialTestListPage() {
                       <h2 className="text-2xl font-bold text-gray-900 flex-1">
                         {test.title}
                       </h2>
-                      <span className="text-3xl">📝</span>
+                      <span className="text-3xl"><Icon name="edit" /></span>
                     </div>
                     {test.description && (
                       <p className="text-gray-600 mb-4 line-clamp-2">
@@ -228,7 +230,7 @@ export default function TrialTestListPage() {
                         {test.task_count || 0} тапсырма
                       </span>
                       <span className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${draftTestIds.has(test.id) ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}>
-                        {draftTestIds.has(test.id) ? "Жалғастыру →" : "Бастау →"}
+                        {draftTestIds.has(test.id) ? <>Жалғастыру <Icon name="arrowRight" /></> : <>Бастау <Icon name="arrowRight" /></>}
                       </span>
                     </div>
                   </Link>

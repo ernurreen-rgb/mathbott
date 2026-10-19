@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
@@ -63,7 +65,7 @@ export default function TrialTestHistoryPage() {
               href="/trial-test"
               className="text-gray-700 hover:text-gray-900 mb-4 inline-block"
             >
-              ← Сынақ тесттері
+              <Icon name="arrowLeft" /> Сынақ тесттері
             </Link>
             <h1 className="text-3xl font-bold text-gray-900 mb-6">Өту тарихы</h1>
 
@@ -75,15 +77,15 @@ export default function TrialTestHistoryPage() {
 
             {loading ? (
               <div className="text-center py-12">
-                <div className="text-4xl mb-4 animate-spin">⏳</div>
+                <div className="text-4xl mb-4"><Icon name="loader" className="animate-spin" /></div>
                 <div className="text-gray-600">Жүктелуде...</div>
               </div>
             ) : tests.length === 0 ? (
               <div className="text-center py-12 text-gray-600">
-                <div className="text-6xl mb-4">📋</div>
+                <div className="text-6xl mb-4"><Icon name="test" /></div>
                 <div>Сіз әлі ешқандай сынақ тестін тапсырған жоқсыз</div>
                 <Link href="/trial-test" className="mt-4 inline-block text-purple-600 font-semibold hover:underline">
-                  Сынақ тесттеріне өту →
+                  Сынақ тесттеріне өту <Icon name="arrowRight" />
                 </Link>
               </div>
             ) : (
@@ -105,7 +107,7 @@ export default function TrialTestHistoryPage() {
                       )}
                     </div>
                     <span className="text-purple-600 font-semibold text-sm whitespace-nowrap">
-                      Нәтижелерді көру →
+                      Нәтижелерді көру <Icon name="arrowRight" />
                     </span>
                   </Link>
                 ))}

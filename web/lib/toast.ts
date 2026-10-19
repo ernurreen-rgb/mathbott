@@ -1,8 +1,11 @@
 import toast from "react-hot-toast";
+import { createElement } from "react";
+import Icon from "@/components/ui/Icon";
 
 export const showToast = {
   success: (message: string) => {
     toast.success(message, {
+      icon: createElement(Icon, { name: "checkCircle", size: 22 }),
       duration: 3000,
       position: "top-center",
       style: {
@@ -15,6 +18,7 @@ export const showToast = {
   },
   error: (message: string) => {
     toast.error(message, {
+      icon: createElement(Icon, { name: "closeCircle", size: 22 }),
       duration: 4000,
       position: "top-center",
       style: {
@@ -27,7 +31,7 @@ export const showToast = {
   },
   warning: (message: string) => {
     toast(message, {
-      icon: "⚠️",
+      icon: createElement(Icon, { name: "alert", size: 22 }),
       duration: 3000,
       position: "top-center",
       style: {
@@ -40,7 +44,7 @@ export const showToast = {
   },
   info: (message: string) => {
     toast(message, {
-      icon: "ℹ️",
+      icon: createElement(Icon, { name: "info", size: 22 }),
       duration: 3000,
       position: "top-center",
       style: {

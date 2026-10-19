@@ -1,5 +1,6 @@
 "use client";
 import styles from "../CmsWorkspace.module.css";
+import IconPicker from "@/components/ui/IconPicker";
 import CurriculumList from "./CurriculumList";
 import type { Dispatch, SetStateAction } from "react";
 import { Module } from "./model";
@@ -39,7 +40,7 @@ export default function ModulesPanel({
         <label className={styles.field}>Атауы<input value={editModuleForm.name} required onChange={(event) => setEditModuleForm({ ...editModuleForm, name: event.target.value })} /></label>
         <label className={styles.field}>Сипаттамасы<textarea rows={2} value={editModuleForm.description} onChange={(event) => setEditModuleForm({ ...editModuleForm, description: event.target.value })} /></label>
         <div className={styles.formColumns}>
-          <label className={styles.field}>Белгіше<input value={editModuleForm.icon} onChange={(event) => setEditModuleForm({ ...editModuleForm, icon: event.target.value })} /></label>
+          <label className={styles.field}>Белгіше<IconPicker value={editModuleForm.icon} onChange={(icon) => setEditModuleForm({ ...editModuleForm, icon })} /></label>
           <label className={styles.field}>Реті<input type="number" value={editModuleForm.sort_order} onChange={(event) => setEditModuleForm({ ...editModuleForm, sort_order: Number(event.target.value) || 0 })} /></label>
         </div>
         <div className={styles.actions}><button className={styles.primaryButton} type="submit">Сақтау</button><button className={styles.secondaryButton} type="button" onClick={cancelEditModule}>Бас тарту</button></div>
@@ -50,7 +51,7 @@ export default function ModulesPanel({
           <label className={styles.field}>Модуль атауы<input value={moduleForm.name} required placeholder="Модуль атауы" onChange={(event) => setModuleForm({ ...moduleForm, name: event.target.value })} /></label>
           <label className={styles.field}>Сипаттамасы<textarea rows={2} value={moduleForm.description} onChange={(event) => setModuleForm({ ...moduleForm, description: event.target.value })} /></label>
           <div className={styles.formColumns}>
-            <label className={styles.field}>Белгіше<input value={moduleForm.icon} placeholder="Эмодзи" onChange={(event) => setModuleForm({ ...moduleForm, icon: event.target.value })} /></label>
+            <label className={styles.field}>Белгіше<IconPicker value={moduleForm.icon} onChange={(icon) => setModuleForm({ ...moduleForm, icon })} /></label>
             <label className={styles.field}>Реті<input type="number" value={moduleForm.sort_order} onChange={(event) => setModuleForm({ ...moduleForm, sort_order: Number(event.target.value) || 0 })} /></label>
           </div>
           <button type="submit" className={styles.primaryButton}>Модуль құру</button>
@@ -58,7 +59,7 @@ export default function ModulesPanel({
       </details>
       <CurriculumList openLabel="Бөлімдерді ашу"
         items={[...modules].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((module) => ({
-          id: module.id, title: module.name, description: module.description,
+          id: module.id, title: module.name, description: module.description, icon: module.icon || "book",
           href: `/admin/cms/modules/${module.id}`,
         }))}
         onEdit={(id) => { const selected = modules.find((item) => item.id === id); if (selected) startEditModule(selected); }}

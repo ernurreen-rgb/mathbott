@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,10 +15,7 @@ interface DesktopNavProps {
 
 function SidebarIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <rect width="18" height="18" x="3" y="3" rx="2" strokeWidth={2} />
-      <path strokeLinecap="round" strokeWidth={2} d="M9 3v18" />
-    </svg>
+    <Icon name="sidebar" className={className} />
   );
 }
 
@@ -64,9 +63,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       label: "Модульдер",
       href: "/modules",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-        </svg>
+        <Icon name="book" className="w-6 h-6" />
       ),
     },
     {
@@ -74,9 +71,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       label: "Тест",
       href: "/trial-test",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
+        <Icon name="test" className="w-6 h-6" />
       ),
     },
     {
@@ -84,10 +79,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       label: "Квиздер",
       href: "/quizzes",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <Icon name="quiz" className="w-6 h-6" />
       ),
     },
     {
@@ -95,9 +87,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       label: "Профиль",
       href: "/profile",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
+        <Icon name="user" className="w-6 h-6" />
       ),
     },
   ];
@@ -108,10 +98,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
       label: "Әкімші",
       href: "/admin/",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
+        <Icon name="shield" className="w-6 h-6" />
       ),
     });
   }
@@ -212,17 +199,13 @@ export default function DesktopNav(_props: DesktopNavProps) {
                   aria-current={isActive ? "page" : undefined}
                   className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${
                     isActive
-                      ? item.id === "admin"
-                        ? "bg-red-500 text-white shadow-md"
-                        : "bg-blue-500 text-white shadow-md"
-                      : item.id === "admin"
-                      ? "text-red-600 hover:bg-red-50 hover:text-red-700"
-                      : "text-gray-600 hover:bg-white/70 hover:text-purple-600"
+                      ? "bg-indigo-100 text-indigo-700 ring-1 ring-inset ring-indigo-200/70"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-indigo-700"
                   }`}
                 >
                   <div
                     className={`flex-shrink-0 ${
-                      isActive ? "text-white" : item.id === "admin" ? "text-red-600" : "text-gray-600"
+                      isActive ? "text-indigo-700" : "text-current"
                     }`}
                     aria-hidden="true"
                   >
@@ -247,17 +230,13 @@ export default function DesktopNav(_props: DesktopNavProps) {
               aria-current={isActive ? "page" : undefined}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${
                 isActive
-                  ? item.id === "admin"
-                    ? "bg-red-500 text-white shadow-lg"
-                    : "bg-blue-500 text-white shadow-lg"
-                  : item.id === "admin"
-                  ? "text-red-600 hover:bg-red-50 hover:text-red-700"
-                  : "text-gray-700 hover:bg-white/60 hover:text-purple-600"
+                  ? "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200/70"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-indigo-700"
               }`}
             >
               <div
                 className={`flex-shrink-0 ${
-                  isActive ? "text-white" : item.id === "admin" ? "text-red-600" : "text-gray-600"
+                  isActive ? "text-indigo-700" : "text-current"
                 }`}
                 aria-hidden="true"
               >

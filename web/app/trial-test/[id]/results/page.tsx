@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -103,7 +105,7 @@ export default function TrialTestResultsPage() {
         <div className="w-full max-w-4xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <button onClick={() => router.push("/trial-test")} className="text-gray-700 hover:text-gray-900 mb-4">
-              ← Сынақ тесттері
+              <Icon name="arrowLeft" /> Сынақ тесттері
             </button>
 
             <div className="text-center mb-6">

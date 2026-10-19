@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -220,7 +222,7 @@ export default function LessonPage() {
       }
       if (data.correct) {
         updateTaskStatusLocal(task.id, "completed");
-        setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "Дұрыс! ✅" } }));
+        setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "Дұрыс!" } }));
         // Save correct answer - if API provides it, use it; otherwise the selected answer is correct
         const correctAns = data.correct_answer || answer;
         setCorrectAnswers((m) => ({ ...m, [task.id]: correctAns }));
@@ -523,7 +525,7 @@ export default function LessonPage() {
       {showCongrats && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-3xl shadow-2xl border border-white/40 w-full max-w-sm p-8 text-center">
-            <div className="text-6xl mb-3 animate-bounce">🎉</div>
+            <div className="text-6xl mb-3 animate-bounce"><Icon name="sparkles" /></div>
             <div className="text-2xl font-extrabold text-gray-900">Құттықтаймыз!</div>
             <div className="text-sm text-gray-600 mt-1">Сабақ аяқталды</div>
             <div className="mt-5 flex items-center justify-center gap-2 text-gray-700">
@@ -542,7 +544,7 @@ export default function LessonPage() {
               onClick={() => router.back()}
               className="text-gray-700 hover:text-gray-900 mb-4"
             >
-              ← Артқа
+              <Icon name="arrowLeft" /> Артқа
             </button>
 
             <div className="flex items-start justify-between gap-4 mb-4">
@@ -619,7 +621,7 @@ export default function LessonPage() {
                       onClick={() => setSelectedMiniId(nextMiniId)}
                       className="ml-3 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
                     >
-                      Келесі кіші сабақ →
+                      Келесі кіші сабақ <Icon name="arrowRight" />
                     </button>
                   ) : (
                     <span className="ml-2 font-semibold">Сабақ аяқталды!</span>
@@ -645,7 +647,7 @@ export default function LessonPage() {
                           feedback[activeTask.id]?.ok ? "text-green-700" : "text-red-700"
                         }`}
                       >
-                        <span>{feedback[activeTask.id]?.text}</span>
+                        <Icon name={feedback[activeTask.id]?.ok ? "checkCircle" : "closeCircle"} className="mr-1.5" /><span>{feedback[activeTask.id]?.text}</span>
                         {feedback[activeTask.id]?.correctMath?.map((answer, index) => (
                           <span key={`${activeTask.id}-correct-${index}`} className="ml-2 inline-block font-semibold">
                             <MathRender inline latex={answer} />
@@ -669,7 +671,7 @@ export default function LessonPage() {
                           onClick={() => goToNextTaskOrMini(activeTask.id)}
                           className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
                         >
-                          Келесі →
+                          Келесі <Icon name="arrowRight" />
                         </button>
                       </div>
                     )}

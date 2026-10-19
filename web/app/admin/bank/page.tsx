@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import BankTaskForm from "./_components/BankTaskForm";
 import DuplicateDialog from "./_components/DuplicateDialog";
 import HistoryDialog from "./_components/HistoryDialog";
@@ -428,7 +430,7 @@ export default function AdminBankPage() {
                 Тапсырмалар банкі
               </h1>
               <Link href="/admin" className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
-                ← Әкімші панелі
+                <Icon name="arrowLeft" /> Әкімші панелі
               </Link>
             </div>
 
@@ -531,7 +533,7 @@ export default function AdminBankPage() {
                 <div className="flex flex-wrap gap-2 mb-2">
                   {topicFilters.map((topic) => (
                     <button key={topic} onClick={() => removeFilterTopic(topic)} className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                      {topic} x
+                      {topic} <Icon name="close" />
                     </button>
                   ))}
                 </div>
@@ -549,7 +551,7 @@ export default function AdminBankPage() {
                     placeholder="Сүзгіге тақырып қосу"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   />
-                  <button onClick={() => addFilterTopic(topicFilterInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3">+</button>
+                  <button aria-label="Тақырып қосу" onClick={() => addFilterTopic(topicFilterInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3"><Icon name="plus" /></button>
                 </div>
                 {topicFilterSuggestions.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -698,7 +700,7 @@ export default function AdminBankPage() {
                       disabled={offset === 0}
                       className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
                     >
-                      ← Артқа
+                      <Icon name="arrowLeft" /> Артқа
                     </button>
                     {paginationPages.map((pageNo, index) => (
                       <Fragment key={pageNo}>
@@ -724,7 +726,7 @@ export default function AdminBankPage() {
                       disabled={offset + LIMIT >= total}
                       className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm"
                     >
-                      Алға →
+                      Алға <Icon name="arrowRight" />
                     </button>
                   </div>
                 </div>

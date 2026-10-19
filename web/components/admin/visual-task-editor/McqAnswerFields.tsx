@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
@@ -73,7 +75,7 @@ export default function McqAnswerFields({ qt, isEditing, taskData, editingField,
                         : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                         }`}
                     >
-                      {isCorrect ? "✓ Дұрыс жауап" : "Дұрыс қылу"}
+                      {isCorrect ? <><Icon name="check" /> Дұрыс жауап</> : "Дұрыс қылу"}
                     </button>
                   </div>
                 ) : (

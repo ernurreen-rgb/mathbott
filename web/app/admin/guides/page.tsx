@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
@@ -151,7 +153,7 @@ export default function SectionGuidesPage() {
         <div className="w-full max-w-5xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">
-              📚 Бөлімдер бойынша анықтамалықтар
+              <Icon name="book" /> Бөлімдер бойынша анықтамалықтар
             </h1>
             {error && (
               <div className="mb-3 rounded-lg bg-red-100 border border-red-300 px-3 py-2 text-sm text-red-700">

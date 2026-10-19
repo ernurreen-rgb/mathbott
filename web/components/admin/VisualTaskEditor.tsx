@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import BankMetadataFields from "./visual-task-editor/BankMetadataFields";
 import MatchingAnswerFields from "./visual-task-editor/MatchingAnswerFields";
 import McqAnswerFields from "./visual-task-editor/McqAnswerFields";
@@ -600,7 +602,7 @@ export default function VisualTaskEditor({
               onClick={() => setCurrentTaskIndex(currentTaskIndex - 1)}
               className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
             >
-              ← Алдыңғы
+              <Icon name="arrowLeft" /> Алдыңғы
             </button>
           )}
           {!isEditing && (
@@ -608,7 +610,7 @@ export default function VisualTaskEditor({
               onClick={handleStartNewTask}
               className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
             >
-              + Жаңа тапсырма
+              <Icon name="plus" /> Жаңа тапсырма
             </button>
           )}
           {currentTask && !isEditing && (
@@ -634,7 +636,7 @@ export default function VisualTaskEditor({
               onClick={() => setCurrentTaskIndex(currentTaskIndex + 1)}
               className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
             >
-              Келесі →
+              Келесі <Icon name="arrowRight" />
             </button>
           )}
         </div>

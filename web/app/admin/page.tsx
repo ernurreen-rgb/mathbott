@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
+import Icon, { type IconName } from "@/components/ui/Icon";
 import MobileNav from "@/components/MobileNav";
 import { checkAdminStatus } from "@/lib/api";
 import { isAllowedForPage, type AdminPageKey } from "@/lib/admin-access";
@@ -15,7 +16,7 @@ type AdminCardConfig = {
   title: string;
   description: string;
   href: string;
-  icon: string;
+  icon: IconName;
   section: AdminPageKey;
 };
 
@@ -63,70 +64,70 @@ export default function AdminPage() {
         title: "CMS",
         description: "Модульдер, бөлімдер, сабақтар және тапсырмалар",
         href: "/admin/cms",
-        icon: "📝",
+        icon: "layers",
         section: "content",
       },
       {
         title: "Статистика",
         description: "Платформаның жалпы статистикасы",
         href: "/admin/statistics",
-        icon: "📊",
+        icon: "chart",
         section: "review",
       },
       {
         title: "Хабарламалар",
         description: "Пайдаланушылардың хабарламаларын басқару",
         href: "/admin/reports",
-        icon: "📋",
+        icon: "report",
         section: "review",
       },
       {
         title: "Сынақ тесттері",
         description: "Сынақ тесттері мен тапсырмаларын басқару",
         href: "/admin/trial-tests",
-        icon: "🧪",
+        icon: "test",
         section: "content",
       },
       {
         title: "БАНК",
         description: "Тақырыптар мен күрделілігі бар тапсырмалар қоры",
         href: "/admin/bank",
-        icon: "🗂️",
+        icon: "folder",
         section: "content",
       },
       {
         title: "Банк сапасы",
         description: "Дубликаттар, қолданылмайтын және тақырыпсыз тапсырмалар",
         href: "/admin/bank/quality",
-        icon: "🧭",
+        icon: "compass",
         section: "review",
       },
       {
         title: "Bank Audit",
         description: "Импорт, rollback және жою әрекеттерінің аудит ізі",
         href: "/admin/bank/audit",
-        icon: "🕵️",
+        icon: "audit",
         section: "review",
       },
       {
         title: "Өндіріс денсаулығы",
         description: "Қателер, инциденттер және сервис күйі",
         href: "/admin/ops",
-        icon: "🛟",
+        icon: "support",
         section: "review",
       },
       {
         title: "Рөлдерді басқару",
         description: "Админ рөлдерін тағайындау және өзгерту",
         href: "/admin/roles",
-        icon: "🛡️",
+        icon: "shield",
         section: "super",
       },
       {
         title: "Нұсқаулар",
         description: "Бөлімдерге нұсқаулық қосу",
         href: "/admin/guides",
-        icon: "📖",
+        icon: "book",
         section: "content",
       },
     ],
@@ -186,12 +187,12 @@ function AdminCard({
   title: string;
   description: string;
   href: string;
-  icon: string;
+  icon: IconName;
 }) {
   return (
     <Link href={href}>
       <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 hover:shadow-glow-pink transition-all transform hover:scale-105 cursor-pointer">
-        <div className="text-5xl mb-4">{icon}</div>
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600"><Icon name={icon} size={28} /></div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2">{title}</h3>
         <p className="text-gray-600">{description}</p>
       </div>

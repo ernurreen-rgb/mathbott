@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import MathFieldInput from "@/components/ui/MathFieldInput";
 
@@ -50,7 +52,7 @@ export default function AcceptedAnswersEditor({
           onClick={() => onChange([...answers, ""])}
           className="shrink-0 rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          + Жауап
+          <Icon name="plus" /> Жауап
         </button>
       </div>
 
@@ -72,7 +74,7 @@ export default function AcceptedAnswersEditor({
                 aria-label={`Балама жауапты жою ${index + 1}`}
                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 disabled:opacity-50"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
           ))}

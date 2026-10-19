@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useState, useCallback, useEffect } from "react";
 import Cropper, { Area, Point } from "react-easy-crop";
@@ -70,12 +72,12 @@ export default function ImageCropperModal({
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-900">Суретті өңдеу</h2>
-          <button
+          <button aria-label="Терезені жабу"
             onClick={onCancel}
             className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
             disabled={isProcessing}
           >
-            ×
+            <Icon name="close" />
           </button>
         </div>
 

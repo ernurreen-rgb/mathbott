@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -282,7 +284,7 @@ export default function ModuleDetailPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-3xl border border-white/80 bg-white/85 p-8 text-center shadow-2xl">
-          <div className="text-5xl">🔐</div>
+          <div className="text-5xl"><Icon name="lock" /></div>
           <h1 className="mt-4 text-2xl font-black text-slate-900">
             Модульді көру үшін кіріңіз
           </h1>
@@ -300,7 +302,7 @@ export default function ModuleDetailPage() {
           role="alert"
           className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-7 text-center shadow-xl"
         >
-          <div className="text-4xl">⚠️</div>
+          <div className="text-4xl"><Icon name="alert" /></div>
           <div className="mt-3 font-bold text-red-700">
             {error || "Модуль табылмады"}
           </div>
@@ -317,7 +319,7 @@ export default function ModuleDetailPage() {
             href="/modules"
             className="mt-4 block text-sm font-bold text-purple-700 hover:underline"
           >
-            ← Модульдерге қайту
+            <Icon name="arrowLeft" /> Модульдерге қайту
           </Link>
         </div>
       </div>
@@ -339,7 +341,7 @@ export default function ModuleDetailPage() {
               aria-label="Модульдерге қайту"
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-xl font-black text-purple-700 transition hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
             >
-              ←
+              <Icon name="arrowLeft" />
             </Link>
 
             <h1 className="sr-only">{module.name}</h1>
@@ -400,7 +402,7 @@ export default function ModuleDetailPage() {
 
           {sortedSections.length === 0 ? (
             <div className="rounded-[2rem] border border-white/90 bg-white/80 px-6 py-16 text-center shadow-xl">
-              <div className="text-5xl">📦</div>
+              <div className="text-5xl"><Icon name="box" /></div>
               <div className="mt-3 font-bold text-slate-600">
                 Бұл модульде бөлімдер әлі қосылмаған.
               </div>
@@ -443,7 +445,7 @@ export default function ModuleDetailPage() {
                 aria-label="Жабу"
                 className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-2xl text-slate-500 shadow-sm hover:text-slate-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <div className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-5 py-5 text-sm leading-relaxed text-slate-700 sm:px-7">

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
@@ -176,7 +178,7 @@ export default function QuizDetailPage({ params }: PageProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${quiz.is_public ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
-                  {quiz.is_public ? "🌐 Ашық квиз (Public)" : "🔒 Жеке квиз (Private)"}
+                  {quiz.is_public ? <><Icon name="globe" /> Ашық квиз (Public)</> : <><Icon name="lock" /> Жеке квиз (Private)</>}
                 </span>
                 <span className="text-xs text-gray-500 font-medium">
                   {questions.length} сұрақ
@@ -184,7 +186,7 @@ export default function QuizDetailPage({ params }: PageProps) {
               </div>
               {!quiz.is_public && (
                 <div className="mb-3 p-2.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-start gap-2 text-xs text-amber-900">
-                  <span className="text-sm">🔒</span>
+                  <span className="text-sm"><Icon name="lock" /></span>
                   <span><strong>Жеке квиз (Private):</strong> Каталогта басқаларға көрінбейді. Бірақ ойын бастап, PIN-код беріп ойната аласыз.</span>
                 </div>
               )}
@@ -220,11 +222,9 @@ export default function QuizDetailPage({ params }: PageProps) {
                 className="w-full md:w-auto px-8 py-4 rounded-2xl font-extrabold text-base bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-xl shadow-purple-500/30 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:hover:scale-100"
               >
                 {startingSession ? (
-                  <span className="inline-block animate-spin">⏳</span>
+                  <span className="inline-block"><Icon name="loader" className="animate-spin" /></span>
                 ) : (
-                  <svg className="w-6 h-6 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
-                  </svg>
+                  <Icon name="play" className="w-6 h-6 text-yellow-300" />
                 )}
                 <span>Тікелей ойынды бастау</span>
               </button>
@@ -241,9 +241,9 @@ export default function QuizDetailPage({ params }: PageProps) {
                   } disabled:opacity-50`}
                 >
                   {togglingPrivacy ? (
-                    <span className="animate-spin text-xs">⏳</span>
+                    <span className="text-xs"><Icon name="loader" className="animate-spin" /></span>
                   ) : (
-                    <span>{quiz.is_public ? "🔒 Жеке ету" : "🌐 Ашық ету"}</span>
+                    <span>{quiz.is_public ? <><Icon name="lock" /> Жеке ету</> : <><Icon name="globe" /> Ашық ету</>}</span>
                   )}
                 </button>
                 <button
@@ -257,9 +257,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                   className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
                   title="Квизді өшіру"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <Icon name="trash" className="w-4 h-4" />
                 </button>
               </div>}
             </div>
@@ -294,8 +292,8 @@ export default function QuizDetailPage({ params }: PageProps) {
                 </div>
 
                 <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
-                  <span>⏱ {q.time_limit_seconds} сек</span>
-                  <span>⭐ {q.points} балл</span>
+                  <span><Icon name="timer" /> {q.time_limit_seconds} сек</span>
+                  <span><Icon name="star" /> {q.points} балл</span>
                 </div>
               </div>
 
@@ -343,7 +341,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                           <MathRender latex={opt.text} />
                         </div>
                         {isCorrect && (
-                          <span className="text-emerald-600 text-xs font-bold">✓ Дұрыс</span>
+                          <span className="text-emerald-600 text-xs font-bold"><Icon name="check" /> Дұрыс</span>
                         )}
                       </div>
                     );

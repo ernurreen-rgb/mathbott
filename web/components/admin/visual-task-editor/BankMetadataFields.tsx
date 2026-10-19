@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import { LessonTask } from "@/types";
 
 type Props = {
@@ -39,7 +41,7 @@ export default function BankMetadataFields({ isEditing, showBankMetadata, contex
                 {(Array.isArray(taskData.bank_topics) ? taskData.bank_topics : []).map((topic) => (
                   <span key={topic} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">
                     {topic}
-                    <button
+                    <button aria-label="Тақырыпты алып тастау"
                       type="button"
                       onClick={() => {
                         const prevTopics = Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [];
@@ -48,7 +50,7 @@ export default function BankMetadataFields({ isEditing, showBankMetadata, contex
                       className="text-purple-700 hover:text-purple-900 disabled:text-gray-400"
                       disabled={!isNewTask && !taskData.bank_task_id}
                     >
-                      ×
+                      <Icon name="close" />
                     </button>
                   </span>
                 ))}
@@ -70,7 +72,7 @@ export default function BankMetadataFields({ isEditing, showBankMetadata, contex
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 disabled:bg-gray-100 disabled:text-gray-500"
                   disabled={!isNewTask && !taskData.bank_task_id}
                 />
-                <button
+                <button aria-label="Тақырып қосу"
                   type="button"
                   onClick={() => {
                     const prevTopics = Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [];
@@ -80,7 +82,7 @@ export default function BankMetadataFields({ isEditing, showBankMetadata, contex
                   className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50"
                   disabled={!isNewTask && !taskData.bank_task_id}
                 >
-                  +
+                  <Icon name="plus" />
                 </button>
               </div>
               <div className="text-xs text-gray-500 mt-1">Ең көбі 10 тақырып, әрқайсысы 64 таңбаға дейін</div>

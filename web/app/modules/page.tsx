@@ -1,4 +1,6 @@
 "use client";
+import Icon, { ContentIcon } from "@/components/ui/Icon";
+
 
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -129,12 +131,12 @@ export default function ModulesPage() {
                   </div>
                 ) : loading ? (
                   <div className="text-center py-12">
-                    <div className="text-4xl mb-4 animate-spin">⏳</div>
+                    <div className="text-4xl mb-4"><Icon name="loader" className="animate-spin" /></div>
                     <div className="text-gray-600">Модульдер жүктелуде...</div>
                   </div>
                 ) : modules.length === 0 ? (
                   <div className="text-center py-12 text-gray-600">
-                    <div className="text-6xl mb-4">📦</div>
+                    <div className="text-6xl mb-4"><Icon name="box" /></div>
                     <div>Модульдер әлі құрылмаған</div>
                   </div>
                 ) : (
@@ -145,6 +147,7 @@ export default function ModulesPage() {
                         href={`/modules/${module.id}`}
                         className="glass rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all transform hover:scale-105 cursor-pointer"
                       >
+                        <ContentIcon value={module.icon} fallback="book" size={32} className="mb-4 text-indigo-600" />
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{module.name}</h3>
                         {module.description && (
                           <p className="text-gray-600 text-sm mb-4 line-clamp-2">{module.description}</p>

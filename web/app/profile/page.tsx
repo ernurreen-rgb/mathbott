@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 import AcceptInvitePanel from "./_components/AcceptInvitePanel";
 import IncomingRequestsPanel from "./_components/IncomingRequestsPanel";
 import InviteDialog from "./_components/InviteDialog";
@@ -560,13 +562,9 @@ function ProfilePageContent() {
                       : "bg-red-50 border border-red-200 text-red-700"
                     }`}>
                     {inviteActionMessage.includes("скопирована") ? (
-                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <Icon name="check" className="w-5 h-5 flex-shrink-0" />
                     ) : (
-                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <Icon name="close" className="w-5 h-5 flex-shrink-0" />
                     )}
                     <span className="text-sm font-semibold">{inviteActionMessage}</span>
                   </div>
@@ -667,9 +665,7 @@ function ProfilePageContent() {
                   className="w-full bg-gradient-to-r from-red-500 via-pink-500 to-red-600 hover:from-red-600 hover:via-pink-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-glow-pink transform hover:scale-[1.02] text-lg"
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
+                    <Icon name="logOut" className="w-5 h-5" />
                     Аккаунттан шығу
                   </div>
                 </button>
@@ -678,9 +674,7 @@ function ProfilePageContent() {
           ) : (
             <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center">
               <div className="text-gray-400 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
               <div className="text-gray-600 text-lg">Профиль деректерін жүктеу мүмкін болмады</div>
             </div>

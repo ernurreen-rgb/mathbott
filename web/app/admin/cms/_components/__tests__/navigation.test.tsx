@@ -82,7 +82,7 @@ it("opens a lesson's tasks directly with horizontal mini-lesson navigation", asy
   expect(within(tabs).getByRole("link", { name: "Қайталау" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByText("2+2")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Кіші сабақтар" })).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "← Сабақтар" })).toHaveAttribute("href", section);
+  expect(screen.getByRole("link", { name: "Сабақтар" })).toHaveAttribute("href", section);
 });
 
 it.each([undefined, 4])("selects the first mini-lesson by order while preserving an explicit URL selection (%s)", async (miniLessonId) => {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ContentIcon } from "@/components/ui/Icon";
+import IconPicker from "@/components/ui/IconPicker";
 
 interface Module {
   id: number;
@@ -62,13 +64,7 @@ export default function ModuleForm({
           className="w-full p-2 border rounded"
           rows={2}
         />
-        <input
-          type="text"
-          placeholder="Белгіше (эмодзи немесе мәтін)"
-          value={form.icon}
-          onChange={(e) => setForm({ ...form, icon: e.target.value })}
-          className="w-full p-2 border rounded"
-        />
+        <IconPicker value={form.icon} onChange={(icon) => setForm({ ...form, icon })} />
         <input
           type="number"
           placeholder="Сұрыптау реті"
@@ -110,12 +106,7 @@ export default function ModuleForm({
                   className="w-full p-2 border rounded"
                   rows={2}
                 />
-                <input
-                  type="text"
-                  value={editForm.icon}
-                  onChange={(e) => setEditForm({ ...editForm, icon: e.target.value })}
-                  className="w-full p-2 border rounded"
-                />
+                <IconPicker value={editForm.icon} onChange={(icon) => setEditForm({ ...editForm, icon })} />
                 <input
                   type="number"
                   value={editForm.sort_order}
@@ -139,7 +130,7 @@ export default function ModuleForm({
               <div className="flex justify-between items-center">
                 <div>
                   <div className="font-bold">
-                    {module.icon && <span className="mr-2">{module.icon}</span>}
+                    <ContentIcon value={module.icon} fallback="book" className="mr-2 text-indigo-600" />
                     {module.name}
                   </div>
                   {module.description && <div className="text-sm text-gray-600">{module.description}</div>}

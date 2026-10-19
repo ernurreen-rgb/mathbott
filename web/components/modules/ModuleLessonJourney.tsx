@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import Link from "next/link";
 
@@ -98,22 +100,13 @@ const connectorTrackClasses: Record<LessonJourneyStatus, string> = {
 
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 fill-current sm:h-9 sm:w-9">
-      <path d="M8 5.8c0-1.1 1.2-1.8 2.2-1.2l8.5 5.2a2.55 2.55 0 0 1 0 4.4l-8.5 5.2A1.45 1.45 0 0 1 8 18.2V5.8Z" />
-    </svg>
+    <Icon name="play" className="h-8 w-8  sm:h-9 sm:w-9" />
   );
 }
 
 function CheckIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-9 w-9 fill-none stroke-current sm:h-10 sm:w-10"
-      strokeWidth="2.8"
-    >
-      <path d="m5 12.5 4.2 4.2L19.5 6.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <Icon name="check" className="h-9 w-9   sm:h-10 sm:w-10" />
   );
 }
 
@@ -216,14 +209,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                     title={`Анықтамалық: ${section.name}`}
                     className={`${styles.guideButton} inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-700 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 motion-reduce:transition-none`}
                   >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6a1 1 0 0 1 .7.3l5.4 5.4a1 1 0 0 1 .3.7V19a2 2 0 0 1-2 2Z"
-                      />
-                    </svg>
+                    <Icon name="file" className="h-5 w-5" />
                     <span className={`${styles.guideLabel} hidden whitespace-nowrap`}>Анықтамалық</span>
                   </button>
                 )}

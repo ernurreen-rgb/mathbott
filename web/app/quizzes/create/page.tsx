@@ -1,4 +1,6 @@
 "use client";
+import Icon from "@/components/ui/Icon";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -254,9 +256,7 @@ export default function CreateQuizPage() {
             className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
             title="Квиздерге оралу"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
+            <Icon name="arrowLeft" className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="text-base sm:text-lg font-extrabold text-gray-900 flex items-center gap-2">
@@ -273,11 +273,9 @@ export default function CreateQuizPage() {
             className="px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-500/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50"
           >
             {submitting ? (
-              <span className="inline-block animate-spin mr-1">⌛</span>
+              <span className="inline-block  mr-1"><Icon name="loader" className="animate-spin" /></span>
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <Icon name="check" className="w-4 h-4" />
             )}
             Сақтау және дайын
           </button>
@@ -327,7 +325,7 @@ export default function CreateQuizPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold flex items-center gap-1.5">
-                      <span>🌐</span>
+                      <span><Icon name="globe" /></span>
                       <span>Ашық</span>
                     </span>
                     <input
@@ -354,7 +352,7 @@ export default function CreateQuizPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold flex items-center gap-1.5">
-                      <span>🔒</span>
+                      <span><Icon name="lock" /></span>
                       <span>Жеке</span>
                     </span>
                     <input
@@ -414,9 +412,7 @@ export default function CreateQuizPage() {
                       title="Көшірмесін жасау"
                       className="p-1 hover:text-purple-600 text-gray-400 rounded hover:bg-purple-50"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
+                      <Icon name="copy" className="w-3.5 h-3.5" />
                     </button>
                     {questions.length > 1 && (
                       <button
@@ -427,9 +423,7 @@ export default function CreateQuizPage() {
                         title="Өшіру"
                         className="p-1 hover:text-red-600 text-gray-400 rounded hover:bg-red-50"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        <Icon name="trash" className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -441,9 +435,7 @@ export default function CreateQuizPage() {
               onClick={addNewQuestion}
               className="mt-2 w-full py-2.5 rounded-xl border border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 text-purple-700 font-bold text-xs transition-all flex items-center justify-center gap-1.5"
             >
-              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon name="plus" className="w-4 h-4 text-purple-600" />
               Сұрақ қосу
             </button>
           </div>
@@ -607,13 +599,15 @@ export default function CreateQuizPage() {
                               <button
                                 type="button"
                                 onClick={() => toggleMultiSelectCorrect(opt.id)}
+                                aria-label={`${opt.id} нұсқасын дұрыс жауап ретінде таңдау`}
+                                aria-pressed={isCorrect}
                                 className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
                                   isCorrect
                                     ? "bg-emerald-600 border-emerald-500 text-white font-bold"
                                     : "border-gray-300 bg-white text-transparent hover:border-gray-400"
                                 }`}
                               >
-                                ✓
+                                <Icon name="check" />
                               </button>
                             ) : (
                               <button
