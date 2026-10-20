@@ -5,6 +5,15 @@
 .qm-icon { display: inline-block; flex-shrink: 0; vertical-align: -0.18em; overflow: visible; }
 @media (prefers-reduced-motion: reduce) { .qm-icon.animate-spin { animation: none; } }
 
+.task-scale-responsive {
+  font-size: var(--task-font-mobile, 16px);
+}
+@media (min-width: 768px) {
+  .task-scale-responsive {
+    font-size: var(--task-font-desktop, 20px);
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

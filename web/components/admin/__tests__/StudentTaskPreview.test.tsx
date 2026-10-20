@@ -103,4 +103,21 @@ describe("StudentTaskPreview", () => {
       "A"
     );
   });
+
+  it("changes mobile font size without shrinking desktop font size", () => {
+    const onTextScaleChange = jest.fn();
+    render(<StudentTaskPreview task={baseTask} onTextScaleChange={onTextScaleChange} />);
+
+    const fontSizeInput = screen.getByRole("textbox", { name: "Қаріп өлшемі (px)" });
+    expect(fontSizeInput).toHaveValue("16");
+
+    fireEvent.change(fontSizeInput, { target: { value: "13" } });
+    expect(onTextScaleChange).toHaveBeenLastCalledWith("13:20");
+
+    fireEvent.click(screen.getByRole("button", { name: "Компьютер" }));
+    expect(fontSizeInput).toHaveValue("20");
+
+    fireEvent.change(fontSizeInput, { target: { value: "24" } });
+    expect(onTextScaleChange).toHaveBeenLastCalledWith("13:24");
+  });
 });

@@ -120,6 +120,10 @@ def _normalize_text_scale(value: Any) -> str:
         return normalized
     if normalized.isdigit() and 8 <= int(normalized) <= 72:
         return str(int(normalized))
+    if ":" in normalized:
+        parts = normalized.split(":")
+        if len(parts) == 2 and all(p.strip().isdigit() and 8 <= int(p.strip()) <= 72 for p in parts):
+            return f"{int(parts[0].strip())}:{int(parts[1].strip())}"
     raise HTTPException(status_code=400, detail="text_scale must be one of sm, md, lg")
 
 
