@@ -168,11 +168,6 @@ export default function LessonPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMiniId, selectedMini?.id, orderedMiniTasks.length]);
 
-  const lessonProgressPct = useMemo(() => {
-    const p = lesson?.progress?.progress ?? 0;
-    return Math.round(clamp01(p) * 100);
-  }, [lesson]);
-
   const updateTaskStatusLocal = (taskId: number, status: LessonTask["status"]) => {
     setLesson((prev) => {
       if (!prev) return prev;
@@ -540,17 +535,13 @@ export default function LessonPage() {
       <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="w-full max-w-4xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="mb-4">
               <button
                 onClick={() => router.back()}
                 className="text-gray-700 hover:text-gray-900"
               >
                 <Icon name="arrowLeft" /> Артқа
               </button>
-              <div className="text-right">
-                <div className="text-sm text-gray-700">Ілгерілеу</div>
-                <div className="text-2xl font-bold text-gray-900">{lessonProgressPct}%</div>
-              </div>
             </div>
 
             {/* 4-step progress bar */}
@@ -594,13 +585,6 @@ export default function LessonPage() {
           {/* Selected mini-lesson */}
           {selectedMini ? (
             <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
-              {selectedMini.progress && (
-                <div className="flex justify-end mb-2">
-                  <div className="text-sm text-gray-700">
-                    {selectedMini.progress.completed_count}/{selectedMini.progress.total}
-                  </div>
-                </div>
-              )}
 
               {orderedMiniTasks.length === 0 ? (
                 <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>

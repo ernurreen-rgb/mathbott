@@ -47,28 +47,6 @@ export default function InlineTaskDialog({
             </div>
             <form onSubmit={onSaveInlineSlot} className="space-y-3">
               <MathFieldInput value={slotForm.text} onChange={(v) => setSlotForm((p) => ({ ...p, text: v }))} placeholder="Тапсырма мәтіні" />
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-gray-700">Мәтін өлшемі</label>
-                <div className="flex gap-2">
-                  {[
-                    { label: "S", value: "sm" },
-                    { label: "M", value: "md" },
-                    { label: "L", value: "lg" },
-                  ].map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => setSlotForm((p) => ({ ...p, text_scale: item.value as TaskTextScale }))}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${slotForm.text_scale === item.value
-                        ? "border-purple-600 bg-purple-600 text-white"
-                        : "border-gray-300 bg-white text-gray-700"
-                        }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div className="grid grid-cols-3 gap-2">
                 <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
                   const questionType = e.target.value as QuestionType;
@@ -166,7 +144,10 @@ export default function InlineTaskDialog({
                   <MathFieldInput value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
                 </div>
               )}
-              <StudentTaskPreview task={slotPreviewTask} />
+              <StudentTaskPreview
+                task={slotPreviewTask}
+                onTextScaleChange={(text_scale) => setSlotForm((p) => ({ ...p, text_scale }))}
+              />
               <button className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm">Сақтау</button>
             </form>
           </div>

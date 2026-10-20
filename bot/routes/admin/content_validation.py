@@ -111,12 +111,16 @@ def _validate_bank_difficulty(difficulty: str) -> str:
 def _normalize_text_scale(value: Any) -> str:
     if value is None:
         return "md"
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = str(value)
     if not isinstance(value, str):
         raise HTTPException(status_code=400, detail="text_scale must be one of sm, md, lg")
     normalized = value.strip().lower() or "md"
-    if normalized not in {"sm", "md", "lg"}:
-        raise HTTPException(status_code=400, detail="text_scale must be one of sm, md, lg")
-    return normalized
+    if normalized in {"sm", "md", "lg"}:
+        return normalized
+    if normalized.isdigit() and 8 <= int(normalized) <= 72:
+        return str(int(normalized))
+    raise HTTPException(status_code=400, detail="text_scale must be one of sm, md, lg")
 
 
 def _normalize_answer_mode_or_raise(value: Any, question_type: str) -> str:

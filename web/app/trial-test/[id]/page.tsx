@@ -16,7 +16,7 @@ import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerF
 import { inviteFriendToCoopTest, getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
@@ -752,7 +752,7 @@ export default function TrialTestPage() {
                             {friend.nickname || `Пайдаланушы #${friend.id}`}
                           </div>
                           <div className="text-sm md:text-base text-gray-500">
-                            {friend.total_points} ұпай
+                            {friend.total_solved} есеп
                           </div>
                         </div>
                         <button
@@ -835,7 +835,11 @@ export default function TrialTestPage() {
               aria-label={`Тапсырма ${currentTaskIndex + 1}`}
             >
               <div className={styles.taskBody}>
-                <div className={styles.statement} data-text-scale={normalizeTaskTextScale(currentTask.text_scale)}>
+                <div
+                  className={styles.statement}
+                  data-text-scale={normalizeTaskTextScale(currentTask.text_scale)}
+                  style={getTaskTextScaleStyle(currentTask.text_scale)}
+                >
                   {currentTask.text ? (
                     <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
                   ) : (

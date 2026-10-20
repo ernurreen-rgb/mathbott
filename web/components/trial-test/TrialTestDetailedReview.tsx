@@ -7,7 +7,7 @@ import { apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
 import { getReviewTasks, type ReviewAnswer } from "@/lib/trial-test-review";
 
@@ -289,7 +289,10 @@ export default function TrialTestDetailedReview({
       >
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
-            <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
+            <div
+              className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
+              style={getTaskTextScaleStyle(task.text_scale)}
+            >
               Тапсырма {currentTaskIndex + 1}:{" "}
               {task.text ? <MathRender inline latex={task.text} /> : "Мәтіні жоқ есеп"}
             </div>

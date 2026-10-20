@@ -3,7 +3,6 @@ import Icon from "@/components/ui/Icon";
 import AcceptedAnswersEditor from "@/components/admin/AcceptedAnswersEditor";
 import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
-import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
@@ -13,7 +12,6 @@ import {
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel
 } from "@/lib/question-options";
-import { getTaskTextScaleClass } from "@/lib/task-text-scale";
 import type { LessonTaskOption, LessonTaskSubquestion } from "@/types";
 import {
   AnswerMode,
@@ -78,34 +76,6 @@ export default function BankTaskForm({
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 autoFocus
               />
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <label className="block text-sm font-semibold text-gray-700">Мәтін өлшемі</label>
-                <div className="flex gap-2">
-                  {[
-                    { label: "S", value: "sm" },
-                    { label: "M", value: "md" },
-                    { label: "L", value: "lg" },
-                  ].map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, text_scale: item.value as TaskTextScale }))}
-                      className={`rounded-lg border px-3 py-1 text-xs font-semibold ${form.text_scale === item.value
-                        ? "border-purple-600 bg-purple-600 text-white"
-                        : "border-gray-300 bg-white text-gray-700"
-                        }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={`min-h-[2.5rem] font-semibold text-gray-900 ${getTaskTextScaleClass(form.text_scale)}`}>
-                {form.text ? <MathRender latex={form.text} /> : "Тапсырма мәтіні preview"}
-              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -330,6 +300,7 @@ export default function BankTaskForm({
             <StudentTaskPreview
               task={formPreviewTask}
               imageSrc={form.removeImage ? null : formImagePreview || undefined}
+              onTextScaleChange={(text_scale) => setForm((prev) => ({ ...prev, text_scale }))}
             />
 
             <div className="flex gap-2">

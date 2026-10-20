@@ -9,13 +9,21 @@ import TaskStatement from "@/components/student/TaskStatement";
 import { checkAdminTaskAnswerPreview } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
+import {
+  MAX_TASK_FONT_SIZE,
+  MIN_TASK_FONT_SIZE,
+  WORD_FONT_SIZES,
+  getTaskTextScaleFontSizePx,
+  normalizeTaskTextScale,
+} from "@/lib/task-text-scale";
 import { isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
-import type { LessonTask } from "@/types";
+import type { LessonTask, TaskTextScale } from "@/types";
 
 interface StudentTaskPreviewProps {
   task: Partial<LessonTask>;
   imageSrc?: string | null;
   className?: string;
+  onTextScaleChange?: (scale: TaskTextScale) => void;
 }
 
 type PreviewViewport = "mobile" | "desktop";
@@ -29,7 +37,7 @@ const asPreviewTask = (task: Partial<LessonTask>): LessonTask => ({
   answer: task.answer || "",
   accepted_answers: Array.isArray(task.accepted_answers) ? task.accepted_answers : [],
   correct_count: task.correct_count,
-  text_scale: task.text_scale || "md",
+  text_scale: normalizeTaskTextScale(task.text_scale),
   options: Array.isArray(task.options) ? task.options : [],
   subquestions: Array.isArray(task.subquestions) ? task.subquestions : [],
   image_filename: task.image_filename || null,
@@ -40,13 +48,38 @@ export default function StudentTaskPreview({
   task,
   imageSrc,
   className = "",
+  onTextScaleChange,
 }: StudentTaskPreviewProps) {
   const [viewport, setViewport] = useState<PreviewViewport>("mobile");
+  const [localTextScale, setLocalTextScale] = useState<TaskTextScale>(() =>
+    normalizeTaskTextScale(task.text_scale)
+  );
+  const [fontSizeDraft, setFontSizeDraft] = useState<string>(() =>
+    String(getTaskTextScaleFontSizePx(normalizeTaskTextScale(task.text_scale)))
+  );
   const [answer, setAnswer] = useState("");
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState<PreviewFeedback | null>(null);
   const checkRequestId = useRef(0);
-  const previewTask = useMemo(() => asPreviewTask(task), [task]);
+
+  useEffect(() => {
+    const normalized = normalizeTaskTextScale(task.text_scale);
+    setLocalTextScale(normalized);
+    setFontSizeDraft(String(getTaskTextScaleFontSizePx(normalized)));
+  }, [task.text_scale]);
+
+  const applyFontSize = (nextPx: number) => {
+    const clamped = Math.min(MAX_TASK_FONT_SIZE, Math.max(MIN_TASK_FONT_SIZE, Math.round(nextPx)));
+    const nextScale = String(clamped);
+    setLocalTextScale(nextScale);
+    setFontSizeDraft(nextScale);
+    onTextScaleChange?.(nextScale);
+  };
+
+  const previewTask = useMemo(
+    () => asPreviewTask({ ...task, text_scale: localTextScale }),
+    [task, localTextScale]
+  );
   const answerMode = getTaskAnswerMode(previewTask);
   const answerDefinitionSignature = JSON.stringify({
     questionType: previewTask.question_type,
@@ -170,25 +203,79 @@ export default function StudentTaskPreview({
           <h3 className="font-bold text-gray-900">Оқушы көрінісі</h3>
           <p className="text-xs text-gray-600">Өзгерістер сақтамай-ақ бірден көрсетіледі</p>
         </div>
-        <div className="flex rounded-lg border border-gray-300 bg-white p-1" aria-label="Алдын ала қарау өлшемі">
-          {[
-            { value: "mobile", label: "Телефон" },
-            { value: "desktop", label: "Компьютер" },
-          ].map((option) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white p-1" aria-label="Қаріп өлшемі">
             <button
-              key={option.value}
               type="button"
-              onClick={() => setViewport(option.value as PreviewViewport)}
-              aria-pressed={viewport === option.value}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                viewport === option.value
-                  ? "bg-purple-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
+              onClick={() => applyFontSize(getTaskTextScaleFontSizePx(previewTask.text_scale) - 1)}
+              disabled={getTaskTextScaleFontSizePx(previewTask.text_scale) <= MIN_TASK_FONT_SIZE}
+              aria-label="Қаріп өлшемін кішірейту"
+              className="rounded-md px-2 py-1 text-xs font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40"
             >
-              {option.label}
+              −
             </button>
-          ))}
+            <input
+              type="number"
+              min={MIN_TASK_FONT_SIZE}
+              max={MAX_TASK_FONT_SIZE}
+              list="student-preview-font-sizes"
+              aria-label="Қаріп өлшемі (px)"
+              value={fontSizeDraft}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setFontSizeDraft(raw);
+                const parsed = Number(raw);
+                if (raw.trim() !== "" && Number.isFinite(parsed) && parsed >= MIN_TASK_FONT_SIZE && parsed <= MAX_TASK_FONT_SIZE) {
+                  const nextScale = String(Math.round(parsed));
+                  setLocalTextScale(nextScale);
+                  onTextScaleChange?.(nextScale);
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number(fontSizeDraft);
+                if (Number.isFinite(parsed) && fontSizeDraft.trim() !== "") {
+                  applyFontSize(parsed);
+                } else {
+                  setFontSizeDraft(String(getTaskTextScaleFontSizePx(previewTask.text_scale)));
+                }
+              }}
+              className="w-14 rounded-md border border-gray-200 px-2 py-1 text-center text-xs font-semibold text-gray-900 focus:border-purple-500 focus:outline-none"
+            />
+            <datalist id="student-preview-font-sizes">
+              {WORD_FONT_SIZES.map((size) => (
+                <option key={size} value={size} />
+              ))}
+            </datalist>
+            <button
+              type="button"
+              onClick={() => applyFontSize(getTaskTextScaleFontSizePx(previewTask.text_scale) + 1)}
+              disabled={getTaskTextScaleFontSizePx(previewTask.text_scale) >= MAX_TASK_FONT_SIZE}
+              aria-label="Қаріп өлшемін үлкейту"
+              className="rounded-md px-2 py-1 text-xs font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
+          <div className="flex rounded-lg border border-gray-300 bg-white p-1" aria-label="Алдын ала қарау өлшемі">
+            {[
+              { value: "mobile", label: "Телефон" },
+              { value: "desktop", label: "Компьютер" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setViewport(option.value as PreviewViewport)}
+                aria-pressed={viewport === option.value}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  viewport === option.value
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

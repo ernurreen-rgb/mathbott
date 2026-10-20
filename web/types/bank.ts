@@ -4,7 +4,7 @@ import type { AnswerMode, LessonTaskOption, LessonTaskSubquestion, QuestionType 
 // Bank tasks (admin pool for trial tests)
 export type BankDifficulty = "A" | "B" | "C";
 
-export type TaskTextScale = "sm" | "md" | "lg";
+export type TaskTextScale = "sm" | "md" | "lg" | (string & {});
 
 
 export interface BankTask {

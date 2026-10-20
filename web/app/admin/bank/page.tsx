@@ -34,7 +34,7 @@ import {
   isMcqQuestionType,
   serializeMcqAnswerLabels
 } from "@/lib/question-options";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import {
   BankDifficulty,
@@ -640,7 +640,10 @@ export default function AdminBankPage() {
                       <div key={task.id} className="bg-white/70 rounded-2xl p-4 border border-white/40">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
-                            <div className={`font-semibold text-gray-900 break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}>
+                            <div
+                              className={`font-semibold text-gray-900 break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
+                              style={getTaskTextScaleStyle(task.text_scale)}
+                            >
                               {offset + idx + 1}. {task.text ? <MathRender inline latex={task.text} /> : `Тапсырма #${task.id}`}
                             </div>
                             <div className="text-sm text-gray-600 mt-1">

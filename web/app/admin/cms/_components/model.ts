@@ -111,9 +111,9 @@ export const formatQuestionTypeLabel = (questionType?: string | null): string =>
 };
 
 export const TASK_TEXT_SCALE_OPTIONS: Array<{ value: TaskTextScale; label: string }> = [
-  { value: "sm", label: "S" },
-  { value: "md", label: "M" },
-  { value: "lg", label: "L" },
+  { value: "sm", label: "14" },
+  { value: "md", label: "15" },
+  { value: "lg", label: "16" },
 ];
 
 export type CreateTaskFormState = {

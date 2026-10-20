@@ -1,6 +1,6 @@
 "use client";
 import MathRender from "@/components/ui/MathRender";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { BankDifficulty, BankTask } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -147,7 +147,10 @@ export default function BankPickerDialog({
                         {alreadyAssigned ? "Тестте бар" : "Таңдау"}
                       </label>
                     </div>
-                    <div className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}><MathRender latex={task.text || ""} /></div>
+                    <div
+                      className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
+                      style={getTaskTextScaleStyle(task.text_scale)}
+                    ><MathRender latex={task.text || ""} /></div>
                     <button
                       className="text-xs bg-green-600 text-white rounded px-2 py-1"
                       onClick={() => void onAssignBankTask(task.id)}

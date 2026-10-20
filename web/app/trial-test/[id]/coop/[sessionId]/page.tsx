@@ -24,7 +24,7 @@ import { useCoopAnswerSync } from "@/lib/use-coop-answer-sync";
 import { resolveWebSocketBase } from "@/lib/websocket-url";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { LessonTask, QuestionType, TrialTestCoopSession, TrialTestDetails } from "@/types";
 
@@ -533,7 +533,10 @@ export default function TrialTestCoopPage() {
               <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
                 <div>
                 <div className="mb-4">
-                  <div className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))}`}>
+                  <div
+                    className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))}`}
+                    style={getTaskTextScaleStyle(currentTask.text_scale)}
+                  >
                     {currentTask.text ? (
                       <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
                     ) : (

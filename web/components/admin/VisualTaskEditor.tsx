@@ -14,7 +14,7 @@ import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import { createCroppedImageFile } from "@/lib/imageCrop";
-import { getTaskTextScaleClass, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -356,6 +356,7 @@ export default function VisualTaskEditor({
                 }}
                 className={`font-semibold text-gray-900 min-h-[3rem] ${getTaskTextScaleClass(normalizeTaskTextScale(taskData.text_scale))} ${isEditing ? "cursor-pointer hover:bg-gray-100 rounded p-2" : ""
                   }`}
+                style={getTaskTextScaleStyle(taskData.text_scale)}
               >
                 {taskData.text ? (
                   <MathRender latex={taskData.text} />
@@ -365,34 +366,6 @@ export default function VisualTaskEditor({
               </div>
             )}
           </div>
-
-          {isEditing && (
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Мәтін өлшемі</label>
-              <div className="flex gap-2">
-                {[
-                  { label: "S", value: "sm" },
-                  { label: "M", value: "md" },
-                  { label: "L", value: "lg" },
-                ].map((item) => {
-                  const isActive = normalizeTaskTextScale(taskData.text_scale) === item.value;
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => updateTempTask({ text_scale: item.value as "sm" | "md" | "lg" })}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${isActive
-                        ? "border-purple-600 bg-purple-600 text-white"
-                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                        }`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           <BankMetadataFields
             isEditing={isEditing}
@@ -701,6 +674,7 @@ export default function VisualTaskEditor({
         <StudentTaskPreview
           task={{ ...tempTaskData, id: editingTaskId ?? -1, sort_order: tempTaskData.sort_order ?? tasks.length }}
           imageSrc={removeImage ? null : tempImagePreview || undefined}
+          onTextScaleChange={(text_scale) => updateTempTask({ text_scale })}
           className="mt-4"
         />
       )}
