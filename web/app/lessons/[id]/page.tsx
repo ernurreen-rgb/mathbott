@@ -77,7 +77,26 @@ export default function LessonPage() {
       else console.error("Failed to fetch lesson:", err);
     }
     if (data) {
-      setLesson(data);
+      setLesson((prev) => {
+        if (!prev) return data;
+        // Preserve any tasks completed locally
+        return {
+          ...data,
+          mini_lessons: data.mini_lessons.map((ml) => {
+            const prevMl = prev.mini_lessons.find((m) => m.id === ml.id);
+            return {
+              ...ml,
+              tasks: ml.tasks.map((t) => {
+                const prevTask = prevMl?.tasks.find((pt) => pt.id === t.id);
+                if (prevTask?.status === "completed") {
+                  return { ...t, status: "completed" };
+                }
+                return t;
+              }),
+            };
+          }),
+        };
+      });
       if (!selectedMiniId) {
         const firstNotCompleted = data.mini_lessons.find((ml) => !ml.progress?.completed);
         setSelectedMiniId((firstNotCompleted || data.mini_lessons[0])?.id ?? null);
@@ -144,10 +163,26 @@ export default function LessonPage() {
     return minis[idx + 1]?.id ?? null;
   }, [lesson, selectedMiniId]);
 
+  const prevMiniId = useMemo(() => {
+    if (!lesson || !selectedMiniId) return null;
+    const minis = lesson.mini_lessons.slice().sort((a, b) => a.mini_index - b.mini_index);
+    const idx = minis.findIndex((m) => m.id === selectedMiniId);
+    if (idx <= 0) return null;
+    return minis[idx - 1]?.id ?? null;
+  }, [lesson, selectedMiniId]);
+
   const activeTask = useMemo(() => {
     if (!activeTaskId) return null;
     return orderedMiniTasks.find((t) => t.id === activeTaskId) || null;
   }, [orderedMiniTasks, activeTaskId]);
+
+  const currentTaskIndex = useMemo(() => {
+    if (!activeTaskId) return -1;
+    return orderedMiniTasks.findIndex((t) => t.id === activeTaskId);
+  }, [orderedMiniTasks, activeTaskId]);
+
+  const hasPrevTask = currentTaskIndex > 0 || prevMiniId !== null;
+  const isTaskCompleted = activeTask ? activeTask.status === "completed" || !!feedback[activeTask.id]?.ok : false;
 
   // When mini-lesson changes or tasks update, pick the first not completed task
   useEffect(() => {
@@ -157,14 +192,10 @@ export default function LessonPage() {
     }
     const firstPending = orderedMiniTasks.find((t) => t.status !== "completed");
     setActiveTaskId((prev) => {
-      // If current task still exists and is not completed, keep it
-      if (prev && orderedMiniTasks.some((t) => t.id === prev && t.status !== "completed")) return prev;
+      // If current task still exists in the selected mini-lesson, keep it
+      if (prev && orderedMiniTasks.some((t) => t.id === prev)) return prev;
       return (firstPending || orderedMiniTasks[0])?.id ?? null;
     });
-    // Reset per-task feedback when switching mini-lesson
-    setFeedback({});
-    setSelectedAnswers({});
-    setCorrectAnswers({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMiniId, selectedMini?.id, orderedMiniTasks.length]);
 
@@ -184,7 +215,7 @@ export default function LessonPage() {
   const goToNextTaskOrMini = (currentTaskId: number) => {
     const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
     if (idx < 0) return;
-    const nextTask = orderedMiniTasks.slice(idx + 1).find((t) => t.status !== "completed") || orderedMiniTasks[idx + 1];
+    const nextTask = orderedMiniTasks[idx + 1];
     if (nextTask) {
       setActiveTaskId(nextTask.id);
       return;
@@ -196,6 +227,27 @@ export default function LessonPage() {
     }
     // lesson fully completed or no next mini
     setActiveTaskId(null);
+  };
+
+  const goToPrevTaskOrMini = (currentTaskId: number) => {
+    const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
+    if (idx < 0) return;
+    if (idx > 0) {
+      setActiveTaskId(orderedMiniTasks[idx - 1].id);
+      return;
+    }
+    if (prevMiniId && lesson) {
+      const prevMini = lesson.mini_lessons.find((m) => m.id === prevMiniId);
+      if (prevMini && prevMini.tasks.length > 0) {
+        const prevMiniTasks = prevMini.tasks
+          .slice()
+          .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+        const lastTask = prevMiniTasks[prevMiniTasks.length - 1];
+        setSelectedMiniId(prevMiniId);
+        setActiveTaskId(lastTask?.id ?? null);
+        return;
+      }
+    }
   };
 
   const submitCheck = async (task: LessonTask, answer: string) => {
@@ -589,18 +641,29 @@ export default function LessonPage() {
               {orderedMiniTasks.length === 0 ? (
                 <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>
               ) : !activeTask ? (
-                <div className="text-gray-700">
-                  Кіші сабақ аяқталды.
+                <div className="text-gray-700 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    {orderedMiniTasks.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
+                        className="mr-3 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Icon name="arrowLeft" /> Алдыңғы есеп
+                      </button>
+                    )}
+                    <span className="font-semibold">Кіші сабақ аяқталды.</span>
+                  </div>
                   {nextMiniId ? (
                     <button
                       type="button"
                       onClick={() => setSelectedMiniId(nextMiniId)}
-                      className="ml-3 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
                     >
                       Келесі кіші сабақ <Icon name="arrowRight" />
                     </button>
                   ) : (
-                    <span className="ml-2 font-semibold">Сабақ аяқталды!</span>
+                    <span className="font-semibold text-green-700">Сабақ аяқталды!</span>
                   )}
                 </div>
               ) : (
@@ -633,24 +696,39 @@ export default function LessonPage() {
                     )}
                     </div>
 
-                    {activeTask.status === "completed" && (
-                      <div className="mt-4 flex justify-between items-center">
-                        <button
-                          type="button"
-                          onClick={() => handleReportClick(activeTask.id)}
-                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg"
-                        >
-                          Шағым
-                        </button>
+                    <div className="mt-4 flex justify-between items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => goToPrevTaskOrMini(activeTask.id)}
+                        disabled={!hasPrevTask}
+                        className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Icon name="arrowLeft" /> Алдыңғы
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReportClick(activeTask.id)}
+                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg"
+                      >
+                        Шағым
+                      </button>
+                      {isTaskCompleted ? (
                         <button
                           type="button"
                           onClick={() => goToNextTaskOrMini(activeTask.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
                         >
                           Келесі <Icon name="arrowRight" />
                         </button>
-                      </div>
-                    )}
+                      ) : (
+                        <div
+                          className="invisible py-2 px-3 sm:px-4 font-bold inline-flex items-center gap-1.5 select-none"
+                          aria-hidden="true"
+                        >
+                          Келесі <Icon name="arrowRight" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
