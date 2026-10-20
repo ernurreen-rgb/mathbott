@@ -78,13 +78,12 @@ class StatisticsRepository(BaseRepository):
                 async with db.execute("SELECT COUNT(DISTINCT user_id) FROM solutions WHERE DATE(created_at) >= ?", (month_ago.isoformat(),)) as cursor:
                     stats["active_users_month"] = (await cursor.fetchone())[0]
                 
-                async with db.execute("""SELECT AVG(total_solved) as avg_solved, AVG(total_points) as avg_points,
+                async with db.execute("""SELECT AVG(total_solved) as avg_solved,
                        AVG(streak) as avg_streak FROM users""") as cursor:
                     row = await cursor.fetchone()
                     stats["avg_user_stats"] = {
                         "avg_solved": round(row[0] or 0, 2),
-                        "avg_points": round(row[1] or 0, 2),
-                        "avg_streak": round(row[2] or 0, 2)
+                        "avg_streak": round(row[1] or 0, 2)
                     }
                 
                 if stats["total_solutions"] > 0:

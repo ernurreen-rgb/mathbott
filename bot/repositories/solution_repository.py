@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from .base import BaseRepository
-from utils.scoring import build_reward_identity, calculate_next_streak
+from utils.learning_progress import build_completion_identity, calculate_next_streak, insert_task_completion
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ class SolutionRepository(BaseRepository):
         task = task_snapshot or await task_repo.get_task_by_id(task_id)
         if not task:
             raise ValueError("Task not found")
-        reward = build_reward_identity(task, surface="module")
-        awarded = False
+        completion = build_completion_identity(task, surface="module")
+        recorded = False
         milestone = None
         async with self._write_transaction() as db:
             await db.execute(
@@ -26,21 +26,14 @@ class SolutionRepository(BaseRepository):
                 (user_id, task_id, answer, is_correct),
             )
             if is_correct:
-                cursor = await db.execute(
-                    """INSERT INTO user_task_rewards
-                       (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
-                       VALUES (?, ?, ?, ?, ?, 'module', ?)
-                       ON CONFLICT(user_id, reward_key) DO NOTHING""",
-                    (user_id, reward["reward_key"], reward["bank_task_id"],
-                     reward["difficulty"], reward["points"], task_id),
+                recorded = await insert_task_completion(
+                    db, user_id=user_id, **completion, source="module", source_ref_id=task_id,
                 )
-                awarded = cursor.rowcount == 1
-                if awarded:
+                if recorded:
                     await db.execute(
-                        """UPDATE users SET total_points = total_points + ?,
-                           total_solved = total_solved + 1, last_active = CURRENT_TIMESTAMP
+                        """UPDATE users SET total_solved = total_solved + 1, last_active = CURRENT_TIMESTAMP
                            WHERE id = ?""",
-                        (reward["points"], user_id),
+                        (user_id,),
                     )
                 await db.execute(
                     """INSERT INTO user_progress (user_id, task_id, status, completed_at)
@@ -65,7 +58,7 @@ class SolutionRepository(BaseRepository):
                         milestone = streak
 
         # Optional effects run only after durable progress has committed.
-        if awarded:
+        if recorded:
             try:
                 await achievement_repo.check_and_unlock_achievements(user_id, user_repo)
             except Exception:

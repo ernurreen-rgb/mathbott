@@ -32,9 +32,7 @@ class AchievementRepository(BaseRepository):
             {"id": "streak_7", "name": "Қатарынан апта", "description": "7 күн қатарынан есептерді шешіңіз", "icon": "🔥",
              "check": lambda u: u.get("streak", 0) >= 7},
             {"id": "streak_30", "name": "Қатарынан ай", "description": "30 күн қатарынан есептерді шешіңіз", "icon": "⭐",
-             "check": lambda u: u.get("streak", 0) >= 30},
-            {"id": "thousand_points", "name": "Мыңдық", "description": "1000 ұпай жинаңыз", "icon": "💵",
-             "check": lambda u: u.get("total_points", 0) >= 1000}
+             "check": lambda u: u.get("streak", 0) >= 30}
         ]
         
         for achievement in achievements:
@@ -87,8 +85,7 @@ class AchievementRepository(BaseRepository):
             "fifty_solves": {"name": "Елудік", "description": "50 есепті шешіңіз", "icon": "💯"},
             "hundred_solves": {"name": "Жүздік", "description": "100 есепті шешіңіз", "icon": "🏆"},
             "streak_7": {"name": "Қатарынан апта", "description": "7 күн қатарынан есептерді шешіңіз", "icon": "🔥"},
-            "streak_30": {"name": "Қатарынан ай", "description": "30 күн қатарынан есептерді шешіңіз", "icon": "⭐"},
-            "thousand_points": {"name": "Мыңдық", "description": "1000 ұпай жинаңыз", "icon": "💵"}
+            "streak_30": {"name": "Қатарынан ай", "description": "30 күн қатарынан есептерді шешіңіз", "icon": "⭐"}
         }
         
         result = []

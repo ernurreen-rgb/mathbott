@@ -188,7 +188,7 @@ class FriendsRepository(BaseRepository):
 
     async def list_friends(self, user_id: int) -> List[Dict[str, Any]]:
         query = """
-            SELECT u.id, u.nickname, u.total_points, u.total_solved
+            SELECT u.id, u.nickname, u.total_solved
             FROM friendships f
             JOIN users u ON u.id = f.friend_id
             WHERE f.user_id = ?
@@ -311,7 +311,7 @@ class FriendsRepository(BaseRepository):
 
     async def list_blocked_users(self, blocker_id: int) -> List[Dict[str, Any]]:
         query = """
-            SELECT u.id, u.nickname, u.total_points, u.total_solved, b.created_at as blocked_at
+            SELECT u.id, u.nickname, u.total_solved, b.created_at as blocked_at
             FROM blocks b
             JOIN users u ON u.id = b.blocked_id
             WHERE b.blocker_id = ?

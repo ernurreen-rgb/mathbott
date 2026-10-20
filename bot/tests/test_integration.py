@@ -30,9 +30,7 @@ async def test_complete_task_solving_flow(test_db, test_user):
     # Check user stats updated
     user = await test_db.users.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
-    assert user["total_points"] == 15
-
-
+    assert "total_points" not in user
 @pytest.mark.asyncio
 async def test_module_progress_calculation_flow(test_db, test_user):
     """Test module progress calculation flow"""

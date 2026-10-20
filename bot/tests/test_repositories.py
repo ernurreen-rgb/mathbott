@@ -50,8 +50,7 @@ async def test_user_repository_create_user_by_email(test_db):
     user = await repo.create_user_by_email("newuser@example.com")
     assert user is not None
     assert user["email"] == "newuser@example.com"
-    assert user["total_points"] == 0
-    
+    assert "total_points" not in user
     # Try to create again (should return existing)
     existing = await repo.create_user_by_email("newuser@example.com")
     assert existing["id"] == user["id"]
@@ -399,42 +398,36 @@ async def test_user_repository_get_solved_task_ids(test_db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_user_repository_award_task_reward_once_deduplicates(test_db, test_user):
+async def test_user_repository_record_task_completion_once_deduplicates(test_db, test_user):
     repo = UserRepository(db_path=test_db.db_path)
 
-    first = await repo.award_task_reward_once(
+    first = await repo.record_task_completion_once(
         user_id=test_user["id"],
-        reward_key="bank:123",
-        bank_task_id=None,
-        difficulty="C",
-        points=20,
-        source="trial_test",
+        completion_key="bank:123",
+        bank_task_id=None,        source="trial_test",
         source_ref_id=77,
     )
-    assert first == {"awarded": True, "points": 20}
+    assert first == {"recorded": True}
 
     user_after_first = await test_db.users.get_user_by_id(test_user["id"])
-    assert user_after_first["total_points"] == 20
+    assert "total_points" not in user_after_first
     assert user_after_first["total_solved"] == 1
 
-    second = await repo.award_task_reward_once(
+    second = await repo.record_task_completion_once(
         user_id=test_user["id"],
-        reward_key="bank:123",
-        bank_task_id=None,
-        difficulty="C",
-        points=20,
-        source="trial_test",
+        completion_key="bank:123",
+        bank_task_id=None,        source="trial_test",
         source_ref_id=77,
     )
-    assert second == {"awarded": False, "points": 0}
+    assert second == {"recorded": False}
 
     user_after_second = await test_db.users.get_user_by_id(test_user["id"])
-    assert user_after_second["total_points"] == 20
+    assert "total_points" not in user_after_second
     assert user_after_second["total_solved"] == 1
 
 
 @pytest.mark.asyncio
-async def test_record_solution_uses_difficulty_and_blocks_repeat_points(test_db, test_user):
+async def test_record_solution_counts_unique_completions_without_points(test_db, test_user):
     module = await test_db.curriculum.create_module("Scoring Module", sort_order=1)
     section = await test_db.curriculum.create_section(module["id"], "Scoring Section", sort_order=1)
     task = await test_db.create_task_in_section(
@@ -447,12 +440,12 @@ async def test_record_solution_uses_difficulty_and_blocks_repeat_points(test_db,
 
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
     after_first = await test_db.users.get_user_by_id(test_user["id"])
-    assert after_first["total_points"] == 10
+    assert "total_points" not in after_first
     assert after_first["total_solved"] == 1
 
     await test_db.record_solution(test_user["id"], task["id"], "42", True)
     after_second = await test_db.users.get_user_by_id(test_user["id"])
-    assert after_second["total_points"] == 10
+    assert "total_points" not in after_second
     assert after_second["total_solved"] == 1
 
 

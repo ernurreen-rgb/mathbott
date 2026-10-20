@@ -15,7 +15,7 @@ async def test_get_user_web(client, test_db):
     assert response.status_code == 200
     data = response.json()
     assert data["email"] == user["email"]
-    assert "total_points" in data
+    assert "total_points" not in data
     assert "total_solved" in data
     assert "achievements" in data
 

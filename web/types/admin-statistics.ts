@@ -1,7 +1,6 @@
 
 export interface AdminAvgUserStats {
   avg_solved: number;
-  avg_points: number;
   avg_streak: number;
 }
 

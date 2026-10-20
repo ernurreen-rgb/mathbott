@@ -122,9 +122,8 @@ export default function StatisticsPage() {
             
             <div className="mb-6">
               <h3 className="text-xl font-semibold mb-3">Орташа көрсеткіштер</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <StatCard label="Орташа шешілген" value={stats.avg_user_stats.avg_solved.toFixed(1)} />
-                <StatCard label="Орташа ұпай" value={stats.avg_user_stats.avg_points.toFixed(1)} />
                 <StatCard label="Орташа серия" value={stats.avg_user_stats.avg_streak.toFixed(1)} />
               </div>
             </div>

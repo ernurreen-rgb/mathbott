@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 from routes.admin.common import _normalize_text_scale
 from utils.file_storage import normalize_stored_image_filename
-from utils.scoring import build_reward_identity, normalize_difficulty_code, points_for_difficulty
+from utils.learning_progress import build_completion_identity
 from utils.internal_proxy_auth import build_ws_token, verify_ws_token
 from utils.validation import (
     get_mcq_answer_count,
@@ -347,36 +347,14 @@ def test_normalize_text_scale():
     assert exc_info.value.detail == "text_scale must be one of sm, md, lg"
 
 
-def test_scoring_helpers():
-    assert normalize_difficulty_code("a") == "A"
-    assert normalize_difficulty_code("B") == "B"
-    assert normalize_difficulty_code("c") == "C"
-    assert normalize_difficulty_code("bad") == "B"
-
-    assert points_for_difficulty("A") == 10
-    assert points_for_difficulty("B") == 15
-    assert points_for_difficulty("C") == 20
-    assert points_for_difficulty(None) == 15
-
-    module_identity = build_reward_identity(
-        {"id": 11, "bank_task_id": 5, "difficulty": "C"},
-        surface="module",
-    )
-    assert module_identity["reward_key"] == "bank:5"
-    assert module_identity["difficulty"] == "C"
-    assert module_identity["points"] == 20
-
-    module_fallback = build_reward_identity(
-        {"id": 12, "bank_task_id": None, "difficulty": "A"},
-        surface="module",
-    )
-    assert module_fallback["reward_key"] == "module-task:12"
-
-    trial_fallback = build_reward_identity(
-        {"id": 21, "bank_task_id": 0, "bank_difficulty": "B"},
-        surface="trial_test",
-    )
-    assert trial_fallback["reward_key"] == "trial-task:21"
+def test_completion_identity_helpers():
+    assert build_completion_identity({"id": 11, "bank_task_id": 5, "difficulty": "C"}, surface="module") == {
+        "completion_key": "bank:5", "bank_task_id": 5,
+    }
+    assert build_completion_identity({"id": 12, "bank_task_id": None}, surface="module") == {
+        "completion_key": "module-task:12", "bank_task_id": None,
+    }
+    assert build_completion_identity({"id": 21, "bank_task_id": 0}, surface="trial_test")["completion_key"] == "trial-task:21"
 
 
 def test_stored_image_filename_normalization():

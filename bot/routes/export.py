@@ -61,8 +61,7 @@ def setup_export_routes(app, db):
             "id": 1,
             "email": "user@example.com",
             "nickname": "TestUser",
-            "total_solved": 50,
-            "total_points": 500
+            "total_solved": 50
           },
           "progress": [
             {
@@ -119,7 +118,6 @@ def setup_export_routes(app, db):
                     yield _csv_line(["Email", user["email"]])
                     yield _csv_line(["Nickname", user.get("nickname", "")])
                     yield _csv_line(["Total Solved", user["total_solved"]])
-                    yield _csv_line(["Total Points", user["total_points"]])
                     yield "\n"
                     
                     # Stream progress
@@ -173,7 +171,6 @@ def setup_export_routes(app, db):
                     yield f'    "email": "{user["email"]}",\n'
                     yield f'    "nickname": {json.dumps(user.get("nickname"))},\n'
                     yield f'    "total_solved": {user["total_solved"]},\n'
-                    yield f'    "total_points": {user["total_points"]},\n'
                     yield f'    "streak": {user.get("streak", 0)}\n'
                     yield '  },\n'
                     

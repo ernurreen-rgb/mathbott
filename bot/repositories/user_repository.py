@@ -557,54 +557,28 @@ class UserRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
 
-    async def award_task_reward_once(
+    async def record_task_completion_once(
         self,
         *,
         user_id: int,
-        reward_key: str,
+        completion_key: str,
         bank_task_id: Optional[int],
-        difficulty: str,
-        points: int,
         source: str,
         source_ref_id: Optional[int],
     ) -> Dict[str, Any]:
-        """Award task points once per unique reward key for a user."""
-        async def operation() -> Dict[str, Any]:
-            async with self._connection() as db:
-                try:
-                    await db.execute(
-                        """
-                        INSERT INTO user_task_rewards
-                        (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            user_id,
-                            reward_key,
-                            bank_task_id,
-                            difficulty,
-                            points,
-                            source,
-                            source_ref_id,
-                        ),
-                    )
-                except db_driver.IntegrityError:
-                    return {"awarded": False, "points": 0}
-
+        """Increment solved count once per unique exercise, without awarding points."""
+        from utils.learning_progress import insert_task_completion
+        async with self._write_transaction() as db:
+            recorded = await insert_task_completion(
+                db, user_id=user_id, completion_key=completion_key, bank_task_id=bank_task_id,
+                source=source, source_ref_id=source_ref_id,
+            )
+            if recorded:
                 await db.execute(
-                    """
-                    UPDATE users SET
-                        total_points = total_points + ?,
-                        total_solved = total_solved + 1,
-                        last_active = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (points, user_id),
+                    "UPDATE users SET total_solved = total_solved + 1, last_active = CURRENT_TIMESTAMP WHERE id = ?",
+                    (user_id,),
                 )
-                await db.commit()
-                return {"awarded": True, "points": points}
-
-        return await self._run_with_lock_retry(operation)
+            return {"recorded": recorded}
 
     async def update_streak(self, user_id: int):
         """Update user streak - increment if solved today or yesterday, reset if longer gap"""

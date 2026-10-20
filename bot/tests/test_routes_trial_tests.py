@@ -78,7 +78,7 @@ async def test_trial_test_retakes_save_separate_results_without_duplicate_reward
     assert first_json["percentage"] == 100.0
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_first["total_points"] == 45
+    assert "total_points" not in user_after_first
     assert user_after_first["total_solved"] == 3
 
     second = client.post(f"/api/trial-tests/{trial_test['id']}/submit", json=payload)
@@ -89,7 +89,7 @@ async def test_trial_test_retakes_save_separate_results_without_duplicate_reward
     assert results[0]["id"] == second.json()["result_id"]
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_second["total_points"] == 45
+    assert "total_points" not in user_after_second
     assert user_after_second["total_solved"] == 3
 
 
@@ -128,7 +128,7 @@ async def test_trial_test_concurrent_submit_allows_only_one_result(test_db, test
     assert len(results) == 1
 
     user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_submit["total_points"] == 15
+    assert "total_points" not in user_after_submit
     assert user_after_submit["total_solved"] == 1
 
 
@@ -149,8 +149,7 @@ async def test_trial_test_retry_reuses_attempt_but_retake_preserves_both_scores(
     retry = client.post(path, json={**payload, "answers": {str(task["id"]): "42"}})
     assert retry.status_code == 200
     assert retry.json() == first.json()
-    assert (await test_db.users.get_user_by_id(test_user["id"]))["total_points"] == 0
-
+    assert "total_points" not in (await test_db.users.get_user_by_id(test_user["id"]))
     retake = client.post(path, json={**payload, "attempt_id": "second-attempt",
                                    "answers": {str(task["id"]): "42"}})
     assert retake.status_code == 200
@@ -159,9 +158,7 @@ async def test_trial_test_retry_reuses_attempt_but_retake_preserves_both_scores(
     results = client.get(f"/api/trial-tests/{trial['id']}/results", params={"email": test_user["email"]}).json()
     assert [result["score"] for result in results] == [1, 0]
     assert results[1]["answers"][str(task["id"])]["answer"] == "wrong"
-    assert (await test_db.users.get_user_by_id(test_user["id"]))["total_points"] == 15
-
-
+    assert "total_points" not in (await test_db.users.get_user_by_id(test_user["id"]))
 @pytest.mark.asyncio
 @pytest.mark.parametrize("attempt_id", ["", "x" * 65, 7, "invalid id"])
 async def test_trial_test_rejects_invalid_attempt_id(client, test_user, attempt_id):
@@ -238,7 +235,7 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
     assert module_response.status_code == 200
 
     user_after_module = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_module["total_points"] == 10
+    assert "total_points" not in user_after_module
     assert user_after_module["total_solved"] == 1
 
     trial_response = client.post(
@@ -249,7 +246,7 @@ async def test_trial_test_submit_does_not_double_award_bank_task_solved_in_modul
     assert trial_response.json()["score"] == 1
 
     user_after_trial = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_trial["total_points"] == 10
+    assert "total_points" not in user_after_trial
     assert user_after_trial["total_solved"] == 1
 
 
@@ -313,7 +310,7 @@ async def test_trial_test_submit_still_returns_200_when_achievement_check_fails(
     assert response.json()["score"] == 1
 
     user_after_submit = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_submit["total_points"] == 15
+    assert "total_points" not in user_after_submit
     assert user_after_submit["total_solved"] == 1
 
 
@@ -354,7 +351,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
     assert payload["percentage"] == 100.0
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_first["total_points"] == 20
+    assert "total_points" not in user_after_first
     assert user_after_first["total_solved"] == 1
 
     repeat = client.post(
@@ -368,7 +365,7 @@ async def test_coop_finish_awards_points_once(client, test_db, test_user):
     assert repeat.status_code == 200
 
     user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_repeat["total_points"] == 20
+    assert "total_points" not in user_after_repeat
     assert user_after_repeat["total_solved"] == 1
 
 

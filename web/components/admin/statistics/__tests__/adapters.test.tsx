@@ -32,7 +32,6 @@ function makeBaseStats(): AdminStatistics {
     active_users_month: 0,
     avg_user_stats: {
       avg_solved: 0,
-      avg_points: 0,
       avg_streak: 0,
     },
     popular_tasks: [],

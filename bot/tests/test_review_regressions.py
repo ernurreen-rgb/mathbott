@@ -81,7 +81,7 @@ async def test_failed_progress_write_rolls_back_solution_and_reward(client, test
     response = client.post("/api/task/check", json={"email": test_user["email"], "task_id": task["id"], "answer": "4"})
     assert response.status_code == 503
     async with test_db.tasks._connection() as conn:
-        for table in ("solutions", "user_progress", "user_task_rewards"):
+        for table in ("solutions", "user_progress", "user_task_completions"):
             async with conn.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (test_user["id"],)) as cursor:
                 assert (await cursor.fetchone())[0] == 0
         await drop_reject_trigger(conn, "user_progress", "reject_progress")
@@ -90,7 +90,7 @@ async def test_failed_progress_write_rolls_back_solution_and_reward(client, test
         assert client.post("/api/task/check", json={"email": test_user["email"], "task_id": task["id"], "answer": "4"}).status_code == 200
     user = await test_db.users.get_user_by_id(test_user["id"])
     assert user["total_solved"] == 1
-    assert user["total_points"] == 15
+    assert "total_points" not in user
     assert (await test_db.progress.get_user_task_progress(test_user["id"], task["id"]))["status"] == "completed"
 
 
@@ -107,7 +107,7 @@ async def test_coop_finish_retries_preserve_original_result_and_allow_solo(clien
     assert client.post(path, json=payload).json()["score"] == 0
     saved = await test_db.trial_tests.get_user_trial_test_results(test_user["id"], trial["id"])
     assert len(saved) == 1
-    assert (await test_db.users.get_user_by_id(test_user["id"]))["total_points"] == 0
+    assert "total_points" not in (await test_db.users.get_user_by_id(test_user["id"]))
     solo = client.post(f"/api/trial-tests/{trial['id']}/submit", json={"email": test_user["email"], "answers": payload["answers"]})
     assert solo.status_code == 200
     assert solo.json()["score"] == 1

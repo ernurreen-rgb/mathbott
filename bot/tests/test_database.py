@@ -11,9 +11,7 @@ async def test_create_user(test_db):
     user = await test_db.users.create_user_by_email("test@example.com")
     assert user is not None
     assert user["email"] == "test@example.com"
-    assert user["total_points"] == 0
-
-
+    assert "total_points" not in user
 @pytest.mark.asyncio
 async def test_get_user_by_email(test_db, test_user):
     """Test getting user by email"""
@@ -71,9 +69,7 @@ async def test_record_solution(test_db, test_user):
     # Check user stats updated
     user = await test_db.users.get_user_by_email("test@example.com")
     assert user["total_solved"] == 1
-    assert user["total_points"] == 15
-
-
+    assert "total_points" not in user
 @pytest.mark.asyncio
 async def test_update_task_progress(test_db, test_user):
     """Test updating task progress"""

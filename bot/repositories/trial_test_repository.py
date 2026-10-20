@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any
 from uuid import uuid4
 
 from .base import BaseRepository
-from utils.scoring import calculate_next_streak
+from utils.learning_progress import calculate_next_streak, insert_task_completion
 from .bank_task_repository import BankTaskRepository
 
 logger = logging.getLogger(__name__)
@@ -455,7 +455,7 @@ class TrialTestRepository(BaseRepository):
         total: int,
         percentage: float,
         answers: Dict[int, Dict[str, Any]],
-        rewards: List[Dict[str, Any]],
+        completions: List[Dict[str, Any]],
         should_update_streak: bool,
         delete_draft: bool = True,
         submit_mode: str = "solo",
@@ -483,7 +483,7 @@ class TrialTestRepository(BaseRepository):
                             saved = await saved_cursor.fetchone()
                         if saved:
                             await db.rollback()
-                            return {"result": dict(saved), "awarded_any": False,
+                            return {"result": dict(saved), "recorded_any": False,
                                     "streak_milestone": None, "reused": True,
                                     "session_status": None}
                     if coop_session_id is not None:
@@ -505,7 +505,7 @@ class TrialTestRepository(BaseRepository):
                             saved = await saved_cursor.fetchone()
                         if saved:
                             await db.rollback()
-                            return {"result": dict(saved), "awarded_any": False,
+                            return {"result": dict(saved), "recorded_any": False,
                                     "streak_milestone": None, "reused": True,
                                     "session_status": participant["status"]}
                         if participant["is_finished"] or participant["status"] != "active":
@@ -523,43 +523,22 @@ class TrialTestRepository(BaseRepository):
                     )
                     result_id = int(cursor.lastrowid)
 
-                    awarded_any = False
-                    awarded_count = 0
-                    awarded_points = 0
-                    for reward in rewards:
-                        before_changes = db.total_changes
-                        await db.execute(
-                            """
-                            INSERT INTO user_task_rewards
-                            (user_id, reward_key, bank_task_id, difficulty, points_awarded, source, source_ref_id)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                            ON CONFLICT(user_id, reward_key) DO NOTHING
-                            """,
-                            (
-                                user_id,
-                                reward["reward_key"],
-                                reward.get("bank_task_id"),
-                                reward["difficulty"],
-                                int(reward["points"]),
-                                reward["source"],
-                                reward.get("source_ref_id"),
-                            ),
-                        )
-                        if db.total_changes > before_changes:
-                            awarded_any = True
-                            awarded_count += 1
-                            awarded_points += int(reward["points"])
+                    recorded_any = False
+                    recorded_count = 0
+                    for completion in completions:
+                        if await insert_task_completion(db, user_id=user_id, **completion):
+                            recorded_any = True
+                            recorded_count += 1
 
-                    if awarded_count > 0:
+                    if recorded_count > 0:
                         await db.execute(
                             """
                             UPDATE users SET
-                                total_points = total_points + ?,
                                 total_solved = total_solved + ?,
                                 last_active = CURRENT_TIMESTAMP
                             WHERE id = ?
                             """,
-                            (awarded_points, awarded_count, user_id),
+                            (recorded_count, user_id),
                         )
 
                     streak_milestone = None
@@ -623,7 +602,7 @@ class TrialTestRepository(BaseRepository):
 
                     return {
                         "result": dict(result_row) if result_row else {"id": result_id},
-                        "awarded_any": awarded_any,
+                        "recorded_any": recorded_any,
                         "streak_milestone": streak_milestone,
                         "session_status": session_status,
                     }

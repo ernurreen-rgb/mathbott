@@ -13,7 +13,7 @@ from dependencies import get_db
 from database import Database
 from utils.cache import cache
 from utils.public_payload import public_subquestions, task_review_snapshot
-from utils.scoring import build_reward_identity
+from utils.learning_progress import build_completion_identity
 from utils.validation import get_mcq_answer_count, is_task_answer_correct, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
@@ -228,18 +228,16 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 percentage = (score / total * 100) if total > 0 else 0.0
 
                 answers_for_db = {int(k): v for k, v in results.items()}
-                rewards = []
+                completions = []
                 for task in tasks:
                     task_result = results.get(int(task["id"])) or {}
                     if not task_result.get("correct"):
                         continue
-                    reward = build_reward_identity(task, surface="trial_test")
-                    rewards.append(
+                    completion = build_completion_identity(task, surface="trial_test")
+                    completions.append(
                         {
-                            "reward_key": reward["reward_key"],
-                            "bank_task_id": reward["bank_task_id"],
-                            "difficulty": reward["difficulty"],
-                            "points": reward["points"],
+                            "completion_key": completion["completion_key"],
+                            "bank_task_id": completion["bank_task_id"],
                             "source": "trial_test",
                             "source_ref_id": int(task["id"]),
                         }
@@ -252,7 +250,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     total=total,
                     percentage=percentage,
                     answers=answers_for_db,
-                    rewards=rewards,
+                    completions=completions,
                     should_update_streak=had_any_correct,
                     delete_draft=True,
                     submit_mode="solo",
@@ -267,7 +265,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     except Exception as e:
                         logger.error(f"Failed to send streak notification after trial submit: {e}", exc_info=True)
 
-                if submit_result.get("awarded_any") or had_any_correct:
+                if submit_result.get("recorded_any") or had_any_correct:
                     try:
                         await db.check_and_unlock_achievements(user["id"])
                     except Exception as e:

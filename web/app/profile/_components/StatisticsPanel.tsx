@@ -26,19 +26,6 @@ export default function StatisticsPanel({ userData }: Props) {
             </div>
           </div>
 
-          {/* Очки опыта */}
-          <div className="glass rounded-2xl shadow-xl p-4 border border-white/30 bg-gradient-to-br from-yellow-50 to-orange-50">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-glow flex-shrink-0">
-                <Icon name="bolt" className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <div className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent mb-1">{userData.total_points || 0}</div>
-                <div className="text-sm font-semibold text-gray-700">Тәжірибе ұпайлары</div>
-              </div>
-            </div>
-          </div>
-
           {/* Решено задач */}
           <div className="glass rounded-2xl shadow-xl p-4 border border-white/30 bg-gradient-to-br from-green-50 to-emerald-50">
             <div className="flex items-center gap-3">

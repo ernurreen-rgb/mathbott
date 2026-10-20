@@ -9,7 +9,7 @@ from slowapi import Limiter
 from dependencies import get_db
 from database import Database
 from utils.cache import cache
-from utils.scoring import build_reward_identity
+from utils.learning_progress import build_completion_identity
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +89,17 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             if all_completed:
                 # Mark task as completed
                 await db.progress.update_task_progress(user["id"], task_id, "completed")
-                reward = build_reward_identity(task, surface="module")
-                award_result = await db.users.award_task_reward_once(
+                completion = build_completion_identity(task, surface="module")
+                completion_result = await db.users.record_task_completion_once(
                     user_id=user["id"],
-                    reward_key=reward["reward_key"],
-                    bank_task_id=reward["bank_task_id"],
-                    difficulty=reward["difficulty"],
-                    points=reward["points"],
+                    completion_key=completion["completion_key"],
+                    bank_task_id=completion["bank_task_id"],
                     source="module",
                     source_ref_id=task_id,
                 )
                 cache.invalidate_pattern(f"user:stats:{email}")
                 cache.invalidate_pattern(f"modules:map:{email}")
-                if award_result.get("awarded"):
+                if completion_result.get("recorded"):
                     try:
                         await db.users.update_streak(user["id"])
                     except Exception as e:

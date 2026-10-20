@@ -12,7 +12,6 @@ export interface UserData {
   email: string;
   nickname?: string;
   total_solved: number;
-  total_points: number;
   streak?: number;
   last_streak_date?: string | null;
   recent_activity_timestamps?: string[];

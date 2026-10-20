@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0009_trial_test_retakes"
+HEAD_REVISION = "0010_remove_learning_points"
 
 
 def test_quiz_upgrade_preserves_scores_and_detaches_question_fk(tmp_path):
@@ -220,7 +220,9 @@ def test_migrated_database_upgrade_is_noop(tmp_path):
 
 def test_existing_competitive_columns_are_removed_on_upgrade(tmp_path):
     path = str(tmp_path / "old_competitive_schema.db")
-    run_migrations(path)
+    from alembic import command
+    from migrations.runner import _build_config
+    command.upgrade(_build_config(path), "0004_task_accepted_answers")
 
     with sqlite3.connect(path) as conn:
         conn.execute("UPDATE alembic_version SET version_num = '0004_task_accepted_answers'")
@@ -266,7 +268,9 @@ def test_existing_competitive_columns_are_removed_on_upgrade(tmp_path):
 
 def test_removed_factor_grid_tasks_and_dependent_records_are_cleaned_up(tmp_path):
     path = str(tmp_path / "obsolete_question_type.db")
-    run_migrations(path)
+    from alembic import command
+    from migrations.runner import _build_config
+    command.upgrade(_build_config(path), "0005_remove_competitive_features")
 
     with sqlite3.connect(path) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -416,7 +420,7 @@ def test_removed_factor_grid_tasks_and_dependent_records_are_cleaned_up(tmp_path
         ):
             assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
         reward = conn.execute(
-            "SELECT bank_task_id, points_awarded FROM user_task_rewards WHERE reward_key = 'obsolete-reward'"
+            "SELECT bank_task_id FROM user_task_completions WHERE completion_key = 'obsolete-reward'"
         ).fetchone()
-        assert reward == (None, 20)
+        assert reward == (None,)
         assert _stamped_revision(path) == HEAD_REVISION

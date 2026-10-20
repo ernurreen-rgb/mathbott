@@ -164,8 +164,8 @@ class BaseRepository:
             await repo.batch_update(
                 "users",
                 [
-                    {1: {"total_points": 100, "total_solved": 10}},
-                    {2: {"total_points": 200, "total_solved": 20}}
+                    {1: {"total_solved": 10}},
+                    {2: {"total_solved": 20}}
                 ],
                 "id"
             )

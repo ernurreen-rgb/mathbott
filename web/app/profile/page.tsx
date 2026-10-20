@@ -115,7 +115,6 @@ function ProfilePageContent() {
           id: 0,
           email: sessionEmail,
           total_solved: 0,
-          total_points: 0,
         });
       } else if (data) {
         setUserData(data);
@@ -131,7 +130,6 @@ function ProfilePageContent() {
         id: 0,
         email: sessionEmail || "",
         total_solved: 0,
-        total_points: 0,
       });
     } finally {
       setLoading(false);
@@ -590,7 +588,7 @@ function ProfilePageContent() {
                           <div className="text-sm font-semibold text-gray-800">
                             {friend.nickname || "\u041f\u0430\u0439\u0434\u0430\u043b\u0430\u043d\u0443\u0448\u044b"}
                           </div>
-                          <div className="text-xs text-gray-500">{"\u04b0\u043f\u0430\u0439: "}{friend.total_points}</div>
+                          <div className="text-xs text-gray-500">Шешілген есептер: {friend.total_solved}</div>
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <button

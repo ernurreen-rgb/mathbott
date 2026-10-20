@@ -93,7 +93,7 @@ async def test_task_questions_hide_answers_and_award_once(client, test_db, test_
     assert second.json()["all_completed"] is True
 
     user_after_completion = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_completion["total_points"] == 10
+    assert "total_points" not in user_after_completion
     assert user_after_completion["total_solved"] == 1
 
     repeat = client.post(
@@ -104,7 +104,7 @@ async def test_task_questions_hide_answers_and_award_once(client, test_db, test_
     assert repeat.json()["all_completed"] is True
 
     user_after_repeat = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_repeat["total_points"] == 10
+    assert "total_points" not in user_after_repeat
     assert user_after_repeat["total_solved"] == 1
 
 
@@ -324,7 +324,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
     assert first.json()["correct"] is True
 
     user_after_first = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_first["total_points"] == 10
+    assert "total_points" not in user_after_first
     assert user_after_first["total_solved"] == 1
 
     second = client.post(
@@ -335,7 +335,7 @@ async def test_check_task_answer_awards_points_once_by_difficulty(client, test_d
     assert second.json()["correct"] is True
 
     user_after_second = await test_db.users.get_user_by_email(test_user["email"])
-    assert user_after_second["total_points"] == 10
+    assert "total_points" not in user_after_second
     assert user_after_second["total_solved"] == 1
 
 

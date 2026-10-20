@@ -1,7 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import IncomingRequestsPanel from "../_components/IncomingRequestsPanel";
 import ProfileHeader from "../_components/ProfileHeader";
+import StatisticsPanel from "../_components/StatisticsPanel";
 import type { FriendRequestItem, UserData } from "@/types";
+
+it("shows learning progress without an experience-points balance", () => {
+  render(<StatisticsPanel userData={{ id: 1, email: "student@example.com", total_solved: 12, streak: 3 }} />);
+  expect(screen.getByText("12")).toBeInTheDocument();
+  expect(screen.getByText("3")).toBeInTheDocument();
+  expect(screen.getByText("Шешілген есептер")).toBeInTheDocument();
+  expect(screen.queryByText("Тәжірибе ұпайлары")).not.toBeInTheDocument();
+});
 
 it("shows only pending requests and disables a request while its action runs", () => {
   const accept = jest.fn();

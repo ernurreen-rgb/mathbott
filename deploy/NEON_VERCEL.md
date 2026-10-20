@@ -111,8 +111,11 @@ remain available for content rollback.
   generated IDs, upserts, UTC dates and existing API row shapes are preserved.
   SQLite `REAL` values become PostgreSQL `DOUBLE PRECISION`, preserving quiz
   clocks and score timing.
-- Critical quiz, role and reward transactions use a transaction-scoped database
+- Critical quiz, role and task-completion transactions use a transaction-scoped database
   advisory lock, which coordinates independent function instances.
+- Learning progress stores unique completions, solved counts and streaks. The
+  `0003_remove_learning_points` PostgreSQL migration preserves that history and
+  quiz scores while retiring learning-point balances and their achievement.
 - Quiz and cooperative test state already have HTTP polling. Hosted web builds
   use polling, and user presence uses a shared database heartbeat with a
   70-second expiry instead of instance-local WebSocket membership.

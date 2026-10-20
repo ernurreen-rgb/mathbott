@@ -2,7 +2,6 @@
 export interface FriendUser {
   id: number;
   nickname: string | null;
-  total_points: number;
   total_solved: number;
 }
 
@@ -47,7 +46,6 @@ export interface FriendRequestItem {
 export interface BlockedUser {
   id: number;
   nickname: string | null;
-  total_points: number;
   total_solved: number;
   blocked_at?: string | null;
 }
