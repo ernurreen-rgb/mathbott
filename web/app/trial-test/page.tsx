@@ -218,7 +218,6 @@ export default function TrialTestListPage() {
                       <h2 className="text-2xl font-bold text-gray-900 flex-1">
                         {test.title}
                       </h2>
-                      <span className="text-3xl"><Icon name="edit" /></span>
                     </div>
                     {test.description && (
                       <p className="text-gray-600 mb-4 line-clamp-2">
