@@ -14,6 +14,7 @@ interface StudentChoiceAnswerFieldsProps {
   value?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  layout?: "grid" | "stack";
 }
 
 const parseSelectAnswer = (value?: string): string[] => {
@@ -30,8 +31,12 @@ export default function StudentChoiceAnswerFields({
   value,
   onChange,
   disabled = false,
+  layout = "grid",
 }: StudentChoiceAnswerFieldsProps) {
   const options = task.options || [];
+  const optionLayoutClass = layout === "stack"
+    ? "grid grid-cols-1 gap-2"
+    : "grid grid-cols-1 gap-2 sm:grid-cols-2";
 
   if (task.question_type === "select") {
     const selected = parseSelectAnswer(value);
@@ -43,7 +48,7 @@ export default function StudentChoiceAnswerFields({
               {String.fromCharCode(65 + index)}){" "}
               <MathRender inline latex={task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`} />
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className={optionLayoutClass}>
               {options.map((option) => {
                 const isSelected = selected[index] === option.label;
                 return (
@@ -80,7 +85,7 @@ export default function StudentChoiceAnswerFields({
   return (
     <div className="space-y-2">
       {requiredCount > 1 && <p className="text-sm text-gray-600">{requiredCount} жауап таңдаңыз</p>}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className={optionLayoutClass}>
         {options.map((option) => {
           const label = option.label.toUpperCase() as McqOptionLabel;
           const isSelected = selectedLabels.includes(label);

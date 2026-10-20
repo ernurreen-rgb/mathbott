@@ -364,6 +364,7 @@ export default function TrialTestPage() {
         return (
           <StudentChoiceAnswerFields
             task={task}
+            layout="stack"
             value={answers[task.id]}
             onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
           />
@@ -391,6 +392,7 @@ export default function TrialTestPage() {
         return (
           <StudentChoiceAnswerFields
             task={task}
+            layout="stack"
             value={currentAnswer}
             onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
           />
@@ -832,7 +834,7 @@ export default function TrialTestPage() {
               className={styles.taskCard}
               aria-label={`Тапсырма ${currentTaskIndex + 1}`}
             >
-              <div className={styles.taskBody} data-has-image={Boolean(currentTask.image_filename)}>
+              <div className={styles.taskBody}>
                 <div className={styles.statement} data-text-scale={normalizeTaskTextScale(currentTask.text_scale)}>
                   {currentTask.text ? (
                     <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />

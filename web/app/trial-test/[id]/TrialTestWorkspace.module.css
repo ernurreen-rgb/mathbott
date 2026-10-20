@@ -28,7 +28,7 @@
 .progress { position: absolute; right: 12px; bottom: 0; left: 12px; height: 3px; overflow: hidden; border-radius: 3px; background: #edf0f4; }
 .progress > div { height: 100%; border-radius: inherit; background: #8b5cf6; transition: width 200ms; }
 .taskCard { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: calc(100dvh - 112px); overflow: hidden; border: 1px solid #e1e5ec; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #17203305; }
-.taskBody { display: grid; flex: 1; align-content: center; gap: clamp(20px, 3dvh, 36px); min-width: 0; padding: clamp(24px, 3.5vw, 56px); }
+.taskBody { display: grid; flex: 1; align-content: start; gap: clamp(20px, 3dvh, 36px); min-width: 0; padding: clamp(24px, 3dvh, 36px) clamp(24px, 3.5vw, 56px); }
 .statement { min-width: 0; overflow-wrap: anywhere; font-weight: 600; line-height: 1.65; }
 .statement[data-text-scale="sm"] { font-size: clamp(18px, 1.3vw, 22px); }
 .statement[data-text-scale="md"] { font-size: clamp(22px, 1.7vw, 30px); }
@@ -46,10 +46,6 @@
 .nextButton:hover { background: #6d28d9; }
 .toolbar button:disabled, .taskFooter button:disabled { cursor: not-allowed; opacity: .45; }
 .page button:focus-visible { outline: 2px solid #8b5cf6; outline-offset: 3px; }
-@media (min-width: 1100px) {
-  .taskBody[data-has-image="true"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
-  .taskBody[data-has-image="true"] .statement { grid-column: 1 / -1; }
-}
 @media (max-width: 1050px) { .taskCounter > span { display: none; } .toolbarActions { gap: 8px; } }
 @media (max-width: 767px) {
   .main { padding: 8px 8px calc(80px + env(safe-area-inset-bottom)); }
