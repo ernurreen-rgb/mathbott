@@ -360,18 +360,31 @@ export default function LessonPage() {
 
   const renderTaskControls = (task: LessonTask) => {
     const qt: QuestionType = (task.question_type || "input") as QuestionType;
+    const isTaskAnswered =
+      task.status === "completed" ||
+      selectedAnswers[task.id] !== undefined ||
+      !!feedback[task.id]?.text;
+    const isTaskCorrect = task.status === "completed" || !!feedback[task.id]?.ok;
+    const currentAnswer = answers[task.id] || selectedAnswers[task.id] || "";
+    const taskCorrectAnswer =
+      correctAnswers[task.id] || (isTaskCorrect ? currentAnswer : task.answer || "");
+
     if (qt === "tf") {
-      const selectedAnswer = selectedAnswers[task.id];
-      const correctAnswer = correctAnswers[task.id];
-      const isAnswered = selectedAnswer !== undefined;
-      const isCompleted = task.status === "completed";
+      const selectedAnswer = currentAnswer;
+      const correctAnswer = taskCorrectAnswer;
 
       // Normalize answers for comparison (case-insensitive)
       const normalizeAnswer = (ans: string | undefined) => ans?.toLowerCase().trim();
       const selectedNormalized = normalizeAnswer(selectedAnswer);
       const correctNormalized = normalizeAnswer(correctAnswer);
-      const isTrueCorrect = correctNormalized === "true" || correctNormalized === "1";
-      const isFalseCorrect = correctNormalized === "false" || correctNormalized === "0";
+      const isTrueCorrect =
+        correctNormalized === "true" ||
+        correctNormalized === "1" ||
+        (isTaskCorrect && selectedNormalized === "true");
+      const isFalseCorrect =
+        correctNormalized === "false" ||
+        correctNormalized === "0" ||
+        (isTaskCorrect && selectedNormalized === "false");
       const isTrueSelected = selectedNormalized === "true" || selectedNormalized === "1";
       const isFalseSelected = selectedNormalized === "false" || selectedNormalized === "0";
 
@@ -379,18 +392,18 @@ export default function LessonPage() {
         <div className="flex gap-2" role="group" aria-label="Жауап таңдау">
           <button
             onClick={() => submitCheck(task, "true")}
-            disabled={!!checking[task.id] || isCompleted}
+            disabled={!!checking[task.id] || isTaskAnswered}
             aria-label="Дұрыс деп таңдау"
-            aria-pressed={isAnswered && isTrueSelected ? "true" : "false"}
+            aria-pressed={isTaskAnswered && isTrueSelected ? "true" : "false"}
             className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-              isAnswered && isTrueSelected
+              isTaskAnswered && isTrueSelected
                 ? isTrueCorrect
-                  ? "bg-green-600 text-white"
-                  : "bg-red-600 text-white"
-                : isAnswered && isTrueCorrect
-                ? "bg-green-600 text-white"
-                : isCompleted
-                ? "bg-gray-300 text-gray-600"
+                  ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
+                  : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
+                : isTaskAnswered && isTrueCorrect
+                ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
+                : isTaskAnswered
+                ? "bg-gray-100 text-gray-400"
                 : "bg-green-600 hover:bg-green-700 text-white"
             }`}
           >
@@ -398,18 +411,18 @@ export default function LessonPage() {
           </button>
           <button
             onClick={() => submitCheck(task, "false")}
-            disabled={!!checking[task.id] || isCompleted}
+            disabled={!!checking[task.id] || isTaskAnswered}
             aria-label="Жалған деп таңдау"
-            aria-pressed={isAnswered && isFalseSelected ? "true" : "false"}
+            aria-pressed={isTaskAnswered && isFalseSelected ? "true" : "false"}
             className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-              isAnswered && isFalseSelected
+              isTaskAnswered && isFalseSelected
                 ? isFalseCorrect
-                  ? "bg-green-600 text-white"
-                  : "bg-red-600 text-white"
-                : isAnswered && isFalseCorrect
-                ? "bg-green-600 text-white"
-                : isCompleted
-                ? "bg-gray-300 text-gray-600"
+                  ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
+                  : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
+                : isTaskAnswered && isFalseCorrect
+                ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
+                : isTaskAnswered
+                ? "bg-gray-100 text-gray-400"
                 : "bg-red-600 hover:bg-red-700 text-white"
             }`}
           >
@@ -421,8 +434,6 @@ export default function LessonPage() {
 
     if (qt === "select") {
       const subquestions = task.subquestions || [];
-      const isCompleted = task.status === "completed";
-      const currentAnswer = answers[task.id] || "";
 
       if (getTaskAnswerMode(task) === "choices") {
         return (
@@ -431,45 +442,53 @@ export default function LessonPage() {
               task={task}
               value={currentAnswer}
               onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              disabled={isCompleted}
+              disabled={isTaskAnswered}
+              isAnswered={isTaskAnswered}
+              isCorrect={isTaskCorrect}
+              correctAnswer={taskCorrectAnswer}
+              selectedAnswer={currentAnswer}
             />
-            <button
-              onClick={() => submitCheck(task, currentAnswer)}
-              disabled={!!checking[task.id] || isCompleted || !isSelectAnswerComplete(currentAnswer)}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-            >
-              Тексеру
-            </button>
+            {!isTaskAnswered && (
+              <button
+                onClick={() => submitCheck(task, currentAnswer)}
+                disabled={!!checking[task.id] || !isSelectAnswerComplete(currentAnswer)}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+              >
+                Тексеру
+              </button>
+            )}
           </div>
         );
       }
 
       return (
         <div className="space-y-3">
-          <StudentWrittenAnswerFields
-            value={currentAnswer}
-            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-            count={2}
-            disabled={isCompleted}
-            labels={[0, 1].map((index) =>
-              `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
-            )}
-          />
-          <button
-            onClick={() => submitCheck(task, currentAnswer)}
-            disabled={!!checking[task.id] || isCompleted || !isWrittenAnswerComplete(currentAnswer, 2)}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-          >
-            Тексеру
-          </button>
+          <div className={isTaskAnswered ? (isTaskCorrect ? "p-1 rounded-xl bg-green-50 border border-green-300" : "p-1 rounded-xl bg-red-50 border border-red-300") : ""}>
+            <StudentWrittenAnswerFields
+              value={currentAnswer}
+              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+              count={2}
+              disabled={isTaskAnswered}
+              labels={[0, 1].map((index) =>
+                `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
+              )}
+            />
+          </div>
+          {!isTaskAnswered && (
+            <button
+              onClick={() => submitCheck(task, currentAnswer)}
+              disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, 2)}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              Тексеру
+            </button>
+          )}
         </div>
       );
     }
 
     if (qt === "mcq" || qt === "mcq6") {
       const requiredCount = getTaskMcqCorrectCount(task);
-      const currentAnswer = answers[task.id] || "";
-      const isCompleted = task.status === "completed";
 
       if (getTaskAnswerMode(task) === "choices") {
         return (
@@ -478,15 +497,21 @@ export default function LessonPage() {
               task={task}
               value={currentAnswer}
               onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              disabled={isCompleted}
+              disabled={isTaskAnswered}
+              isAnswered={isTaskAnswered}
+              isCorrect={isTaskCorrect}
+              correctAnswer={taskCorrectAnswer}
+              selectedAnswer={currentAnswer}
             />
-            <button
-              onClick={() => submitCheck(task, currentAnswer)}
-              disabled={!!checking[task.id] || isCompleted || !isMcqAnswerComplete(currentAnswer, requiredCount)}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-            >
-              Тексеру
-            </button>
+            {!isTaskAnswered && (
+              <button
+                onClick={() => submitCheck(task, currentAnswer)}
+                disabled={!!checking[task.id] || !isMcqAnswerComplete(currentAnswer, requiredCount)}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+              >
+                Тексеру
+              </button>
+            )}
           </div>
         );
       }
@@ -496,38 +521,46 @@ export default function LessonPage() {
           {requiredCount > 1 && (
             <p className="text-sm text-gray-600">{requiredCount} жауап жазыңыз</p>
           )}
-          <StudentWrittenAnswerFields
-            value={currentAnswer}
-            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-            count={requiredCount}
-            disabled={isCompleted}
-          />
-          <button
-            onClick={() => submitCheck(task, currentAnswer)}
-            disabled={!!checking[task.id] || isCompleted || !isWrittenAnswerComplete(currentAnswer, requiredCount)}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-          >
-            Тексеру
-          </button>
+          <div className={isTaskAnswered ? (isTaskCorrect ? "p-1 rounded-xl bg-green-50 border border-green-300" : "p-1 rounded-xl bg-red-50 border border-red-300") : ""}>
+            <StudentWrittenAnswerFields
+              value={currentAnswer}
+              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+              count={requiredCount}
+              disabled={isTaskAnswered}
+            />
+          </div>
+          {!isTaskAnswered && (
+            <button
+              onClick={() => submitCheck(task, currentAnswer)}
+              disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, requiredCount)}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              Тексеру
+            </button>
+          )}
         </div>
       );
     }
 
     return (
       <div className="flex flex-col gap-3">
-        <StudentMathAnswerInput
-          value={answers[task.id] || ""}
-          onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-          disabled={task.status === "completed"}
-          placeholder="Жауапты жазыңыз"
-        />
-        <button
-          onClick={() => submitCheck(task, answers[task.id] || "")}
-          disabled={!!checking[task.id] || task.status === "completed" || !(answers[task.id] || "").trim()}
-          className="self-stretch sm:self-end bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-        >
-          Тексеру
-        </button>
+        <div className={isTaskAnswered ? (isTaskCorrect ? "p-0.5 rounded-xl ring-2 ring-green-500 bg-green-50" : "p-0.5 rounded-xl ring-2 ring-red-500 bg-red-50") : ""}>
+          <StudentMathAnswerInput
+            value={currentAnswer}
+            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
+            disabled={isTaskAnswered}
+            placeholder="Жауапты жазыңыз"
+          />
+        </div>
+        {!isTaskAnswered && (
+          <button
+            onClick={() => submitCheck(task, currentAnswer)}
+            disabled={!!checking[task.id] || !currentAnswer.trim()}
+            className="self-stretch sm:self-end bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
+          >
+            Тексеру
+          </button>
+        )}
       </div>
     );
   };
@@ -697,14 +730,22 @@ export default function LessonPage() {
                     </div>
 
                     <div className="mt-4 flex justify-between items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => goToPrevTaskOrMini(activeTask.id)}
-                        disabled={!hasPrevTask}
-                        className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
-                      >
-                        <Icon name="arrowLeft" /> Алдыңғы
-                      </button>
+                      {currentTaskIndex > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => goToPrevTaskOrMini(activeTask.id)}
+                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          <Icon name="arrowLeft" /> Алдыңғы
+                        </button>
+                      ) : (
+                        <div
+                          className="invisible py-2 px-3 sm:px-4 font-bold inline-flex items-center gap-1.5 select-none"
+                          aria-hidden="true"
+                        >
+                          <Icon name="arrowLeft" /> Алдыңғы
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleReportClick(activeTask.id)}

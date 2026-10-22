@@ -331,7 +331,7 @@ class QuizSessionsMixin:
                 LEFT JOIN users u ON u.id = s.host_id
                 LEFT JOIN quiz_participants p ON p.session_id = s.id
                 WHERE s.quiz_id = ?
-                GROUP BY s.id
+                GROUP BY s.id, u.nickname
                 ORDER BY s.created_at DESC
             """, (quiz_id,)) as cursor:
                 sessions = [dict(row) for row in await cursor.fetchall()]

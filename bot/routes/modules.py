@@ -284,7 +284,8 @@ def setup_modules_routes(app, db, limiter):
                     "options": options,
                     "subquestions": public_subquestions(subquestions),
                     "sort_order": t.get("sort_order", 0),
-                    "status": task_progress.get(t["id"], "not_started")
+                    "status": task_progress.get(t["id"], "not_started"),
+                    "answer": t.get("answer") if task_progress.get(t["id"]) == "completed" else None,
                 })
 
             ml_progress = await db.progress.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None

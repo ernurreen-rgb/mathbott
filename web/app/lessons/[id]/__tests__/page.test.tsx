@@ -127,7 +127,7 @@ afterEach(() => {
 });
 
 describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
-  it("renders the lesson tasks with disabled 'Алдыңғы' on the first task", async () => {
+  it("renders the lesson tasks without 'Алдыңғы' on the first task", async () => {
     await act(async () => {
       render(<LessonPage />);
     });
@@ -135,15 +135,14 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
     expect(screen.getByText("Есеп 1 / 2")).toBeInTheDocument();
     expect(screen.getByText("12 + 15")).toBeInTheDocument();
 
-    const prevButton = screen.getByRole("button", { name: /Алдыңғы/ });
-    expect(prevButton).toBeInTheDocument();
-    expect(prevButton).toBeDisabled();
+    // On the 1st task, "Алдыңғы" is not shown
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
 
     // "Келесі" is not shown when task is not completed
     expect(screen.queryByRole("button", { name: /Келесі/ })).not.toBeInTheDocument();
   });
 
-  it("shows 'Келесі' after completing a task, and allows navigating back with 'Алдыңғы'", async () => {
+  it("shows 'Келесі' and hides 'Тексеру' after completing a task, and allows navigating back with 'Алдыңғы'", async () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ correct: true, correct_answer: "27" }),
@@ -162,10 +161,9 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
       fireEvent.click(checkButton);
     });
 
-    // Now task is completed: both "Алдыңғы" and "Келесі" are present
-    const prevBtn = screen.getByRole("button", { name: /Алдыңғы/ });
-    expect(prevBtn).toBeInTheDocument();
-    expect(prevBtn).toBeDisabled(); // still on task 1 of mini-lesson 1
+    // Now task is completed: "Тексеру" is hidden, on task 1 "Алдыңғы" is not shown, and "Келесі" is present
+    expect(screen.queryByRole("button", { name: "Тексеру" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
 
     const nextBtn = screen.getByRole("button", { name: /Келесі/ });
     expect(nextBtn).toBeInTheDocument();
@@ -193,7 +191,8 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
     expect(screen.getByText("Есеп 1 / 2")).toBeInTheDocument();
     expect(screen.getByText("12 + 15")).toBeInTheDocument();
 
-    // On task 1, "Келесі" is available since task 1 was already completed
+    // On task 1, "Алдыңғы" is not shown, but "Келесі" is available since task 1 was completed
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
     const nextBtnOnTask1 = screen.getByRole("button", { name: /Келесі/ });
     expect(nextBtnOnTask1).toBeInTheDocument();
 
@@ -206,7 +205,7 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
     expect(screen.getByText("49 + 54")).toBeInTheDocument();
   });
 
-  it("navigates to previous mini-lesson when clicking 'Алдыңғы' on the first task of subsequent mini-lessons", async () => {
+  it("does not render 'Алдыңғы' on the first task even in subsequent mini-lessons", async () => {
     // Start lesson with mini-lesson 2 selected
     const dataWithMini2 = JSON.parse(JSON.stringify(mockLessonData));
     dataWithMini2.mini_lessons[0].tasks[0].status = "completed";
@@ -226,19 +225,8 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
     expect(screen.getByText("Есеп 1 / 1")).toBeInTheDocument();
     expect(screen.getByText("20 + 30")).toBeInTheDocument();
 
-    // "Алдыңғы" should be enabled because previous mini-lesson exists!
-    const prevBtn = screen.getByRole("button", { name: /Алдыңғы/ });
-    expect(prevBtn).toBeInTheDocument();
-    expect(prevBtn).not.toBeDisabled();
-
-    // Click "Алдыңғы" to go back to previous mini-lesson
-    await act(async () => {
-      fireEvent.click(prevBtn);
-    });
-
-    // Should navigate to mini-lesson 1's last task: "49 + 54"
-    expect(screen.getByText("Есеп 2 / 2")).toBeInTheDocument();
-    expect(screen.getByText("49 + 54")).toBeInTheDocument();
+    // "Алдыңғы" is not shown on the first task
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
   });
 
   it("allows returning to the previous task from the mini-lesson completed screen", async () => {
@@ -370,10 +358,17 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
       fireEvent.click(checkBtn);
     });
 
+    // After answer is checked:
+    // "Тексеру" button is removed!
+    expect(screen.queryByRole("button", { name: "Тексеру" })).not.toBeInTheDocument();
+
     // After correct answer is shown:
     // Both "Алдыңғы" and "Келесі" are present!
     expect(screen.getByRole("button", { name: /Алдыңғы/ })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: /Келесі/ })).toBeInTheDocument();
+
+    // Option D should have green styling
+    expect(optionD.className).toContain("bg-green-500");
 
     // Click "Алдыңғы" to review Task 1
     await act(async () => {
@@ -382,7 +377,78 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
 
     expect(screen.getByText("Есеп 1 / 2")).toBeInTheDocument();
     expect(screen.getByText("1 + 1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Алдыңғы/ })).toBeDisabled();
+    // On task 1, "Алдыңғы" is not shown
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Келесі/ })).toBeInTheDocument();
+  });
+
+  it("shows red for selected wrong answer and green for correct answer in MCQ", async () => {
+    const mcqLessonData: LessonDetails = {
+      id: 17,
+      module_id: 1,
+      section_id: 2,
+      title: "MCQ Error Test",
+      sort_order: 1,
+      mini_lessons: [
+        {
+          id: 50,
+          lesson_id: 17,
+          mini_index: 1,
+          title: "Mini 1",
+          progress: { progress: 0, completed: false },
+          tasks: [
+            {
+              id: 601,
+              text: "15 + 8",
+              question_type: "mcq",
+              answer_mode: "choices",
+              sort_order: 1,
+              status: "not_started",
+              options: [
+                { label: "A", text: "23" },
+                { label: "B", text: "22" },
+                { label: "C", text: "24" },
+                { label: "D", text: "25" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    (getLessonDetails as jest.Mock).mockResolvedValue({
+      data: mcqLessonData,
+      error: null,
+    });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ correct: false, correct_answer: "A" }),
+    });
+
+    await act(async () => {
+      render(<LessonPage />);
+    });
+
+    // On 1st task, "Алдыңғы" is not shown
+    expect(screen.queryByRole("button", { name: /Алдыңғы/ })).not.toBeInTheDocument();
+
+    // Student selects wrong answer B: 22
+    const optionB = screen.getByRole("button", { name: /22/ });
+    fireEvent.click(optionB);
+
+    const checkBtn = screen.getByRole("button", { name: "Тексеру" });
+    await act(async () => {
+      fireEvent.click(checkBtn);
+    });
+
+    // "Тексеру" button is now hidden
+    expect(screen.queryByRole("button", { name: "Тексеру" })).not.toBeInTheDocument();
+
+    // Wrong option B should be red
+    expect(optionB.className).toContain("bg-red-500");
+
+    // Correct option A should be green
+    const optionA = screen.getByRole("button", { name: /23/ });
+    expect(optionA.className).toContain("bg-green-50");
   });
 });
