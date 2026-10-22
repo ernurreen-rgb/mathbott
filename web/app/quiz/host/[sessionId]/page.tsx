@@ -470,13 +470,15 @@ export default function HostQuizPage({ params }: PageProps) {
           </div>
 
           {activeTab === "podium" ? (
-            <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-xl flex-1 flex flex-col justify-center items-center">
-              <h2 className="text-3xl font-black text-gray-900 mb-8 text-center">
-                <Icon name="sparkles" /> Құттықтаймыз! Викторина аяқталды! <Icon name="sparkles" />
+            <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-xl flex-1 flex flex-col justify-center items-center">
+              <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8 sm:mb-10 text-center flex items-center justify-center gap-2 flex-wrap">
+                <Icon name="sparkles" className="text-amber-500" />
+                <span>Құттықтаймыз! Викторина аяқталды!</span>
+                <Icon name="sparkles" className="text-amber-500" />
               </h2>
 
               {/* 3D Podium Graphic */}
-              <div className="w-full max-w-2xl flex items-end justify-center gap-4 h-80 my-4">
+              <div className="w-full max-w-2xl flex items-end justify-center gap-3 sm:gap-6 pt-4 pb-2">
                 {/* 2nd Place (Silver) */}
                 <div className="flex-1 flex flex-col items-center">
                   {sortedLeaderboard[1] && (
@@ -495,7 +497,7 @@ export default function HostQuizPage({ params }: PageProps) {
                       </div>
                     </div>
                   )}
-                  <div className="w-full h-44 rounded-t-3xl bg-gradient-to-t from-slate-300 to-slate-200 border-t-4 border-slate-400 flex flex-col items-center justify-center text-slate-800 font-black text-3xl shadow-md">
+                  <div className="w-full h-40 rounded-t-3xl bg-gradient-to-t from-slate-300 to-slate-200 border-t-4 border-slate-400 flex flex-col items-center justify-center text-slate-800 font-black text-3xl shadow-md">
                     <span><Icon name="medal" /></span>
                     <span className="text-xl">2</span>
                   </div>
@@ -505,7 +507,7 @@ export default function HostQuizPage({ params }: PageProps) {
                 <div className="flex-1 flex flex-col items-center">
                   {sortedLeaderboard[0] && (
                     <div className="text-center mb-3 flex flex-col items-center">
-                      <span className="text-3xl animate-bounce block mb-1"><Icon name="crown" /></span>
+                      <span className="text-3xl animate-bounce block mb-1 text-amber-500"><Icon name="crown" /></span>
                       <QuizAvatar
                         avatarColor={sortedLeaderboard[0].avatar_color}
                         nickname={sortedLeaderboard[0].nickname}
@@ -520,7 +522,7 @@ export default function HostQuizPage({ params }: PageProps) {
                       </div>
                     </div>
                   )}
-                  <div className="w-full h-60 rounded-t-3xl bg-gradient-to-t from-amber-400 to-amber-300 border-t-4 border-yellow-500 flex flex-col items-center justify-center text-amber-950 font-black text-4xl shadow-xl">
+                  <div className="w-full h-56 rounded-t-3xl bg-gradient-to-t from-amber-400 to-amber-300 border-t-4 border-yellow-500 flex flex-col items-center justify-center text-amber-950 font-black text-4xl shadow-xl">
                     <span><Icon name="medal" /></span>
                     <span className="text-2xl">1</span>
                   </div>
@@ -544,7 +546,7 @@ export default function HostQuizPage({ params }: PageProps) {
                       </div>
                     </div>
                   )}
-                  <div className="w-full h-32 rounded-t-3xl bg-gradient-to-t from-orange-300 to-orange-200 border-t-4 border-orange-400 flex flex-col items-center justify-center text-orange-950 font-black text-3xl shadow-md">
+                  <div className="w-full h-28 rounded-t-3xl bg-gradient-to-t from-orange-300 to-orange-200 border-t-4 border-orange-400 flex flex-col items-center justify-center text-orange-950 font-black text-3xl shadow-md">
                     <span><Icon name="medal" /></span>
                     <span className="text-xl">3</span>
                   </div>
