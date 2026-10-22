@@ -113,8 +113,13 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         session = await db.quizzes.get_session_by_pin(payload.pin_code)
         if not session:
             raise HTTPException(404, 'Invalid PIN or finished game')
+        user_id = user['id'] if user else None
+        if not user_id and payload.email:
+            found_user = await db.users.get_user_by_email(payload.email)
+            if found_user:
+                user_id = found_user['id']
         joined = await db.quizzes.join_session(session['id'], payload.nickname,
-            user_id=user['id'] if user else None, avatar_color=payload.avatar_color, participant_token=payload.participant_token)
+            user_id=user_id, avatar_color=payload.avatar_color, participant_token=payload.participant_token)
         credential = joined.pop('participant_token')
         await quiz_manager.broadcast(session['id'], {'type': 'participant_joined', 'participant': joined})
         return {'session': session, 'participant': joined, 'participant_token': credential}
@@ -202,6 +207,21 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         if participant and session['status'] != 'finished':
             raise HTTPException(403, 'Stats are available after the game finishes')
         return await db.quizzes.get_session_stats(session_id)
+
+    @app.get('/api/quiz-sessions/{session_id}/results')
+    async def session_results(session_id: int, request: Request,
+                              user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        """Get comprehensive session results including all participants, scores, and accuracy."""
+        await access(session_id, request, user, db)
+        results = await db.quizzes.get_session_full_results(session_id)
+        if not results:
+            raise HTTPException(404, 'Session results not found')
+        return results
+
+    @app.get('/api/quiz-sessions/user/history')
+    async def user_quiz_history(current_user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
+        """Get all quiz sessions taken by the authenticated user."""
+        return await db.quizzes.get_user_quiz_history(current_user['id'])
 
     @app.get('/api/quiz-sessions/{session_id}/ws-token')
     async def ws_ticket(session_id: int, request: Request,

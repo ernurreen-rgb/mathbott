@@ -12,6 +12,7 @@ import {
 } from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
+import { completeQuizParticipant } from "@/lib/api/quizzes";
 
 interface PageProps {
   params: Promise<{ sessionId: string }>;
@@ -73,6 +74,13 @@ export default function PlayQuizPage({ params }: PageProps) {
   const streak = progress?.participant.streak || 0;
   const correctCount = progress?.participant.correct_count || 0;
   const isFinished = progress?.status === "finished" || !!progress?.participant.is_finished;
+  const isAllAnswered = questionCount > 0 && currentQIndex >= questionCount;
+
+  useEffect(() => {
+    if ((isFinished || isAllAnswered) && credentials?.token && participantId && !progress?.participant.is_finished) {
+      void completeQuizParticipant(sessionId, participantId, { participantToken: credentials.token });
+    }
+  }, [isFinished, isAllAnswered, credentials?.token, participantId, progress?.participant.is_finished, sessionId]);
 
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [inputAnswer, setInputAnswer] = useState("");

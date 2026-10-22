@@ -286,6 +286,46 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert stats["total_players"] == 2
     assert stats["podium"][0]["nickname"] == "Алихан"
 
+    # 11. Quiz sessions list endpoint (for host to see past session results)
+    sessions_resp = client.get(
+        f"/api/quizzes/{quiz['id']}/sessions",
+        params={"email": user_email},
+    )
+    assert sessions_resp.status_code == 200
+    sessions_list = sessions_resp.json()
+    assert len(sessions_list) == 1
+    assert sessions_list[0]["id"] == session_id
+    assert sessions_list[0]["participant_count"] == 2
+    assert sessions_list[0]["status"] == "finished"
+    assert sessions_list[0]["avg_score"] > 800
+    assert len(sessions_list[0]["top_participants"]) == 2
+
+    # 12. Full session results endpoint
+    results_resp = client.get(
+        f"/api/quiz-sessions/{session_id}/results",
+        params={"email": user_email},
+    )
+    assert results_resp.status_code == 200
+    res_data = results_resp.json()
+    assert res_data["total_players"] == 2
+    assert res_data["participants"][0]["nickname"] == "Алихан"
+    assert res_data["participants"][0]["rank"] == 1
+    assert len(res_data["participants"][0]["answers"]) == 2
+    assert res_data["participants"][1]["nickname"] == "Аружан"
+    assert res_data["participants"][1]["rank"] == 2
+
+    # 13. User quiz history endpoint (Player 2 was registered with user_email)
+    user_hist_resp = client.get(
+        "/api/quiz-sessions/user/history",
+        params={"email": user_email},
+    )
+    assert user_hist_resp.status_code == 200
+    user_history = user_hist_resp.json()
+    assert len(user_history) == 1
+    assert user_history[0]["quiz_title"] == "Quizizz Live Game"
+    assert user_history[0]["nickname"] == "Аружан"
+    assert user_history[0]["rank"] == 2
+
 
 @pytest.mark.asyncio
 async def test_quiz_public_private_visibility(client, test_db, test_user):
@@ -350,3 +390,115 @@ async def test_quiz_public_private_visibility(client, test_db, test_user):
     # Hidden from public catalog again
     public_list_final = client.get("/api/quizzes").json()
     assert not any(q["id"] == quiz_id for q in public_list_final)
+
+
+@pytest.mark.asyncio
+async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
+    user_email = test_user["email"]
+
+    # 1. Create other user
+    other_user = await test_db.users.create_user_by_email("other@example.com")
+
+    # 2. Create quiz with questions by user 1
+    create_resp = client.post(
+        "/api/quizzes",
+        json={
+            "title": "Бастапқы квиз",
+            "description": "Сипаттамасы",
+            "is_public": True,
+            "questions": [
+                {
+                    "question_text": "1 + 1 нешеге тең?",
+                    "question_type": "mcq",
+                    "options": [
+                        {"id": "A", "text": "2", "is_correct": True},
+                        {"id": "B", "text": "3", "is_correct": False},
+                    ],
+                    "correct_answer": "A",
+                    "time_limit_seconds": 30,
+                    "points": 1000,
+                }
+            ],
+        },
+        params={"email": user_email},
+    )
+    assert create_resp.status_code == 200
+    quiz_id = create_resp.json()["id"]
+
+    # 3. Update quiz with modified title and replaced questions
+    update_resp = client.put(
+        f"/api/quizzes/{quiz_id}",
+        json={
+            "title": "Жаңартылған квиз тақырыбы",
+            "questions": [
+                {
+                    "question_text": "5 * 5 нешеге тең?",
+                    "question_type": "mcq",
+                    "options": [
+                        {"id": "A", "text": "25", "is_correct": True},
+                        {"id": "B", "text": "20", "is_correct": False},
+                    ],
+                    "correct_answer": "A",
+                    "time_limit_seconds": 25,
+                    "points": 1200,
+                },
+                {
+                    "question_text": "10 / 2",
+                    "question_type": "input",
+                    "correct_answer": "5",
+                    "time_limit_seconds": 15,
+                    "points": 800,
+                },
+            ],
+        },
+        params={"email": user_email},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["title"] == "Жаңартылған квиз тақырыбы"
+
+    questions_resp = client.get(f"/api/quizzes/{quiz_id}/questions", params={"email": user_email})
+    assert questions_resp.status_code == 200
+    updated_questions = questions_resp.json()
+    assert len(updated_questions) == 2
+    assert updated_questions[0]["question_text"] == "5 * 5 нешеге тең?"
+    assert updated_questions[0]["correct_answer"] == "A"
+    assert updated_questions[1]["question_text"] == "10 / 2"
+    assert updated_questions[1]["correct_answer"] == "5"
+
+    # 4. Other user forks the public quiz
+    fork_resp = client.post(
+        f"/api/quizzes/{quiz_id}/fork",
+        params={"email": other_user["email"]},
+    )
+    assert fork_resp.status_code == 200
+    cloned_quiz = fork_resp.json()
+    assert cloned_quiz["created_by"] == other_user["id"]
+    assert cloned_quiz["id"] != quiz_id
+    assert "Көшірме" in cloned_quiz["title"]
+    assert cloned_quiz["can_manage"] is True
+
+    # Other user can see full questions and answers in their cloned copy
+    cloned_questions = client.get(
+        f"/api/quizzes/{cloned_quiz['id']}/questions",
+        params={"email": other_user["email"]},
+    ).json()
+    assert len(cloned_questions) == 2
+    assert cloned_questions[0]["correct_answer"] == "A"
+    assert cloned_questions[1]["correct_answer"] == "5"
+
+    # 5. Non-owner cannot update the original quiz
+    forbidden_update = client.put(
+        f"/api/quizzes/{quiz_id}",
+        json={"title": "Бөтен өзгерту"},
+        params={"email": other_user["email"]},
+    )
+    assert forbidden_update.status_code == 403
+
+    # 6. If quiz is private, other user cannot fork it
+    client.put(f"/api/quizzes/{quiz_id}", json={"is_public": False}, params={"email": user_email})
+    fork_private_resp = client.post(
+        f"/api/quizzes/{quiz_id}/fork",
+        params={"email": other_user["email"]},
+    )
+    assert fork_private_resp.status_code == 403
+

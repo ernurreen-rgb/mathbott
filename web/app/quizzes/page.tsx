@@ -4,20 +4,23 @@ import Icon from "@/components/ui/Icon";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { getQuizzes, deleteQuiz, updateQuiz } from "@/lib/api/quizzes";
+import { getQuizzes, deleteQuiz, updateQuiz, forkQuiz } from "@/lib/api/quizzes";
 import { Quiz } from "@/types/quiz";
 import toast from "react-hot-toast";
 
 export default function QuizzesCatalogPage() {
+  const router = useRouter();
   const { data: session } = useSession();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "my">("all");
   const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "private">("all");
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [forkingId, setForkingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchQuizzes = useCallback(async (tab: "all" | "my") => {
@@ -53,6 +56,30 @@ export default function QuizzesCatalogPage() {
       toast.success("Квиз өшірілді");
     } catch {
       toast.error("Квизді өшіру мүмкін болмады");
+    }
+  };
+
+  const handleFork = async (quizId: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!session?.user) {
+      toast.error("Квизді көшіру үшін алдымен жүйеге кіріңіз");
+      return;
+    }
+    setForkingId(quizId);
+    try {
+      const email = session?.user?.email || undefined;
+      const { data: forked, error: forkErr } = await forkQuiz(quizId, email);
+      if (forkErr || !forked) {
+        toast.error(forkErr || "Квизді көшіру сәтсіз аяқталды");
+        setForkingId(null);
+        return;
+      }
+      toast.success("Квиз көшірмесі сәтті сақталды! Өңдеу терезесі ашылуда...");
+      router.push(`/quizzes/${forked.id}/edit`);
+    } catch {
+      toast.error("Қате орын алды");
+      setForkingId(null);
     }
   };
 
@@ -294,8 +321,15 @@ export default function QuizzesCatalogPage() {
                   >
                     Ашу & Ойнау
                   </Link>
-                  {activeTab === "my" && (
+                  {(quiz.can_manage || activeTab === "my") ? (
                     <>
+                      <Link
+                        href={`/quizzes/${quiz.id}/edit`}
+                        title="Өңдеу"
+                        className="p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-xl bg-purple-50 hover:bg-purple-100"
+                      >
+                        <Icon name="edit" className="w-4 h-4" />
+                      </Link>
                       <button
                         onClick={(e) => handleTogglePrivacy(quiz, e)}
                         disabled={togglingId === quiz.id}
@@ -323,7 +357,21 @@ export default function QuizzesCatalogPage() {
                         <Icon name="trash" className="w-4 h-4" />
                       </button>
                     </>
-                  )}
+                  ) : quiz.is_public ? (
+                    <button
+                      onClick={(e) => handleFork(quiz.id, e)}
+                      disabled={forkingId === quiz.id}
+                      title="Өзіме көшіріп өңдеу"
+                      className="p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-xl bg-purple-50 hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
+                    >
+                      {forkingId === quiz.id ? (
+                        <Icon name="loader" className="animate-spin w-4 h-4" />
+                      ) : (
+                        <Icon name="copy" className="w-4 h-4" />
+                      )}
+                      <span className="hidden sm:inline">Көшіріп алу</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}

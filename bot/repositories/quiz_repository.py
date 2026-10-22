@@ -62,6 +62,7 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
         description: Optional[str] = None,
         cover_image: Optional[str] = None,
         is_public: Optional[bool] = None,
+        questions: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict[str, Any]]:
         updates = []
         params = []
@@ -78,18 +79,60 @@ class QuizRepository(QuizSessionsMixin, BaseRepository):
             updates.append("is_public = ?")
             params.append(1 if is_public else 0)
 
-        if not updates:
-            return await self.get_quiz_by_id(quiz_id)
-
-        updates.append("updated_at = CURRENT_TIMESTAMP")
-        params.append(quiz_id)
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(quiz_id)
 
         async with self._write_transaction() as db:
-            await db.execute(
-                f"UPDATE quizzes SET {', '.join(updates)} WHERE id = ?",
-                params,
-            )
+            if updates:
+                await db.execute(
+                    f"UPDATE quizzes SET {', '.join(updates)} WHERE id = ?",
+                    params,
+                )
+            if questions is not None:
+                await db.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", (quiz_id,))
+                for question in questions:
+                    await self._insert_question(db, quiz_id=quiz_id, **question)
+
         return await self.get_quiz_by_id(quiz_id)
+
+    async def fork_quiz(
+        self,
+        quiz_id: int,
+        user_id: int,
+        title_override: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        quiz = await self.get_quiz_by_id(quiz_id)
+        if not quiz:
+            return None
+        questions = await self.get_quiz_questions(quiz_id)
+
+        title = title_override or f"{quiz['title']} (Көшірме)"
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO quizzes (title, description, cover_image, created_by, is_public)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (title, quiz.get("description") or "", quiz.get("cover_image"), user_id, 1 if quiz.get("is_public") else 0),
+            )
+            new_quiz_id = cursor.lastrowid
+            for q in questions:
+                await self._insert_question(
+                    db,
+                    quiz_id=new_quiz_id,
+                    question_text=q["question_text"],
+                    question_type=q.get("question_type", "mcq"),
+                    options=q.get("options") or [],
+                    correct_answer=q.get("correct_answer") or "",
+                    accepted_answers=q.get("accepted_answers") or [],
+                    time_limit_seconds=q.get("time_limit_seconds", 30),
+                    points=q.get("points", 1000),
+                    sort_order=q.get("sort_order", 0),
+                    image_filename=q.get("image_filename"),
+                    explanation=q.get("explanation"),
+                )
+        return await self.get_quiz_by_id(new_quiz_id)
 
     async def delete_quiz(self, quiz_id: int) -> bool:
         async with self._write_transaction() as db:

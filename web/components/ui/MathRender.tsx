@@ -24,6 +24,7 @@ const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.
 const LATEX_COMMAND_NAME_RE = /^[A-Za-z]+/;
 const RAW_MATH_START_RE = /[A-Za-z0-9]/;
 const RAW_MATH_CHAR_RE = /[A-Za-z0-9{}^_=+\-*/<>()[\]|.,;]/;
+const FRACTION_LITERAL_RE = /(^|[^0-9/\\])([0-9]+)\s*\/\s*([0-9]+)(?![0-9/])/g;
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
@@ -38,17 +39,53 @@ const makeRenderKey = (value: string): string => {
 const normalizeSpacesForMathDisplay = (value: string): string => {
   if (!value) return "";
   const normalized = value.replace(/\\text\{\s*\}/g, "\\ ");
+  // Keep spaces inside text commands literal. Escaping those spaces for
+  // MathLive makes them appear as backslashes in rendered text.
+  const textSpaceToken = "\uE000";
+  const protectedText = normalized.replace(/\\text\{([^{}]*)\}/g, (command) =>
+    command.replace(/ /g, textSpaceToken)
+  );
   let output = "";
-  for (let i = 0; i < normalized.length; i += 1) {
-    const ch = normalized[i];
-    const prev = i > 0 ? normalized[i - 1] : "";
+  for (let i = 0; i < protectedText.length; i += 1) {
+    const ch = protectedText[i];
+    const prev = i > 0 ? protectedText[i - 1] : "";
     if (ch === " " && prev !== "\\") {
       output += "\\ ";
     } else {
       output += ch;
     }
   }
-  return output;
+  return output.split(textSpaceToken).join(" ");
+};
+
+const stackFractionsInText = (text: string): string => {
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(FRACTION_LITERAL_RE)) {
+    const prefix = match[1] || "";
+    const start = (match.index || 0) + prefix.length;
+    const end = (match.index || 0) + match[0].length;
+    if (start > cursor) parts.push(`\\text{${text.slice(cursor, start)}}`);
+    parts.push(`\\frac{${match[2]}}{${match[3]}}`);
+    cursor = end;
+  }
+
+  if (cursor === 0) return `\\text{${text}}`;
+  if (cursor < text.length) parts.push(`\\text{${text.slice(cursor)}}`);
+  return parts.join("");
+};
+
+const formatFractionsForDisplay = (value: string): string => {
+  const withTextFractionsStacked = value.replace(/\\text\{([^{}]*)\}/g, (_command, text: string) =>
+    stackFractionsInText(text)
+  );
+
+  return withTextFractionsStacked.replace(
+    FRACTION_LITERAL_RE,
+    (_fraction, prefix: string, numerator: string, denominator: string) =>
+      `${prefix}\\frac{${numerator}}{${denominator}}`
+  );
 };
 
 const shouldRenderAsPlainText = (value: string): boolean => {
@@ -644,15 +681,16 @@ export default function MathRender({
   }, []);
 
   const normalizedLatex = normalizeLatexForMathDisplay(latex || "");
-  const renderKey = makeRenderKey(normalizedLatex);
-  const content = normalizeSpacesForMathDisplay(normalizedLatex);
+  const displayLatex = formatFractionsForDisplay(normalizedLatex);
+  const renderKey = makeRenderKey(displayLatex);
+  const content = normalizeSpacesForMathDisplay(displayLatex);
   const wrapStyle: CSSProperties = {
     whiteSpace: "normal",
     overflowWrap: "anywhere",
     wordBreak: "break-word",
     maxWidth: "100%",
   };
-  const protectedParts = splitLatexEnvironmentBlocks(normalizedLatex);
+  const protectedParts = splitLatexEnvironmentBlocks(displayLatex);
   const delimiterProtectedParts = protectedParts.flatMap((part) =>
     part.type === "math" ? [part] : splitPairedLeftRightBlocks(part.value)
   );
@@ -666,18 +704,18 @@ export default function MathRender({
   const hasTextPart = mixedParts.some((part) => part.type === "text");
   const hasMathPart = mixedParts.some((part) => part.type === "math");
 
-  if (shouldRenderAsPlainText(normalizedLatex)) {
+  if (shouldRenderAsPlainText(displayLatex)) {
     if (inline) {
       return (
         <span key={`plain-inline-${renderKey}`} className={className} style={wrapStyle}>
-          {normalizedLatex}
+          {displayLatex}
         </span>
       );
     }
 
     return (
       <div key={`plain-block-${renderKey}`} className={className} style={wrapStyle}>
-        {normalizedLatex}
+        {displayLatex}
       </div>
     );
   }
@@ -709,11 +747,11 @@ export default function MathRender({
   }
 
   if (inline) {
-    const breakableContent = renderBreakableMathSegments(normalizedLatex, "inline", className);
+    const breakableContent = renderBreakableMathSegments(displayLatex, "inline", className);
     if (Array.isArray(breakableContent)) {
       return (
         <span key={`inline-wrap-${renderKey}`} className={className} style={wrapStyle}>
-          {breakableContent}
+        {breakableContent}
         </span>
       );
     }

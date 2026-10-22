@@ -126,3 +126,68 @@ export type QuizPlayerSession = Pick<QuizSession, "id" | "status" | "pin_code" |
 export interface QuizAnswerResponse extends QuizAnswerResult {
   progress?: QuizPlayerProgress;
 }
+
+export interface QuizSessionSummary {
+  id: number;
+  quiz_id: number;
+  host_id: number;
+  host_nickname?: string;
+  pin_code: string;
+  status: "lobby" | "in_progress" | "finished";
+  settings: Record<string, any>;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  participant_count: number;
+  finished_count: number;
+  avg_score: number;
+  max_score: number;
+  top_participants: Array<{
+    id: number;
+    nickname: string;
+    avatar_color: string;
+    score: number;
+    correct_count: number;
+    total_answered: number;
+    is_finished: boolean;
+  }>;
+}
+
+export interface QuizSessionFullResults {
+  session: QuizSession;
+  participants: Array<QuizParticipant & {
+    rank: number;
+    accuracy_percent: number;
+    answers?: Array<{
+      participant_id: number;
+      question_id: number;
+      user_answer: string;
+      is_correct: boolean;
+      time_taken_seconds: number;
+      points_awarded: number;
+    }>;
+  }>;
+  question_stats: QuestionAccuracyStat[];
+  total_players: number;
+}
+
+export interface UserQuizHistoryItem {
+  participant_id: number;
+  session_id: number;
+  nickname: string;
+  avatar_color: string;
+  score: number;
+  correct_count: number;
+  total_answered: number;
+  is_finished: boolean;
+  joined_at: string;
+  quiz_id: number;
+  session_status: "lobby" | "in_progress" | "finished";
+  pin_code: string;
+  session_date: string;
+  quiz_title: string;
+  question_count: number;
+  rank: number;
+  total_participants: number;
+  accuracy_percent: number;
+}

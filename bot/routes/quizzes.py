@@ -27,6 +27,7 @@ class UpdateQuizRequest(BaseModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     cover_image: Optional[str] = None
     is_public: Optional[bool] = None
+    questions: Optional[List["QuizQuestionItem"]] = Field(default=None, max_length=200)
 
 
 class QuizQuestionItem(BaseModel):
@@ -110,6 +111,17 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         questions = await db.quizzes.get_quiz_questions(quiz_id)
         return questions if can_manage(quiz, current_user) else [public_question(q) for q in questions]
 
+    @app.get("/api/quizzes/{quiz_id}/sessions")
+    async def get_quiz_sessions_endpoint(
+        quiz_id: int,
+        db: Database = Depends(get_db),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
+    ):
+        """Get past game sessions and student results for a quiz."""
+        quiz = await db.quizzes.get_quiz_by_id(quiz_id)
+        ensure_visible(quiz, current_user)
+        return await db.quizzes.get_quiz_sessions(quiz_id)
+
     @app.post("/api/quizzes")
     async def create_quiz_endpoint(
         payload: CreateQuizRequest,
@@ -149,8 +161,31 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             description=payload.description,
             cover_image=payload.cover_image,
             is_public=payload.is_public,
+            questions=[q.model_dump() for q in payload.questions] if payload.questions is not None else None,
         )
         return {**updated, 'is_public': bool(updated['is_public']), 'can_manage': can_manage(updated, current_user)}
+
+    @app.post("/api/quizzes/{quiz_id}/fork")
+    async def fork_quiz_endpoint(
+        quiz_id: int,
+        current_user: dict = Depends(require_internal_identity),
+        db: Database = Depends(get_db),
+    ):
+        """Fork/clone a public quiz to user's own quizzes."""
+        quiz = await db.quizzes.get_quiz_by_id(quiz_id)
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        if not quiz["is_public"] and not can_manage(quiz, current_user):
+            raise HTTPException(status_code=403, detail="Тек ашық квиздерді көшіріп алуға болады")
+
+        cloned = await db.quizzes.fork_quiz(
+            quiz_id=quiz_id,
+            user_id=current_user["id"],
+        )
+        if not cloned:
+            raise HTTPException(status_code=400, detail="Квизді көшіру мүмкін болмады")
+        return {**cloned, 'is_public': bool(cloned['is_public']), 'can_manage': True}
 
     @app.delete("/api/quizzes/{quiz_id}")
     async def delete_quiz_endpoint(

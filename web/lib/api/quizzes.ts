@@ -6,6 +6,9 @@ import {
   QuizParticipant,
   QuizAnswerResponse,
   QuizSessionStats,
+  QuizSessionSummary,
+  QuizSessionFullResults,
+  UserQuizHistoryItem,
   QuizAuth,
   QuizPlayerProgress,
 } from "@/types/quiz";
@@ -52,7 +55,7 @@ export async function createQuiz(
 
 export async function updateQuiz(
   quizId: number,
-  payload: Partial<Quiz>,
+  payload: Partial<Quiz> & { questions?: Partial<QuizQuestion>[] },
   email?: string
 ): Promise<FetchResult<Quiz>> {
   const qs = email ? `?email=${encodeURIComponent(email)}` : "";
@@ -60,6 +63,16 @@ export async function updateQuiz(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function forkQuiz(
+  quizId: number,
+  email?: string
+): Promise<FetchResult<Quiz>> {
+  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+  return fetchWithErrorHandling<Quiz>(`${apiPath(`quizzes/${quizId}/fork`)}${qs}`, {
+    method: "POST",
   });
 }
 
@@ -147,8 +160,9 @@ export async function joinQuizSession(
   avatarColor?: string,
   participantToken?: string
 ): Promise<FetchResult<{ session: QuizSession; participant: QuizParticipant; participant_token: string }>> {
+  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
   return fetchWithErrorHandling<{ session: QuizSession; participant: QuizParticipant; participant_token: string }>(
-    apiPath("quiz-sessions/join"),
+    `${apiPath("quiz-sessions/join")}${qs}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -279,4 +293,33 @@ export function activateQuizQuestion(sessionId: number, auth: QuizAuth, advance 
 export function getQuizWsToken(sessionId: number, auth: QuizAuth) {
   return fetchWithErrorHandling<{ token: string; expires_in: number }>(
     `${apiPath(`quiz-sessions/${sessionId}/ws-token`)}${authQuery(auth)}`, { headers: authHeaders(auth) });
+}
+
+export async function getQuizSessions(
+  quizId: number,
+  email?: string
+): Promise<FetchResult<QuizSessionSummary[]>> {
+  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+  return fetchWithErrorHandling<QuizSessionSummary[]>(
+    `${apiPath(`quizzes/${quizId}/sessions`)}${qs}`
+  );
+}
+
+export async function getQuizSessionFullResults(
+  sessionId: number,
+  auth?: QuizAuth
+): Promise<FetchResult<QuizSessionFullResults>> {
+  return fetchWithErrorHandling<QuizSessionFullResults>(
+    `${apiPath(`quiz-sessions/${sessionId}/results`)}${authQuery(auth)}`,
+    { headers: authHeaders(auth) }
+  );
+}
+
+export async function getUserQuizHistory(
+  email?: string
+): Promise<FetchResult<UserQuizHistoryItem[]>> {
+  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+  return fetchWithErrorHandling<UserQuizHistoryItem[]>(
+    `${apiPath("quiz-sessions/user/history")}${qs}`
+  );
 }

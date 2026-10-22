@@ -316,3 +316,114 @@ class QuizSessionsMixin:
                               'sort_order': question['sort_order'], **row})
         return {'session_id': session_id, 'total_players': len(leaderboard),
                 'leaderboard': leaderboard, 'podium': leaderboard[:3], 'question_stats': stats}
+
+    async def get_quiz_sessions(self, quiz_id: int):
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute("""
+                SELECT s.*,
+                    u.nickname AS host_nickname,
+                    COUNT(p.id) AS participant_count,
+                    COALESCE(SUM(CASE WHEN p.is_finished = 1 THEN 1 ELSE 0 END), 0) AS finished_count,
+                    COALESCE(AVG(p.score), 0) AS avg_score,
+                    COALESCE(MAX(p.score), 0) AS max_score
+                FROM quiz_sessions s
+                LEFT JOIN users u ON u.id = s.host_id
+                LEFT JOIN quiz_participants p ON p.session_id = s.id
+                WHERE s.quiz_id = ?
+                GROUP BY s.id
+                ORDER BY s.created_at DESC
+            """, (quiz_id,)) as cursor:
+                sessions = [dict(row) for row in await cursor.fetchall()]
+
+            for s in sessions:
+                s['settings'] = json.loads(s.get('settings') or '{}')
+                s['avg_score'] = round(float(s['avg_score']))
+                async with db.execute("""
+                    SELECT id, nickname, avatar_color, score, correct_count, total_answered, is_finished
+                    FROM quiz_participants
+                    WHERE session_id = ?
+                    ORDER BY score DESC, correct_count DESC, id ASC
+                    LIMIT 3
+                """, (s['id'],)) as p_cursor:
+                    s['top_participants'] = [dict(r) for r in await p_cursor.fetchall()]
+
+            return sessions
+
+    async def get_session_full_results(self, session_id: int):
+        session = await self.get_session_by_id(session_id)
+        if not session:
+            return None
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute("""
+                SELECT id, session_id, user_id, nickname, avatar_color, score, streak,
+                       correct_count, total_answered, is_finished, joined_at, last_active_at
+                FROM quiz_participants
+                WHERE session_id = ?
+                ORDER BY score DESC, correct_count DESC, id ASC
+            """, (session_id,)) as cursor:
+                participants = [dict(row) for row in await cursor.fetchall()]
+
+            for idx, p in enumerate(participants):
+                p['rank'] = idx + 1
+                total = p['total_answered'] or 1
+                p['accuracy_percent'] = round((p['correct_count'] / total) * 100) if p['total_answered'] > 0 else 0
+
+            questions = await self._snapshot_questions(db, session_id)
+            stats = []
+            for question in questions:
+                row = await self._row(db, '''SELECT COUNT(*) AS total_answers,
+                    COALESCE(SUM(is_correct), 0) AS correct_answers, AVG(time_taken_seconds) AS avg_time
+                    FROM quiz_answers WHERE session_id = ? AND question_id = ?''', (session_id, question['id']))
+                stats.append({'question_id': question['id'], 'question_text': question['question_text'],
+                              'question_type': question.get('question_type', 'mcq'),
+                              'sort_order': question['sort_order'], **row})
+
+            async with db.execute("""
+                SELECT participant_id, question_id, user_answer, is_correct, time_taken_seconds, points_awarded
+                FROM quiz_answers
+                WHERE session_id = ?
+            """, (session_id,)) as cursor:
+                answers = [dict(row) for row in await cursor.fetchall()]
+
+            answers_by_participant = {}
+            for ans in answers:
+                pid = ans['participant_id']
+                answers_by_participant.setdefault(pid, []).append(ans)
+
+            for p in participants:
+                p['answers'] = answers_by_participant.get(p['id'], [])
+
+        return {
+            'session': session,
+            'participants': participants,
+            'question_stats': stats,
+            'total_players': len(participants),
+        }
+
+    async def get_user_quiz_history(self, user_id: int):
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute("""
+                SELECT p.id AS participant_id, p.session_id, p.nickname, p.avatar_color,
+                       p.score, p.correct_count, p.total_answered, p.is_finished, p.joined_at,
+                       s.quiz_id, s.status AS session_status, s.pin_code, s.created_at AS session_date,
+                       q.title AS quiz_title,
+                       (SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = s.id) AS question_count,
+                       (SELECT COUNT(*) + 1 FROM quiz_participants
+                        WHERE session_id = s.id AND (score > p.score OR (score = p.score AND correct_count > p.correct_count))) AS rank,
+                       (SELECT COUNT(*) FROM quiz_participants WHERE session_id = s.id) AS total_participants
+                FROM quiz_participants p
+                JOIN quiz_sessions s ON s.id = p.session_id
+                JOIN quizzes q ON q.id = s.quiz_id
+                WHERE p.user_id = ?
+                ORDER BY p.joined_at DESC
+            """, (user_id,)) as cursor:
+                history = [dict(row) for row in await cursor.fetchall()]
+
+            for item in history:
+                total = item['question_count'] or item['total_answered'] or 1
+                item['accuracy_percent'] = round((item['correct_count'] / total) * 100) if total > 0 else 0
+
+            return history
