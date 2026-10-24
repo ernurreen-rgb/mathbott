@@ -317,10 +317,16 @@ class QuizSessionsMixin:
         return {'session_id': session_id, 'total_players': len(leaderboard),
                 'leaderboard': leaderboard, 'podium': leaderboard[:3], 'question_stats': stats}
 
-    async def get_quiz_sessions(self, quiz_id: int):
+    async def get_quiz_sessions(self, quiz_id: int, host_id: int | None = None):
+        where_sql = "s.quiz_id = ?"
+        params: list = [quiz_id]
+        if host_id is not None:
+            where_sql += " AND s.host_id = ?"
+            params.append(host_id)
+
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            async with db.execute("""
+            async with db.execute(f"""
                 SELECT s.*,
                     u.nickname AS host_nickname,
                     COUNT(p.id) AS participant_count,
@@ -330,10 +336,10 @@ class QuizSessionsMixin:
                 FROM quiz_sessions s
                 LEFT JOIN users u ON u.id = s.host_id
                 LEFT JOIN quiz_participants p ON p.session_id = s.id
-                WHERE s.quiz_id = ?
+                WHERE {where_sql}
                 GROUP BY s.id, u.nickname
                 ORDER BY s.created_at DESC
-            """, (quiz_id,)) as cursor:
+            """, tuple(params)) as cursor:
                 sessions = [dict(row) for row in await cursor.fetchall()]
 
             for s in sessions:

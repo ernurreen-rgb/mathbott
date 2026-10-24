@@ -392,10 +392,9 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
       mini_lessons: [
         {
           id: 50,
-          lesson_id: 17,
           mini_index: 1,
           title: "Mini 1",
-          progress: { progress: 0, completed: false },
+          progress: { progress: 0, completed: false, total: 1, completed_count: 0 },
           tasks: [
             {
               id: 601,
@@ -450,5 +449,42 @@ describe("LessonPage task navigation (Алдыңғы / Келесі)", () => {
     // Correct option A should be green
     const optionA = screen.getByRole("button", { name: /23/ });
     expect(optionA.className).toContain("bg-green-50");
+
+    // Student is not soft-locked: can click "Қайта көру" and answer again
+    const retryBtn = screen.getByRole("button", { name: "Қайта көру" });
+    fireEvent.click(retryBtn);
+
+    expect(screen.getByRole("button", { name: "Тексеру" })).toBeInTheDocument();
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ correct: true, correct_answer: null }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /23/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Тексеру" }));
+    });
+
+    expect(screen.getByRole("button", { name: /Келесі/ })).toBeInTheDocument();
+  });
+
+  it("does not lock task controls when check request fails with a network or server error", async () => {
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error("Желі қатесі"));
+
+    await act(async () => {
+      render(<LessonPage />);
+    });
+
+    const input = screen.getByLabelText("Жауапты жазыңыз");
+    fireEvent.change(input, { target: { value: "27" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Тексеру" }));
+    });
+
+    expect(screen.getByText("Желі қатесі")).toBeInTheDocument();
+    expect(input).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Тексеру" })).not.toBeDisabled();
   });
 });

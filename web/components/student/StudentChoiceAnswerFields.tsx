@@ -48,8 +48,11 @@ export default function StudentChoiceAnswerFields({
     : "grid grid-cols-1 gap-2 sm:grid-cols-2";
 
   if (task.question_type === "select") {
-    const selected = parseSelectAnswer(value || selectedAnswer);
-    const correctArr = parseSelectAnswer(correctAnswer || (isCorrect ? (value || selectedAnswer) : ""));
+    const effectiveSelectValue = value || selectedAnswer || "";
+    const selected = parseSelectAnswer(effectiveSelectValue);
+    const correctArr = parseSelectAnswer(
+      correctAnswer || (isCorrect && effectiveSelectValue ? effectiveSelectValue : task.answer || "")
+    );
     return (
       <div className="space-y-4">
         {[0, 1].map((index) => {
@@ -140,7 +143,8 @@ export default function StudentChoiceAnswerFields({
   const requiredCount = getTaskMcqCorrectCount(task);
   const effectiveSelected = value || selectedAnswer || "";
   const selectedLabels = parseMcqAnswerLabels(effectiveSelected);
-  const effectiveCorrect = correctAnswer || (isCorrect ? effectiveSelected : task.answer || "");
+  const effectiveCorrect =
+    correctAnswer || (isCorrect && effectiveSelected ? effectiveSelected : task.answer || "");
   const correctLabels = parseMcqAnswerLabels(effectiveCorrect);
 
   return (

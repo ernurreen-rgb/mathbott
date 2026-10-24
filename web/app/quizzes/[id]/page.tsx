@@ -463,26 +463,28 @@ export default function QuizDetailPage({ params }: PageProps) {
             </span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("sessions")}
-            className={`pb-3 px-3 text-sm font-extrabold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === "sessions"
-                ? "border-purple-600 text-purple-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            <Icon name="trophy" className="w-4 h-4" />
-            <span>Өткізілген ойындар мен нәтижелер</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full ${
+          {session?.user && (
+            <button
+              onClick={() => setActiveTab("sessions")}
+              className={`pb-3 px-3 text-sm font-extrabold flex items-center gap-2 border-b-2 transition-all ${
                 activeTab === "sessions"
-                  ? "bg-purple-100 text-purple-800"
-                  : "bg-gray-100 text-gray-600"
+                  ? "border-purple-600 text-purple-700"
+                  : "border-transparent text-gray-500 hover:text-gray-800"
               }`}
             >
-              {sessions.length}
-            </span>
-          </button>
+              <Icon name="trophy" className="w-4 h-4" />
+              <span>Өткізілген ойындар мен нәтижелер</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full ${
+                  activeTab === "sessions"
+                    ? "bg-purple-100 text-purple-800"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {sessions.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* TAB 1: QUESTIONS BREAKDOWN */}
@@ -696,7 +698,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                             <span>{isFinished ? "Пьедестал" : "Бөлмеге өту"}</span>
                           </Link>
 
-                          {!isFinished && quiz.can_manage && (
+                          {!isFinished && (
                             <button
                               onClick={() => handleFinishSession(s.id)}
                               disabled={finishingSessionId === s.id}
@@ -1006,7 +1008,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                                       {p.score.toLocaleString()}
                                     </td>
                                     <td className="py-3 px-3 text-center font-mono text-gray-700">
-                                      {p.correct_count} / {questions.length}
+                                      {p.correct_count} / {selectedSessionResults.question_stats.length || questions.length}
                                     </td>
                                     <td className="py-3 px-3 text-center">
                                       <span

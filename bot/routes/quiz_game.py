@@ -212,10 +212,20 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def session_results(session_id: int, request: Request,
                               user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         """Get comprehensive session results including all participants, scores, and accuracy."""
-        await access(session_id, request, user, db)
+        session, participant = await access(session_id, request, user, db)
+        if participant and session['status'] != 'finished':
+            raise HTTPException(403, 'Results are available after the game finishes')
         results = await db.quizzes.get_session_full_results(session_id)
         if not results:
             raise HTTPException(404, 'Session results not found')
+        if participant:
+            results = {
+                **results,
+                'participants': [
+                    p if p['id'] == participant['id'] else {**p, 'answers': []}
+                    for p in results['participants']
+                ],
+            }
         return results
 
     @app.get('/api/quiz-sessions/user/history')

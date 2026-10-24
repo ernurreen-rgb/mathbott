@@ -117,10 +117,13 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         current_user: Optional[dict] = Depends(optional_internal_identity),
     ):
-        """Get past game sessions and student results for a quiz."""
+        """Get past game sessions and student results hosted by the current user (or all for admin)."""
         quiz = await db.quizzes.get_quiz_by_id(quiz_id)
         ensure_visible(quiz, current_user)
-        return await db.quizzes.get_quiz_sessions(quiz_id)
+        if not current_user:
+            return []
+        host_filter = None if current_user.get("is_admin") else current_user["id"]
+        return await db.quizzes.get_quiz_sessions(quiz_id, host_id=host_filter)
 
     @app.post("/api/quizzes")
     async def create_quiz_endpoint(

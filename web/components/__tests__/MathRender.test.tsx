@@ -93,4 +93,26 @@ describe("MathRender", () => {
     expect(container.textContent).toContain("}-2} \u04e9\u0440\u043d\u0435\u043a\u0442\u0456");
     expect(container.textContent).toContain("\u043c\u04b1\u043d\u0434\u0430\u0493\u044b 1<x<y");
   });
+
+  it("formats standalone integer fractions without corrupting exponents, subscripts, decimals, or school years", () => {
+    const standalone = render(<MathRender latex="\\text{Есептеңіз: 1/2 + 3/4}" />);
+    expect(standalone.container.textContent).toContain("\\frac{1}{2}");
+    expect(standalone.container.textContent).toContain("\\frac{3}{4}");
+
+    const powerAndSubscript = render(<MathRender latex="a^2/3 + x_1/2 + 3/2^4" />);
+    expect(powerAndSubscript.container.textContent).not.toContain("a^\\frac{2}{3}");
+    expect(powerAndSubscript.container.textContent).not.toContain("x_\\frac{1}{2}");
+    expect(powerAndSubscript.container.textContent).not.toContain("\\frac{3}{2}^4");
+    expect(powerAndSubscript.container.textContent).toContain("a^2/3");
+    expect(powerAndSubscript.container.textContent).toContain("x_1/2");
+    expect(powerAndSubscript.container.textContent).toContain("3/2^4");
+
+    const decimals = render(<MathRender latex="1.5/2 + 3/2.5 + 1,5/2" />);
+    expect(decimals.container.textContent).not.toContain("\\frac");
+    expect(decimals.container.textContent).toContain("1.5/2");
+    expect(decimals.container.textContent).toContain("3/2.5");
+
+    const schoolYear = render(<MathRender latex="2025/2026 оқу жылы" />);
+    expect(schoolYear.container.textContent).toBe("2025/2026 оқу жылы");
+  });
 });

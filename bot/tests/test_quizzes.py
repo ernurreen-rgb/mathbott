@@ -276,6 +276,15 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert leaderboard[0]["score"] > 1700
     assert leaderboard[1]["nickname"] == "Аружан"
 
+    # 9b. Participants cannot read full session results while game is in progress,
+    # and unauthenticated guests cannot list quiz sessions / PIN codes.
+    midgame_results_resp = client.get(f"/api/quiz-sessions/{session_id}/results", headers=h1)
+    assert midgame_results_resp.status_code == 403
+
+    guest_sessions_resp = client.get(f"/api/quizzes/{quiz['id']}/sessions")
+    assert guest_sessions_resp.status_code == 200
+    assert guest_sessions_resp.json() == []
+
     # 10. Host finishes game
     finish_resp = client.post(
         f"/api/quiz-sessions/{session_id}/finish",
@@ -286,7 +295,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert stats["total_players"] == 2
     assert stats["podium"][0]["nickname"] == "Алихан"
 
-    # 11. Quiz sessions list endpoint (for host to see past session results)
+    # 11. Quiz sessions list endpoint (only visible to the session host / admin)
     sessions_resp = client.get(
         f"/api/quizzes/{quiz['id']}/sessions",
         params={"email": user_email},
@@ -300,7 +309,15 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert sessions_list[0]["avg_score"] > 800
     assert len(sessions_list[0]["top_participants"]) == 2
 
-    # 12. Full session results endpoint
+    stranger = await test_db.users.create_user_by_email("stranger@example.com")
+    stranger_sessions_resp = client.get(
+        f"/api/quizzes/{quiz['id']}/sessions",
+        params={"email": stranger["email"]},
+    )
+    assert stranger_sessions_resp.status_code == 200
+    assert stranger_sessions_resp.json() == []
+
+    # 12. Full session results endpoint (host sees all answers; participant only sees own answers)
     results_resp = client.get(
         f"/api/quiz-sessions/{session_id}/results",
         params={"email": user_email},
@@ -313,6 +330,12 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     assert len(res_data["participants"][0]["answers"]) == 2
     assert res_data["participants"][1]["nickname"] == "Аружан"
     assert res_data["participants"][1]["rank"] == 2
+
+    p1_results_resp = client.get(f"/api/quiz-sessions/{session_id}/results", headers=h1)
+    assert p1_results_resp.status_code == 200
+    p1_res_data = p1_results_resp.json()
+    assert len(p1_res_data["participants"][0]["answers"]) == 2
+    assert p1_res_data["participants"][1]["answers"] == []
 
     # 13. User quiz history endpoint (Player 2 was registered with user_email)
     user_hist_resp = client.get(

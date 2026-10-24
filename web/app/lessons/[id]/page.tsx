@@ -163,14 +163,6 @@ export default function LessonPage() {
     return minis[idx + 1]?.id ?? null;
   }, [lesson, selectedMiniId]);
 
-  const prevMiniId = useMemo(() => {
-    if (!lesson || !selectedMiniId) return null;
-    const minis = lesson.mini_lessons.slice().sort((a, b) => a.mini_index - b.mini_index);
-    const idx = minis.findIndex((m) => m.id === selectedMiniId);
-    if (idx <= 0) return null;
-    return minis[idx - 1]?.id ?? null;
-  }, [lesson, selectedMiniId]);
-
   const activeTask = useMemo(() => {
     if (!activeTaskId) return null;
     return orderedMiniTasks.find((t) => t.id === activeTaskId) || null;
@@ -181,8 +173,14 @@ export default function LessonPage() {
     return orderedMiniTasks.findIndex((t) => t.id === activeTaskId);
   }, [orderedMiniTasks, activeTaskId]);
 
-  const hasPrevTask = currentTaskIndex > 0 || prevMiniId !== null;
   const isTaskCompleted = activeTask ? activeTask.status === "completed" || !!feedback[activeTask.id]?.ok : false;
+  const isActiveTaskAnswered = activeTask
+    ? activeTask.status === "completed" || selectedAnswers[activeTask.id] !== undefined
+    : false;
+  const hasSubsequentTask =
+    (currentTaskIndex >= 0 && currentTaskIndex < orderedMiniTasks.length - 1) ||
+    nextMiniId !== null;
+  const canGoNext = isTaskCompleted || (isActiveTaskAnswered && hasSubsequentTask);
 
   // When mini-lesson changes or tasks update, pick the first not completed task
   useEffect(() => {
@@ -212,12 +210,43 @@ export default function LessonPage() {
     });
   };
 
+  const resetTaskAttempt = (taskId: number) => {
+    setSelectedAnswers((m) => {
+      const next = { ...m };
+      delete next[taskId];
+      return next;
+    });
+    setFeedback((m) => {
+      const next = { ...m };
+      delete next[taskId];
+      return next;
+    });
+    setCorrectAnswers((m) => {
+      const next = { ...m };
+      delete next[taskId];
+      return next;
+    });
+    setAnswers((m) => {
+      const next = { ...m };
+      delete next[taskId];
+      return next;
+    });
+  };
+
   const goToNextTaskOrMini = (currentTaskId: number) => {
     const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
     if (idx < 0) return;
     const nextTask = orderedMiniTasks[idx + 1];
     if (nextTask) {
       setActiveTaskId(nextTask.id);
+      return;
+    }
+    const firstIncomplete = orderedMiniTasks.find(
+      (t) => t.id !== currentTaskId && t.status !== "completed"
+    );
+    if (firstIncomplete) {
+      resetTaskAttempt(firstIncomplete.id);
+      setActiveTaskId(firstIncomplete.id);
       return;
     }
     if (nextMiniId) {
@@ -231,31 +260,19 @@ export default function LessonPage() {
 
   const goToPrevTaskOrMini = (currentTaskId: number) => {
     const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
-    if (idx < 0) return;
     if (idx > 0) {
       setActiveTaskId(orderedMiniTasks[idx - 1].id);
-      return;
-    }
-    if (prevMiniId && lesson) {
-      const prevMini = lesson.mini_lessons.find((m) => m.id === prevMiniId);
-      if (prevMini && prevMini.tasks.length > 0) {
-        const prevMiniTasks = prevMini.tasks
-          .slice()
-          .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
-        const lastTask = prevMiniTasks[prevMiniTasks.length - 1];
-        setSelectedMiniId(prevMiniId);
-        setActiveTaskId(lastTask?.id ?? null);
-        return;
-      }
     }
   };
 
   const submitCheck = async (task: LessonTask, answer: string) => {
     if (!email) return;
     setChecking((m) => ({ ...m, [task.id]: true }));
-    setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "" } }));
-    // Save selected answer
-    setSelectedAnswers((m) => ({ ...m, [task.id]: answer }));
+    setFeedback((m) => {
+      const next = { ...m };
+      delete next[task.id];
+      return next;
+    });
     try {
       const res = await fetch(`${API_URL}/api/task/check`, {
         method: "POST",
@@ -267,6 +284,7 @@ export default function LessonPage() {
         setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: (data as any)?.detail || "Тексеру қатесі" } }));
         return;
       }
+      setSelectedAnswers((m) => ({ ...m, [task.id]: answer }));
       if (data.correct) {
         updateTaskStatusLocal(task.id, "completed");
         setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "Дұрыс!" } }));
@@ -362,12 +380,24 @@ export default function LessonPage() {
     const qt: QuestionType = (task.question_type || "input") as QuestionType;
     const isTaskAnswered =
       task.status === "completed" ||
-      selectedAnswers[task.id] !== undefined ||
-      !!feedback[task.id]?.text;
+      selectedAnswers[task.id] !== undefined;
     const isTaskCorrect = task.status === "completed" || !!feedback[task.id]?.ok;
-    const currentAnswer = answers[task.id] || selectedAnswers[task.id] || "";
+    const currentAnswer =
+      answers[task.id] ||
+      selectedAnswers[task.id] ||
+      (task.status === "completed" ? task.answer || "" : "");
     const taskCorrectAnswer =
-      correctAnswers[task.id] || (isTaskCorrect ? currentAnswer : task.answer || "");
+      correctAnswers[task.id] || (isTaskCorrect && currentAnswer ? currentAnswer : task.answer || "");
+    const retryButton =
+      isTaskAnswered && !isTaskCorrect ? (
+        <button
+          type="button"
+          onClick={() => resetTaskAttempt(task.id)}
+          className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2.5 px-5 rounded-lg transition-colors self-start"
+        >
+          Қайта көру
+        </button>
+      ) : null;
 
     if (qt === "tf") {
       const selectedAnswer = currentAnswer;
@@ -389,45 +419,48 @@ export default function LessonPage() {
       const isFalseSelected = selectedNormalized === "false" || selectedNormalized === "0";
 
       return (
-        <div className="flex gap-2" role="group" aria-label="Жауап таңдау">
-          <button
-            onClick={() => submitCheck(task, "true")}
-            disabled={!!checking[task.id] || isTaskAnswered}
-            aria-label="Дұрыс деп таңдау"
-            aria-pressed={isTaskAnswered && isTrueSelected ? "true" : "false"}
-            className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-              isTaskAnswered && isTrueSelected
-                ? isTrueCorrect
-                  ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
-                  : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
-                : isTaskAnswered && isTrueCorrect
-                ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
-                : isTaskAnswered
-                ? "bg-gray-100 text-gray-400"
-                : "bg-green-600 hover:bg-green-700 text-white"
-            }`}
-          >
-            Дұрыс
-          </button>
-          <button
-            onClick={() => submitCheck(task, "false")}
-            disabled={!!checking[task.id] || isTaskAnswered}
-            aria-label="Жалған деп таңдау"
-            aria-pressed={isTaskAnswered && isFalseSelected ? "true" : "false"}
-            className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-              isTaskAnswered && isFalseSelected
-                ? isFalseCorrect
-                  ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
-                  : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
-                : isTaskAnswered && isFalseCorrect
-                ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
-                : isTaskAnswered
-                ? "bg-gray-100 text-gray-400"
-                : "bg-red-600 hover:bg-red-700 text-white"
-            }`}
-          >
-            Жалған
-          </button>
+        <div className="space-y-3">
+          <div className="flex gap-2" role="group" aria-label="Жауап таңдау">
+            <button
+              onClick={() => submitCheck(task, "true")}
+              disabled={!!checking[task.id] || isTaskAnswered}
+              aria-label="Дұрыс деп таңдау"
+              aria-pressed={isTaskAnswered && isTrueSelected ? "true" : "false"}
+              className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                isTaskAnswered && isTrueSelected
+                  ? isTrueCorrect
+                    ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
+                    : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
+                  : isTaskAnswered && isTrueCorrect
+                  ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
+                  : isTaskAnswered
+                  ? "bg-gray-100 text-gray-400"
+                  : "bg-green-600 hover:bg-green-700 text-white"
+              }`}
+            >
+              Дұрыс
+            </button>
+            <button
+              onClick={() => submitCheck(task, "false")}
+              disabled={!!checking[task.id] || isTaskAnswered}
+              aria-label="Жалған деп таңдау"
+              aria-pressed={isTaskAnswered && isFalseSelected ? "true" : "false"}
+              className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+                isTaskAnswered && isFalseSelected
+                  ? isFalseCorrect
+                    ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
+                    : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
+                  : isTaskAnswered && isFalseCorrect
+                  ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
+                  : isTaskAnswered
+                  ? "bg-gray-100 text-gray-400"
+                  : "bg-red-600 hover:bg-red-700 text-white"
+              }`}
+            >
+              Жалған
+            </button>
+          </div>
+          {retryButton}
         </div>
       );
     }
@@ -448,7 +481,7 @@ export default function LessonPage() {
               correctAnswer={taskCorrectAnswer}
               selectedAnswer={currentAnswer}
             />
-            {!isTaskAnswered && (
+            {!isTaskAnswered ? (
               <button
                 onClick={() => submitCheck(task, currentAnswer)}
                 disabled={!!checking[task.id] || !isSelectAnswerComplete(currentAnswer)}
@@ -456,6 +489,8 @@ export default function LessonPage() {
               >
                 Тексеру
               </button>
+            ) : (
+              retryButton
             )}
           </div>
         );
@@ -474,7 +509,7 @@ export default function LessonPage() {
               )}
             />
           </div>
-          {!isTaskAnswered && (
+          {!isTaskAnswered ? (
             <button
               onClick={() => submitCheck(task, currentAnswer)}
               disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, 2)}
@@ -482,6 +517,8 @@ export default function LessonPage() {
             >
               Тексеру
             </button>
+          ) : (
+            retryButton
           )}
         </div>
       );
@@ -503,7 +540,7 @@ export default function LessonPage() {
               correctAnswer={taskCorrectAnswer}
               selectedAnswer={currentAnswer}
             />
-            {!isTaskAnswered && (
+            {!isTaskAnswered ? (
               <button
                 onClick={() => submitCheck(task, currentAnswer)}
                 disabled={!!checking[task.id] || !isMcqAnswerComplete(currentAnswer, requiredCount)}
@@ -511,6 +548,8 @@ export default function LessonPage() {
               >
                 Тексеру
               </button>
+            ) : (
+              retryButton
             )}
           </div>
         );
@@ -529,7 +568,7 @@ export default function LessonPage() {
               disabled={isTaskAnswered}
             />
           </div>
-          {!isTaskAnswered && (
+          {!isTaskAnswered ? (
             <button
               onClick={() => submitCheck(task, currentAnswer)}
               disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, requiredCount)}
@@ -537,6 +576,8 @@ export default function LessonPage() {
             >
               Тексеру
             </button>
+          ) : (
+            retryButton
           )}
         </div>
       );
@@ -552,7 +593,7 @@ export default function LessonPage() {
             placeholder="Жауапты жазыңыз"
           />
         </div>
-        {!isTaskAnswered && (
+        {!isTaskAnswered ? (
           <button
             onClick={() => submitCheck(task, currentAnswer)}
             disabled={!!checking[task.id] || !currentAnswer.trim()}
@@ -560,6 +601,8 @@ export default function LessonPage() {
           >
             Тексеру
           </button>
+        ) : (
+          retryButton
         )}
       </div>
     );
@@ -753,7 +796,7 @@ export default function LessonPage() {
                       >
                         Шағым
                       </button>
-                      {isTaskCompleted ? (
+                      {canGoNext ? (
                         <button
                           type="button"
                           onClick={() => goToNextTaskOrMini(activeTask.id)}

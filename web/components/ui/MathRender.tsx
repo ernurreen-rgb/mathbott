@@ -24,7 +24,11 @@ const RIGHT_DELIMITER_AT_START_RE = /^(\s*\\right(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.
 const LATEX_COMMAND_NAME_RE = /^[A-Za-z]+/;
 const RAW_MATH_START_RE = /[A-Za-z0-9]/;
 const RAW_MATH_CHAR_RE = /[A-Za-z0-9{}^_=+\-*/<>()[\]|.,;]/;
-const FRACTION_LITERAL_RE = /(^|[^0-9/\\])([0-9]+)\s*\/\s*([0-9]+)(?![0-9/])/g;
+const FRACTION_LITERAL_RE =
+  /(^|[^0-9A-Za-z\u0400-\u04FF/\\^_.,])([0-9]+)\s*\/\s*([0-9]+)(?![0-9A-Za-z\u0400-\u04FF/^_.,])/g;
+
+const isCalendarYearPair = (numerator: string, denominator: string): boolean =>
+  /^(?:19|20)\d{2}$/.test(numerator) && /^(?:19|20)\d{2}$/.test(denominator);
 
 type MixedContentPart = { type: "space" | "text" | "math"; value: string };
 
@@ -61,31 +65,45 @@ const normalizeSpacesForMathDisplay = (value: string): string => {
 const stackFractionsInText = (text: string): string => {
   const parts: string[] = [];
   let cursor = 0;
+  let converted = false;
 
   for (const match of text.matchAll(FRACTION_LITERAL_RE)) {
+    const numerator = match[2];
+    const denominator = match[3];
+    if (isCalendarYearPair(numerator, denominator)) {
+      continue;
+    }
+    converted = true;
     const prefix = match[1] || "";
     const start = (match.index || 0) + prefix.length;
     const end = (match.index || 0) + match[0].length;
     if (start > cursor) parts.push(`\\text{${text.slice(cursor, start)}}`);
-    parts.push(`\\frac{${match[2]}}{${match[3]}}`);
+    parts.push(`\\frac{${numerator}}{${denominator}}`);
     cursor = end;
   }
 
-  if (cursor === 0) return `\\text{${text}}`;
+  if (!converted) return `\\text{${text}}`;
   if (cursor < text.length) parts.push(`\\text{${text.slice(cursor)}}`);
   return parts.join("");
 };
 
 const formatFractionsForDisplay = (value: string): string => {
-  const withTextFractionsStacked = value.replace(/\\text\{([^{}]*)\}/g, (_command, text: string) =>
-    stackFractionsInText(text)
-  );
-
-  return withTextFractionsStacked.replace(
-    FRACTION_LITERAL_RE,
-    (_fraction, prefix: string, numerator: string, denominator: string) =>
-      `${prefix}\\frac{${numerator}}{${denominator}}`
-  );
+  return value
+    .split(/(\\text\{[^{}]*\})/g)
+    .map((segment) => {
+      const textMatch = /^\\text\{([^{}]*)\}$/.exec(segment);
+      if (textMatch) {
+        return stackFractionsInText(textMatch[1]);
+      }
+      return segment.replace(
+        FRACTION_LITERAL_RE,
+        (fullMatch, prefix: string, numerator: string, denominator: string) =>
+          isCalendarYearPair(numerator, denominator)
+            ? fullMatch
+            : `${prefix}\\frac{${numerator}}{${denominator}}`
+      );
+    })
+    .join("");
 };
 
 const shouldRenderAsPlainText = (value: string): boolean => {
