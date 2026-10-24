@@ -10,17 +10,14 @@ import WeekActivityPanel from "./_components/WeekActivityPanel";
 import MobileNav from "@/components/MobileNav";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 
 import DesktopNav from "@/components/DesktopNav";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { acceptFriendInvite, acceptFriendRequest, cancelFriendRequest, createFriendInvite, declineFriendRequest, getFriendInviteDetails, getUserData, listFriendInvites, listFriendRequests, listFriends, removeFriend, revokeFriendInvite, updateNickname } from "@/lib/api";
-import { getUserQuizHistory } from "@/lib/api/quizzes";
 import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, UserData } from "@/types";
-import { UserQuizHistoryItem } from "@/types/quiz";
 
 export const dynamic = "force-dynamic";
 
@@ -67,8 +64,6 @@ function ProfilePageContent() {
   const [friendsMessage, setFriendsMessage] = useState<string | null>(null);
   const [removingFriends, setRemovingFriends] = useState<Set<number>>(new Set());
   const [requestActions, setRequestActions] = useState<Set<number>>(new Set());
-  const [quizHistory, setQuizHistory] = useState<UserQuizHistoryItem[]>([]);
-  const [quizHistoryLoading, setQuizHistoryLoading] = useState(false);
   const inviteToken = searchParams?.get("invite");
 
   const weekDays = [
@@ -189,23 +184,6 @@ function ProfilePageContent() {
     }
   }, [sessionEmail]);
 
-  const fetchQuizHistory = useCallback(async () => {
-    if (!sessionEmail) return;
-    setQuizHistoryLoading(true);
-    try {
-      const { data, error } = await getUserQuizHistory(sessionEmail);
-      if (!error && data) {
-        setQuizHistory(data);
-      }
-    } catch (err) {
-      if (process.env.NODE_ENV === "development") {
-        console.error("Error fetching quiz history:", err);
-      }
-    } finally {
-      setQuizHistoryLoading(false);
-    }
-  }, [sessionEmail]);
-
   useEffect(() => {
     if (!sessionEmail) {
       setLoading(false);
@@ -213,8 +191,7 @@ function ProfilePageContent() {
     }
     void fetchUserData();
     void fetchFriendsData();
-    void fetchQuizHistory();
-  }, [sessionEmail, fetchUserData, fetchFriendsData, fetchQuizHistory]);
+  }, [sessionEmail, fetchUserData, fetchFriendsData]);
 
   useEffect(() => {
     if (!inviteToken || !sessionEmail) {
@@ -550,109 +527,6 @@ function ProfilePageContent() {
                 weekDays={weekDays}
                 streakDaysSet={streakDaysSet}
               />
-
-              {/* Quiz Results & History Section */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-                    Квиз нәтижелері мен тарихы
-                  </h3>
-                  <Link
-                    href="/quizzes"
-                    className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 transition-colors"
-                  >
-                    <span>Барлық квиздер</span>
-                    <Icon name="arrowRight" className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-
-                <div className="glass rounded-3xl shadow-xl p-6 border border-white/30 bg-white/90">
-                  {quizHistoryLoading ? (
-                    <div className="text-center py-6 text-sm text-gray-500">
-                      <Icon name="loader" className="animate-spin inline mr-2" /> Нәтижелер жүктелуде...
-                    </div>
-                  ) : quizHistory.length === 0 ? (
-                    <div className="text-center py-6">
-                      <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2 text-xl">
-                        <Icon name="trophy" />
-                      </div>
-                      <p className="text-sm font-bold text-gray-800">Әзірге қатысқан квиздеріңіз жоқ</p>
-                      <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                        Ойынға қосылып, сыныптастарыңызбен немесе достарыңызбен білім жарысына түсіңіз!
-                      </p>
-                      <Link
-                        href="/quizzes"
-                        className="inline-block mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20 hover:bg-purple-700 transition-colors"
-                      >
-                        Квиздерге өту
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {quizHistory.map((item) => {
-                        const medal =
-                          item.rank === 1 ? "🥇" : item.rank === 2 ? "🥈" : item.rank === 3 ? "🥉" : `#${item.rank}`;
-
-                        return (
-                          <div
-                            key={item.participant_id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl border border-gray-100 bg-white hover:border-purple-200 transition-all shadow-sm"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span
-                                className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-                                  item.rank === 1
-                                    ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                    : item.rank === 2
-                                    ? "bg-slate-100 text-slate-700 border border-slate-300"
-                                    : item.rank === 3
-                                    ? "bg-orange-100 text-orange-800 border border-orange-300"
-                                    : "bg-purple-50 text-purple-700 border border-purple-200"
-                                }`}
-                              >
-                                {medal}
-                              </span>
-                              <div className="min-w-0">
-                                <Link
-                                  href={`/quizzes/${item.quiz_id}`}
-                                  className="font-bold text-sm text-gray-900 hover:text-purple-600 transition-colors truncate block"
-                                >
-                                  {item.quiz_title}
-                                </Link>
-                                <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
-                                  <span>{new Date(item.session_date).toLocaleDateString("kk-KZ")}</span>
-                                  <span>•</span>
-                                  <span>
-                                    {item.rank}-орын ({item.total_participants} қатысушы)
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
-                              <div className="text-right">
-                                <div className="font-mono font-black text-sm text-purple-700">
-                                  {item.score.toLocaleString()} балл
-                                </div>
-                                <div className="text-[11px] font-semibold text-emerald-600">
-                                  {item.accuracy_percent}% дәлдік ({item.correct_count}/{item.question_count} дұрыс)
-                                </div>
-                              </div>
-
-                              <Link
-                                href={`/quizzes/${item.quiz_id}`}
-                                className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold transition-colors"
-                              >
-                                Толығырақ
-                              </Link>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
 
               <AcceptInvitePanel
                 inviteToken={inviteToken}

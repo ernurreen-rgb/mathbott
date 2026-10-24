@@ -6,13 +6,29 @@ from .common import *  # noqa: F401,F403
 def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Trial tests admin
     @app.get("/api/admin/trial-tests")
-    async def get_admin_trial_tests(admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
+    async def get_admin_trial_tests(
+        category: Optional[str] = Query(None),
+        admin_user: dict = Depends(require_admin),
+        db: Database = Depends(get_db)
+    ):
         """Get all trial tests (admin only)"""
         try:
-            tests = await db.trial_tests.get_trial_tests()
+            tests = await db.trial_tests.get_trial_tests(category=category)
             return tests
         except Exception as e:
             logger.error(f"Error getting trial tests: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
+
+    @app.get("/api/admin/trial-tests/categories")
+    async def get_admin_trial_test_categories(
+        admin_user: dict = Depends(require_admin),
+        db: Database = Depends(get_db)
+    ):
+        """Get trial test categories (admin only)"""
+        try:
+            return await db.trial_tests.get_trial_test_categories()
+        except Exception as e:
+            logger.error(f"Error getting trial test categories: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/admin/trial-tests")
@@ -21,6 +37,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         description: Optional[str] = Form(None),
         sort_order: int = Form(0),
         expected_tasks_count: int = Form(40),
+        category: str = Form("Жалпы"),
         email: str = Form(...),
         db: Database = Depends(get_db)
     ):
@@ -34,6 +51,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 sort_order=sort_order,
                 created_by=admin_user["id"],
                 expected_tasks_count=expected_tasks_count,
+                category=category,
             )
             return test
         except HTTPException:
@@ -49,6 +67,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         description: Optional[str] = Form(None),
         sort_order: Optional[int] = Form(None),
         expected_tasks_count: Optional[int] = Form(None),
+        category: Optional[str] = Form(None),
         email: str = Form(...),
         db: Database = Depends(get_db)
     ):
@@ -62,6 +81,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 description=description if description and description.strip() else None,
                 sort_order=sort_order,
                 expected_tasks_count=expected_tasks_count,
+                category=category,
             )
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")

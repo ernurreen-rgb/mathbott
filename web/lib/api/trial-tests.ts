@@ -1,10 +1,18 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { TrialTest, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse } from "@/types";
+import { TrialTest, TrialTestCategory, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse } from "@/types";
 
 
 // Trial Tests API
-export async function getTrialTests(): Promise<{ data: TrialTest[] | null; error: string | null }> {
-  return fetchWithErrorHandling<TrialTest[]>(apiPath('trial-tests'));
+export async function getTrialTests(category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
+  const url = category
+    ? `${apiPath('trial-tests')}?category=${encodeURIComponent(category)}`
+    : apiPath('trial-tests');
+  return fetchWithErrorHandling<TrialTest[]>(url);
+}
+
+
+export async function getTrialTestCategories(): Promise<{ data: TrialTestCategory[] | null; error: string | null }> {
+  return fetchWithErrorHandling<TrialTestCategory[]>(apiPath('trial-tests/categories'));
 }
 
 

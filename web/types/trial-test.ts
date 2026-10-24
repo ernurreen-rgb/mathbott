@@ -6,10 +6,17 @@ export interface TrialTest {
   id: number;
   title: string;
   description?: string;
+  category?: string | null;
   sort_order: number;
   expected_tasks_count?: number;
   created_at: string;
   task_count?: number;
+}
+
+
+export interface TrialTestCategory {
+  category: string;
+  test_count: number;
 }
 
 

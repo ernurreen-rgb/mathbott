@@ -43,6 +43,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_trial_tests(
         email: Optional[str] = Query(None),
         attempted_only: Optional[bool] = Query(False),
+        category: Optional[str] = Query(None),
         db: Database = Depends(get_db)
     ):
         """Get all trial tests, or only those the user has attempted when attempted_only=true and email is provided"""
@@ -55,14 +56,23 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 attempted_ids = {r["trial_test_id"] for r in results}
                 if not attempted_ids:
                     return []
-                all_tests = await db.trial_tests.get_trial_tests()
+                all_tests = await db.trial_tests.get_trial_tests(category=category)
                 return [t for t in all_tests if t.get("id") in attempted_ids]
-            tests = await db.trial_tests.get_trial_tests()
+            tests = await db.trial_tests.get_trial_tests(category=category)
             return tests
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error getting trial tests: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
+
+    @app.get("/api/trial-tests/categories")
+    async def get_trial_test_categories(db: Database = Depends(get_db)):
+        """Return list of categories (folders) with test counts."""
+        try:
+            return await db.trial_tests.get_trial_test_categories()
+        except Exception as e:
+            logger.error(f"Error getting trial test categories: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/api/trial-tests/drafts")

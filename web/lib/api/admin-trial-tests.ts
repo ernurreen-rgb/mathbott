@@ -1,11 +1,18 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { TrialTest, BankPlacementTask } from "@/types";
+import { TrialTest, TrialTestCategory, BankPlacementTask } from "@/types";
 
 
 // Trial Tests Admin API
-export async function getAdminTrialTests(email: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
-  return fetchWithErrorHandling<TrialTest[]>(
-    `${apiPath('admin/trial-tests')}?email=${encodeURIComponent(email)}`
+export async function getAdminTrialTests(email: string, category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
+  const base = `${apiPath('admin/trial-tests')}?email=${encodeURIComponent(email)}`;
+  const url = category ? `${base}&category=${encodeURIComponent(category)}` : base;
+  return fetchWithErrorHandling<TrialTest[]>(url);
+}
+
+
+export async function getAdminTrialTestCategories(email: string): Promise<{ data: TrialTestCategory[] | null; error: string | null }> {
+  return fetchWithErrorHandling<TrialTestCategory[]>(
+    `${apiPath('admin/trial-tests/categories')}?email=${encodeURIComponent(email)}`
   );
 }
 
@@ -27,13 +34,15 @@ export async function createTrialTest(
   description: string | null,
   sort_order: number,
   expected_tasks_count: number,
-  email: string
+  email: string,
+  category: string = "Жалпы"
 ): Promise<{ data: TrialTest | null; error: string | null }> {
   const formData = new FormData();
   formData.append("title", title);
   if (description) formData.append("description", description);
   formData.append("sort_order", sort_order.toString());
   formData.append("expected_tasks_count", String(expected_tasks_count || 40));
+  formData.append("category", category || "Жалпы");
   formData.append("email", email);
   return fetchWithErrorHandling<TrialTest>(apiPath('admin/trial-tests'), {
     method: "POST",
@@ -48,7 +57,8 @@ export async function updateTrialTest(
   description: string | null,
   sort_order: number | null,
   expected_tasks_count: number | null,
-  email: string
+  email: string,
+  category?: string | null
 ): Promise<{ data: TrialTest | null; error: string | null }> {
   const formData = new FormData();
   if (title !== null) formData.append("title", title);
@@ -56,6 +66,9 @@ export async function updateTrialTest(
   if (sort_order !== null) formData.append("sort_order", sort_order.toString());
   if (expected_tasks_count !== null) {
     formData.append("expected_tasks_count", expected_tasks_count.toString());
+  }
+  if (category !== undefined && category !== null) {
+    formData.append("category", category);
   }
   formData.append("email", email);
   return fetchWithErrorHandling<TrialTest>(apiPath(`admin/trial-tests/${testId}`), {

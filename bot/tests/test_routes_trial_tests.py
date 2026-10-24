@@ -482,3 +482,51 @@ async def test_presence_broadcast_reports_stale_last_connection_offline():
         and message.get("user", {}).get("id") == 1
         for message in peer_ws.messages
     )
+
+
+@pytest.mark.asyncio
+async def test_trial_test_categories_and_folder_filtering(client, test_db, test_user):
+    test_ubt = await test_db.trial_tests.create_trial_test(
+        "ҰБТ Математика 1",
+        category="ҰБТ 2025",
+        sort_order=1,
+        created_by=test_user["id"],
+    )
+    test_geom = await test_db.trial_tests.create_trial_test(
+        "Планиметрия негіздері",
+        category="Геометрия",
+        sort_order=2,
+        created_by=test_user["id"],
+    )
+    test_gen = await test_db.trial_tests.create_trial_test(
+        "Жалпы тест 1",
+        sort_order=3,
+        created_by=test_user["id"],
+    )
+
+    # 1. Fetch categories
+    cat_response = client.get("/api/trial-tests/categories")
+    assert cat_response.status_code == 200
+    categories = cat_response.json()
+    cat_map = {c["category"]: c["test_count"] for c in categories}
+    assert cat_map.get("ҰБТ 2025") == 1
+    assert cat_map.get("Геометрия") == 1
+    assert cat_map.get("Жалпы") == 1
+
+    # 2. Filter by category
+    filter_response = client.get("/api/trial-tests", params={"category": "ҰБТ 2025"})
+    assert filter_response.status_code == 200
+    filtered = filter_response.json()
+    assert len(filtered) == 1
+    assert filtered[0]["id"] == test_ubt["id"]
+    assert filtered[0]["category"] == "ҰБТ 2025"
+
+    # 3. All tests have category
+    all_response = client.get("/api/trial-tests")
+    assert all_response.status_code == 200
+    all_tests = all_response.json()
+    assert len(all_tests) >= 3
+    test_ids = {t["id"]: t["category"] for t in all_tests}
+    assert test_ids[test_ubt["id"]] == "ҰБТ 2025"
+    assert test_ids[test_geom["id"]] == "Геометрия"
+    assert test_ids[test_gen["id"]] == "Жалпы"

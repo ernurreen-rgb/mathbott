@@ -101,33 +101,65 @@ class TrialTestRepository(BaseRepository):
         sort_order: int = 0,
         created_by: Optional[int] = None,
         expected_tasks_count: int = 40,
+        category: str = "Жалпы",
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
+            category_val = (category or "").strip() or "Жалпы"
             await db.execute(
                 """
-                INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by, category)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (title, description, sort_order, max(1, int(expected_tasks_count or 40)), created_by),
+                (title, description, sort_order, max(1, int(expected_tasks_count or 40)), created_by, category_val),
             )
             await db.commit()
             async with db.execute("SELECT * FROM trial_tests WHERE id = last_insert_rowid()") as cursor:
                 row = await cursor.fetchone()
-                return dict(row) if row else {}
+                if not row:
+                    return {}
+                res = dict(row)
+                if not res.get("category"):
+                    res["category"] = "Жалпы"
+                return res
 
-    async def get_trial_tests(self) -> List[Dict[str, Any]]:
+    async def get_trial_tests(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            async with db.execute(
-                """
+            query = """
                 SELECT t.*, COUNT(tt.id) AS task_count
                 FROM trial_tests t
                 LEFT JOIN trial_test_tasks tt
                   ON t.id = tt.trial_test_id
                  AND tt.deleted_at IS NULL
+            """
+            params = []
+            if category:
+                query += " WHERE COALESCE(NULLIF(t.category, ''), 'Жалпы') = ?"
+                params.append(category.strip())
+            query += """
                 GROUP BY t.id
                 ORDER BY t.sort_order ASC, t.created_at DESC
+            """
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                results = []
+                for row in rows:
+                    item = dict(row)
+                    if not item.get("category"):
+                        item["category"] = "Жалпы"
+                    results.append(item)
+                return results
+
+    async def get_trial_test_categories(self) -> List[Dict[str, Any]]:
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                """
+                SELECT COALESCE(NULLIF(category, ''), 'Жалпы') AS category, COUNT(*) AS test_count
+                FROM trial_tests
+                GROUP BY COALESCE(NULLIF(category, ''), 'Жалпы')
+                ORDER BY category ASC
                 """
             ) as cursor:
                 rows = await cursor.fetchall()
@@ -138,7 +170,12 @@ class TrialTestRepository(BaseRepository):
             db.row_factory = db_driver.Row
             async with db.execute("SELECT * FROM trial_tests WHERE id = ?", (test_id,)) as cursor:
                 row = await cursor.fetchone()
-                return dict(row) if row else None
+                if not row:
+                    return None
+                item = dict(row)
+                if not item.get("category"):
+                    item["category"] = "Жалпы"
+                return item
 
     async def update_trial_test(
         self,
@@ -147,6 +184,7 @@ class TrialTestRepository(BaseRepository):
         description: Optional[str] = None,
         sort_order: Optional[int] = None,
         expected_tasks_count: Optional[int] = None,
+        category: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
             updates = []
@@ -163,6 +201,9 @@ class TrialTestRepository(BaseRepository):
             if expected_tasks_count is not None:
                 updates.append("expected_tasks_count = ?")
                 params.append(max(1, int(expected_tasks_count)))
+            if category is not None:
+                updates.append("category = ?")
+                params.append(category.strip() or "Жалпы")
             if not updates:
                 return await self.get_trial_test_by_id(test_id)
 

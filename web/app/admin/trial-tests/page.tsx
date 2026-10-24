@@ -40,6 +40,7 @@ export default function AdminTrialTestsPage() {
   const [createForm, setCreateForm] = useState({
     title: "",
     description: "",
+    category: "Жалпы",
     sort_order: 0,
     expected_tasks_count: 40,
   });
@@ -47,9 +48,11 @@ export default function AdminTrialTestsPage() {
   const [editTestForm, setEditTestForm] = useState({
     title: "",
     description: "",
+    category: "Жалпы",
     sort_order: 0,
     expected_tasks_count: 40,
   });
+  const [adminCategoryFilter, setAdminCategoryFilter] = useState<string>("all");
 
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
@@ -175,6 +178,21 @@ export default function AdminTrialTestsPage() {
     setCurrentSlotIndex((prev) => Math.min(Math.max(prev, 1), slotCount));
   }, [slotCount]);
 
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    tests.forEach((t) => {
+      const cat = (t.category || "Жалпы").trim();
+      if (cat) set.add(cat);
+    });
+    if (!set.has("Жалпы")) set.add("Жалпы");
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "kk"));
+  }, [tests]);
+
+  const filteredAdminTests = useMemo(() => {
+    if (adminCategoryFilter === "all") return tests;
+    return tests.filter((t) => ((t.category || "Жалпы").trim() || "Жалпы") === adminCategoryFilter);
+  }, [tests, adminCategoryFilter]);
+
   const onCreateTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
@@ -183,13 +201,14 @@ export default function AdminTrialTestsPage() {
       createForm.description || null,
       createForm.sort_order,
       createForm.expected_tasks_count,
-      email
+      email,
+      createForm.category || "Жалпы"
     );
     if (err) {
       setError(err);
       return;
     }
-    setCreateForm({ title: "", description: "", sort_order: 0, expected_tasks_count: 40 });
+    setCreateForm({ title: "", description: "", category: "Жалпы", sort_order: 0, expected_tasks_count: 40 });
     await fetchTests();
   };
 
@@ -204,7 +223,7 @@ export default function AdminTrialTestsPage() {
     if (selectedTestId === testId) setSelectedTestId(null);
     if (editingTestId === testId) {
       setEditingTestId(null);
-      setEditTestForm({ title: "", description: "", sort_order: 0, expected_tasks_count: 40 });
+      setEditTestForm({ title: "", description: "", category: "Жалпы", sort_order: 0, expected_tasks_count: 40 });
     }
     await fetchTests();
   };
@@ -214,6 +233,7 @@ export default function AdminTrialTestsPage() {
     setEditTestForm({
       title: test.title || "",
       description: test.description || "",
+      category: (test.category || "Жалпы").trim() || "Жалпы",
       sort_order: test.sort_order || 0,
       expected_tasks_count: test.expected_tasks_count || 40,
     });
@@ -221,7 +241,7 @@ export default function AdminTrialTestsPage() {
 
   const cancelEditTest = () => {
     setEditingTestId(null);
-    setEditTestForm({ title: "", description: "", sort_order: 0, expected_tasks_count: 40 });
+    setEditTestForm({ title: "", description: "", category: "Жалпы", sort_order: 0, expected_tasks_count: 40 });
   };
 
   const onUpdateTest = async (e: React.FormEvent) => {
@@ -233,7 +253,8 @@ export default function AdminTrialTestsPage() {
       editTestForm.description,
       editTestForm.sort_order,
       editTestForm.expected_tasks_count,
-      email
+      email,
+      editTestForm.category || "Жалпы"
     );
     if (err) {
       setError(err);
@@ -443,7 +464,14 @@ export default function AdminTrialTestsPage() {
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
               <div className="space-y-3">
+                <datalist id="trial-test-categories-list">
+                  {availableCategories.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+
                 <form onSubmit={onCreateTest} className="bg-white/80 rounded-xl border border-white/40 p-3 space-y-2">
+                  <div className="font-bold text-xs text-gray-700">Жаңа тест қосу</div>
                   <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                     placeholder="Атауы"
@@ -451,33 +479,49 @@ export default function AdminTrialTestsPage() {
                     onChange={(e) => setCreateForm((p) => ({ ...p, title: e.target.value }))}
                     required
                   />
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-600">Папка / Санат:</label>
+                    <input
+                      list="trial-test-categories-list"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      placeholder="Папка атауы (мысалы: ҰБТ 2025, Геометрия)"
+                      value={createForm.category}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, category: e.target.value }))}
+                    />
+                  </div>
                   <textarea
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[70px]"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[60px]"
                     placeholder="Сипаттамасы"
                     value={createForm.description}
                     onChange={(e) => setCreateForm((p) => ({ ...p, description: e.target.value }))}
                   />
                   <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                      value={createForm.sort_order}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, sort_order: Number(e.target.value || 0) }))}
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                      value={createForm.expected_tasks_count}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({
-                          ...p,
-                          expected_tasks_count: Math.max(1, Number(e.target.value || 40)),
-                        }))
-                      }
-                    />
+                    <div>
+                      <label className="text-[11px] text-gray-500">Реттік сан:</label>
+                      <input
+                        type="number"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        value={createForm.sort_order}
+                        onChange={(e) => setCreateForm((p) => ({ ...p, sort_order: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-gray-500">Тапсырма саны:</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        value={createForm.expected_tasks_count}
+                        onChange={(e) =>
+                          setCreateForm((p) => ({
+                            ...p,
+                            expected_tasks_count: Math.max(1, Number(e.target.value || 40)),
+                          }))
+                        }
+                      />
+                    </div>
                   </div>
-                  <button className="w-full rounded-lg bg-green-600 text-white py-2 text-sm">Құру</button>
+                  <button className="w-full rounded-lg bg-green-600 text-white py-2 text-sm font-semibold">Құру</button>
                 </form>
 
                 {editingTestId && (
@@ -499,65 +543,103 @@ export default function AdminTrialTestsPage() {
                       onChange={(e) => setEditTestForm((prev) => ({ ...prev, title: e.target.value }))}
                       required
                     />
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-600">Папка / Санат:</label>
+                      <input
+                        list="trial-test-categories-list"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        placeholder="Папка атауы"
+                        value={editTestForm.category}
+                        onChange={(e) => setEditTestForm((prev) => ({ ...prev, category: e.target.value }))}
+                      />
+                    </div>
                     <textarea
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[70px]"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[60px]"
                       placeholder="Сипаттамасы"
                       value={editTestForm.description}
                       onChange={(e) => setEditTestForm((prev) => ({ ...prev, description: e.target.value }))}
                     />
                     <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        value={editTestForm.sort_order}
-                        onChange={(e) =>
-                          setEditTestForm((prev) => ({ ...prev, sort_order: Number(e.target.value || 0) }))
-                        }
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        value={editTestForm.expected_tasks_count}
-                        onChange={(e) =>
-                          setEditTestForm((prev) => ({
-                            ...prev,
-                            expected_tasks_count: Math.max(1, Number(e.target.value || 40)),
-                          }))
-                        }
-                      />
+                      <div>
+                        <label className="text-[11px] text-gray-500">Реттік сан:</label>
+                        <input
+                          type="number"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                          value={editTestForm.sort_order}
+                          onChange={(e) =>
+                            setEditTestForm((prev) => ({ ...prev, sort_order: Number(e.target.value || 0) }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-gray-500">Тапсырма саны:</label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                          value={editTestForm.expected_tasks_count}
+                          onChange={(e) =>
+                            setEditTestForm((prev) => ({
+                              ...prev,
+                              expected_tasks_count: Math.max(1, Number(e.target.value || 40)),
+                            }))
+                          }
+                        />
+                      </div>
                     </div>
-                    <button className="w-full rounded-lg bg-blue-600 text-white py-2 text-sm">Сақтау</button>
+                    <button className="w-full rounded-lg bg-blue-600 text-white py-2 text-sm font-semibold">Сақтау</button>
                   </form>
                 )}
 
                 <div className="bg-white/80 rounded-xl border border-white/40 p-3 max-h-[620px] overflow-auto space-y-2">
+                  <div className="pb-1">
+                    <select
+                      value={adminCategoryFilter}
+                      onChange={(e) => setAdminCategoryFilter(e.target.value)}
+                      className="w-full text-xs rounded-lg border border-gray-300 px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      <option value="all">Барлық папкалар ({tests.length})</option>
+                      {availableCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          📁 {cat} ({tests.filter((t) => ((t.category || "Жалпы").trim() || "Жалпы") === cat).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {loading ? (
                     <p className="text-sm text-gray-600">Жүктелуде...</p>
+                  ) : filteredAdminTests.length === 0 ? (
+                    <p className="text-xs text-gray-500 py-3 text-center">Бұл санатта тесттер жоқ</p>
                   ) : (
-                    tests.map((test) => (
+                    filteredAdminTests.map((test) => (
                       <div
                         key={test.id}
-                        className={`rounded-lg border p-2 ${selectedTestId === test.id ? "border-purple-500 bg-purple-50" : "border-gray-200 bg-white"
+                        className={`rounded-lg border p-2.5 ${selectedTestId === test.id ? "border-purple-500 bg-purple-50" : "border-gray-200 bg-white"
                           }`}
                       >
                         <button className="w-full text-left" onClick={() => setSelectedTestId(test.id)}>
-                          <div className="font-semibold text-sm">{test.title}</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              📁 {(test.category || "Жалпы").trim() || "Жалпы"}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-sm text-gray-900">{test.title}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
                             Ұяшықтар: {test.expected_tasks_count || 40} • тапсырмалар: {test.task_count || 0}
                           </div>
                         </button>
                         <div className="mt-2 flex gap-2">
                           <button
                             type="button"
-                            className="text-xs text-blue-700 border border-blue-300 rounded px-2 py-1"
+                            className="text-xs text-blue-700 border border-blue-300 rounded px-2 py-1 hover:bg-blue-50 font-medium"
                             onClick={() => startEditTest(test)}
                           >
                             Өңдеу
                           </button>
                           <button
                             type="button"
-                            className="text-xs text-red-700 border border-red-300 rounded px-2 py-1"
+                            className="text-xs text-red-700 border border-red-300 rounded px-2 py-1 hover:bg-red-50 font-medium"
                             onClick={() => void onDeleteTest(test.id)}
                           >
                             Жою
