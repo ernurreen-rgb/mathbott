@@ -1,9 +1,9 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   getTrialTests,
   getTrialTestDraftIds,
@@ -16,9 +16,15 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
 
-export default function TrialTestListPage() {
+function TrialTestListPageContent() {
   const { data: session } = useSession();
   const router = useRouter();
+  const pathname = usePathname() || "/trial-test";
+  const searchParams = useSearchParams();
+  const folderParam = useMemo(() => {
+    const raw = searchParams?.get("folder");
+    return raw && raw.trim() ? raw.trim() : null;
+  }, [searchParams]);
 
   const [tests, setTests] = useState<TrialTest[]>([]);
   const [draftTestIds, setDraftTestIds] = useState<Set<number>>(new Set());
@@ -26,8 +32,30 @@ export default function TrialTestListPage() {
   const [error, setError] = useState<string | null>(null);
   const [coopInvites, setCoopInvites] = useState<any[]>([]);
 
-  // Navigation state (root shows folders, opening a folder shows its tests)
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  // Navigation state synced with ?folder= query parameter
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(folderParam);
+
+  useEffect(() => {
+    setSelectedFolder(folderParam);
+  }, [folderParam]);
+
+  const handleOpenFolder = useCallback(
+    (folderName: string) => {
+      setSelectedFolder(folderName);
+      const params = new URLSearchParams(searchParams?.toString() || "");
+      params.set("folder", folderName);
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const handleCloseFolder = useCallback(() => {
+    setSelectedFolder(null);
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.delete("folder");
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const fetchTests = useCallback(async () => {
     setLoading(true);
@@ -260,7 +288,7 @@ export default function TrialTestListPage() {
                   <button
                     key={folder.name}
                     type="button"
-                    onClick={() => setSelectedFolder(folder.name)}
+                    onClick={() => handleOpenFolder(folder.name)}
                     className="group text-left bg-white rounded-2xl p-5 border-2 border-slate-200 hover:border-purple-500 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 h-44 flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between">
@@ -282,16 +310,29 @@ export default function TrialTestListPage() {
             ) : (
               /* INSIDE SPECIFIC FOLDER */
               <div>
-                {/* Back button */}
-                <div className="mb-6">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolder(null)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-sm font-bold border border-slate-200 shadow-sm hover:shadow transition-all"
-                  >
-                    <Icon name="arrowLeft" />
-                    <span>Артқа</span>
-                  </button>
+                {/* Folder header with Back button + active folder title */}
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={handleCloseFolder}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-sm font-bold border border-slate-200 shadow-sm hover:shadow transition-all shrink-0"
+                    >
+                      <Icon name="arrowLeft" />
+                      <span>Артқа</span>
+                    </button>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                        <Icon name="folder" />
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+                        {selectedFolder}
+                      </h2>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    {currentFolderTests.length} тест
+                  </span>
                 </div>
 
                 {/* Tests in Folder */}
@@ -349,5 +390,21 @@ export default function TrialTestListPage() {
       </main>
       <MobileNav currentPage="trial-test" />
     </div>
+  );
+}
+
+export default function TrialTestListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="text-4xl text-purple-600">
+            <Icon name="loader" className="animate-spin" />
+          </div>
+        </div>
+      }
+    >
+      <TrialTestListPageContent />
+    </Suspense>
   );
 }

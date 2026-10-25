@@ -504,22 +504,27 @@ async def test_trial_test_categories_and_folder_filtering(client, test_db, test_
         created_by=test_user["id"],
     )
 
-    # 1. Fetch categories
+    # 1. Fetch categories (ordered by min sort_order first, then category name)
     cat_response = client.get("/api/trial-tests/categories")
     assert cat_response.status_code == 200
     categories = cat_response.json()
+    assert [c["category"] for c in categories] == ["ҰБТ 2025", "Геометрия", "Жалпы"]
     cat_map = {c["category"]: c["test_count"] for c in categories}
     assert cat_map.get("ҰБТ 2025") == 1
     assert cat_map.get("Геометрия") == 1
     assert cat_map.get("Жалпы") == 1
 
-    # 2. Filter by category
-    filter_response = client.get("/api/trial-tests", params={"category": "ҰБТ 2025"})
+    # 2. Filter by category (and ensure whitespace-only filter behaves as unfiltered)
+    filter_response = client.get("/api/trial-tests", params={"category": "  ҰБТ 2025  "})
     assert filter_response.status_code == 200
     filtered = filter_response.json()
     assert len(filtered) == 1
     assert filtered[0]["id"] == test_ubt["id"]
     assert filtered[0]["category"] == "ҰБТ 2025"
+
+    blank_filter_response = client.get("/api/trial-tests", params={"category": "   "})
+    assert blank_filter_response.status_code == 200
+    assert len(blank_filter_response.json()) >= 3
 
     # 3. All tests have category
     all_response = client.get("/api/trial-tests")
@@ -530,3 +535,72 @@ async def test_trial_test_categories_and_folder_filtering(client, test_db, test_
     assert test_ids[test_ubt["id"]] == "ҰБТ 2025"
     assert test_ids[test_geom["id"]] == "Геометрия"
     assert test_ids[test_gen["id"]] == "Жалпы"
+
+
+@pytest.mark.asyncio
+async def test_admin_trial_test_categories_crud_and_validation(client, test_db):
+    admin_user = await test_db.users.create_user_by_email("admin.folders@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+
+    # Reject overly long category name (> 120 chars)
+    too_long = client.post(
+        "/api/admin/trial-tests",
+        data={
+            "title": "Ұзын санат тесті",
+            "category": "А" * 121,
+            "sort_order": "1",
+            "expected_tasks_count": "20",
+            "email": admin_user["email"],
+        },
+    )
+    assert too_long.status_code == 400
+    assert "category" in str(too_long.json())
+
+    # Create test with padded category -> trimmed
+    created_resp = client.post(
+        "/api/admin/trial-tests",
+        data={
+            "title": "Алгебра 1-нұсқа",
+            "category": "  Алгебра  ",
+            "sort_order": "5",
+            "expected_tasks_count": "20",
+            "email": admin_user["email"],
+        },
+    )
+    assert created_resp.status_code == 200
+    created_test = created_resp.json()
+    assert created_test["category"] == "Алгебра"
+
+    # Admin categories endpoint
+    admin_cats = client.get("/api/admin/trial-tests/categories", params={"email": admin_user["email"]})
+    assert admin_cats.status_code == 200
+    assert any(c["category"] == "Алгебра" and c["test_count"] == 1 for c in admin_cats.json())
+
+    # Admin filter by category
+    admin_filtered = client.get(
+        "/api/admin/trial-tests",
+        params={"email": admin_user["email"], "category": "Алгебра"},
+    )
+    assert admin_filtered.status_code == 200
+    assert [t["id"] for t in admin_filtered.json()] == [created_test["id"]]
+
+    # Update category with blank string -> falls back to "Жалпы"
+    updated_resp = client.put(
+        f"/api/admin/trial-tests/{created_test['id']}",
+        data={
+            "category": "   ",
+            "email": admin_user["email"],
+        },
+    )
+    assert updated_resp.status_code == 200
+    assert updated_resp.json()["category"] == "Жалпы"
+
+    # Overly long category on update is also rejected
+    too_long_update = client.put(
+        f"/api/admin/trial-tests/{created_test['id']}",
+        data={
+            "category": "Б" * 121,
+            "email": admin_user["email"],
+        },
+    )
+    assert too_long_update.status_code == 400

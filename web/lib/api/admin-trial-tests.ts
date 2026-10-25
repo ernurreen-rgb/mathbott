@@ -5,7 +5,8 @@ import { TrialTest, TrialTestCategory, BankPlacementTask } from "@/types";
 // Trial Tests Admin API
 export async function getAdminTrialTests(email: string, category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
   const base = `${apiPath('admin/trial-tests')}?email=${encodeURIComponent(email)}`;
-  const url = category ? `${base}&category=${encodeURIComponent(category)}` : base;
+  const normalizedCategory = category?.trim();
+  const url = normalizedCategory ? `${base}&category=${encodeURIComponent(normalizedCategory)}` : base;
   return fetchWithErrorHandling<TrialTest[]>(url);
 }
 

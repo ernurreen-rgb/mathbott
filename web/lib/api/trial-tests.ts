@@ -4,8 +4,9 @@ import { TrialTest, TrialTestCategory, TrialTestDetails, TrialTestResult, TrialT
 
 // Trial Tests API
 export async function getTrialTests(category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
-  const url = category
-    ? `${apiPath('trial-tests')}?category=${encodeURIComponent(category)}`
+  const normalizedCategory = category?.trim();
+  const url = normalizedCategory
+    ? `${apiPath('trial-tests')}?category=${encodeURIComponent(normalizedCategory)}`
     : apiPath('trial-tests');
   return fetchWithErrorHandling<TrialTest[]>(url);
 }

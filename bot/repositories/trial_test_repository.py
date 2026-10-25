@@ -94,6 +94,10 @@ class TrialTestRepository(BaseRepository):
         )
         return int(cursor.lastrowid)
 
+    @staticmethod
+    def _normalize_category(category: Optional[str]) -> str:
+        return (category or "").strip() or "Жалпы"
+
     async def create_trial_test(
         self,
         title: str,
@@ -105,7 +109,7 @@ class TrialTestRepository(BaseRepository):
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            category_val = (category or "").strip() or "Жалпы"
+            category_val = self._normalize_category(category)
             await db.execute(
                 """
                 INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by, category)
@@ -119,8 +123,7 @@ class TrialTestRepository(BaseRepository):
                 if not row:
                     return {}
                 res = dict(row)
-                if not res.get("category"):
-                    res["category"] = "Жалпы"
+                res["category"] = self._normalize_category(res.get("category"))
                 return res
 
     async def get_trial_tests(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -134,9 +137,10 @@ class TrialTestRepository(BaseRepository):
                  AND tt.deleted_at IS NULL
             """
             params = []
-            if category:
-                query += " WHERE COALESCE(NULLIF(t.category, ''), 'Жалпы') = ?"
-                params.append(category.strip())
+            category_filter = (category or "").strip()
+            if category_filter:
+                query += " WHERE COALESCE(NULLIF(TRIM(t.category), ''), 'Жалпы') = ?"
+                params.append(category_filter)
             query += """
                 GROUP BY t.id
                 ORDER BY t.sort_order ASC, t.created_at DESC
@@ -146,8 +150,7 @@ class TrialTestRepository(BaseRepository):
                 results = []
                 for row in rows:
                     item = dict(row)
-                    if not item.get("category"):
-                        item["category"] = "Жалпы"
+                    item["category"] = self._normalize_category(item.get("category"))
                     results.append(item)
                 return results
 
@@ -156,10 +159,13 @@ class TrialTestRepository(BaseRepository):
             db.row_factory = db_driver.Row
             async with db.execute(
                 """
-                SELECT COALESCE(NULLIF(category, ''), 'Жалпы') AS category, COUNT(*) AS test_count
+                SELECT
+                    COALESCE(NULLIF(TRIM(category), ''), 'Жалпы') AS category,
+                    COUNT(*) AS test_count,
+                    MIN(COALESCE(sort_order, 0)) AS min_sort_order
                 FROM trial_tests
-                GROUP BY COALESCE(NULLIF(category, ''), 'Жалпы')
-                ORDER BY category ASC
+                GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Жалпы')
+                ORDER BY MIN(COALESCE(sort_order, 0)) ASC, category ASC
                 """
             ) as cursor:
                 rows = await cursor.fetchall()
@@ -173,8 +179,7 @@ class TrialTestRepository(BaseRepository):
                 if not row:
                     return None
                 item = dict(row)
-                if not item.get("category"):
-                    item["category"] = "Жалпы"
+                item["category"] = self._normalize_category(item.get("category"))
                 return item
 
     async def update_trial_test(
@@ -203,7 +208,7 @@ class TrialTestRepository(BaseRepository):
                 params.append(max(1, int(expected_tasks_count)))
             if category is not None:
                 updates.append("category = ?")
-                params.append(category.strip() or "Жалпы")
+                params.append(self._normalize_category(category))
             if not updates:
                 return await self.get_trial_test_by_id(test_id)
 

@@ -4,10 +4,12 @@ import { getTrialTests, getTrialTestDraftIds, getCoopTestInvites } from "@/lib/a
 import type { TrialTest } from "@/types";
 
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
+let mockSearchParamsString = "";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
   usePathname: () => "/trial-test",
+  useSearchParams: () => new URLSearchParams(mockSearchParamsString),
 }));
 
 jest.mock("next-auth/react", () => ({
@@ -67,6 +69,7 @@ const mockTests: TrialTest[] = [
 describe("TrialTestListPage - Pure Folder System", () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockSearchParamsString = "";
     (getTrialTests as jest.Mock).mockResolvedValue({ data: mockTests, error: null });
     (getTrialTestDraftIds as jest.Mock).mockResolvedValue({ data: { test_ids: [1] }, error: null });
     (getCoopTestInvites as jest.Mock).mockResolvedValue({ data: { items: [] }, error: null });
@@ -103,6 +106,13 @@ describe("TrialTestListPage - Pure Folder System", () => {
       fireEvent.click(ubtFolder);
     });
 
+    // Opened folder heading is displayed and URL query is pushed
+    expect(screen.getByRole("heading", { name: "ҰБТ 2025" })).toBeInTheDocument();
+    expect(mockRouter.push).toHaveBeenCalledWith(
+      expect.stringContaining("/trial-test?folder="),
+      { scroll: false }
+    );
+
     // Tests inside folder are displayed
     expect(screen.getByText("ҰБТ 1-нұсқа")).toBeInTheDocument();
     expect(screen.getByText("ҰБТ 2-нұсқа")).toBeInTheDocument();
@@ -117,9 +127,23 @@ describe("TrialTestListPage - Pure Folder System", () => {
       fireEvent.click(backBtn);
     });
 
+    expect(mockRouter.push).toHaveBeenLastCalledWith("/trial-test", { scroll: false });
+
     // Returned to root folder list
     expect(screen.getByText("Геометрия")).toBeInTheDocument();
     expect(screen.getByText("Жалпы")).toBeInTheDocument();
+  });
+
+  it("opens folder directly when ?folder= query parameter is present", async () => {
+    mockSearchParamsString = "folder=%D0%93%D0%B5%D0%BE%D0%BC%D0%B5%D1%82%D1%80%D0%B8%D1%8F";
+
+    await act(async () => {
+      render(<TrialTestListPage />);
+    });
+
+    expect(screen.getByRole("heading", { name: "Геометрия" })).toBeInTheDocument();
+    expect(screen.getByText("Үшбұрыштар мен шеңберлер")).toBeInTheDocument();
+    expect(screen.queryByText("ҰБТ 1-нұсқа")).not.toBeInTheDocument();
   });
 
   it("sorts folders by min sort_order first", async () => {

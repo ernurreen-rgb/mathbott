@@ -17,6 +17,7 @@ export interface TrialTest {
 export interface TrialTestCategory {
   category: string;
   test_count: number;
+  min_sort_order?: number;
 }
 
 

@@ -17,6 +17,10 @@ import {
   getUserData,
   exportAdminBankTasksJson,
   importAdminBankTasks,
+  getTrialTests,
+  getTrialTestCategories,
+  getAdminTrialTests,
+  getAdminTrialTestCategories,
 } from "../api";
 
 // Mock fetch globally
@@ -1001,6 +1005,55 @@ describe("API Client", () => {
       });
       expect(incidents.data).toBeNull();
       expect(incidents.error).toContain("Access denied");
+    });
+  });
+
+  describe("Trial test categories & folder filtering API", () => {
+    it("fetches public and admin trial test categories and trims blank category filters", async () => {
+      (global.fetch as jest.Mock).mockClear();
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          text: async () =>
+            JSON.stringify([{ category: "ҰБТ 2025", test_count: 2, min_sort_order: 1 }]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          text: async () => JSON.stringify([]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          text: async () =>
+            JSON.stringify([{ category: "Геометрия", test_count: 1, min_sort_order: 3 }]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          text: async () => JSON.stringify([]),
+        });
+
+      const pubCats = await getTrialTestCategories();
+      expect(pubCats.error).toBeNull();
+      expect(pubCats.data?.[0]?.category).toBe("ҰБТ 2025");
+
+      await getTrialTests("   ");
+      expect((global.fetch as jest.Mock).mock.calls[1]?.[0]).toBe("/api/backend/trial-tests");
+
+      const adminCats = await getAdminTrialTestCategories("admin@example.com");
+      expect(adminCats.error).toBeNull();
+      expect(adminCats.data?.[0]?.category).toBe("Геометрия");
+
+      await getAdminTrialTests("admin@example.com", "  Геометрия  ");
+      expect((global.fetch as jest.Mock).mock.calls[3]?.[0]).toContain(
+        "category=%D0%93%D0%B5%D0%BE%D0%BC%D0%B5%D1%82%D1%80%D0%B8%D1%8F"
+      );
     });
   });
 });

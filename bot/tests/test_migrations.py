@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0010_remove_learning_points"
+HEAD_REVISION = "0011_trial_test_category"
 
 
 def test_quiz_upgrade_preserves_scores_and_detaches_question_fk(tmp_path):
@@ -107,6 +107,7 @@ def test_fresh_database_gets_full_schema(tmp_path):
     assert "uq_trial_test_results_solo_user_test" not in _indexes(path)
     assert "uq_trial_test_results_solo_attempt" in _indexes(path)
     assert "attempt_id" in _columns(path, "trial_test_results")
+    assert "category" in _columns(path, "trial_tests")
     assert _stamped_revision(path) == HEAD_REVISION
 
 

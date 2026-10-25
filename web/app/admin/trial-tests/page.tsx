@@ -6,6 +6,7 @@ import { SlotForm, buildSlotPayload, buildSlotPreviewTask, emptySlotForm, getPla
 
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
+import Icon from "@/components/ui/Icon";
 import MathRender from "@/components/ui/MathRender";
 import {
   apiPath,
@@ -178,15 +179,24 @@ export default function AdminTrialTestsPage() {
     setCurrentSlotIndex((prev) => Math.min(Math.max(prev, 1), slotCount));
   }, [slotCount]);
 
-  const availableCategories = useMemo(() => {
-    const set = new Set<string>();
+  const { availableCategories, categoryCounts } = useMemo(() => {
+    const counts = new Map<string, number>();
     tests.forEach((t) => {
-      const cat = (t.category || "Жалпы").trim();
-      if (cat) set.add(cat);
+      const cat = (t.category || "Жалпы").trim() || "Жалпы";
+      counts.set(cat, (counts.get(cat) || 0) + 1);
     });
-    if (!set.has("Жалпы")) set.add("Жалпы");
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "kk"));
+    if (!counts.has("Жалпы")) {
+      counts.set("Жалпы", 0);
+    }
+    const sorted = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b, "kk"));
+    return { availableCategories: sorted, categoryCounts: counts };
   }, [tests]);
+
+  useEffect(() => {
+    if (adminCategoryFilter !== "all" && !categoryCounts.has(adminCategoryFilter)) {
+      setAdminCategoryFilter("all");
+    }
+  }, [adminCategoryFilter, categoryCounts]);
 
   const filteredAdminTests = useMemo(() => {
     if (adminCategoryFilter === "all") return tests;
@@ -483,6 +493,7 @@ export default function AdminTrialTestsPage() {
                     <label className="text-[11px] font-semibold text-gray-600">Папка / Санат:</label>
                     <input
                       list="trial-test-categories-list"
+                      maxLength={120}
                       className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                       placeholder="Папка атауы (мысалы: ҰБТ 2025, Геометрия)"
                       value={createForm.category}
@@ -547,6 +558,7 @@ export default function AdminTrialTestsPage() {
                       <label className="text-[11px] font-semibold text-gray-600">Папка / Санат:</label>
                       <input
                         list="trial-test-categories-list"
+                        maxLength={120}
                         className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                         placeholder="Папка атауы"
                         value={editTestForm.category}
@@ -601,7 +613,7 @@ export default function AdminTrialTestsPage() {
                       <option value="all">Барлық папкалар ({tests.length})</option>
                       {availableCategories.map((cat) => (
                         <option key={cat} value={cat}>
-                          📁 {cat} ({tests.filter((t) => ((t.category || "Жалпы").trim() || "Жалпы") === cat).length})
+                          {cat} ({categoryCounts.get(cat) || 0})
                         </option>
                       ))}
                     </select>
@@ -620,8 +632,9 @@ export default function AdminTrialTestsPage() {
                       >
                         <button className="w-full text-left" onClick={() => setSelectedTestId(test.id)}>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                              📁 {(test.category || "Жалпы").trim() || "Жалпы"}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              <Icon name="folder" className="w-3 h-3" />
+                              <span>{(test.category || "Жалпы").trim() || "Жалпы"}</span>
                             </span>
                           </div>
                           <div className="font-semibold text-sm text-gray-900">{test.title}</div>

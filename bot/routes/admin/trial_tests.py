@@ -3,6 +3,22 @@ Admin trial test routes.
 """
 from .common import *  # noqa: F401,F403
 
+MAX_TRIAL_TEST_CATEGORY_LENGTH = 120
+
+
+def _normalize_admin_category(category: Optional[str]) -> str:
+    cleaned = (category or "").strip() or "Жалпы"
+    try:
+        return validate_string_length(
+            cleaned,
+            min_length=1,
+            max_length=MAX_TRIAL_TEST_CATEGORY_LENGTH,
+            field_name="category",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Trial tests admin
     @app.get("/api/admin/trial-tests")
@@ -43,6 +59,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Create a new trial test (admin only)"""
         admin_user = await require_admin(email=email, db=db)
+        normalized_category = _normalize_admin_category(category)
         
         try:
             test = await db.trial_tests.create_trial_test(
@@ -51,7 +68,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 sort_order=sort_order,
                 created_by=admin_user["id"],
                 expected_tasks_count=expected_tasks_count,
-                category=category,
+                category=normalized_category,
             )
             return test
         except HTTPException:
@@ -73,6 +90,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update trial test (admin only)"""
         await require_admin(email=email, db=db)
+        normalized_category = _normalize_admin_category(category) if category is not None else None
         
         try:
             test = await db.trial_tests.update_trial_test(
@@ -81,7 +99,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 description=description if description and description.strip() else None,
                 sort_order=sort_order,
                 expected_tasks_count=expected_tasks_count,
-                category=category,
+                category=normalized_category,
             )
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
