@@ -1,4 +1,6 @@
 "use client";
+import CmsDialog from "../../cms/_components/CmsDialog";
+import styles from "../../cms/CmsWorkspace.module.css";
 import AcceptedAnswersEditor from "@/components/admin/AcceptedAnswersEditor";
 import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
@@ -11,11 +13,13 @@ import {
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel
 } from "@/lib/question-options";
-import { AnswerMode, BankDifficulty, LessonTask, QuestionType, TaskTextScale } from "@/types";
+import { AnswerMode, BankDifficulty, LessonTask, QuestionType } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
 import { SlotForm, getSlotFormOptionValue, setSlotFormOptionValue } from "./model";
 
 type Props = {
+  error: string | null;
+  busy: boolean;
   showInlineCreate: boolean;
   selectedTestId: number | null;
   activeSlot: number | null;
@@ -27,6 +31,7 @@ type Props = {
 };
 
 export default function InlineTaskDialog({
+  error, busy,
   showInlineCreate,
   selectedTestId,
   activeSlot,
@@ -36,25 +41,20 @@ export default function InlineTaskDialog({
   setSlotForm,
   slotPreviewTask,
 }: Props) {
-  return (
-    <>
-      {showInlineCreate && selectedTestId && activeSlot && (
-        <div className="fixed inset-0 bg-black/50 z-50 p-4 overflow-auto">
-          <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 border border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">Жаңа тапсырма • ұяшық {activeSlot}</h3>
-              <button className="text-sm" onClick={() => setShowInlineCreate(false)}>Жабу</button>
-            </div>
-            <form onSubmit={onSaveInlineSlot} className="space-y-3">
-              <MathFieldInput value={slotForm.text} onChange={(v) => setSlotForm((p) => ({ ...p, text: v }))} placeholder="Тапсырма мәтіні" />
-              <div className="grid grid-cols-3 gap-2">
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
+  return <CmsDialog open={Boolean(showInlineCreate && selectedTestId && activeSlot)}
+    title={`Жаңа тапсырма · ${activeSlot || ""}-ұяшық`} error={error}
+    onClose={() => { if (!busy) setShowInlineCreate(false); }}>
+            <form onSubmit={onSaveInlineSlot} className={styles.taskForm}>
+              <fieldset disabled={busy} className="grid min-w-0 gap-4">
+              <div className="grid gap-2"><span className={styles.field}>Тапсырма мәтіні</span><MathFieldInput readOnly={busy} ariaLabel="Тапсырма мәтіні" value={slotForm.text} onChange={(v) => setSlotForm((p) => ({ ...p, text: v }))} placeholder="Тапсырма мәтіні" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select aria-label="Сұрақ түрі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
                   const questionType = e.target.value as QuestionType;
                   setSlotForm((p) => ({ ...p, question_type: questionType, answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
                 }}>
                   <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
                 </select>
-                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
+                <select aria-label="Күрделілігі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
                   <option value="A">A</option><option value="B">B</option><option value="C">C</option>
                 </select>
                 <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Тақырыптар (үтір арқылы)" value={slotForm.topicsRaw} onChange={(e) => setSlotForm((p) => ({ ...p, topicsRaw: e.target.value }))} />
@@ -77,8 +77,9 @@ export default function InlineTaskDialog({
               {(isMcqQuestionType(slotForm.question_type) || slotForm.question_type === "select") && (
                 <div className="grid grid-cols-2 gap-2">
                   {(isMcqQuestionType(slotForm.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
-                    <MathFieldInput
+                    <MathFieldInput readOnly={busy}
                       key={label}
+                      ariaLabel={`${label} нұсқасы`}
                       value={getSlotFormOptionValue(slotForm, label)}
                       onChange={(v) => setSlotForm((p) => setSlotFormOptionValue(p, label, v))}
                       placeholder={label}
@@ -87,9 +88,10 @@ export default function InlineTaskDialog({
                 </div>
               )}
 
-              {slotForm.question_type === "input" && <MathFieldInput value={slotForm.answer} onChange={(v) => setSlotForm((p) => ({ ...p, answer: v }))} placeholder="Дұрыс жауап" />}
+              {slotForm.question_type === "input" && <MathFieldInput readOnly={busy} ariaLabel="Дұрыс жауап" value={slotForm.answer} onChange={(v) => setSlotForm((p) => ({ ...p, answer: v }))} placeholder="Дұрыс жауап" />}
               {slotForm.question_type === "input" && (
                 <AcceptedAnswersEditor
+                  disabled={busy}
                   value={slotForm.acceptedAnswers}
                   onChange={(acceptedAnswers) => setSlotForm((previous) => ({ ...previous, acceptedAnswers }))}
                 />
@@ -125,10 +127,8 @@ export default function InlineTaskDialog({
                               };
                             })
                           }
-                          className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-bold ${isSelected
-                            ? "border-purple-700 bg-purple-600 text-white"
-                            : "border-gray-300 bg-white text-gray-800 hover:border-purple-300 hover:bg-purple-50"
-                            }`}
+                          aria-pressed={isSelected}
+                          className={`${styles.choiceButton} ${isSelected ? styles.choiceButtonActive : ""}`}
                         >
                           {label}
                         </button>
@@ -140,19 +140,16 @@ export default function InlineTaskDialog({
               )}
               {slotForm.question_type === "select" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <MathFieldInput value={slotForm.subQuestion1} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion1: v }))} placeholder="1-қосымша сұрақ" />
-                  <MathFieldInput value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
+                  <MathFieldInput readOnly={busy} value={slotForm.subQuestion1} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion1: v }))} placeholder="1-қосымша сұрақ" />
+                  <MathFieldInput readOnly={busy} value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
                 </div>
               )}
               <StudentTaskPreview
                 task={slotPreviewTask}
                 onTextScaleChange={(text_scale) => setSlotForm((p) => ({ ...p, text_scale }))}
               />
-              <button className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm">Сақтау</button>
+              <button className={styles.primaryButton}>{busy ? "Сақталуда..." : "Сақтау"}</button>
+              </fieldset>
             </form>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  </CmsDialog>;
 }

@@ -7,7 +7,7 @@ export async function getAdminTrialTests(email: string, category?: string): Prom
   const base = `${apiPath('admin/trial-tests')}?email=${encodeURIComponent(email)}`;
   const normalizedCategory = category?.trim();
   const url = normalizedCategory ? `${base}&category=${encodeURIComponent(normalizedCategory)}` : base;
-  return fetchWithErrorHandling<TrialTest[]>(url);
+  return fetchWithErrorHandling<TrialTest[]>(url, { cache: "no-store" });
 }
 
 
@@ -23,7 +23,8 @@ export async function getAdminTrialTestTasks(
   email: string
 ): Promise<{ data: BankPlacementTask[] | null; error: string | null }> {
   const { data, error } = await fetchWithErrorHandling<{ tasks: BankPlacementTask[] }>(
-    `${apiPath(`admin/trial-tests/${testId}/tasks`)}?email=${encodeURIComponent(email)}`
+    `${apiPath(`admin/trial-tests/${testId}/tasks`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
   );
   if (error) return { data: null, error };
   return { data: data?.tasks || [], error: null };

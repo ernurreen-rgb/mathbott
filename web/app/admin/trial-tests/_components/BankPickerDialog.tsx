@@ -1,10 +1,19 @@
 "use client";
+import CmsDialog from "../../cms/_components/CmsDialog";
+import CmsSkeleton from "../../cms/_components/CmsSkeleton";
+import styles from "../../cms/CmsWorkspace.module.css";
+import local from "../TrialTests.module.css";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { BankDifficulty, BankTask } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
+import { trialQuestionTypeLabel } from "./model";
 
 type Props = {
+  error: string | null;
+  busy: boolean;
+  bankOffset: number;
+  setBankOffset: Dispatch<SetStateAction<number>>;
   showBankPicker: boolean;
   selectedTestId: number | null;
   activeSlot: number | null;
@@ -29,6 +38,7 @@ type Props = {
 };
 
 export default function BankPickerDialog({
+  error, busy, bankOffset, setBankOffset,
   showBankPicker,
   selectedTestId,
   activeSlot,
@@ -51,119 +61,34 @@ export default function BankPickerDialog({
   toggleBankTaskSelection,
   onAssignBankTask,
 }: Props) {
-  return (
-    <>
-      {showBankPicker && selectedTestId && activeSlot && (
-        <div className="fixed inset-0 bg-black/50 z-50 p-4 overflow-auto">
-          <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 border border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">БАНК • ұяшық {activeSlot}</h3>
-              <button
-                className="text-sm"
-                onClick={() => {
-                  setShowBankPicker(false);
-                  setSelectedBankTaskIds([]);
-                }}
-              >
-                Жабу
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <input
-                className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Іздеу"
-                value={bankSearch}
-                onChange={(e) => setBankSearch(e.target.value)}
-              />
-              <select
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                value={bankDifficulty}
-                onChange={(e) => setBankDifficulty(e.target.value as BankDifficulty | "")}
-              >
-                <option value="">Барлығы</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </div>
-            <button
-              className="mb-3 text-sm border border-gray-300 rounded px-3 py-1 disabled:opacity-50"
-              onClick={() => void fetchBank()}
-              disabled={bankLoading}
-            >
-              {bankLoading ? "Ізделуде..." : "Іздеу"}
-            </button>
-            <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm text-gray-700">
-                  Таңдалды: <span className="font-semibold">{selectedBankTaskIds.length}</span>
-                  <span className="ml-2 text-xs text-gray-500">Көрсетілген: {bankItems.length}/{bankTotal}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onSelectAllBankTasks()}
-                    disabled={bankSelectAllLoading || bankLoading || bankTotal === 0}
-                    className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:opacity-50"
-                  >
-                    {bankSelectAllLoading ? "Жүктелуде..." : "Барлығын таңдау"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBankTaskIds([])}
-                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
-                    className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-50"
-                  >
-                    Таңдауды тазалау
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onAssignSelectedBankTasks()}
-                    disabled={selectedBankTaskIds.length === 0 || bankAssigningSelected}
-                    className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:bg-gray-300"
-                  >
-                    {bankAssigningSelected ? "Қосылуда..." : "Таңдалғанды қосу"}
-                  </button>
-                </div>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                Барлығын таңдау ағымдағы іздеу/деңгей сүзгісіне сай барлық банк тапсырмаларын алады. Тестте бұрыннан бар тапсырмалар қайталанбайды.
-              </div>
-            </div>
-            <div className="space-y-2 max-h-[420px] overflow-auto">
-              {bankItems.map((task) => {
-                const alreadyAssigned = assignedBankTaskIds.has(task.id);
-                return (
-                  <div key={task.id} className="rounded-lg border border-gray-200 p-2">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <div className="text-xs text-gray-500">#{task.id}</div>
-                      <label className={`flex items-center gap-2 text-xs ${alreadyAssigned ? "text-gray-400" : "text-gray-700"}`}>
-                        <input
-                          type="checkbox"
-                          disabled={alreadyAssigned}
-                          checked={!alreadyAssigned && selectedBankTaskIds.includes(task.id)}
-                          onChange={() => toggleBankTaskSelection(task.id)}
-                        />
-                        {alreadyAssigned ? "Тестте бар" : "Таңдау"}
-                      </label>
-                    </div>
-                    <div
-                      className={`mb-2 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
-                      style={getTaskTextScaleStyle(task.text_scale)}
-                    ><MathRender latex={task.text || ""} /></div>
-                    <button
-                      className="text-xs bg-green-600 text-white rounded px-2 py-1"
-                      onClick={() => void onAssignBankTask(task.id)}
-                    >
-                      Осы ұяшыққа
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  const close = () => { if (!busy) { setShowBankPicker(false); setSelectedBankTaskIds([]); } };
+  return <CmsDialog open={Boolean(showBankPicker && selectedTestId && activeSlot)} title={`Банктен таңдау · ${activeSlot || ""}-ұяшық`} error={error} onClose={close}>
+    <div className={local.bankFilters}>
+      <label className={styles.field}>Іздеу<input type="search" value={bankSearch} onChange={(e) => setBankSearch(e.target.value)} placeholder="Мәтін немесе тақырып" disabled={busy} /></label>
+      <label className={styles.field}>Күрделілігі<select className="min-h-[38px] rounded border border-slate-300 bg-white px-3 text-sm" value={bankDifficulty} onChange={(e) => setBankDifficulty(e.target.value as BankDifficulty | "")} disabled={busy}><option value="">Барлығы</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></label>
+      <button type="button" className={styles.secondaryButton} onClick={() => void fetchBank()} disabled={bankLoading || busy}>Іздеу</button>
+    </div>
+    <div className={local.bankSelection}>
+      <span className={styles.count}>Таңдалды: {selectedBankTaskIds.length} · Барлығы: {bankTotal}</span>
+      <div className={styles.actions}><button type="button" className={styles.textButton} onClick={() => void onSelectAllBankTasks()} disabled={busy || bankLoading || !bankTotal}>{bankSelectAllLoading ? "Таңдалуда..." : "Барлығын таңдау"}</button><button type="button" className={styles.textButton} onClick={() => setSelectedBankTaskIds([])} disabled={busy || !selectedBankTaskIds.length}>Таңдауды тазалау</button></div>
+    </div>
+    <p className="mb-2 text-xs leading-relaxed text-slate-500">Тестке қосылған есептер қайта таңдалмайды. Бірнеше есеп таңдалса, ағымдағы орыннан бастап бос ұяшықтарға қосылады.</p>
+    {bankLoading ? <CmsSkeleton kind="tasks" label="Банк тапсырмалары жүктелуде..." /> : <div className={local.bankList}>
+      {bankItems.map((task) => {
+        const assigned = assignedBankTaskIds.has(task.id);
+        const selected = selectedBankTaskIds.includes(task.id);
+        return <article key={task.id} className={`${local.bankRow} ${selected ? local.bankRowSelected : ""}`}>
+          <input type="checkbox" aria-label={`Банк #${task.id} таңдау`} checked={selected} disabled={assigned || busy} onChange={() => toggleBankTaskSelection(task.id)} />
+          <div className="min-w-0"><div className={local.bankMeta}>#{task.id} · {task.difficulty} · {trialQuestionTypeLabel(task.question_type)}{assigned ? " · Тестке қосылған" : ""}</div><div className={`text-slate-800 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`} style={getTaskTextScaleStyle(task.text_scale)}><MathRender latex={task.text || ""} /></div></div>
+          <button type="button" className={styles.secondaryButton} disabled={assigned || busy} onClick={() => void onAssignBankTask(task.id)}>Осы ұяшыққа</button>
+        </article>;
+      })}
+      {!bankItems.length && <p className={styles.hint}>Тапсырмалар табылмады.</p>}
+    </div>}
+    <div className={local.bankActions}><div className={styles.actions}>
+      <button type="button" className={styles.secondaryButton} disabled={busy || bankLoading || bankOffset === 0} onClick={() => setBankOffset(Math.max(0, bankOffset - 20))}>Алдыңғы</button>
+      <span className={styles.count}>{bankTotal ? bankOffset + 1 : 0}–{Math.min(bankOffset + bankItems.length, bankTotal)} / {bankTotal}</span>
+      <button type="button" className={styles.secondaryButton} disabled={busy || bankLoading || bankOffset + bankItems.length >= bankTotal} onClick={() => setBankOffset(bankOffset + 20)}>Келесі</button>
+    </div><button type="button" className={styles.primaryButton} disabled={busy || selectedBankTaskIds.length === 0} onClick={() => void onAssignSelectedBankTasks()}>{bankAssigningSelected ? "Қосылуда..." : `Таңдалғанды қосу (${selectedBankTaskIds.length})`}</button></div>
+  </CmsDialog>;
 }

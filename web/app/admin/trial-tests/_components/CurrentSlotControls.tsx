@@ -31,9 +31,9 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() => setPreviewAnswer(currentSlotIndex, "true")}
+          aria-pressed={isTrue} onClick={() => setPreviewAnswer(currentSlotIndex, "true")}
           className={`font-semibold py-2 px-3 rounded-lg border transition-colors ${isTrue
-            ? "bg-purple-600 border-purple-700 text-white"
+            ? "bg-slate-800 border-slate-900 text-white"
             : "bg-green-600 border-green-700 text-white hover:bg-green-700"
             }`}
         >
@@ -41,9 +41,9 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
         </button>
         <button
           type="button"
-          onClick={() => setPreviewAnswer(currentSlotIndex, "false")}
+          aria-pressed={isFalse} onClick={() => setPreviewAnswer(currentSlotIndex, "false")}
           className={`font-semibold py-2 px-3 rounded-lg border transition-colors ${isFalse
-            ? "bg-purple-600 border-purple-700 text-white"
+            ? "bg-slate-800 border-slate-900 text-white"
             : "bg-red-600 border-red-700 text-white hover:bg-red-700"
             }`}
         >
@@ -73,6 +73,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
                   return (
                     <button
                       key={`slot-${currentSlotIndex}-sub-${subIndex}-option-${optionIndex}`}
+                      aria-pressed={isSelected}
                       type="button"
                       onClick={() => {
                         const next = [...selected] as [string, string];
@@ -80,8 +81,8 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
                         setPreviewAnswer(currentSlotIndex, JSON.stringify(next));
                       }}
                       className={`text-left border rounded-lg p-2 transition-colors ${isSelected
-                        ? "bg-purple-600 border-purple-700 text-white"
-                        : "bg-white border-gray-300 text-gray-900 hover:border-purple-300 hover:bg-purple-50"
+                        ? "bg-slate-800 border-slate-900 text-white"
+                        : "bg-white border-gray-300 text-gray-900 hover:border-slate-400 hover:bg-slate-50"
                         }`}
                     >
                       <div className="font-bold">{label || `#${optionIndex + 1}`}</div>
@@ -109,6 +110,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
           return (
             <button
               key={`slot-${currentSlotIndex}-option-${optionIndex}`}
+                      aria-pressed={isSelected}
               type="button"
               onClick={() =>
                 setPreviewAnswer(
@@ -117,8 +119,8 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
                 )
               }
               className={`text-left border rounded-lg p-3 transition-colors ${isSelected
-                ? "bg-purple-600 border-purple-700 text-white"
-                : "border-gray-200 bg-white text-gray-900 hover:border-purple-300 hover:bg-purple-50"
+                ? "bg-slate-800 border-slate-900 text-white"
+                : "border-gray-200 bg-white text-gray-900 hover:border-slate-400 hover:bg-slate-50"
                 }`}
             >
               <div className={`font-bold ${isSelected ? "text-white" : "text-gray-900"}`}>{label}</div>
@@ -134,6 +136,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
 
   return (
     <input
+      aria-label="Алдын ала жауап"
       value={value}
       onChange={(e) => setPreviewAnswer(currentSlotIndex, e.target.value)}
       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder:text-gray-400"

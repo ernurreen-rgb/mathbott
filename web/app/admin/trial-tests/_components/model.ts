@@ -170,6 +170,13 @@ export const getPlacementQuestionType = (placement: BankPlacementTask | null): Q
   return "input";
 };
 
+export const trialQuestionTypeLabel = (type?: string | null): string => {
+  if (type === "mcq" || type === "mcq6") return "Нұсқалы жауап";
+  if (type === "tf") return "Дұрыс / Жалған";
+  if (type === "select") return "Сәйкестендіру";
+  return "Жауап енгізу";
+};
+
 export const getPlacementOptions = (placement: BankPlacementTask | null) => {
   const options = placement?.options || placement?.bank_task?.options;
   return Array.isArray(options) ? options : [];

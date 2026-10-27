@@ -1,0 +1,42 @@
+.catalogToolbar, .editorToolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.folderName { display: flex; align-items: center; gap: 14px; font-size: 14px; font-weight: 500; }
+.search { min-width: 0; width: 220px; min-height: 34px; padding: 6px 10px; border: 1px solid #d6d9de; border-radius: 5px; color: #454c57; background: #fff; font-size: 13px; }
+.description { max-width: 760px; margin: -12px 0 24px; color: #777e89; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.taskExcerpt { max-height: 76px; overflow: hidden; margin-top: 10px; font-size: 14px; line-height: 1.7; color: #454c57; overflow-wrap: anywhere; }
+.previewLayout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; border-top: 1px solid #e1e4e8; padding-top: 22px; }
+.slotsHeading { font-size: 13px; font-weight: 600; color: #454c57; margin-bottom: 14px; }
+.slotGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.slot { position: relative; display: grid; place-items: center; min-height: 36px; border: 1px solid #e1e4e8; border-radius: 4px; background: #fff; color: #969da8; font-size: 13px; }
+.slotFilled { color: #303640; background: #f4f5f7; border-color: #d5d9df; }
+.slotCurrent { color: white; background: #252a34; border-color: #252a34; }
+.slotAnswered::after { content: ""; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: #138461; }
+.slotCurrent.slotAnswered::after { background: #a7f3d0; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; color: #777e89; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; border: 1px solid #d5d9df; border-radius: 2px; }
+.legendFilled { background: #d5d9df; }
+.preview { min-width: 0; }
+.previewHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.previewHeading h3 { font-size: 15px; font-weight: 600; color: #303640; }
+.statement { line-height: 1.8; overflow-wrap: anywhere; }
+.answerControls { max-width: 720px; margin-top: 24px; }
+.previewFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #e8eaed; padding-top: 18px; margin-top: 28px; }
+.bankFilters { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 10px; align-items: end; margin-bottom: 18px; }
+.bankSelection { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-block: 1px solid #e1e4e8; padding: 12px 0; margin-bottom: 10px; }
+.bankList { display: grid; }
+.bankRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; border-bottom: 1px solid #e8eaed; padding: 16px 0; }
+.bankRow input { margin-top: 5px; accent-color: #303640; }
+.bankRowSelected { background: #f7f9fc; }
+.bankMeta { font-size: 12px; line-height: 1.7; color: #777e89; margin-bottom: 8px; }
+.bankActions { position: sticky; bottom: -24px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 16px 0; border-top: 1px solid #e1e4e8; background: #fff; }
+@media (max-width: 900px) { .previewLayout { grid-template-columns: 1fr; gap: 24px; } .slotGrid { grid-template-columns: repeat(10, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .catalogToolbar > div:last-child, .editorToolbar > div:last-child { width: 100%; }
+  .search { flex: 1; width: 140px; }
+  .slotGrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .bankFilters { grid-template-columns: minmax(0, 1fr) 100px; }
+  .bankFilters > button { grid-column: 1 / -1; }
+  .bankRow { grid-template-columns: auto minmax(0, 1fr); }
+  .bankRow > button { grid-column: 2; justify-self: start; }
+  .bankActions { bottom: -16px; flex-wrap: wrap; }
+}

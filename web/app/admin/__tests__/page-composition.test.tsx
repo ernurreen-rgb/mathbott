@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import BankPage from "../bank/page";
 import CMSPage from "../cms/page";
 import TrialTestsPage from "../trial-tests/page";
+import { TrialTestsProvider } from "../trial-tests/_components/TrialTestsProvider";
 
 jest.mock("next-auth/react", () => ({
   useSession: () => ({ data: { user: { email: "editor@example.com" } }, status: "authenticated" }),
@@ -35,8 +36,8 @@ it("composes bank import and version actions without opening dialogs", async () 
   expect(screen.queryByLabelText("Тапсырма JSON")).not.toBeInTheDocument();
 });
 
-it("composes the trial editor before a test is selected", async () => {
-  await act(async () => { render(<TrialTestsPage />); });
-  expect(screen.getByRole("main")).toBeInTheDocument();
-  expect(screen.queryByText(/Жаңа тапсырма • ұяшық/)).not.toBeInTheDocument();
+it("shows trial-test folders without embedding a task editor", async () => {
+  await act(async () => { render(<TrialTestsProvider><TrialTestsPage /></TrialTestsProvider>); });
+  expect(screen.getByRole("heading", { name: "Папкалар" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Жаңа тапсырма" })).not.toBeInTheDocument();
 });
