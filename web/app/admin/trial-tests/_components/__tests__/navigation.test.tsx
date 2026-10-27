@@ -80,8 +80,10 @@ it("edits metadata in a dialog without opening or replacing a test's tasks", asy
 it("opens tasks directly on their own page, and keeps preview answers between task navigation", async () => {
   await act(async () => { render(workspace()); });
   expect(screen.getByText("2+2")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Алдын ала жауап" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Тізім" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Алдын ала көру" })).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "Атауы" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "1-тапсырманы ашу" }));
   fireEvent.change(screen.getByPlaceholderText("Жауапты енгізіңіз"), { target: { value: "4" } });
   fireEvent.click(screen.getByRole("button", { name: "2-тапсырма, бос" }));
   expect(screen.getByRole("heading", { name: "Бос ұяшық" })).toBeInTheDocument();
@@ -103,7 +105,6 @@ it("keeps the inline editor and task text open when saving fails", async () => {
 
 it("adds into the selected empty slot when previewing a specific task position", async () => {
   await act(async () => { render(workspace()); });
-  fireEvent.click(screen.getByRole("button", { name: "Алдын ала көру" }));
   fireEvent.click(screen.getByRole("button", { name: "3-тапсырма, бос" }));
   fireEvent.click(screen.getByRole("button", { name: "Жаңа тапсырма" }));
   expect(screen.getByRole("dialog", { name: "Жаңа тапсырма · 3-ұяшық" })).toBeInTheDocument();
@@ -135,7 +136,9 @@ it("keeps a partial bank assignment visible after a later assignment fails", asy
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Екінші есеп сақталмады");
   expect(within(dialog).getByRole("checkbox", { name: "Банк #11 таңдау" })).toBeDisabled();
   fireEvent.click(within(dialog).getByRole("button", { name: "Терезені жабу" }));
-  expect(screen.getByRole("button", { name: "2-тапсырманы ашу" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "2-тапсырма" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "2-тапсырма" }));
+  expect(screen.getByText("4+4")).toBeInTheDocument();
 });
 
 it("shows cached tasks on a return visit while revalidating and isolates a different test", async () => {
@@ -201,7 +204,6 @@ it("loads later bank pages and ignores a response from a previous search", async
 
 it("clears only the requested slot and resets its preview answer", async () => {
   await act(async () => { render(workspace()); });
-  fireEvent.click(screen.getByRole("button", { name: "1-тапсырманы ашу" }));
   fireEvent.change(screen.getByPlaceholderText("Жауапты енгізіңіз"), { target: { value: "4" } });
   mocked.getAdminTrialTestTasks.mockResolvedValue({ data: [], error: null });
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Тазалау" })); });
