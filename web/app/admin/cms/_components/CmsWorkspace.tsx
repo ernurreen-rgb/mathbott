@@ -2,7 +2,6 @@
 import Icon from "@/components/ui/Icon";
 
 import CreateTaskForm from "./CreateTaskForm";
-import EditTaskForm from "./EditTaskForm";
 import LessonsPanel from "./LessonsPanel";
 import ModulesPanel from "./ModulesPanel";
 import SectionsPanel from "./SectionsPanel";
@@ -17,16 +16,16 @@ import { createModuleActions } from "./createModuleActions";
 import { createSectionActions } from "./createSectionActions";
 import { createTaskActions } from "./createTaskActions";
 import { createTrashActions } from "./createTrashActions";
-import { formatMiniLessonTitle, formatQuestionTypeLabel, Lesson, MiniLesson, MiniLessonTask, Module, parseBankTaskId, Section, TrashTask } from "./model";
+import { formatMiniLessonTitle, Lesson, MiniLesson, MiniLessonTask, Module, parseBankTaskId, Section, TrashTask } from "./model";
 
 import Link from "next/link";
 import VisualTaskEditor from "@/components/admin/VisualTaskEditor";
-import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api";
 import {
   McqOptionLabel
 } from "@/lib/question-options";
 import { normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { AnswerMode, TaskTextScale } from "@/types";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -63,7 +62,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashTasks, setTrashTasks] = useState<TrashTask[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
-  const [useVisualEditor, setUseVisualEditor] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(pageKind === "tasks" && !cache.read(`admin/mini-lessons/${initialMiniId}/tasks`));
   const [navigationLoading, setNavigationLoading] = useState(() => !cache.read(
@@ -519,20 +517,14 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                         <h2 className={styles.taskTitle}>Тапсырмалар <span className={styles.count}>{miniTasks.length}</span></h2>
                       </div>
                       <div className={styles.actions}>
-                        <div className={styles.viewSwitch} aria-label="Көрсету тәсілі">
-                          <button type="button" aria-pressed={!useVisualEditor} onClick={() => setUseVisualEditor(false)}
-                            className={`${styles.viewButton} ${!useVisualEditor ? styles.viewButtonActive : ""}`}>Тізім</button>
-                          <button type="button" aria-pressed={useVisualEditor} onClick={() => setUseVisualEditor(true)}
-                            className={`${styles.viewButton} ${useVisualEditor ? styles.viewButtonActive : ""}`}>Көрнекі редактор</button>
-                        </div>
-                        {!useVisualEditor && <button type="button" className={styles.primaryButton}
-                          onClick={() => { setError(null); setTaskDialogOpen(true); }}>Тапсырма қосу</button>}
+                        <button type="button" className={styles.primaryButton}
+                          onClick={() => { setError(null); setTaskDialogOpen(true); }}>Тапсырма қосу</button>
                       </div>
                     </div>
                     <div>
-                      {useVisualEditor ? (
-                        <VisualTaskEditor
-                          tasks={miniTasks.map((task: any) => {
+                      {tasksLoading ? <CmsSkeleton kind="tasks" label="Тапсырмалар жүктелуде..." /> : (
+                        <VisualTaskEditor key={selectedMiniLesson} appearance="plain" showAddButton={false} showBankMetadata
+                          tasks={[...miniTasks].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((task: any) => {
                             let options = undefined;
                             if (task.options) {
                               try {
@@ -580,78 +572,80 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                           })}
                           onSave={async (taskData) => {
                             if (!session?.user?.email || !selectedMiniLesson) return;
-                            const formData = new FormData();
-                            formData.append("question_type", taskData.question_type || "input");
-                            formData.append("answer_mode", taskData.answer_mode || "choices");
-                            formData.append("text_scale", normalizeTaskTextScale(taskData.text_scale));
-                            formData.append("email", session.user.email);
-                            formData.append("sort_order", (taskData.sort_order || 0).toString());
+                            setError(null);
+                            try {
+                              const formData = new FormData();
+                              formData.append("question_type", taskData.question_type || "input");
+                              formData.append("answer_mode", taskData.answer_mode || "choices");
+                              formData.append("text_scale", normalizeTaskTextScale(taskData.text_scale));
+                              formData.append("email", session.user.email);
+                              formData.append("sort_order", (taskData.sort_order || 0).toString());
 
-                            const linkedBankTaskId = parseBankTaskId(taskData.bank_task_id as any);
-                            if (!taskData.id && linkedBankTaskId) {
-                              formData.append("bank_task_id", String(linkedBankTaskId));
-                            } else {
-                              formData.append("text", taskData.text || "");
-                            }
-
-                            if (taskData.bank_difficulty) {
-                              formData.append("bank_difficulty", taskData.bank_difficulty);
-                            }
-                            formData.append(
-                              "bank_topics",
-                              JSON.stringify(Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [])
-                            );
-
-                            let answer = taskData.answer || "";
-                            if (taskData.question_type === "mcq" || taskData.question_type === "mcq6") {
-                              answer = taskData.answer || "";
-                              formData.append("options", JSON.stringify(taskData.options || []));
-                            } else if (taskData.question_type === "tf") {
-                              answer = taskData.answer || "true";
-                              formData.append("options", "");
-                            } else if (taskData.question_type === "select") {
-                              if (taskData.subquestions) {
-                                const correctAnswers = taskData.subquestions.map((sq: any) => sq.correct || "A");
-                                answer = JSON.stringify(correctAnswers);
+                              const linkedBankTaskId = parseBankTaskId(taskData.bank_task_id as any);
+                              if (!taskData.id && linkedBankTaskId) {
+                                formData.append("bank_task_id", String(linkedBankTaskId));
+                              } else {
+                                formData.append("text", normalizeMathFieldValueForStorage(taskData.text || ""));
                               }
-                              formData.append("options", JSON.stringify(taskData.options || []));
-                              if (taskData.subquestions) {
-                                formData.append("subquestions", JSON.stringify(taskData.subquestions));
-                              }
-                            } else {
-                              formData.append("options", "");
-                            }
-                            formData.append("answer", answer);
-                            formData.append(
-                              "accepted_answers",
-                              JSON.stringify(Array.isArray(taskData.accepted_answers) ? taskData.accepted_answers : [])
-                            );
-                            if (taskData.imageFile) {
-                              formData.append("image", taskData.imageFile);
-                            }
 
-                            if (taskData.id) {
-                              // Update existing task
-                              const response = await fetch(apiPath(`admin/tasks/${taskData.id}`), {
-                                method: "PUT",
-                                body: formData,
-                              });
-                              if (!response.ok) throw new Error("Тапсырманы жаңарту мүмкін болмады");
-                            } else {
-                              // Create new task
-                              const response = await fetch(apiPath(`admin/mini-lessons/${selectedMiniLesson}/tasks`), {
-                                method: "POST",
-                                body: formData,
-                              });
-                              if (!response.ok) throw new Error("Тапсырма құру мүмкін болмады");
-                            }
-                            await fetchMiniTasks(selectedMiniLesson);
-                          }}
-                          onAdd={async () => {
-                            if (selectedMiniLesson) {
+                              if (taskData.bank_difficulty) {
+                                formData.append("bank_difficulty", taskData.bank_difficulty);
+                              }
+                              formData.append(
+                                "bank_topics",
+                                JSON.stringify(Array.isArray(taskData.bank_topics) ? taskData.bank_topics : [])
+                              );
+
+                              let answer = taskData.answer || "";
+                              if (taskData.question_type === "mcq" || taskData.question_type === "mcq6") {
+                                answer = taskData.answer || "";
+                                formData.append("options", JSON.stringify((taskData.options || []).map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
+                              } else if (taskData.question_type === "tf") {
+                                answer = taskData.answer || "true";
+                                formData.append("options", "");
+                              } else if (taskData.question_type === "select") {
+                                if (taskData.subquestions) {
+                                  const correctAnswers = taskData.subquestions.map((sq: any) => sq.correct || "A");
+                                  answer = JSON.stringify(correctAnswers);
+                                }
+                                formData.append("options", JSON.stringify((taskData.options || []).map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
+                                if (taskData.subquestions) {
+                                  formData.append("subquestions", JSON.stringify(taskData.subquestions.map((sub) => ({ ...sub, text: normalizeMathFieldValueForStorage(sub.text) }))));
+                                }
+                              } else {
+                                formData.append("options", "");
+                              }
+                              formData.append("answer", taskData.question_type === "input" ? normalizeMathFieldValueForStorage(answer) : answer);
+                              formData.append(
+                                "accepted_answers",
+                                JSON.stringify(Array.isArray(taskData.accepted_answers) ? taskData.accepted_answers.map(normalizeMathFieldValueForStorage) : [])
+                              );
+                              if (taskData.imageFile) {
+                                formData.append("image", taskData.imageFile);
+                              }
+
+                              if (taskData.id) {
+                                // Update existing task
+                                const response = await fetch(apiPath(`admin/tasks/${taskData.id}`), {
+                                  method: "PUT",
+                                  body: formData,
+                                });
+                                if (!response.ok) throw new Error("Тапсырманы жаңарту мүмкін болмады");
+                              } else {
+                                // Create new task
+                                const response = await fetch(apiPath(`admin/mini-lessons/${selectedMiniLesson}/tasks`), {
+                                  method: "POST",
+                                  body: formData,
+                                });
+                                if (!response.ok) throw new Error("Тапсырма құру мүмкін болмады");
+                              }
                               await fetchMiniTasks(selectedMiniLesson);
+                            } catch (error) {
+                              setError(error instanceof Error ? error.message : "Тапсырманы сақтау мүмкін болмады");
+                              throw error;
                             }
                           }}
+                          onAdd={() => {}}
                           onDelete={async (taskId) => {
                             await deleteMiniLessonTask(taskId);
                           }}
@@ -659,7 +653,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                           testIdOrMiniLessonId={selectedMiniLesson || undefined}
                           email={session?.user?.email || ""}
                         />
-                      ) : (
+                      )}
                         <CmsDialog open={taskDialogOpen} title="Жаңа тапсырма" error={error}
                           description={`${lessonLabel} · ${currentMini ? formatMiniLessonTitle(currentMini) : "Кіші сабақ"}`}
                           onClose={() => setTaskDialogOpen(false)}>
@@ -673,36 +667,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                           taskAnswerMode={taskAnswerMode}
                         />
                         </CmsDialog>
-                      )}
-
-                      {!useVisualEditor && <div className={styles.taskList}>
-                        {tasksLoading ? <CmsSkeleton kind="tasks" label="Тапсырмалар жүктелуде..." /> :
-                          [...miniTasks].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((task, index) => (
-                            <article key={task.id} className={styles.taskRow}>
-                              <div className="min-w-0 flex-1">
-                                <div className={styles.taskMeta}><span>{index + 1}-тапсырма</span><span className={styles.count}>{formatQuestionTypeLabel(task.question_type)}</span><span>#{task.id}</span></div>
-                                <div className={styles.taskPreview}><MathRender latex={task.text} inline /></div>
-                              </div>
-                              <div className={styles.actions}>
-                                <button type="button" className={styles.secondaryButton} aria-label={`Тапсырма #${task.id} өңдеу`}
-                                  onClick={() => { setError(null); startEditMiniLessonTask(task); }}>Өңдеу</button>
-                                <button type="button" className={styles.dangerButton} aria-label={`Тапсырма #${task.id} жою`}
-                                  onClick={() => deleteMiniLessonTask(task.id)}>Жою</button>
-                              </div>
-                            </article>
-                          ))}
-                        {!tasksLoading && miniTasks.length === 0 && <div className={styles.empty}>
-                          <h3>Тапсырмалар әлі жоқ</h3>
-                          <p>Тапсырма қосылған соң осы тізімде көрсетіледі.</p>
-                        </div>}
-                      </div>}
-                      <CmsDialog open={editingMiniTask !== null} title={`Тапсырманы өңдеу #${editingMiniTask || ""}`}
-                        error={error} onClose={cancelEditMiniLessonTask}>
-                        <EditTaskForm updateMiniLessonTask={updateMiniLessonTask} handlePasteImageEdit={handlePasteImageEdit}
-                          editTaskForm={editTaskForm} setEditTaskForm={setEditTaskForm} editHasLinkedBankTask={editHasLinkedBankTask}
-                          setEditTaskAnswerMode={setEditTaskAnswerMode} editTaskAnswerMode={editTaskAnswerMode}
-                          cancelEditMiniLessonTask={cancelEditMiniLessonTask} />
-                      </CmsDialog>
                     </div>
                   </div>
                 </div>

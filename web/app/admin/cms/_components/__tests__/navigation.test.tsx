@@ -225,21 +225,57 @@ it("keeps bank references read-only and does not require local math options", as
   expect(body.has("options")).toBe(false);
 });
 
-it("loads and saves an existing math answer through the edit form", async () => {
+it("opens the editor directly and saves edited formulas without a task list", async () => {
   await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
-  fireEvent.click(screen.getByRole("button", { name: "Тапсырма #11 өңдеу" }));
-  const dialog = screen.getByRole("dialog", { name: "Тапсырманы өңдеу #11" });
-  expect(within(dialog).getByLabelText("Тапсырма мәтіні")).toHaveValue("2+2");
-  expect(within(dialog).getByLabelText("Дұрыс жауап")).toHaveValue("4");
-  fireEvent.change(within(dialog).getByLabelText("Тапсырма мәтіні"), { target: { value: String.raw`Есептеңіз: \sqrt4` } });
-  fireEvent.change(within(dialog).getByLabelText("Дұрыс жауап"), { target: { value: String.raw`\frac12` } });
-  await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
+  const editor = screen.getByRole("region", { name: "Тапсырма редакторы" });
+  expect(screen.getByRole("navigation", { name: "Тапсырма нөмірлері" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Тізім" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Көрнекі редактор" })).not.toBeInTheDocument();
+  fireEvent.click(within(editor).getByRole("button", { name: "Өңдеу" }));
+  fireEvent.click(within(editor).getByRole("button", { name: "Тапсырма мәтінін өңдеу" }));
+  expect(within(editor).getByLabelText("Тапсырма мәтіні")).toHaveValue("2+2");
+  fireEvent.change(within(editor).getByLabelText("Тапсырма мәтіні"), { target: { value: String.raw`Есептеңіз: \sqrt4` } });
+  fireEvent.click(within(editor).getByRole("button", { name: "Дұрыс жауапты өңдеу" }));
+  expect(within(editor).getByLabelText("Дұрыс жауап")).toHaveValue("4");
+  fireEvent.change(within(editor).getByLabelText("Дұрыс жауап"), { target: { value: String.raw`\frac12` } });
+  await act(async () => { fireEvent.click(within(editor).getByRole("button", { name: "Сақтау" })); });
   const request = jest.mocked(global.fetch).mock.calls.find(([, options]) => options?.method === "PUT");
   expect(request?.[0]).toBe("/api/backend/admin/tasks/11");
   const body = request?.[1]?.body as FormData;
   expect(body.get("text")).toBe(String.raw`Есептеңіз: \sqrt{4}`);
   expect(body.get("answer")).toBe(String.raw`\frac{1}{2}`);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("navigates one task at a time in curriculum order", async () => {
+  const original = global.fetch;
+  global.fetch = jest.fn(async (input: RequestInfo | URL, options?: RequestInit) => String(input).includes("/mini-lessons/4/tasks")
+    ? { ok: true, json: async () => [
+      { id: 12, text: "Екінші есеп", answer: "8", question_type: "input", sort_order: 2 },
+      { id: 11, text: "Бірінші есеп", answer: "4", question_type: "input", sort_order: 0 },
+    ] } as Response : original(input, options)) as typeof fetch;
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  expect(screen.getByText("Бірінші есеп")).toBeInTheDocument();
+  expect(screen.queryByText("Екінші есеп")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "2-тапсырма" }));
+  expect(screen.getByText("Екінші есеп")).toBeInTheDocument();
+  expect(screen.queryByText("Бірінші есеп")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "2-тапсырма" })).toHaveAttribute("aria-current", "step");
+});
+
+it("keeps unsaved visual edits and reports a failed save", async () => {
+  const original = global.fetch;
+  global.fetch = jest.fn(async (input: RequestInfo | URL, options?: RequestInit) => options?.method === "PUT"
+    ? { ok: false } as Response : original(input, options)) as typeof fetch;
+  await act(async () => { render(<CmsWorkspace moduleId={1} sectionId={2} lessonId={3} miniLessonId={4} />); });
+  const editor = screen.getByRole("region", { name: "Тапсырма редакторы" });
+  fireEvent.click(within(editor).getByRole("button", { name: "Өңдеу" }));
+  fireEvent.click(within(editor).getByRole("button", { name: "Тапсырма мәтінін өңдеу" }));
+  fireEvent.change(within(editor).getByLabelText("Тапсырма мәтіні"), { target: { value: "Сақталмаған мәтін" } });
+  await act(async () => { fireEvent.click(within(editor).getByRole("button", { name: "Сақтау" })); });
+  expect(screen.getByRole("alert")).toHaveTextContent("Тапсырманы жаңарту мүмкін болмады");
+  expect(within(editor).getByLabelText("Тапсырма мәтіні")).toHaveValue("Сақталмаған мәтін");
+  expect(within(editor).getByRole("button", { name: "Сақтау" })).toBeInTheDocument();
 });
 
 it("keeps the task URL's selection while the login session is loading on refresh", async () => {

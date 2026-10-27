@@ -1,5 +1,6 @@
 "use client";
 import Icon from "@/components/ui/Icon";
+import styles from "./VisualTaskEditor.module.css";
 
 import BankMetadataFields from "./visual-task-editor/BankMetadataFields";
 import MatchingAnswerFields from "./visual-task-editor/MatchingAnswerFields";
@@ -27,7 +28,10 @@ export default function VisualTaskEditor({
   showBankMetadata = false,
   testIdOrMiniLessonId,
   email,
+  appearance = "default",
+  showAddButton = true,
 }: VisualTaskEditorProps) {
+  const plain = appearance === "plain";
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [tempTaskData, setTempTaskData] = useState<Partial<LessonTask>>({});
@@ -333,14 +337,15 @@ export default function VisualTaskEditor({
 
     return (
       <div
-        className="glass rounded-3xl shadow-2xl p-6 border border-white/30"
+        className={plain ? styles.surface : "glass rounded-3xl shadow-2xl p-6 border border-white/30"}
         onPaste={handlePasteImage}
       >
-        <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
+        <div className={plain ? "min-w-0" : "bg-white/70 rounded-2xl p-4 border border-white/40"}>
           {/* Question Text */}
           <div className="mb-4">
             {isEditing && editingField === "text" ? (
               <MathFieldInput
+                ariaLabel="Тапсырма мәтіні"
                 value={taskData.text || ""}
                 onChange={(value) => updateTempTask({ text: value })}
                 onBlur={() => setEditingField(null)}
@@ -349,6 +354,12 @@ export default function VisualTaskEditor({
               />
             ) : (
               <div
+                role={isEditing ? "button" : undefined}
+                aria-label={isEditing ? "Тапсырма мәтінін өңдеу" : undefined}
+                tabIndex={isEditing ? 0 : undefined}
+                onKeyDown={(event) => {
+                  if (isEditing && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setEditingField("text"); }
+                }}
                 onClick={() => {
                   if (isEditing) {
                     setEditingField("text");
@@ -422,6 +433,7 @@ export default function VisualTaskEditor({
             <div>
               {isEditing && editingField === "answer" ? (
                 <MathFieldInput
+                  ariaLabel="Дұрыс жауап"
                   value={taskData.answer || ""}
                   onChange={(value) => updateTempTask({ answer: value })}
                   onBlur={() => setEditingField(null)}
@@ -431,6 +443,12 @@ export default function VisualTaskEditor({
                 />
               ) : (
                 <div
+                  role={isEditing ? "button" : undefined}
+                  aria-label={isEditing ? "Дұрыс жауапты өңдеу" : undefined}
+                  tabIndex={isEditing ? 0 : undefined}
+                  onKeyDown={(event) => {
+                    if (isEditing && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setEditingField("answer"); }
+                  }}
                   onClick={() => {
                     if (isEditing) {
                       setEditingField("answer");
@@ -502,13 +520,14 @@ export default function VisualTaskEditor({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.primary : "bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"}
             >
               {saving ? "Сақталуда..." : "Сақтау"}
             </button>
             <button
               onClick={handleCancelEdit}
-              className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg"
+              disabled={saving}
+              className={plain ? styles.button : "bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg"}
             >
               Болдырмау
             </button>
@@ -522,22 +541,26 @@ export default function VisualTaskEditor({
   const isEditing = !!editingTask || isNewTask;
 
   return (
-    <div className="w-full">
+    <div className={plain ? styles.plain : "w-full"} role={plain ? "region" : undefined} aria-label={plain ? "Тапсырма редакторы" : undefined}>
       {/* Navigation buttons at top */}
-      <div className="mb-6 overflow-x-auto pb-2">
-        <div className="flex gap-2 min-w-full w-max justify-center">
+      <nav aria-label="Тапсырма нөмірлері" className={plain ? styles.navigation : "mb-6 overflow-x-auto pb-2"}>
+        <div className={plain ? styles.numbers : "flex gap-2 min-w-full w-max justify-center"}>
           {tasks.map((task, idx) => {
             const isCurrent = idx === currentTaskIndex && !isEditing;
             return (
               <button
                 key={task.id}
+                type="button"
+                aria-label={`${idx + 1}-тапсырма`}
+                aria-current={idx === currentTaskIndex ? "step" : undefined}
+                disabled={saving}
                 onClick={() => {
                   if (!isDirty || confirm("Сақталмаған өзгерістер бар. Жалғастыру керек пе?")) {
                     handleCancelEdit();
                     setCurrentTaskIndex(idx);
                   }
                 }}
-                className={`shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${isCurrent
+                className={plain ? `${styles.number} ${idx === currentTaskIndex ? styles.numberActive : ""}` : `shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${isCurrent
                   ? "bg-purple-600 border-purple-700 text-white"
                   : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400"
                   }`}
@@ -554,50 +577,57 @@ export default function VisualTaskEditor({
             </button>
           )}
         </div>
-      </div>
+      </nav>
 
       {/* Current task card */}
+      {plain && currentTask && <div className={styles.taskToolbar}>
+        <h3 className={styles.taskHeading}>{currentTaskIndex + 1}-тапсырма</h3>
+        {!isEditing && <div className={styles.actions}>
+          <button type="button" className={styles.button} onClick={() => handleStartEdit(currentTask)}>Өңдеу</button>
+          <button type="button" className={styles.danger} onClick={() => void handleDelete(currentTask.id)}>Жою</button>
+        </div>}
+      </div>}
       {displayTask ? (
         <div key={isNewTask ? "new-task" : editingTaskId ? `editing-${editingTaskId}` : `view-${(currentTask as LessonTask).id}-${currentTaskIndex}`}>
           {renderTaskCard(displayTask as LessonTask, isEditing)}
         </div>
       ) : (
-        <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 text-center text-gray-600">
+        <div className={plain ? styles.empty : "glass rounded-3xl shadow-2xl p-6 border border-white/30 text-center text-gray-600"}>
           Тапсырмалар жоқ
         </div>
       )}
 
       {/* Bottom navigation and actions */}
-      <div className="flex justify-between items-center mt-6">
-        <div className="flex gap-2">
+      {(!plain || showAddButton || (tasks.length > 1 && !isEditing)) && <div className={plain ? styles.toolbar : "flex justify-between items-center mt-6"}>
+        <div className={plain ? styles.actions : "flex gap-2"}>
           {currentTaskIndex > 0 && !isEditing && (
             <button
               onClick={() => setCurrentTaskIndex(currentTaskIndex - 1)}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.button : "bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"}
             >
               <Icon name="arrowLeft" /> Алдыңғы
             </button>
           )}
-          {!isEditing && (
+          {!isEditing && showAddButton && (
             <button
               onClick={handleStartNewTask}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.primary : "bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"}
             >
               <Icon name="plus" /> Жаңа тапсырма
             </button>
           )}
-          {currentTask && !isEditing && (
+          {!plain && currentTask && !isEditing && (
             <button
               onClick={() => handleStartEdit(currentTask)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.button : "bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"}
             >
               Өңдеу
             </button>
           )}
-          {currentTask && !isEditing && (
+          {!plain && currentTask && !isEditing && (
             <button
               onClick={() => handleDelete(currentTask.id)}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.danger : "bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg"}
             >
               Жою
             </button>
@@ -607,17 +637,22 @@ export default function VisualTaskEditor({
           {currentTaskIndex < tasks.length - 1 && !isEditing && (
             <button
               onClick={() => setCurrentTaskIndex(currentTaskIndex + 1)}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+              className={plain ? styles.button : "bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"}
             >
               Келесі <Icon name="arrowRight" />
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Question type selector when editing */}
       {isEditing && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          {plain && <label className="mb-4 grid gap-2 text-sm font-semibold text-slate-700">Реті
+            <input type="number" step={1} value={tempTaskData.sort_order ?? 0} disabled={saving}
+              className="w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal"
+              onChange={(event) => updateTempTask({ sort_order: Number(event.target.value) || 0 })} />
+          </label>}
           <label className="block text-sm font-semibold text-gray-700 mb-2">
             Сұрақ түрі
           </label>

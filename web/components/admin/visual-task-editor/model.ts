@@ -15,4 +15,6 @@ export interface VisualTaskEditorProps {
   showBankMetadata?: boolean;
   testIdOrMiniLessonId?: number;
   email: string;
+  appearance?: "default" | "plain";
+  showAddButton?: boolean;
 }

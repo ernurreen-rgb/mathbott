@@ -18,7 +18,7 @@ type Props = {
 export default function BankMetadataFields({ isEditing, showBankMetadata, context, taskData, updateTempTask, isNewTask, bankTopicInput, setBankTopicInput, appendTopic }: Props) {
   return (
     <>
-      {isEditing && showBankMetadata && context === "trial-test" && (
+      {isEditing && showBankMetadata && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
           <div className="text-sm font-semibold text-gray-700 mb-2">БАНК параметрлері</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

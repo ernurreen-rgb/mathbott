@@ -1,0 +1,22 @@
+.plain { width: 100%; min-width: 0; }
+.surface { padding: 20px 0; border-top: 1px solid #e1e4e8; }
+.navigation { margin-bottom: 18px; overflow-x: auto; padding: 3px 3px 8px; }
+.numbers { display: flex; gap: 7px; width: max-content; min-width: 100%; }
+.number { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #d6d9de; border-radius: 4px; background: #fff; color: #606773; font-size: 13px; }
+.numberActive { border-color: #252a34; background: #252a34; color: #fff; }
+.taskHeading { margin: 0 0 12px; color: #454c57; font-size: 14px; font-weight: 600; }
+.taskToolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.taskToolbar .taskHeading { margin: 0; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 20px 0 0; padding-top: 18px; border-top: 1px solid #e8eaed; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.button, .primary, .danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 12px; border: 1px solid #d6d9de; border-radius: 5px; background: #fff; color: #454c57; font-size: 13px; font-weight: 500; }
+.button:hover { background: #f5f6f7; }
+.primary { background: #252a34; border-color: #252a34; color: #fff; }
+.primary:hover { background: #3c4350; }
+.danger { border-color: transparent; color: #606773; }
+.danger:hover { color: #b42323; background: #fff0f0; }
+.button:disabled, .primary:disabled, .danger:disabled { opacity: .5; cursor: not-allowed; }
+.empty { padding: 36px 16px; border-block: 1px solid #e8eaed; color: #777e89; font-size: 14px; }
+.plain button:focus-visible { outline: 2px solid #366bbd; outline-offset: 3px; }
+.plain :global(.bg-purple-600) { background-color: #303640; }
+.plain :global(.border-purple-600), .plain :global(.border-purple-700) { border-color: #303640; }
