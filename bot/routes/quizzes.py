@@ -4,7 +4,7 @@ Routes for Quizzes management (Quizizz-like service)
 import logging
 from typing import Optional, List, Dict, Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter
 
 from dependencies import get_db, require_internal_identity, optional_internal_identity
@@ -41,6 +41,12 @@ class QuizQuestionItem(BaseModel):
     sort_order: int = Field(default=0)
     image_filename: Optional[str] = None
     explanation: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_option_count(self):
+        if self.question_type in {"mcq", "multi_select"} and len(self.options or []) not in (4, 6):
+            raise ValueError("Multiple-choice questions require exactly 4 or 6 options")
+        return self
 
 
 class UpdateQuestionItem(BaseModel):
@@ -261,6 +267,11 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         question = await db.quizzes.get_question_by_id(question_id)
         if not question or question["quiz_id"] != quiz_id:
             raise HTTPException(status_code=404, detail="Question not found in this quiz")
+
+        effective_type = payload.question_type or question.get("question_type")
+        effective_options = payload.options if payload.options is not None else question.get("options") or []
+        if effective_type in {"mcq", "multi_select"} and len(effective_options) not in (4, 6):
+            raise HTTPException(status_code=400, detail="Multiple-choice questions require exactly 4 or 6 options")
 
         updated = await db.quizzes.update_question(
             question_id=question_id,

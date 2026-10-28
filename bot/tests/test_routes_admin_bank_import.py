@@ -77,7 +77,7 @@ async def test_admin_bank_import_dry_run_single_select_task(client, test_db):
 
 
 @pytest.mark.asyncio
-async def test_admin_bank_import_dry_run_mcq_accepts_eight_options(client, test_db):
+async def test_admin_bank_import_dry_run_mcq_rejects_eight_options(client, test_db):
     admin_user = await test_db.users.create_user_by_email("admin.bank.import.mcq8@example.com")
     await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
 
@@ -102,9 +102,9 @@ async def test_admin_bank_import_dry_run_mcq_accepts_eight_options(client, test_
     assert response.status_code == 200
     payload = response.json()
     assert payload["summary"]["total_tasks"] == 1
-    assert payload["summary"]["valid_count"] == 1
-    assert payload["summary"]["invalid_count"] == 0
-    assert payload["validation_errors"] == []
+    assert payload["summary"]["valid_count"] == 0
+    assert payload["summary"]["invalid_count"] == 1
+    assert payload["validation_errors"]
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_admin_bank_create_rejects_removed_factor_grid_type(client, test_d
 
 
 @pytest.mark.asyncio
-async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
+async def test_admin_bank_create_mcq_rejects_eight_options(client, test_db):
     admin_user = await test_db.users.create_user_by_email("admin.bank.mcq8@example.com")
     await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
     options = [{"label": label, "text": f"Option {label}"} for label in ["A", "B", "C", "D", "E", "F", "G", "H"]]
@@ -298,13 +298,8 @@ async def test_admin_bank_create_mcq_accepts_eight_options(client, test_db):
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["question_type"] == "mcq"
-    assert payload["answer"] == "H"
-    assert payload["answer_mode"] == "written"
-    assert len(payload["options"]) == 8
-    assert payload["options"][-1]["label"] == "H"
+    assert response.status_code == 400
+    assert "exactly 4 or 6 options" in str(response.json())
 
 
 @pytest.mark.asyncio

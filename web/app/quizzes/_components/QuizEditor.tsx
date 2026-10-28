@@ -11,6 +11,7 @@ import { createQuiz, updateQuiz } from "@/lib/api/quizzes";
 import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { QuestionType, Quiz, QuizOption, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
+import { MCQ_EDITOR_OPTION_COUNTS, MCQ_OPTION_LABELS } from "@/lib/question-options";
 
 interface DraftQuestion {
   id: string; // temporary local id
@@ -164,6 +165,12 @@ export default function QuizEditor({
     updateCurrentQuestion({ options: newOptions });
   };
 
+  const changeOptionCount = (count: 4 | 6) => {
+    const options = MCQ_OPTION_LABELS.slice(0, count).map((id) => currentQ.options.find((option) => option.id === id) || { id, text: "", is_correct: false });
+    const correctIds = options.filter((option) => option.is_correct).map((option) => option.id);
+    updateCurrentQuestion({ options, correct_answer: currentQ.question_type === "multi_select" ? correctIds.join(",") : correctIds[0] || "" });
+  };
+
   const setMcqCorrect = (optId: string) => {
     if (!currentQ) return;
     const newOptions = currentQ.options.map((opt) => ({
@@ -242,6 +249,10 @@ export default function QuizEditor({
         return;
       }
       if (q.question_type === "mcq" || q.question_type === "multi_select") {
+        if (![4, 6].includes(q.options.length)) {
+          toast.error(`${i + 1}-сұрақ үшін 4 немесе 6 жауап нұсқасын таңдаңыз`);
+          setActiveQuestionIndex(i); return;
+        }
         for (const opt of q.options) {
           if (!opt.text.trim()) {
             toast.error(`${i + 1}-сұрақтың "${opt.id}" жауап нұсқасын толтырыңыз`);
@@ -540,7 +551,15 @@ export default function QuizEditor({
                   </select>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  {(currentQ.question_type === "mcq" || currentQ.question_type === "multi_select") && <label className="flex items-center gap-2 text-xs font-bold text-gray-600">Жауап саны:
+                    <select aria-label="Жауап саны" value={[4, 6].includes(currentQ.options.length) ? currentQ.options.length : ""}
+                      onChange={(event) => changeOptionCount(Number(event.target.value) as 4 | 6)}
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900">
+                      {![4, 6].includes(currentQ.options.length) && <option value="" disabled>4 немесе 6 таңдаңыз</option>}
+                      {MCQ_EDITOR_OPTION_COUNTS.map((count) => <option value={count} key={count}>{count} жауап</option>)}
+                    </select>
+                  </label>}
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-600">Уақыт:</span>
                     <select

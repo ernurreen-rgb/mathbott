@@ -14,6 +14,7 @@ import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
+import { getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
 import { createCroppedImageFile } from "@/lib/imageCrop";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType } from "@/types";
@@ -47,6 +48,8 @@ export default function VisualTaskEditor({
   const [draggingHandle, setDraggingHandle] = useState<typeof HANDLES[number] | null>(null);
   const [inlineCropApplying, setInlineCropApplying] = useState(false);
   const [bankTopicInput, setBankTopicInput] = useState("");
+  const [legacyOptionCount, setLegacyOptionCount] = useState<number | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const cropImageRef = useRef<HTMLImageElement>(null);
 
@@ -159,9 +162,12 @@ export default function VisualTaskEditor({
   }, [tempImageFile]);
 
   const handleStartEdit = (task: LessonTask) => {
+    setValidationError(null);
+    setLegacyOptionCount(isMcqQuestionType(task.question_type) && ![4, 6].includes(task.options?.length || 0) ? task.options?.length || 0 : null);
     setEditingTaskId(task.id);
     setTempTaskData({
       ...task,
+      question_type: getMcqEditorQuestionType(task.question_type, task.options),
       accepted_answers: normalizeAcceptedAnswers(task.accepted_answers),
       answer_mode: getTaskAnswerMode(task),
       options: task.options ? [...task.options] : undefined,
@@ -177,6 +183,8 @@ export default function VisualTaskEditor({
   };
 
   const handleStartNewTask = () => {
+    setLegacyOptionCount(null);
+    setValidationError(null);
     setEditingTaskId(null);
     setTempTaskData({
       text: "",
@@ -202,9 +210,19 @@ export default function VisualTaskEditor({
 
   const handleSave = async () => {
     if (!isDirty && !isNewTask) return;
+    if (legacyOptionCount !== null) { setValidationError("Сақтаудан бұрын 4 немесе 6 жауап нұсқасын таңдаңыз."); return; }
 
     // Prepare data for saving
     const taskToSave: Partial<LessonTask> & { imageFile?: File | null; removeImage?: boolean } = { ...tempTaskData };
+    if (isMcqQuestionType(taskToSave.question_type)) {
+      const labels = getMcqEditorLabels(taskToSave.question_type);
+      taskToSave.options = labels.map((label) => ({ label, text: taskToSave.options?.find((option) => option.label === label)?.text || "" }));
+      taskToSave.answer = serializeMcqAnswerLabels(parseMcqAnswerLabels(taskToSave.answer).filter((label) => labels.includes(label)));
+      if (taskToSave.options.some((option) => !option.text.trim()) || !taskToSave.answer) {
+        setValidationError("Барлық жауап нұсқаларын толтырып, дұрыс жауапты белгілеңіз."); return;
+      }
+    }
+    setValidationError(null);
     taskToSave.accepted_answers = normalizeAcceptedAnswers(taskToSave.accepted_answers);
     if (tempImageFile) {
       taskToSave.imageFile = tempImageFile;
@@ -254,6 +272,8 @@ export default function VisualTaskEditor({
   };
 
   const handleCancelEdit = () => {
+    setValidationError(null);
+    setLegacyOptionCount(null);
     setEditingTaskId(null);
     setTempTaskData({});
     setIsDirty(false);
@@ -315,8 +335,8 @@ export default function VisualTaskEditor({
   };
 
   const renderTaskCard = (task: LessonTask | Partial<LessonTask>, isEditing: boolean) => {
-    const qt: QuestionType = (task.question_type || "input") as QuestionType;
     const taskData = isEditing ? tempTaskData : task;
+    const qt: QuestionType = (taskData.question_type || "input") as QuestionType;
     const handlePasteImage = (e: React.ClipboardEvent) => {
       if (!isEditing) return;
       const items = e.clipboardData?.items;
@@ -542,6 +562,8 @@ export default function VisualTaskEditor({
 
   return (
     <div className={plain ? styles.plain : "w-full"} role={plain ? "region" : undefined} aria-label={plain ? "Тапсырма редакторы" : undefined}>
+      {validationError && <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{validationError}</p>}
+      {isEditing && legacyOptionCount !== null && <p className="mb-4 text-sm text-amber-700">Бұл ескі тапсырмада {legacyOptionCount} жауап нұсқасы бар. Сұрақ түрінен 4 немесе 6 жауапты таңдағанға дейін тапсырма сақталмайды.</p>}
       {/* Navigation buttons at top */}
       <nav aria-label="Тапсырма нөмірлері" className={plain ? styles.navigation : "mb-6 overflow-x-auto pb-2"}>
         <div className={plain ? styles.numbers : "flex gap-2 min-w-full w-max justify-center"}>
@@ -657,20 +679,27 @@ export default function VisualTaskEditor({
             Сұрақ түрі
           </label>
           <select
-            value={tempTaskData.question_type || "input"}
+            aria-label="Сұрақ түрі"
+            value={legacyOptionCount !== null ? "" : tempTaskData.question_type || "input"}
             onChange={(e) => {
               const questionType = e.target.value as QuestionType;
+              setLegacyOptionCount(null); setValidationError(null); setEditingField(null);
               updateTempTask({
                 question_type: questionType,
+                ...(isMcqQuestionType(questionType) ? {
+                  options: getMcqEditorLabels(questionType).map((label) => ({ label, text: tempTaskData.options?.find((option) => option.label === label)?.text || "" })),
+                  answer: serializeMcqAnswerLabels(parseMcqAnswerLabels(tempTaskData.answer).filter((label) => getMcqEditorLabels(questionType).includes(label))),
+                } : {}),
                 answer_mode: getTaskAnswerMode({ question_type: questionType }),
               });
             }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2"
           >
+            {legacyOptionCount !== null && <option value="" disabled>4 немесе 6 жауапты таңдаңыз</option>}
             <option value="input">Енгізу</option>
             <option value="tf">Дұрыс / Жалған</option>
-            <option value="mcq">Көп таңдаулы (4-8)</option>
-            <option value="mcq6">Көп таңдаулы legacy</option>
+            <option value="mcq">Көп таңдаулы (4 жауап)</option>
+            <option value="mcq6">Көп таңдаулы (6 жауап)</option>
             <option value="select">Сәйкестендіру</option>
           </select>
           {supportsAnswerModeSwitch(tempTaskData.question_type) && (

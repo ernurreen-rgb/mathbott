@@ -5,7 +5,7 @@ import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
-  MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   isMcqQuestionType,
   parseMcqAnswerLabels,
   toggleMcqAnswerLabel,
@@ -27,7 +27,7 @@ export default function McqAnswerFields({ qt, isEditing, taskData, editingField,
       {isMcqQuestionType(qt) && (
         <div className="grid grid-cols-1 gap-2">
           {(isEditing
-            ? MCQ_OPTION_LABELS
+            ? getMcqEditorLabels(qt)
             : (taskData.options || []).map((option: any) => option.label).filter(Boolean)
           ).map((label: string) => {
             const option = taskData.options?.find((o: any) => o.label === label);

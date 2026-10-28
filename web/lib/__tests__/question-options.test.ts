@@ -4,9 +4,18 @@ import {
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel,
+  getMcqEditorLabels,
+  getMcqEditorQuestionType,
 } from "../question-options";
 
 describe("question-options", () => {
+  it("offers exactly four or six editor labels while preserving old answer parsing", () => {
+    expect(getMcqEditorLabels("mcq")).toEqual(["A", "B", "C", "D"]);
+    expect(getMcqEditorLabels("mcq6")).toEqual(["A", "B", "C", "D", "E", "F"]);
+    expect(getMcqEditorQuestionType("mcq", Array(6))).toBe("mcq6");
+    expect(getMcqEditorQuestionType("mcq6", Array(4))).toBe("mcq");
+    expect(parseMcqAnswerLabels('["G","H"]')).toEqual(["G", "H"]);
+  });
   it("parses and serializes multi-answer MCQ labels", () => {
     expect(parseMcqAnswerLabels("a,c,a")).toEqual(["A", "C"]);
     expect(parseMcqAnswerLabels('["B","D"]')).toEqual(["B", "D"]);

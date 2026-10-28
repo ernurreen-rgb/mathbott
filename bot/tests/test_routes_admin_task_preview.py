@@ -141,4 +141,4 @@ async def test_admin_preview_rejects_incomplete_task_payload(client, test_db):
     )
 
     assert response.status_code == 400
-    assert "requires 4 to 8 options" in str(response.json())
+    assert "requires exactly 4 or 6 options" in str(response.json())

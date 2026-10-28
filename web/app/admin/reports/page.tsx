@@ -12,6 +12,7 @@ import MobileNav from "@/components/MobileNav";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   McqOptionLabel,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
@@ -578,13 +579,13 @@ function ReportsPageContent() {
                   </label>
                   <select
                     value={taskForm.question_type}
-                    onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any })}
+                    onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any, correctOptions: taskForm.correctOptions.filter((label) => getMcqEditorLabels(e.target.value).includes(label)) })}
                     className="border border-gray-300 rounded-md px-3 py-2 text-sm"
                   >
                     <option value="input">Мәтін енгізу</option>
                     <option value="tf">Шын/Жалған</option>
-                    <option value="mcq">Бірнеше таңдау</option>
-                    <option value="mcq6">Бірнеше таңдау (6)</option>
+                    <option value="mcq">Көп таңдаулы (4 жауап)</option>
+                    <option value="mcq6">Көп таңдаулы (6 жауап)</option>
                   </select>
                 </div>
 

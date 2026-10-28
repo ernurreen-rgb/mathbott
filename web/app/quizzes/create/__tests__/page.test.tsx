@@ -141,3 +141,22 @@ it("submits quiz with is_public: false when user selects private privacy option"
   expect(mockPush).toHaveBeenCalledWith("/quizzes/15");
 });
 
+
+
+it("offers only four or six answers and saves a six-option quiz", async () => {
+  (createQuiz as jest.Mock).mockResolvedValue({ data: { id: 12 }, error: null });
+  render(<CreateQuizPage />);
+  fireEvent.change(screen.getByPlaceholderText("Мысалы: 9-сынып Теңдеулер жарысы"), { target: { value: "Алты нұсқа" } });
+  fireEvent.change(screen.getByLabelText("Сұрақ мәтіні"), { target: { value: "Таңдаңыз" } });
+  const count = screen.getByRole("combobox", { name: "Жауап саны" });
+  expect(within(count).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual(["4", "6"]);
+  fireEvent.change(count, { target: { value: "6" } });
+  for (const label of ["A", "B", "C", "D", "E", "F"]) {
+    fireEvent.change(screen.getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
+  }
+  expect(screen.queryByLabelText("G жауап нұсқасы")).not.toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Сақтау және дайын/ })); });
+  const payload = (createQuiz as jest.Mock).mock.calls[0][0];
+  expect(payload.questions[0].options).toHaveLength(6);
+  expect(payload.questions[0].options.map((option: { id: string }) => option.id)).toEqual(["A", "B", "C", "D", "E", "F"]);
+});

@@ -436,6 +436,8 @@ async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
                     "options": [
                         {"id": "A", "text": "2", "is_correct": True},
                         {"id": "B", "text": "3", "is_correct": False},
+                        {"id": "C", "text": "0", "is_correct": False},
+                        {"id": "D", "text": "1", "is_correct": False},
                     ],
                     "correct_answer": "A",
                     "time_limit_seconds": 30,
@@ -460,6 +462,8 @@ async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
                     "options": [
                         {"id": "A", "text": "25", "is_correct": True},
                         {"id": "B", "text": "20", "is_correct": False},
+                        {"id": "C", "text": "0", "is_correct": False},
+                        {"id": "D", "text": "1", "is_correct": False},
                     ],
                     "correct_answer": "A",
                     "time_limit_seconds": 25,

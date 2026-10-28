@@ -3,6 +3,8 @@ import { getTaskAnswerMode } from "@/lib/answer-mode";
 import {
   isMcqQuestionType,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
+  getMcqEditorQuestionType,
   McqOptionLabel,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels
@@ -22,6 +24,7 @@ import {
 export type BankFormState = {
   text: string;
   question_type: QuestionType;
+  legacyOptionCount?: number | null;
   answer_mode: AnswerMode;
   text_scale: TaskTextScale;
   answer: string;
@@ -108,7 +111,8 @@ export const createEmptyForm = (): BankFormState => ({
 export const parseTaskToForm = (task: BankTask): BankFormState => {
   const form = createEmptyForm();
   form.text = task.text || "";
-  form.question_type = (task.question_type || "input") as QuestionType;
+  form.question_type = getMcqEditorQuestionType(task.question_type || "input", task.options);
+  form.legacyOptionCount = isMcqQuestionType(task.question_type) && ![4, 6].includes(task.options?.length || 0) ? task.options?.length || 0 : null;
   form.answer_mode = getTaskAnswerMode(task);
   form.text_scale = normalizeTaskTextScale(task.text_scale);
   form.answer = task.answer || "";
@@ -256,16 +260,9 @@ export const setBankFormOptionValue = (
   }
 };
 
-export const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string; text: string }> => {
-  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
-    const value = getBankFormOptionValue(form, label).trim();
-    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
-  }, 3);
-  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
-    label,
-    text: getBankFormOptionValue(form, label),
-  }));
-};
+export const buildMcqOptionsFromBankForm = (form: BankFormState): Array<{ label: string; text: string }> => getMcqEditorLabels(form.question_type).map((label) => ({
+  label, text: getBankFormOptionValue(form, label),
+}));
 
 export const buildBankFormPreviewTask = (form: BankFormState): LessonTask => {
   let answer = form.answer;
@@ -273,7 +270,7 @@ export const buildBankFormPreviewTask = (form: BankFormState): LessonTask => {
   let subquestions: LessonTask["subquestions"] = [];
 
   if (isMcqQuestionType(form.question_type)) {
-    answer = serializeMcqAnswerLabels(form.correctOptions);
+    answer = serializeMcqAnswerLabels(form.correctOptions.filter((label) => getMcqEditorLabels(form.question_type).includes(label)));
     options = buildMcqOptionsFromBankForm(form);
   } else if (form.question_type === "select") {
     answer = JSON.stringify([form.correctSub1, form.correctSub2]);

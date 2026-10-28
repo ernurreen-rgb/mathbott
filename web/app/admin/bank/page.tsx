@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import {
   isMcqQuestionType,
+  getMcqEditorLabels,
   serializeMcqAnswerLabels
 } from "@/lib/question-options";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
@@ -246,12 +247,13 @@ export default function AdminBankPage() {
   });
 
   const buildAnswerAndPayload = (currentForm: BankFormState) => {
+    if (currentForm.legacyOptionCount != null) throw new Error("Сақтаудан бұрын 4 немесе 6 жауап нұсқасын таңдаңыз");
     let answer = currentForm.answer;
     let options: Array<{ label: string; text: string }> | null = null;
     let subquestions: Array<{ text: string; correct: string }> | null = null;
 
     if (isMcqQuestionType(currentForm.question_type)) {
-      answer = serializeMcqAnswerLabels(currentForm.correctOptions);
+      answer = serializeMcqAnswerLabels(currentForm.correctOptions.filter((label) => getMcqEditorLabels(currentForm.question_type).includes(label)));
       options = buildMcqOptionsFromBankForm(currentForm);
     } else if (currentForm.question_type === "tf") {
       answer = currentForm.correctTf;

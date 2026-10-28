@@ -39,7 +39,7 @@ MCQ_OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"]
 MIN_MCQ_OPTIONS = 4
 
 
-MAX_MCQ_OPTIONS = len(MCQ_OPTION_LABELS)
+MAX_MCQ_OPTIONS = 6
 
 
 BANK_AUDIT_ACTIONS = {"import_confirm", "version_delete", "rollback", "hard_delete", "role_change"}
@@ -195,10 +195,10 @@ def _validate_trial_like_payload(
     if question_type in {*MCQ_QUESTION_TYPES, "select"} and options_list is None:
         raise HTTPException(status_code=400, detail="options are required for this question_type")
     if question_type in MCQ_QUESTION_TYPES and options_list is not None:
-        if not MIN_MCQ_OPTIONS <= len(options_list) <= MAX_MCQ_OPTIONS:
+        if len(options_list) not in (4, 6):
             raise HTTPException(
                 status_code=400,
-                detail=f"{question_type} requires {MIN_MCQ_OPTIONS} to {MAX_MCQ_OPTIONS} options",
+                detail=f"{question_type} requires exactly 4 or 6 options",
             )
         labels = [str(item.get("label") or "").strip().upper() if isinstance(item, dict) else "" for item in options_list]
         expected = MCQ_OPTION_LABELS[: len(options_list)]

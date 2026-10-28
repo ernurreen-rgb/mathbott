@@ -7,6 +7,7 @@ import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   isMcqQuestionType,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
@@ -82,21 +83,25 @@ export default function BankTaskForm({
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Түрі</label>
                 <select
-                  value={form.question_type}
+                  aria-label="Тапсырма түрі"
+                  value={form.legacyOptionCount != null ? "" : form.question_type}
                   onChange={(e) => {
                     const questionType = e.target.value as QuestionType;
                     setForm((prev) => ({
                       ...prev,
                       question_type: questionType,
+                      legacyOptionCount: null,
+                      correctOptions: prev.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)),
                       answer_mode: getTaskAnswerMode({ question_type: questionType }),
                     }));
                   }}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 >
+                  {form.legacyOptionCount != null && <option value="" disabled>4 немесе 6 жауапты таңдаңыз</option>}
                   <option value="input">Енгізу</option>
                   <option value="tf">Шын/Жалған</option>
-                  <option value="mcq">MCQ (4-8)</option>
-                  <option value="mcq6">MCQ legacy (4-8)</option>
+                  <option value="mcq">Көп таңдаулы (4 жауап)</option>
+                  <option value="mcq6">Көп таңдаулы (6 жауап)</option>
                   <option value="select">Сәйкестендіру</option>
                 </select>
               </div>
@@ -193,11 +198,10 @@ export default function BankTaskForm({
             {(isMcqQuestionType(form.question_type) || form.question_type === "select") && (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {(isMcqQuestionType(form.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label, index) => (
+                  {(isMcqQuestionType(form.question_type) ? getMcqEditorLabels(form.question_type) : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
                     <div key={label}>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">
                         {label}
-                        {isMcqQuestionType(form.question_type) && index >= 4 ? " (қосымша)" : ""}
                       </label>
                       <MathFieldInput
                         value={getBankFormOptionValue(form, label)}
@@ -212,7 +216,7 @@ export default function BankTaskForm({
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
                     <div className="flex flex-wrap gap-2">
-                      {MCQ_OPTION_LABELS.map((label) => {
+                      {getMcqEditorLabels(form.question_type).map((label) => {
                         const isSelected = form.correctOptions.includes(label);
                         return (
                           <button

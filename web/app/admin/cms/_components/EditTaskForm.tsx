@@ -7,6 +7,7 @@ import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel
@@ -113,15 +114,15 @@ export default function EditTaskForm({
             aria-label="Тапсырма түрі"
             onChange={(e) => {
               const questionType = e.target.value as any;
-              setEditTaskForm({ ...editTaskForm, question_type: questionType });
+              setEditTaskForm({ ...editTaskForm, question_type: questionType, correctOptions: editTaskForm.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)) });
               setEditTaskAnswerMode(getTaskAnswerMode({ question_type: questionType }));
             }}
             className="p-2 rounded border text-sm"
           >
             <option value="input">Енгізу</option>
             <option value="tf">Ш/Ж</option>
-            <option value="mcq">MCQ (4)</option>
-            <option value="mcq6">MCQ (6)</option>
+            <option value="mcq">Көп таңдаулы (4 жауап)</option>
+            <option value="mcq6">Көп таңдаулы (6 жауап)</option>
             <option value="select">Сәйкестендіру</option>
           </select>
           {supportsAnswerModeSwitch(editTaskForm.question_type) && (

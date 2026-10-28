@@ -86,6 +86,8 @@ describe("EditQuizPage", () => {
           options: [
             { id: "A", text: "4", is_correct: true },
             { id: "B", text: "5", is_correct: false },
+            { id: "C", text: "6", is_correct: false },
+            { id: "D", text: "7", is_correct: false },
           ],
           correct_answer: "A",
           time_limit_seconds: 30,

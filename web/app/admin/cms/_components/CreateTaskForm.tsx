@@ -7,6 +7,7 @@ import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel
@@ -113,15 +114,15 @@ export default function CreateTaskForm({
             aria-label="Тапсырма түрі"
             onChange={(e) => {
               const questionType = e.target.value as any;
-              setTaskForm({ ...taskForm, question_type: questionType });
+              setTaskForm({ ...taskForm, question_type: questionType, correctOptions: taskForm.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)) });
               setTaskAnswerMode(getTaskAnswerMode({ question_type: questionType }));
             }}
             className="p-2 rounded border"
           >
             <option value="input">Пайдаланушы жауап енгізеді</option>
             <option value="tf">Дұрыс / Жалған</option>
-            <option value="mcq">Нұсқалар A/B/C/D</option>
-            <option value="mcq6">Нұсқалар A/B/C/D/E/F</option>
+            <option value="mcq">Көп таңдаулы (4 жауап)</option>
+            <option value="mcq6">Көп таңдаулы (6 жауап)</option>
             <option value="select">Тізімнен таңдау</option>
           </select>
           {!createUsesBank && supportsAnswerModeSwitch(taskForm.question_type) && (

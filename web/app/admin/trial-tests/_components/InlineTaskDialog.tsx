@@ -8,6 +8,7 @@ import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
   MAX_MCQ_CORRECT_OPTIONS,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   isMcqQuestionType,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
@@ -50,9 +51,10 @@ export default function InlineTaskDialog({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <select aria-label="Сұрақ түрі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
                   const questionType = e.target.value as QuestionType;
-                  setSlotForm((p) => ({ ...p, question_type: questionType, answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
+                  setSlotForm((p) => ({ ...p, question_type: questionType,
+                      correctOptions: p.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)), answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
                 }}>
-                  <option value="mcq">MCQ(4-8)</option><option value="mcq6">MCQ legacy</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
+                  <option value="mcq">Көп таңдаулы (4 жауап)</option><option value="mcq6">Көп таңдаулы (6 жауап)</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
                 </select>
                 <select aria-label="Күрделілігі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
                   <option value="A">A</option><option value="B">B</option><option value="C">C</option>
@@ -76,7 +78,7 @@ export default function InlineTaskDialog({
 
               {(isMcqQuestionType(slotForm.question_type) || slotForm.question_type === "select") && (
                 <div className="grid grid-cols-2 gap-2">
-                  {(isMcqQuestionType(slotForm.question_type) ? MCQ_OPTION_LABELS : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
+                  {(isMcqQuestionType(slotForm.question_type) ? getMcqEditorLabels(slotForm.question_type) : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
                     <MathFieldInput readOnly={busy}
                       key={label}
                       ariaLabel={`${label} нұсқасы`}
@@ -104,7 +106,7 @@ export default function InlineTaskDialog({
               {isMcqQuestionType(slotForm.question_type) && (
                 <div className="space-y-1">
                   <div className="flex flex-wrap gap-2">
-                    {MCQ_OPTION_LABELS.map((label) => {
+                    {getMcqEditorLabels(slotForm.question_type).map((label) => {
                       const isSelected = slotForm.correctOptions.includes(label);
                       return (
                         <button

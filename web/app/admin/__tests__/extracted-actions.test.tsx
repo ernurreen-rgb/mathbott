@@ -60,11 +60,14 @@ it("preserves multiple MCQ selections for the active preview slot", () => {
   expect(onAnswer).toHaveBeenCalledWith(3, '["A","B"]');
 });
 
-it("keeps high MCQ labels and matching subquestions in slot payloads", () => {
-  const form = { ...emptySlotForm(), optionH: "8", correctOptions: ["A", "H"] as ("A" | "H")[] };
+it("limits MCQ slots to four or six labels and preserves matching subquestions", () => {
+  const form = { ...emptySlotForm(), question_type: "mcq6" as const, optionF: "6", correctOptions: ["A", "F"] as ("A" | "F")[] };
   const mcq = buildSlotPayload(form);
-  expect(mcq.options).toHaveLength(8);
-  expect(mcq.answer).toBe('["A","H"]');
+  expect(mcq.options).toHaveLength(6);
+  expect(mcq.answer).toBe('["A","F"]');
+  const four = buildSlotPayload({ ...form, question_type: "mcq" });
+  expect(four.options).toHaveLength(4);
+  expect(four.answer).toBe("A");
   const select = buildSlotPayload({ ...form, question_type: "select", subQuestion1: "First", subQuestion2: "Second", correctSub2: "D" });
   expect(select.answer).toBe('["A","D"]');
   expect(select.subquestions).toEqual([{ text: "First", correct: "A" }, { text: "Second", correct: "D" }]);

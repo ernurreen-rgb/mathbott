@@ -2,6 +2,7 @@ import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEdit
 import {
   isMcqQuestionType,
   MCQ_OPTION_LABELS,
+  getMcqEditorLabels,
   McqOptionLabel,
   serializeMcqAnswerLabels
 } from "@/lib/question-options";
@@ -107,16 +108,9 @@ export const setSlotFormOptionValue = (form: SlotForm, label: McqOptionLabel, va
   }
 };
 
-export const buildMcqOptionsFromSlotForm = (form: SlotForm): Array<{ label: string; text: string }> => {
-  const highestIndex = MCQ_OPTION_LABELS.reduce((highest, label, index) => {
-    const value = getSlotFormOptionValue(form, label).trim();
-    return value || form.correctOptions.includes(label) ? Math.max(highest, index) : highest;
-  }, 3);
-  return MCQ_OPTION_LABELS.slice(0, highestIndex + 1).map((label) => ({
-    label,
-    text: getSlotFormOptionValue(form, label),
-  }));
-};
+export const buildMcqOptionsFromSlotForm = (form: SlotForm): Array<{ label: string; text: string }> => getMcqEditorLabels(form.question_type).map((label) => ({
+  label, text: getSlotFormOptionValue(form, label),
+}));
 
 export const buildSlotPayload = (form: SlotForm) => {
   const payload: Record<string, any> = {
@@ -138,7 +132,7 @@ export const buildSlotPayload = (form: SlotForm) => {
     return payload;
   }
   if (isMcqQuestionType(form.question_type)) {
-    payload.answer = serializeMcqAnswerLabels(form.correctOptions);
+    payload.answer = serializeMcqAnswerLabels(form.correctOptions.filter((label) => getMcqEditorLabels(form.question_type).includes(label)));
     payload.options = buildMcqOptionsFromSlotForm(form);
     return payload;
   }

@@ -3,14 +3,26 @@ export const MCQ_OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"] as con
 export type McqOptionLabel = (typeof MCQ_OPTION_LABELS)[number];
 
 export const MIN_MCQ_OPTIONS = 4;
-export const MAX_MCQ_OPTIONS = MCQ_OPTION_LABELS.length;
+export const MAX_MCQ_OPTIONS = 6;
 export const MAX_MCQ_CORRECT_OPTIONS = 3;
+export const MCQ_EDITOR_OPTION_COUNTS = [4, 6] as const;
+
+export function getMcqEditorLabels(questionType?: string | null): McqOptionLabel[] {
+  return MCQ_OPTION_LABELS.slice(0, questionType === "mcq6" ? 6 : 4);
+}
+
+export function getMcqEditorQuestionType<T extends string>(questionType: T, options?: readonly unknown[] | null): T | "mcq" | "mcq6" {
+  if (questionType !== "mcq" && questionType !== "mcq6") return questionType;
+  if (options?.length === 6) return "mcq6";
+  if (options?.length === 4) return "mcq";
+  return questionType;
+}
 
 export const isMcqQuestionType = (questionType?: string | null): boolean =>
   questionType === "mcq" || questionType === "mcq6";
 
 export function getMcqLabelsForOptionCount(count: number): McqOptionLabel[] {
-  const safeCount = Math.min(Math.max(count, MIN_MCQ_OPTIONS), MAX_MCQ_OPTIONS);
+  const safeCount = count <= MIN_MCQ_OPTIONS ? MIN_MCQ_OPTIONS : MAX_MCQ_OPTIONS;
   return MCQ_OPTION_LABELS.slice(0, safeCount);
 }
 
@@ -19,7 +31,7 @@ export function getMcqOptionCountFromOptions(
   questionType?: string | null
 ): number {
   if (Array.isArray(options) && options.length > 0) {
-    return Math.min(Math.max(options.length, MIN_MCQ_OPTIONS), MAX_MCQ_OPTIONS);
+    return options.length <= MIN_MCQ_OPTIONS ? MIN_MCQ_OPTIONS : MAX_MCQ_OPTIONS;
   }
   return questionType === "mcq6" ? 6 : MIN_MCQ_OPTIONS;
 }
