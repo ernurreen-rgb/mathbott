@@ -276,7 +276,19 @@ export default function QuizzesCatalogPage() {
             {displayedQuizzes.map((quiz) => (
               <div
                 key={quiz.id}
-                className="group relative bg-white/90 backdrop-blur-md rounded-2xl border border-purple-100/60 p-5 shadow-sm hover:shadow-xl hover:border-purple-300 transition-all flex flex-col justify-between"
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/quizzes/${quiz.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    const tag = (e.target as HTMLElement).tagName;
+                    if (tag !== "BUTTON" && tag !== "A") {
+                      e.preventDefault();
+                      router.push(`/quizzes/${quiz.id}`);
+                    }
+                  }
+                }}
+                className="group relative bg-white/90 backdrop-blur-md rounded-2xl border border-purple-100/60 p-5 shadow-sm hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all flex flex-col justify-between cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-2 gap-2">
@@ -317,6 +329,7 @@ export default function QuizzesCatalogPage() {
                 <div className="pt-4 border-t border-gray-100 flex items-center justify-between gap-2 mt-4">
                   <Link
                     href={`/quizzes/${quiz.id}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="flex-1 text-center py-2 px-3 rounded-xl bg-purple-50 text-purple-700 font-bold text-xs hover:bg-purple-600 hover:text-white transition-all"
                   >
                     Ашу & Ойнау
@@ -326,6 +339,7 @@ export default function QuizzesCatalogPage() {
                       <Link
                         href={`/quizzes/${quiz.id}/edit`}
                         title="Өңдеу"
+                        onClick={(e) => e.stopPropagation()}
                         className="p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-xl bg-purple-50 hover:bg-purple-100"
                       >
                         <Icon name="edit" className="w-4 h-4" />
