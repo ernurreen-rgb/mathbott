@@ -27,6 +27,17 @@ class QuizSessionsMixin:
         ) as cursor:
             return [json.loads(row[0]) for row in await cursor.fetchall()]
 
+    @staticmethod
+    def _get_participant_question_order(participant: dict) -> Optional[List[int]]:
+        raw = participant.get('question_order')
+        if not raw or not isinstance(raw, str):
+            return None
+        try:
+            val = json.loads(raw)
+            return [int(x) for x in val] if isinstance(val, list) else None
+        except Exception:
+            return None
+
     async def create_session(self, quiz_id: int, host_id: int, settings=None):
         async with self._write_transaction() as db:
             quiz = await self._row(db, "SELECT * FROM quizzes WHERE id = ?", (quiz_id,))
@@ -50,8 +61,6 @@ class QuizSessionsMixin:
                 (quiz_id, host_id, pin, json.dumps(settings or {}, ensure_ascii=False)),
             )
             session_id = cursor.lastrowid
-            if settings and settings.get("shuffle_questions"):
-                random.shuffle(questions)
             for position, question in enumerate(questions):
                 for key in ('options', 'accepted_answers'):
                     question[key] = json.loads(question.get(key) or '[]')
@@ -83,18 +92,19 @@ class QuizSessionsMixin:
                 pass  # Retry does not reset the clock.
             elif status == 'in_progress' and row['status'] == 'lobby':
                 settings = json.loads(row.get('settings') or '{}') if isinstance(row.get('settings'), str) else (row.get('settings') or {})
-                should_shuffle = shuffle_questions if shuffle_questions is not None else settings.get('shuffle_questions', False)
-                if should_shuffle:
-                    settings['shuffle_questions'] = True
-                    async with db.execute("SELECT question_id, snapshot_json FROM quiz_session_questions WHERE session_id = ? ORDER BY position", (session_id,)) as cursor:
-                        sq_rows = [dict(r) for r in await cursor.fetchall()]
-                    if sq_rows:
-                        random.shuffle(sq_rows)
-                        await db.execute("DELETE FROM quiz_session_questions WHERE session_id = ?", (session_id,))
-                        for pos, sq in enumerate(sq_rows):
-                            await db.execute("INSERT INTO quiz_session_questions (session_id, question_id, position, snapshot_json) VALUES (?, ?, ?, ?)",
-                                             (session_id, sq['question_id'], pos, sq['snapshot_json']))
+                if shuffle_questions is not None:
+                    settings['shuffle_questions'] = bool(shuffle_questions)
                 await db.execute("UPDATE quiz_sessions SET status = ?, settings = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?", (status, json.dumps(settings, ensure_ascii=False), session_id))
+                if settings.get('shuffle_questions'):
+                    async with db.execute("SELECT question_id FROM quiz_session_questions WHERE session_id = ? ORDER BY position", (session_id,)) as cursor:
+                        q_ids = [r[0] for r in await cursor.fetchall()]
+                    if q_ids:
+                        async with db.execute("SELECT id FROM quiz_participants WHERE session_id = ?", (session_id,)) as cursor:
+                            p_rows = await cursor.fetchall()
+                        for p_row in p_rows:
+                            shuffled = list(q_ids)
+                            random.shuffle(shuffled)
+                            await db.execute("UPDATE quiz_participants SET question_order = ? WHERE id = ?", (json.dumps(shuffled), p_row[0]))
             elif status == 'finished' and row['status'] in ('lobby', 'in_progress'):
                 await db.execute("UPDATE quiz_sessions SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
             else:
@@ -139,6 +149,14 @@ class QuizSessionsMixin:
                     (session_id, user_id, nickname, avatar_color, token_hash) VALUES (?, ?, ?, ?, ?)''',
                     (session_id, user_id, nickname, color, token_hash(issued_token)))
                 participant_id = cursor.lastrowid
+                if session.get('status') == 'in_progress':
+                    s_settings = json.loads(session.get('settings') or '{}') if isinstance(session.get('settings'), str) else (session.get('settings') or {})
+                    if s_settings.get('shuffle_questions'):
+                        async with db.execute('SELECT question_id FROM quiz_session_questions WHERE session_id = ? ORDER BY position', (session_id,)) as cursor:
+                            q_ids = [r[0] for r in await cursor.fetchall()]
+                        if q_ids:
+                            random.shuffle(q_ids)
+                            await db.execute('UPDATE quiz_participants SET question_order = ? WHERE id = ?', (json.dumps(q_ids), participant_id))
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
         return {**public_participant(participant), 'participant_token': issued_token}
 
@@ -199,9 +217,13 @@ class QuizSessionsMixin:
             FROM quiz_sessions s JOIN quizzes q ON q.id = s.quiz_id
             JOIN users u ON u.id = s.host_id WHERE s.id = ?''', (session_id,))
         index = participant['current_question_index']
-        # Polls only need one immutable snapshot, regardless of the quiz length.
-        row = await self._row(db, 'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND position = ?',
-                              (session_id, index))
+        order = self._get_participant_question_order(participant)
+        if order and 0 <= index < len(order):
+            row = await self._row(db, 'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
+                                  (session_id, order[index]))
+        else:
+            row = await self._row(db, 'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND position = ?',
+                                  (session_id, index))
         question = json.loads(row['snapshot_json']) if row else None
         answer = None
         if question:
@@ -238,7 +260,7 @@ class QuizSessionsMixin:
     async def activate_question(self, session_id, participant_token, advance=False, question_id=None):
         async with self._write_transaction() as db:
             participant = await self._token_participant(db, session_id, participant_token)
-            session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+            session = await self._row(db, 'SELECT status, settings FROM quiz_sessions WHERE id = ?', (session_id,))
             if session['status'] != 'in_progress':
                 raise QuizError('conflict', 'Game is not active')
             questions = await self._snapshot_questions(db, session_id)
@@ -246,10 +268,27 @@ class QuizSessionsMixin:
             if participant['is_finished']:
                 return await self._progress(db, session_id, participant, now)
             index = participant['current_question_index']
-            if not questions or index >= len(questions):
+            if not questions:
                 raise QuizError('conflict', 'Session has no playable questions')
+
+            settings = json.loads(session.get('settings') or '{}') if isinstance(session.get('settings'), str) else (session.get('settings') or {})
+            order = self._get_participant_question_order(participant)
+            if order is None and settings.get('shuffle_questions'):
+                q_ids = [q['id'] for q in questions]
+                random.shuffle(q_ids)
+                order = q_ids
+                order_json = json.dumps(order)
+                await db.execute('UPDATE quiz_participants SET question_order = ? WHERE id = ?', (order_json, participant['id']))
+                participant['question_order'] = order_json
+
+            total_count = len(order) if order else len(questions)
+            if index >= total_count:
+                raise QuizError('conflict', 'Session has no playable questions')
+
+            current_expected_id = order[index] if order and 0 <= index < len(order) else questions[index]['id']
+
             if advance:
-                if question_id != questions[index]['id']:
+                if question_id != current_expected_id:
                     # A delayed retry for an earlier answered question must not advance twice.
                     previous = await self._row(db, 'SELECT id FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
                                                (session_id, participant['id'], question_id))
@@ -257,10 +296,10 @@ class QuizSessionsMixin:
                         return await self._progress(db, session_id, participant, now)
                     raise QuizError('conflict', 'Question does not match current progress')
                 answered = await self._row(db, 'SELECT id FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
-                                          (session_id, participant['id'], questions[index]['id']))
+                                          (session_id, participant['id'], current_expected_id))
                 if not answered:
                     raise QuizError('conflict', 'Answer the current question first')
-                if index + 1 == len(questions):
+                if index + 1 == total_count:
                     await db.execute('UPDATE quiz_participants SET is_finished = 1 WHERE session_id = ? AND id = ?', (session_id, participant['id']))
                 else:
                     await db.execute('UPDATE quiz_participants SET current_question_index = ?, question_started_at = ? WHERE session_id = ? AND id = ?',
@@ -284,13 +323,33 @@ class QuizSessionsMixin:
             if existing:
                 return {**answer_result(existing, participant, question), 'reused': True,
                         'progress': await self._progress(db, session_id, participant, time.time())}
-            session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+            session = await self._row(db, 'SELECT status, settings FROM quiz_sessions WHERE id = ?', (session_id,))
             if session['status'] != 'in_progress':
                 raise QuizError('conflict', 'Game session is not active')
             if participant['is_finished']:
                 raise QuizError('conflict', 'Participant is finished')
-            if participant['current_question_index'] != question_row['position'] or participant['question_started_at'] is None:
-                raise QuizError('conflict', 'Question has not been activated')
+
+            settings = json.loads(session.get('settings') or '{}') if isinstance(session.get('settings'), str) else (session.get('settings') or {})
+            order = self._get_participant_question_order(participant)
+            if order is None and settings.get('shuffle_questions'):
+                async with db.execute('SELECT question_id FROM quiz_session_questions WHERE session_id = ? ORDER BY position', (session_id,)) as cursor:
+                    q_ids = [r[0] for r in await cursor.fetchall()]
+                if q_ids:
+                    random.shuffle(q_ids)
+                    order = q_ids
+                    order_json = json.dumps(order)
+                    await db.execute('UPDATE quiz_participants SET question_order = ? WHERE id = ?', (order_json, participant['id']))
+                    participant['question_order'] = order_json
+
+            if order:
+                curr_idx = participant['current_question_index']
+                expected_qid = order[curr_idx] if 0 <= curr_idx < len(order) else None
+                if question_id != expected_qid or participant['question_started_at'] is None:
+                    raise QuizError('conflict', 'Question has not been activated')
+            else:
+                if participant['current_question_index'] != question_row['position'] or participant['question_started_at'] is None:
+                    raise QuizError('conflict', 'Question has not been activated')
+
             elapsed = max(0.0, time.time() - participant['question_started_at'])
             is_correct = elapsed < question['time_limit_seconds'] and check_question_answer(question, user_answer)
             points = calculate_speed_points(question['points'], question['time_limit_seconds'], elapsed, participant['streak'] + 1) if is_correct else 0

@@ -258,27 +258,6 @@ export default function QuizEditor({
     setDragOverIndex(null);
   };
 
-  const shuffleQuestions = () => {
-    if (questions.length <= 1) return;
-    const currentId = questions[activeQuestionIndex]?.id;
-    setQuestions((prev) => {
-      const copy = [...prev];
-      for (let i = copy.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-      }
-      return copy;
-    });
-    setTimeout(() => {
-      setQuestions((latest) => {
-        const newIdx = latest.findIndex((q) => q.id === currentId);
-        if (newIdx !== -1) setActiveQuestionIndex(newIdx);
-        return latest;
-      });
-    }, 0);
-    toast.success("Сұрақтар реті араластырылды");
-  };
-
   const handleSaveQuiz = async () => {
     if (!title.trim()) {
       toast.error("Квиз тақырыбын жазыңыз");
@@ -510,17 +489,6 @@ export default function QuizEditor({
           <div className="flex-1 flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs font-bold text-gray-600 px-1">
               <span>Сұрақтар ({questions.length})</span>
-              {questions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={shuffleQuestions}
-                  title="Сұрақтар ретін кездейсоқ араластыру"
-                  className="px-2 py-0.5 rounded-lg text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors flex items-center gap-1 active:scale-95"
-                >
-                  <Icon name="dice" className="w-3.5 h-3.5 text-purple-600" />
-                  Араластыру
-                </button>
-              )}
             </div>
 
             <div className="space-y-2 max-h-[46vh] lg:max-h-none overflow-y-auto pr-1">

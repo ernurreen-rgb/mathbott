@@ -566,6 +566,15 @@ async def test_quiz_session_shuffle_questions(client, test_user):
         params={"email": user_email},
     )
     session_id = session_resp.json()["id"]
+    pin = session_resp.json()["pin_code"]
+
+    # Join 2 participants in lobby
+    j1 = client.post("/api/quiz-sessions/join", json={"pin_code": pin, "nickname": "Student 1"}).json()
+    j2 = client.post("/api/quiz-sessions/join", json={"pin_code": pin, "nickname": "Student 2"}).json()
+    p1, t1 = j1["participant"], j1["participant_token"]
+    p2, t2 = j2["participant"], j2["participant_token"]
+    h1 = {"X-Quiz-Participant-Token": t1}
+    h2 = {"X-Quiz-Participant-Token": t2}
 
     # Start session with shuffle_questions: True
     start_resp = client.post(
@@ -578,7 +587,7 @@ async def test_quiz_session_shuffle_questions(client, test_user):
     assert started_session["status"] == "in_progress"
     assert started_session["settings"].get("shuffle_questions") is True
 
-    # Check host questions endpoint
+    # Check host questions endpoint: host sees questions in original order (not scrambled for host)
     host_q_resp = client.get(
         f"/api/quiz-sessions/{session_id}/questions",
         params={"is_host": True, "email": user_email},
@@ -586,6 +595,60 @@ async def test_quiz_session_shuffle_questions(client, test_user):
     assert host_q_resp.status_code == 200
     host_questions = host_q_resp.json()
     assert len(host_questions) == 5
-    assert set(q["question_text"] for q in host_questions) == {f"Question {i}" for i in range(1, 6)}
+    assert [q["question_text"] for q in host_questions] == [f"Question {i}" for i in range(1, 6)]
+
+    # Play through all questions for Student 1
+    p1_questions = []
+    for _ in range(5):
+        prog = client.post(f"/api/quiz-sessions/{session_id}/current-question", headers=h1).json()
+        curr_q = prog["current_question"]
+        assert curr_q is not None
+        p1_questions.append(curr_q["question_text"])
+        ans_resp = client.post(
+            f"/api/quiz-sessions/{session_id}/answers",
+            headers=h1,
+            json={
+                "participant_id": p1["id"],
+                "question_id": curr_q["id"],
+                "answer": "A",
+                "time_taken_seconds": 2.0,
+            },
+        )
+        assert ans_resp.status_code == 200
+        assert ans_resp.json()["is_correct"] is True
+        client.post(f"/api/quiz-sessions/{session_id}/next", headers=h1, json={"question_id": curr_q["id"]})
+
+    # Play through all questions for Student 2
+    p2_questions = []
+    for _ in range(5):
+        prog = client.post(f"/api/quiz-sessions/{session_id}/current-question", headers=h2).json()
+        curr_q = prog["current_question"]
+        assert curr_q is not None
+        p2_questions.append(curr_q["question_text"])
+        ans_resp = client.post(
+            f"/api/quiz-sessions/{session_id}/answers",
+            headers=h2,
+            json={
+                "participant_id": p2["id"],
+                "question_id": curr_q["id"],
+                "answer": "A",
+                "time_taken_seconds": 2.0,
+            },
+        )
+        assert ans_resp.status_code == 200
+        client.post(f"/api/quiz-sessions/{session_id}/next", headers=h2, json={"question_id": curr_q["id"]})
+
+    # Both participants received all 5 questions
+    expected_all = {f"Question {i}" for i in range(1, 6)}
+    assert set(p1_questions) == expected_all
+    assert set(p2_questions) == expected_all
+    assert len(p1_questions) == 5
+    assert len(p2_questions) == 5
+
+    # Check that both participants finished
+    p1_final = client.get(f"/api/quiz-sessions/{session_id}/progress", headers=h1).json()
+    p2_final = client.get(f"/api/quiz-sessions/{session_id}/progress", headers=h2).json()
+    assert p1_final["participant"]["is_finished"] == 1
+    assert p2_final["participant"]["is_finished"] == 1
 
 

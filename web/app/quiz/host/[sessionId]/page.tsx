@@ -195,7 +195,7 @@ export default function HostQuizPage({ params }: PageProps) {
           {quizSession.status === "lobby" && (
             <>
               <label
-                title="Оқушылар үшін сұрақтарды кездейсоқ ретпен араластырып беру"
+                title="Оқушылар ойын ойнағанда әрқайсысында сұрақтар реті әртүрлі болып шығады"
                 className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-white border border-purple-200/90 shadow-sm cursor-pointer hover:bg-purple-50/60 transition-colors select-none"
               >
                 <input
@@ -206,7 +206,7 @@ export default function HostQuizPage({ params }: PageProps) {
                 />
                 <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
                   <Icon name="dice" className="w-4 h-4 text-purple-600" />
-                  Сұрақтарды араластыру
+                  Сұрақтарды араластыру (әр оқушыға әртүрлі)
                 </span>
               </label>
 

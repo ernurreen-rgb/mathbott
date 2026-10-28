@@ -1,0 +1,1 @@
+ALTER TABLE quiz_participants ADD COLUMN IF NOT EXISTS question_order TEXT DEFAULT NULL;
