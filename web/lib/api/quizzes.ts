@@ -194,11 +194,14 @@ export async function updateQuizParticipantAvatar(
 
 export async function startQuizSession(
   sessionId: number,
-  email?: string
+  email?: string,
+  options?: { shuffle_questions?: boolean }
 ): Promise<FetchResult<QuizSession>> {
   const qs = email ? `?email=${encodeURIComponent(email)}` : "";
   return fetchWithErrorHandling<QuizSession>(`${apiPath(`quiz-sessions/${sessionId}/start`)}${qs}`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options || {}),
   });
 }
 

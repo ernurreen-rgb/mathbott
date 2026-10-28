@@ -34,6 +34,7 @@ export default function HostQuizPage({ params }: PageProps) {
   const [stats, setStats] = useState<QuizSessionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
   const [activeTab, setActiveTab] = useState<"podium" | "questions">("podium");
 
@@ -71,7 +72,9 @@ export default function HostQuizPage({ params }: PageProps) {
     setActionLoading(true);
     try {
       const email = session?.user?.email || undefined;
-      const { data, error } = await startQuizSession(sessionId, email);
+      const { data, error } = await startQuizSession(sessionId, email, {
+        shuffle_questions: shuffleQuestions,
+      });
       if (error || !data) {
         toast.error(error || "Ойынды бастау мүмкін болмады");
         return;
@@ -190,14 +193,32 @@ export default function HostQuizPage({ params }: PageProps) {
         {/* Action Controls */}
         <div className="flex items-center gap-3">
           {quizSession.status === "lobby" && (
-            <button
-              onClick={handleStartGame}
-              disabled={actionLoading}
-              className="px-8 py-3.5 rounded-2xl font-black text-base bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2.5 disabled:opacity-50"
-            >
-              <Icon name="play" className="w-5 h-5 " />
-              Ойынды бастау!
-            </button>
+            <>
+              <label
+                title="Оқушылар үшін сұрақтарды кездейсоқ ретпен араластырып беру"
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-white border border-purple-200/90 shadow-sm cursor-pointer hover:bg-purple-50/60 transition-colors select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={shuffleQuestions}
+                  onChange={(e) => setShuffleQuestions(e.target.checked)}
+                  className="w-4 h-4 rounded text-purple-600 border-purple-300 focus:ring-purple-500 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                  <Icon name="dice" className="w-4 h-4 text-purple-600" />
+                  Сұрақтарды араластыру
+                </span>
+              </label>
+
+              <button
+                onClick={handleStartGame}
+                disabled={actionLoading}
+                className="px-8 py-3.5 rounded-2xl font-black text-base bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2.5 disabled:opacity-50"
+              >
+                <Icon name="play" className="w-5 h-5 " />
+                Ойынды бастау!
+              </button>
+            </>
           )}
 
           {quizSession.status === "in_progress" && (

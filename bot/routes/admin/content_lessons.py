@@ -1,10 +1,14 @@
 """CMS routes: lessons."""
 from .common import (
+    Any,
+    Body,
     Database,
     Depends,
+    Dict,
     File,
     Form,
     HTTPException,
+    List,
     Optional,
     Query,
     UploadFile,
@@ -117,6 +121,29 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
         await require_admin(email=email, db=db)
         tasks = await db.tasks.get_tasks_by_mini_lesson(mini_lesson_id)
         return [_serialize_bank_placement_task(task) for task in tasks]
+
+    @app.put("/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder")
+    @app.post("/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder")
+    async def reorder_mini_lesson_tasks(
+        mini_lesson_id: int,
+        payload: Dict[str, Any] = Body(...),
+        db: Database = Depends(get_db)
+    ):
+        """Reorder tasks within a mini-lesson"""
+        email = payload.get("email")
+        if not email or not isinstance(email, str):
+            raise HTTPException(status_code=400, detail="email is required")
+        await require_admin(email=email, db=db)
+
+        task_ids = payload.get("task_ids")
+        if not isinstance(task_ids, list):
+            raise HTTPException(status_code=400, detail="task_ids must be a list of task IDs")
+
+        for order, task_id in enumerate(task_ids):
+            if isinstance(task_id, int):
+                await db.tasks.update_task(task_id=task_id, sort_order=order)
+
+        return {"success": True, "message": "Tasks reordered successfully"}
 
     @app.post("/api/admin/mini-lessons/{mini_lesson_id}/tasks")
     async def create_task_in_mini_lesson_cms(

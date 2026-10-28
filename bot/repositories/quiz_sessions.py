@@ -3,6 +3,7 @@ import json
 import random
 import secrets
 import time
+from typing import Optional, Dict, Any, List
 import storage as db_driver
 
 from utils.quiz import (QuizError, token_hash, public_participant, public_question,
@@ -49,6 +50,8 @@ class QuizSessionsMixin:
                 (quiz_id, host_id, pin, json.dumps(settings or {}, ensure_ascii=False)),
             )
             session_id = cursor.lastrowid
+            if settings and settings.get("shuffle_questions"):
+                random.shuffle(questions)
             for position, question in enumerate(questions):
                 for key in ('options', 'accepted_answers'):
                     question[key] = json.loads(question.get(key) or '[]')
@@ -71,7 +74,7 @@ class QuizSessionsMixin:
             row = await self._row(db, "SELECT id FROM quiz_sessions WHERE pin_code = ? AND status != 'finished'", (pin_code,))
         return await self.get_session_by_id(row['id']) if row else None
 
-    async def update_session_status(self, session_id: int, status: str):
+    async def update_session_status(self, session_id: int, status: str, shuffle_questions: Optional[bool] = None):
         async with self._write_transaction() as db:
             row = await self._row(db, "SELECT * FROM quiz_sessions WHERE id = ?", (session_id,))
             if not row:
@@ -79,7 +82,19 @@ class QuizSessionsMixin:
             if status == row['status']:
                 pass  # Retry does not reset the clock.
             elif status == 'in_progress' and row['status'] == 'lobby':
-                await db.execute("UPDATE quiz_sessions SET status = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
+                settings = json.loads(row.get('settings') or '{}') if isinstance(row.get('settings'), str) else (row.get('settings') or {})
+                should_shuffle = shuffle_questions if shuffle_questions is not None else settings.get('shuffle_questions', False)
+                if should_shuffle:
+                    settings['shuffle_questions'] = True
+                    async with db.execute("SELECT question_id, snapshot_json FROM quiz_session_questions WHERE session_id = ? ORDER BY position", (session_id,)) as cursor:
+                        sq_rows = [dict(r) for r in await cursor.fetchall()]
+                    if sq_rows:
+                        random.shuffle(sq_rows)
+                        await db.execute("DELETE FROM quiz_session_questions WHERE session_id = ?", (session_id,))
+                        for pos, sq in enumerate(sq_rows):
+                            await db.execute("INSERT INTO quiz_session_questions (session_id, question_id, position, snapshot_json) VALUES (?, ?, ?, ?)",
+                                             (session_id, sq['question_id'], pos, sq['snapshot_json']))
+                await db.execute("UPDATE quiz_sessions SET status = ?, settings = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?", (status, json.dumps(settings, ensure_ascii=False), session_id))
             elif status == 'finished' and row['status'] in ('lobby', 'in_progress'):
                 await db.execute("UPDATE quiz_sessions SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
             else:

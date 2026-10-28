@@ -108,6 +108,8 @@ export default function QuizEditor({
   });
 
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const currentQ = questions[activeQuestionIndex];
 
@@ -232,6 +234,49 @@ export default function QuizEditor({
     if (activeQuestionIndex >= nextList.length) {
       setActiveQuestionIndex(nextList.length - 1);
     }
+  };
+
+  const moveQuestion = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= questions.length || toIdx >= questions.length) return;
+    setQuestions((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(toIdx, 0, moved);
+      return copy;
+    });
+    setActiveQuestionIndex(toIdx);
+  };
+
+  const handleDrop = (targetIdx: number) => {
+    if (draggedIndex === null || draggedIndex === targetIdx) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    moveQuestion(draggedIndex, targetIdx);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const shuffleQuestions = () => {
+    if (questions.length <= 1) return;
+    const currentId = questions[activeQuestionIndex]?.id;
+    setQuestions((prev) => {
+      const copy = [...prev];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    });
+    setTimeout(() => {
+      setQuestions((latest) => {
+        const newIdx = latest.findIndex((q) => q.id === currentId);
+        if (newIdx !== -1) setActiveQuestionIndex(newIdx);
+        return latest;
+      });
+    }, 0);
+    toast.success("Сұрақтар реті араластырылды");
   };
 
   const handleSaveQuiz = async () => {
@@ -465,60 +510,139 @@ export default function QuizEditor({
           <div className="flex-1 flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs font-bold text-gray-600 px-1">
               <span>Сұрақтар ({questions.length})</span>
+              {questions.length > 1 && (
+                <button
+                  type="button"
+                  onClick={shuffleQuestions}
+                  title="Сұрақтар ретін кездейсоқ араластыру"
+                  className="px-2 py-0.5 rounded-lg text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors flex items-center gap-1 active:scale-95"
+                >
+                  <Icon name="dice" className="w-3.5 h-3.5 text-purple-600" />
+                  Араластыру
+                </button>
+              )}
             </div>
 
             <div className="space-y-2 max-h-[46vh] lg:max-h-none overflow-y-auto pr-1">
-              {questions.map((q, idx) => (
-                <div
-                  key={q.id}
-                  onClick={() => setActiveQuestionIndex(idx)}
-                  className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex items-center justify-between group ${
-                    activeQuestionIndex === idx
-                      ? "bg-purple-50 border-purple-400 shadow-sm text-purple-950 font-semibold"
-                      : "bg-white border-gray-200/80 hover:border-purple-200 text-gray-700 shadow-sm"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    <span
-                      className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
-                        activeQuestionIndex === idx
-                          ? "bg-purple-600 text-white"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span className="text-xs truncate max-w-[140px]">
-                      {q.question_text || "Жаңа сұрақ..."}
-                    </span>
-                  </div>
+              {questions.map((q, idx) => {
+                const canMove = questions.length > 1;
+                const isDragging = draggedIndex === idx;
+                const isDragOver = dragOverIndex === idx && draggedIndex !== idx;
 
-                  <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        duplicateQuestion(idx);
-                      }}
-                      title="Көшірмесін жасау"
-                      className="p-1 hover:text-purple-600 text-gray-400 rounded hover:bg-purple-50"
-                    >
-                      <Icon name="copy" className="w-3.5 h-3.5" />
-                    </button>
-                    {questions.length > 1 && (
+                return (
+                  <div
+                    key={q.id}
+                    draggable={canMove}
+                    title={canMove ? "Тасымалдау немесе ретін өзгерту үшін сүйреңіз" : undefined}
+                    onDragStart={(e) => {
+                      if (!canMove) return;
+                      e.dataTransfer.setData("text/plain", String(idx));
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggedIndex(idx);
+                    }}
+                    onDragOver={(e) => {
+                      if (!canMove) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dragOverIndex !== idx) setDragOverIndex(idx);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverIndex === idx) setDragOverIndex(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!canMove) return;
+                      handleDrop(idx);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedIndex(null);
+                      setDragOverIndex(null);
+                    }}
+                    onClick={() => setActiveQuestionIndex(idx)}
+                    className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between group ${
+                      canMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                    } ${
+                      isDragging
+                        ? "opacity-35 scale-95 border-dashed border-purple-400 bg-purple-50/50"
+                        : isDragOver
+                        ? "border-purple-600 ring-2 ring-purple-300 scale-[1.02] bg-purple-50"
+                        : activeQuestionIndex === idx
+                        ? "bg-purple-50 border-purple-400 shadow-sm text-purple-950 font-semibold"
+                        : "bg-white border-gray-200/80 hover:border-purple-200 text-gray-700 shadow-sm"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
+                      <span
+                        className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
+                          activeQuestionIndex === idx
+                            ? "bg-purple-600 text-white"
+                            : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs truncate">
+                        {q.question_text || "Жаңа сұрақ..."}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 shrink-0">
+                      {canMove && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveQuestion(idx, idx - 1);
+                            }}
+                            title="Жоғары жылжыту"
+                            className="p-1 hover:text-purple-600 text-gray-400 disabled:opacity-20 rounded hover:bg-purple-50 transition-colors"
+                          >
+                            <Icon name="chevronUp" className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === questions.length - 1}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveQuestion(idx, idx + 1);
+                            }}
+                            title="Төмен жылжыту"
+                            className="p-1 hover:text-purple-600 text-gray-400 disabled:opacity-20 rounded hover:bg-purple-50 transition-colors"
+                          >
+                            <Icon name="chevronDown" className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          removeQuestion(idx);
+                          duplicateQuestion(idx);
                         }}
-                        title="Өшіру"
-                        className="p-1 hover:text-red-600 text-gray-400 rounded hover:bg-red-50"
+                        title="Көшірмесін жасау"
+                        className="p-1 hover:text-purple-600 text-gray-400 rounded hover:bg-purple-50 transition-colors"
                       >
-                        <Icon name="trash" className="w-3.5 h-3.5" />
+                        <Icon name="copy" className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                      {questions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeQuestion(idx);
+                          }}
+                          title="Өшіру"
+                          className="p-1 hover:text-red-600 text-gray-400 rounded hover:bg-red-50 transition-colors"
+                        >
+                          <Icon name="trash" className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <button

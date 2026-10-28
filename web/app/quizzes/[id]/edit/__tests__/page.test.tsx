@@ -178,4 +178,80 @@ describe("EditQuizPage", () => {
     expect(toast.success).toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith("/quizzes/88/edit");
   });
+
+  it("allows reordering questions via move buttons and saves updated sort_order", async () => {
+    (getQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 42, title: "Тест квиз", is_public: true, can_manage: true },
+      error: null,
+    });
+    (getQuizQuestions as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          quiz_id: 42,
+          question_text: "Сұрақ 1",
+          question_type: "mcq",
+          options: [
+            { id: "A", text: "1", is_correct: true },
+            { id: "B", text: "2", is_correct: false },
+            { id: "C", text: "3", is_correct: false },
+            { id: "D", text: "4", is_correct: false },
+          ],
+          correct_answer: "A",
+          time_limit_seconds: 30,
+          points: 1000,
+        },
+        {
+          id: 2,
+          quiz_id: 42,
+          question_text: "Сұрақ 2",
+          question_type: "mcq",
+          options: [
+            { id: "A", text: "10", is_correct: true },
+            { id: "B", text: "20", is_correct: false },
+            { id: "C", text: "30", is_correct: false },
+            { id: "D", text: "40", is_correct: false },
+          ],
+          correct_answer: "A",
+          time_limit_seconds: 30,
+          points: 1000,
+        },
+      ],
+      error: null,
+    });
+    (updateQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 42, title: "Тест квиз" },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<EditQuizPage params={Promise.resolve(mockParams)} />);
+    });
+
+    // Both questions are shown
+    expect(screen.getAllByText("Сұрақ 1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Сұрақ 2").length).toBeGreaterThanOrEqual(1);
+
+    // Click "Төмен жылжыту" on the first question
+    const downButtons = screen.getAllByTitle("Төмен жылжыту");
+    expect(downButtons).toHaveLength(2);
+    fireEvent.click(downButtons[0]);
+
+    // Save
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Өзгерістерді сақтау/ }));
+    });
+
+    // Check that question 2 is now first and question 1 is second
+    expect(updateQuiz).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({ question_text: "Сұрақ 2", sort_order: 1 }),
+          expect.objectContaining({ question_text: "Сұрақ 1", sort_order: 2 }),
+        ],
+      }),
+      "author@example.com"
+    );
+  });
 });

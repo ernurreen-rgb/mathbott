@@ -316,6 +316,14 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         if task.get("created_by") != admin_user["id"]:
             raise HTTPException(status_code=403, detail="You can only edit your own tasks")
 
+        if sort_order is not None and not text and not answer and question_type is None:
+            await db.tasks.update_task(
+                task_id=task_id,
+                task_type=task_type,
+                sort_order=sort_order,
+            )
+            return {"success": True, "message": "Task updated successfully"}
+
         options_list = _parse_options_json(options) if options is not None else None
         if subquestions is not None and not subquestions.strip():
             subquestions = None

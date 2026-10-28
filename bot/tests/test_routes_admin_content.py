@@ -534,3 +534,57 @@ async def test_admin_mini_lesson_task_update_syncs_linked_bank_metadata(client, 
     assert updated_bank["answer"] == "Updated mini answer"
     assert updated_bank["difficulty"] == "C"
     assert set(updated_bank["topics"]) == {"UpdatedTopic", "SecondTopic"}
+
+
+@pytest.mark.asyncio
+async def test_admin_mini_lesson_tasks_reorder(client, test_db):
+    admin_user = await test_db.users.create_user_by_email("admin.minilesson.reorder@example.com")
+    await test_db.users.set_admin(email=admin_user["email"], is_admin=True)
+
+    module = await test_db.curriculum.create_module("Reorder Module", "Desc", "icon", 0)
+    section = await test_db.curriculum.create_section(module["id"], "Reorder Section", 0, "Desc")
+    lesson = await test_db.curriculum.create_lesson(section["id"], lesson_number=1, title="Reorder Lesson", sort_order=0)
+    mini_lessons = await test_db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
+    mini_lesson_id = mini_lessons[0]["id"]
+
+    t1 = await test_db.create_task_in_mini_lesson(
+        mini_lesson_id=mini_lesson_id,
+        text="Task 1",
+        answer="A1",
+        created_by=admin_user["id"],
+        sort_order=0,
+    )
+    t2 = await test_db.create_task_in_mini_lesson(
+        mini_lesson_id=mini_lesson_id,
+        text="Task 2",
+        answer="A2",
+        created_by=admin_user["id"],
+        sort_order=1,
+    )
+    t3 = await test_db.create_task_in_mini_lesson(
+        mini_lesson_id=mini_lesson_id,
+        text="Task 3",
+        answer="A3",
+        created_by=admin_user["id"],
+        sort_order=2,
+    )
+
+    # Reorder so t3 comes first, then t1, then t2
+    reorder_response = client.post(
+        f"/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder",
+        json={
+            "email": admin_user["email"],
+            "task_ids": [t3["id"], t1["id"], t2["id"]],
+        },
+    )
+    assert reorder_response.status_code == 200
+    assert reorder_response.json().get("success") is True
+
+    # Verify tasks sort orders in database
+    t3_db = await test_db.tasks.get_task_by_id(t3["id"])
+    t1_db = await test_db.tasks.get_task_by_id(t1["id"])
+    t2_db = await test_db.tasks.get_task_by_id(t2["id"])
+
+    assert t3_db["sort_order"] == 0
+    assert t1_db["sort_order"] == 1
+    assert t2_db["sort_order"] == 2

@@ -139,9 +139,11 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.post('/api/quiz-sessions/{session_id}/start')
     async def start_game_session(session_id: int, request: Request,
+                                 payload: Optional[Dict[str, Any]] = Body(None),
                                  user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
         await access(session_id, request, user, db, host_only=True)
-        session = await db.quizzes.update_session_status(session_id, 'in_progress')
+        shuffle = payload.get('shuffle_questions') if isinstance(payload, dict) else None
+        session = await db.quizzes.update_session_status(session_id, 'in_progress', shuffle_questions=shuffle)
         await quiz_manager.broadcast(session_id, {'type': 'game_started', 'session_id': session_id})
         return session
 

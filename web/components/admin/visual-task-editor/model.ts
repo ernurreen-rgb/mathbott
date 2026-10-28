@@ -11,6 +11,7 @@ export interface VisualTaskEditorProps {
   onSave: (task: Partial<LessonTask> & { imageFile?: File | null; removeImage?: boolean }) => Promise<void>;
   onAdd: () => void;
   onDelete: (taskId: number) => Promise<void>;
+  onReorder?: (tasks: LessonTask[]) => Promise<void> | void;
   context: "trial-test" | "mini-lesson";
   showBankMetadata?: boolean;
   testIdOrMiniLessonId?: number;

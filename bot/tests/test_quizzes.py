@@ -529,3 +529,63 @@ async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
     )
     assert fork_private_resp.status_code == 403
 
+
+@pytest.mark.asyncio
+async def test_quiz_session_shuffle_questions(client, test_user):
+    user_email = test_user["email"]
+    # Create quiz with 5 questions
+    quiz_resp = client.post(
+        "/api/quizzes",
+        json={"title": "Shuffle Quiz", "is_public": True},
+        params={"email": user_email},
+    )
+    quiz_id = quiz_resp.json()["id"]
+
+    for i in range(1, 6):
+        client.post(
+            f"/api/quizzes/{quiz_id}/questions",
+            json={
+                "question_text": f"Question {i}",
+                "question_type": "mcq",
+                "options": [
+                    {"id": "A", "text": "Opt A"},
+                    {"id": "B", "text": "Opt B"},
+                    {"id": "C", "text": "Opt C"},
+                    {"id": "D", "text": "Opt D"},
+                ],
+                "correct_answer": "A",
+                "sort_order": i,
+            },
+            params={"email": user_email},
+        )
+
+    # Create session
+    session_resp = client.post(
+        "/api/quiz-sessions",
+        json={"quiz_id": quiz_id, "settings": {}},
+        params={"email": user_email},
+    )
+    session_id = session_resp.json()["id"]
+
+    # Start session with shuffle_questions: True
+    start_resp = client.post(
+        f"/api/quiz-sessions/{session_id}/start",
+        json={"shuffle_questions": True},
+        params={"email": user_email},
+    )
+    assert start_resp.status_code == 200
+    started_session = start_resp.json()
+    assert started_session["status"] == "in_progress"
+    assert started_session["settings"].get("shuffle_questions") is True
+
+    # Check host questions endpoint
+    host_q_resp = client.get(
+        f"/api/quiz-sessions/{session_id}/questions",
+        params={"is_host": True, "email": user_email},
+    )
+    assert host_q_resp.status_code == 200
+    host_questions = host_q_resp.json()
+    assert len(host_questions) == 5
+    assert set(q["question_text"] for q in host_questions) == {f"Question {i}" for i in range(1, 6)}
+
+

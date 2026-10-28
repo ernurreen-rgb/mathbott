@@ -13,7 +13,7 @@ import AcceptedAnswersEditor, { normalizeAcceptedAnswers } from "@/components/ad
 import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
-import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
 import { createCroppedImageFile } from "@/lib/imageCrop";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
@@ -25,6 +25,7 @@ export default function VisualTaskEditor({
   onSave,
   onAdd,
   onDelete,
+  onReorder,
   context,
   showBankMetadata = false,
   testIdOrMiniLessonId,
@@ -38,6 +39,8 @@ export default function VisualTaskEditor({
   const [tempTaskData, setTempTaskData] = useState<Partial<LessonTask>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draggedTaskIndex, setDraggedTaskIndex] = useState<number | null>(null);
+  const [dragOverTaskIndex, setDragOverTaskIndex] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [tempImageFile, setTempImageFile] = useState<File | null>(null);
   const [tempImagePreview, setTempImagePreview] = useState<string | null>(null);
@@ -268,6 +271,36 @@ export default function VisualTaskEditor({
       }
     } catch (error) {
       console.error("Error deleting task:", error);
+    }
+  };
+
+  const handleTaskDrop = async (targetIndex: number) => {
+    if (draggedTaskIndex === null || draggedTaskIndex === targetIndex) {
+      setDraggedTaskIndex(null);
+      setDragOverTaskIndex(null);
+      return;
+    }
+    const sourceIndex = draggedTaskIndex;
+    setDraggedTaskIndex(null);
+    setDragOverTaskIndex(null);
+
+    const reordered = [...tasks];
+    const [movedTask] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, movedTask);
+
+    const withUpdatedOrder = reordered.map((t, idx) => ({
+      ...t,
+      sort_order: idx,
+    }));
+
+    setCurrentTaskIndex(targetIndex);
+
+    if (onReorder) {
+      try {
+        await onReorder(withUpdatedOrder);
+      } catch (err) {
+        setValidationError(err instanceof Error ? err.message : "Тапсырмалар ретін сақтау мүмкін болмады");
+      }
     }
   };
 
@@ -569,6 +602,32 @@ export default function VisualTaskEditor({
         <div className={plain ? styles.numbers : "flex gap-2 min-w-full w-max justify-center"}>
           {tasks.map((task, idx) => {
             const isCurrent = idx === currentTaskIndex && !isEditing;
+            const canDrag = !isEditing && !saving && tasks.length > 1;
+            const isDragging = draggedTaskIndex === idx;
+            const isDragOver = dragOverTaskIndex === idx && draggedTaskIndex !== idx;
+
+            const buttonClassName = plain
+              ? [
+                  styles.number,
+                  canDrag ? styles.numberDraggable : "",
+                  idx === currentTaskIndex ? styles.numberActive : "",
+                  isDragging ? styles.numberDragging : "",
+                  isDragOver ? styles.numberDragOver : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+              : [
+                  "shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-all",
+                  isCurrent
+                    ? "bg-purple-600 border-purple-700 text-white"
+                    : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400",
+                  canDrag ? "cursor-grab" : "",
+                  isDragging ? "opacity-35 cursor-grabbing" : "",
+                  isDragOver ? "ring-2 ring-purple-500 scale-105 border-purple-600" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+
             return (
               <button
                 key={task.id}
@@ -576,16 +635,43 @@ export default function VisualTaskEditor({
                 aria-label={`${idx + 1}-тапсырма`}
                 aria-current={idx === currentTaskIndex ? "step" : undefined}
                 disabled={saving}
+                draggable={canDrag}
+                title={canDrag ? "Тапсырма ретін өзгерту үшін сүйреңіз" : undefined}
+                onDragStart={(e) => {
+                  if (!canDrag) return;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(idx));
+                  setDraggedTaskIndex(idx);
+                }}
+                onDragOver={(e) => {
+                  if (!canDrag) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverTaskIndex !== idx) {
+                    setDragOverTaskIndex(idx);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverTaskIndex === idx) {
+                    setDragOverTaskIndex(null);
+                  }
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  if (!canDrag) return;
+                  await handleTaskDrop(idx);
+                }}
+                onDragEnd={() => {
+                  setDraggedTaskIndex(null);
+                  setDragOverTaskIndex(null);
+                }}
                 onClick={() => {
                   if (!isDirty || confirm("Сақталмаған өзгерістер бар. Жалғастыру керек пе?")) {
                     handleCancelEdit();
                     setCurrentTaskIndex(idx);
                   }
                 }}
-                className={plain ? `${styles.number} ${idx === currentTaskIndex ? styles.numberActive : ""}` : `shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center font-bold transition-colors ${isCurrent
-                  ? "bg-purple-600 border-purple-700 text-white"
-                  : "bg-white/70 border-gray-300 text-gray-700 hover:border-purple-400"
-                  }`}
+                className={buttonClassName}
               >
                 {idx + 1}
               </button>
@@ -670,11 +756,6 @@ export default function VisualTaskEditor({
       {/* Question type selector when editing */}
       {isEditing && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          {plain && <label className="mb-4 grid gap-2 text-sm font-semibold text-slate-700">Реті
-            <input type="number" step={1} value={tempTaskData.sort_order ?? 0} disabled={saving}
-              className="w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal"
-              onChange={(event) => updateTempTask({ sort_order: Number(event.target.value) || 0 })} />
-          </label>}
           <label className="block text-sm font-semibold text-gray-700 mb-2">
             Сұрақ түрі
           </label>
@@ -702,35 +783,6 @@ export default function VisualTaskEditor({
             <option value="mcq6">Көп таңдаулы (6 жауап)</option>
             <option value="select">Сәйкестендіру</option>
           </select>
-          {supportsAnswerModeSwitch(tempTaskData.question_type) && (
-            <div className="mt-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Оқушы қалай жауап береді
-              </label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {[
-                  { value: "choices", title: "Нұсқаны таңдайды", hint: "Дайын жауаптарды батырма арқылы таңдайды" },
-                  { value: "written", title: "Жауапты өзі жазады", hint: "Математикалық пернетақтамен жауап енгізеді" },
-                ].map((mode) => {
-                  const isActive = getTaskAnswerMode(tempTaskData) === mode.value;
-                  return (
-                    <button
-                      key={mode.value}
-                      type="button"
-                      onClick={() => updateTempTask({ answer_mode: mode.value as "choices" | "written" })}
-                      className={`rounded-xl border p-3 text-left transition-colors ${isActive
-                        ? "border-purple-600 bg-purple-50 ring-2 ring-purple-200"
-                        : "border-gray-300 bg-white hover:border-purple-300"
-                        }`}
-                    >
-                      <div className="font-semibold text-gray-900">{mode.title}</div>
-                      <div className="mt-1 text-xs text-gray-600">{mode.hint}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

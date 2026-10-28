@@ -518,7 +518,11 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                       </div>
                       <div className={styles.actions}>
                         <button type="button" className={styles.primaryButton}
-                          onClick={() => { setError(null); setTaskDialogOpen(true); }}>Тапсырма қосу</button>
+                          onClick={() => {
+                            setError(null);
+                            setTaskForm((prev) => ({ ...prev, sort_order: miniTasks.length }));
+                            setTaskDialogOpen(true);
+                          }}>Тапсырма қосу</button>
                       </div>
                     </div>
                     <div>
@@ -648,6 +652,43 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                           onAdd={() => {}}
                           onDelete={async (taskId) => {
                             await deleteMiniLessonTask(taskId);
+                          }}
+                          onReorder={async (reorderedTasks) => {
+                            if (!session?.user?.email || !selectedMiniLesson) return;
+                            setError(null);
+                            const orderMap = new Map(reorderedTasks.map((t, idx) => [t.id, idx]));
+                            const optimistic = [...miniTasks].map((task) =>
+                              orderMap.has(task.id) ? { ...task, sort_order: orderMap.get(task.id)! } : task
+                            );
+                            setMiniTasks(optimistic);
+                            cache.write(`admin/mini-lessons/${selectedMiniLesson}/tasks`, optimistic);
+
+                            try {
+                              const taskIds = reorderedTasks.map((t) => t.id);
+                              const response = await fetch(apiPath(`admin/mini-lessons/${selectedMiniLesson}/tasks/reorder`), {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  email: session.user.email,
+                                  task_ids: taskIds,
+                                }),
+                              });
+                              if (!response.ok) {
+                                for (const t of reorderedTasks) {
+                                  const formData = new FormData();
+                                  formData.append("email", session.user.email);
+                                  formData.append("sort_order", (t.sort_order ?? 0).toString());
+                                  await fetch(apiPath(`admin/tasks/${t.id}`), {
+                                    method: "PUT",
+                                    body: formData,
+                                  });
+                                }
+                              }
+                              await fetchMiniTasks(selectedMiniLesson);
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : "Тапсырмалар ретін сақтау мүмкін болмады");
+                              await fetchMiniTasks(selectedMiniLesson);
+                            }
                           }}
                           context="mini-lesson"
                           testIdOrMiniLessonId={selectedMiniLesson || undefined}

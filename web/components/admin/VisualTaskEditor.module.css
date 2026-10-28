@@ -2,7 +2,10 @@
 .surface { padding: 20px 0; border-top: 1px solid #e1e4e8; }
 .navigation { margin-bottom: 18px; overflow-x: auto; padding: 3px 3px 8px; }
 .numbers { display: flex; gap: 7px; width: max-content; min-width: 100%; }
-.number { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #d6d9de; border-radius: 4px; background: #fff; color: #606773; font-size: 13px; }
+.number { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #d6d9de; border-radius: 4px; background: #fff; color: #606773; font-size: 13px; cursor: pointer; user-select: none; transition: transform 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+.numberDraggable { cursor: grab; }
+.numberDragging { opacity: 0.35; cursor: grabbing !important; }
+.numberDragOver { border-color: #252a34; outline: 2px dashed #252a34; outline-offset: 2px; transform: scale(1.08); }
 .numberActive { border-color: #252a34; background: #252a34; color: #fff; }
 .taskHeading { margin: 0 0 12px; color: #454c57; font-size: 14px; font-weight: 600; }
 .taskToolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
