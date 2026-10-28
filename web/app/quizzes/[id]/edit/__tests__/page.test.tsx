@@ -59,6 +59,7 @@ jest.mock("react-hot-toast", () => ({
 }));
 
 describe("EditQuizPage", () => {
+  beforeEach(() => { localStorage.clear(); });
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = { id: "42" };

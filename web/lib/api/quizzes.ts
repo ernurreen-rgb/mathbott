@@ -9,6 +9,8 @@ import {
   QuizSessionSummary,
   QuizSessionFullResults,
   UserQuizHistoryItem,
+  QuizReview,
+  QuizPracticeResult,
   QuizAuth,
   QuizPlayerProgress,
 } from "@/types/quiz";
@@ -325,4 +327,23 @@ export async function getUserQuizHistory(
   return fetchWithErrorHandling<UserQuizHistoryItem[]>(
     `${apiPath("quiz-sessions/user/history")}${qs}`
   );
+}
+
+export function claimQuizResult(sessionId: number, participantToken: string, email: string) {
+  return fetchWithErrorHandling<{ linked: boolean }>(`${apiPath(`quiz-sessions/${sessionId}/claim`)}?email=${encodeURIComponent(email)}&expected_email=${encodeURIComponent(email)}`, {
+    method: "POST", headers: { "X-Quiz-Participant-Token": participantToken },
+  });
+}
+
+export function getQuizReview(sessionId: number, participantId: number, auth?: QuizAuth) {
+  const params = new URLSearchParams({ participant_id: String(participantId) });
+  if (auth?.email) params.set("email", auth.email);
+  return fetchWithErrorHandling<QuizReview>(`${apiPath(`quiz-sessions/${sessionId}/review`)}?${params}`, { headers: authHeaders(auth) });
+}
+
+export function checkQuizPracticeAnswer(sessionId: number, participantId: number, questionId: number, answer: string, auth?: QuizAuth) {
+  return fetchWithErrorHandling<QuizPracticeResult>(`${apiPath(`quiz-sessions/${sessionId}/review/answers`)}${authQuery(auth)}`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(auth) },
+    body: JSON.stringify({ participant_id: participantId, question_id: questionId, answer }),
+  });
 }

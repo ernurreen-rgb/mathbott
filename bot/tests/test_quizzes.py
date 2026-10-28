@@ -163,6 +163,7 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     join2_resp = client.post(
         "/api/quiz-sessions/join",
         json={"pin_code": pin_code, "nickname": "Аружан", "email": user_email},
+        params={"email": user_email},
     )
     assert join2_resp.status_code == 200
     p2 = join2_resp.json()["participant"]

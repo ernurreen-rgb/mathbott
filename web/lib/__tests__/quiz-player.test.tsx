@@ -24,6 +24,7 @@ const active: QuizPlayerProgress = {
 beforeEach(() => {
   jest.resetAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
   saveQuizPlayer(credentials);
   (api.getQuizProgress as jest.Mock).mockResolvedValue({ data: active, error: null });
   (api.getQuizSession as jest.Mock).mockResolvedValue({ data: { id: 1, status: "in_progress" }, error: null });
@@ -167,6 +168,7 @@ it("reconciles a lost answer response without scoring or submitting twice", asyn
 it("does not reuse credentials from a different game or legacy global storage", () => {
   expect(readQuizPlayer(2)).toBeNull();
   sessionStorage.clear();
+  localStorage.clear();
   sessionStorage.setItem("quiz_participant_id", "7");
   expect(readQuizPlayer(1)).toBeNull();
 });

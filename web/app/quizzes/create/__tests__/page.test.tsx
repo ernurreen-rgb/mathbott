@@ -29,6 +29,7 @@ jest.mock("@/lib/api/quizzes", () => ({ createQuiz: jest.fn() }));
 jest.mock("react-hot-toast", () => ({ __esModule: true, default: { error: jest.fn(), success: jest.fn() } }));
 
 beforeEach(() => {
+  localStorage.clear();
   jest.clearAllMocks();
   (createQuiz as jest.Mock).mockReset();
 });

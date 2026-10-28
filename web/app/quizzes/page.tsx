@@ -137,7 +137,8 @@ export default function QuizzesCatalogPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <Link href="/quiz/history" className="rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-purple-700">Менің ойындарым</Link>
             <Link
               href="/join"
               className="flex-1 sm:flex-none text-center px-4 py-2.5 rounded-xl font-bold text-sm bg-white border border-gray-200 text-gray-800 shadow-sm hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"

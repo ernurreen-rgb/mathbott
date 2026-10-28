@@ -103,6 +103,20 @@ export interface QuizPlayerCredentials {
   token: string;
   nickname: string;
   avatarColor: string;
+  accountEmail?: string;
+}
+
+export interface QuizReview {
+  session_id: number;
+  quiz_title: string;
+  participant: QuizParticipant;
+  items: Array<{ question: QuizQuestion; user_answer: string; is_correct: boolean }>;
+}
+
+export interface QuizPracticeResult {
+  is_correct: boolean;
+  correct_answer: string;
+  explanation?: string | null;
 }
 
 export interface QuizPlayerProgress {

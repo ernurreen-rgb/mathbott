@@ -81,15 +81,16 @@ function JoinForm() {
         return;
       }
 
-      // Store in session storage for student play page
+      // Preserve guest access after closing the tab and signing up later.
       if (typeof window !== "undefined") {
-        saveQuizPlayer({
+        const persisted = saveQuizPlayer({
           sessionId: data.session.id,
           participantId: data.participant.id,
           token: data.participant_token,
           nickname: data.participant.nickname,
           avatarColor: data.participant.avatar_color,
         });
+        if (!persisted) toast.error("Браузер сақтау орнын бұғаттады. Нәтижені жоғалтпау үшін осы вкладканы жаппаңыз.");
       }
 
       toast.success("Сәтті қосылдыңыз!");

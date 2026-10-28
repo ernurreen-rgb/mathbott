@@ -191,6 +191,68 @@ class QuizSessionsMixin:
         async with self._connection() as db:
             return await self._token_participant(db, session_id, participant_token)
 
+    async def claim_participant(self, session_id, participant_token, user_id):
+        """Attach a capability-owned guest result once; never transfer another account's result."""
+        async with self._write_transaction() as db:
+            participant = await self._token_participant(db, session_id, participant_token)
+            if participant['user_id'] is not None and participant['user_id'] != user_id:
+                raise QuizError('forbidden', 'This result belongs to another account')
+            await db.execute('UPDATE quiz_participants SET user_id = ? WHERE id = ? AND user_id IS NULL',
+                             (user_id, participant['id']))
+            owner = await self._row(db, 'SELECT user_id FROM quiz_participants WHERE id = ?', (participant['id'],))
+            if owner['user_id'] != user_id:
+                raise QuizError('forbidden', 'This result belongs to another account')
+            return {'participant_id': participant['id'], 'session_id': session_id, 'linked': True}
+
+    async def _review_access(self, db, session_id, participant_token='', user_id=None, participant_id=None):
+        if participant_token:
+            participant = await self._token_participant(db, session_id, participant_token, participant_id)
+            if participant['user_id'] is not None and participant['user_id'] != user_id:
+                raise QuizError('forbidden', 'Sign in to the account that owns this result')
+        elif user_id and participant_id:
+            participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ? AND session_id = ? AND user_id = ?',
+                                          (participant_id, session_id, user_id))
+            if not participant:
+                raise QuizError('forbidden', 'Result is not available to this account')
+        else:
+            raise QuizError('unauthorized', 'Participant token or account required')
+        session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
+        if not participant['is_finished'] and session['status'] != 'finished':
+            raise QuizError('conflict', 'Finish the quiz before reviewing answers')
+        return participant
+
+    async def get_player_review(self, session_id, participant_token='', user_id=None, participant_id=None):
+        async with self._connection() as db:
+            participant = await self._review_access(db, session_id, participant_token, user_id, participant_id)
+            questions = await self._snapshot_questions(db, session_id)
+            order = self._get_participant_question_order(participant)
+            if order:
+                positions = {question_id: index for index, question_id in enumerate(order)}
+                questions.sort(key=lambda q: positions.get(q['id'], len(order)))
+            async with db.execute('SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ?',
+                                  (session_id, participant['id'])) as cursor:
+                answers = {row['question_id']: dict(row) for row in await cursor.fetchall()}
+            items = [{
+                'question': {**public_question(q), 'correct_answer': q.get('correct_answer', ''), 'explanation': q.get('explanation')},
+                'user_answer': answers.get(q['id'], {}).get('user_answer', ''),
+                'is_correct': bool(answers.get(q['id'], {}).get('is_correct', False)),
+            } for q in questions]
+            session = await self._row(db, 'SELECT q.title FROM quiz_sessions s JOIN quizzes q ON q.id = s.quiz_id WHERE s.id = ?', (session_id,))
+            return {'session_id': session_id, 'quiz_title': session['title'],
+                    'participant': public_participant(participant), 'items': items}
+
+    async def check_review_answer(self, session_id, question_id, answer, participant_token='', user_id=None, participant_id=None):
+        async with self._connection() as db:
+            await self._review_access(db, session_id, participant_token, user_id, participant_id)
+            row = await self._row(db, 'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
+                                  (session_id, question_id))
+            if not row:
+                raise QuizError('not_found', 'Question not found in this game')
+            question = json.loads(row['snapshot_json'])
+            # Practice is deliberately read-only: original answers, ranks and scores stay immutable.
+            return {'is_correct': check_question_answer(question, answer),
+                    'correct_answer': question.get('correct_answer', ''), 'explanation': question.get('explanation')}
+
     async def list_participants(self, session_id: int):
         async with self._connection() as db:
             return await self._public_participants(db, session_id)

@@ -35,6 +35,11 @@ class SubmitAnswerRequest(BaseModel):
     # Accepted for older clients, never used to calculate scores or deadlines.
     time_taken_seconds: Optional[float] = Field(default=None, ge=0, le=600)
 
+class ReviewAnswerRequest(BaseModel):
+    question_id: int = Field(gt=0)
+    answer: str = Field(min_length=1, max_length=5000)
+    participant_id: Optional[int] = Field(default=None, gt=0)
+
 class QuizConnectionManager:
     """In-memory WebSocket connection manager for live quiz sessions."""
 
@@ -114,15 +119,32 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not session:
             raise HTTPException(404, 'Invalid PIN or finished game')
         user_id = user['id'] if user else None
-        if not user_id and payload.email:
-            found_user = await db.users.get_user_by_email(payload.email)
-            if found_user:
-                user_id = found_user['id']
         joined = await db.quizzes.join_session(session['id'], payload.nickname,
             user_id=user_id, avatar_color=payload.avatar_color, participant_token=payload.participant_token)
         credential = joined.pop('participant_token')
+        if user_id:
+            await db.quizzes.claim_participant(session['id'], credential, user_id)
         await quiz_manager.broadcast(session['id'], {'type': 'participant_joined', 'participant': joined})
         return {'session': session, 'participant': joined, 'participant_token': credential}
+
+    @app.post('/api/quiz-sessions/{session_id}/claim')
+    async def claim_guest_result(session_id: int, request: Request,
+                                expected_email: Optional[str] = Query(None),
+                                user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
+        if expected_email and expected_email.strip().lower() != user['email'].strip().lower():
+            raise HTTPException(403, 'Account changed; retry with the current account')
+        return await db.quizzes.claim_participant(session_id, token(request), user['id'])
+
+    @app.get('/api/quiz-sessions/{session_id}/review')
+    async def player_review(session_id: int, request: Request, participant_id: Optional[int] = Query(None, gt=0),
+                            user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        return await db.quizzes.get_player_review(session_id, token(request), user['id'] if user else None, participant_id)
+
+    @app.post('/api/quiz-sessions/{session_id}/review/answers')
+    async def practice_answer(session_id: int, payload: ReviewAnswerRequest, request: Request,
+                              user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        return await db.quizzes.check_review_answer(session_id, payload.question_id, payload.answer,
+            token(request), user['id'] if user else None, payload.participant_id)
 
     @app.patch('/api/quiz-sessions/{session_id}/avatar')
     async def update_participant_avatar(session_id: int, payload: UpdateAvatarRequest, request: Request,

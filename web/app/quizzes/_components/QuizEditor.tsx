@@ -13,6 +13,7 @@ import { QuestionType, Quiz, QuizOption, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
 import { MCQ_EDITOR_OPTION_COUNTS, MCQ_OPTION_LABELS } from "@/lib/question-options";
 import styles from "./QuizEditor.module.css";
+import { quizDraftKey, useQuizDraft } from "@/lib/use-quiz-draft";
 
 interface DraftQuestion {
   id: string; // temporary local id
@@ -23,6 +24,19 @@ interface DraftQuestion {
   time_limit_seconds: number;
   points: number;
   explanation: string;
+}
+
+interface EditorDraft { title: string; description: string; isPublic: boolean; questions: DraftQuestion[]; activeQuestionIndex: number }
+function isEditorDraft(raw: unknown): raw is EditorDraft {
+  const draft = raw as EditorDraft | null;
+  return !!draft && typeof draft.title === "string" && typeof draft.description === "string" &&
+    typeof draft.isPublic === "boolean" && Number.isInteger(draft.activeQuestionIndex) &&
+    Array.isArray(draft.questions) && draft.questions.length > 0 && draft.questions.every((q) =>
+      q && typeof q.id === "string" && typeof q.question_text === "string" &&
+      ["mcq", "multi_select", "input", "tf"].includes(q.question_type) &&
+      typeof q.correct_answer === "string" && typeof q.explanation === "string" &&
+      typeof q.time_limit_seconds === "number" && typeof q.points === "number" &&
+      Array.isArray(q.options) && q.options.every((option) => typeof option.id === "string" && typeof option.text === "string"));
 }
 
 const OPTION_COLORS = [
@@ -113,6 +127,14 @@ export default function QuizEditor({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const currentQ = questions[activeQuestionIndex];
+  const email = session?.user?.email;
+  const autosave = useQuizDraft<EditorDraft>(email ? quizDraftKey(email, initialQuiz?.id) : null,
+    { title, description, isPublic, questions, activeQuestionIndex },
+    (draft) => {
+      setTitle(draft.title); setDescription(draft.description); setIsPublic(draft.isPublic);
+      setQuestions(draft.questions);
+      setActiveQuestionIndex(Math.max(0, Math.min(draft.activeQuestionIndex, draft.questions.length - 1)));
+    }, isEditorDraft);
 
   const updateCurrentQuestion = (updates: Partial<DraftQuestion>) => {
     setQuestions((prev) => {
@@ -332,6 +354,7 @@ export default function QuizEditor({
         }
 
         toast.success("Квиз сәтті жаңартылды!");
+        autosave.clear({ title, description, isPublic, questions, activeQuestionIndex });
         router.push(`/quizzes/${initialQuiz.id}`);
       } else {
         const { data: newQuiz, error: quizErr } = await createQuiz(
@@ -351,6 +374,7 @@ export default function QuizEditor({
         }
 
         toast.success("Квиз сәтті сақталды!");
+        autosave.clear({ title, description, isPublic, questions, activeQuestionIndex });
         router.push(`/quizzes/${newQuiz.id}`);
       }
     } catch (err: any) {
@@ -396,6 +420,15 @@ export default function QuizEditor({
           </button>
         </div>
       </header>
+
+      {email && (
+        <div role="status" className="border-b border-purple-100 bg-white px-4 py-2 text-xs text-gray-600">
+          {autosave.status === "error" ? "Нобайды сақтау мүмкін болмады. Браузердің сақтау орнын тексеріңіз." :
+            autosave.status === "saving" ? "Нобай сақталуда..." : autosave.savedAt ?
+              `${autosave.restored ? "Нобай қалпына келтірілді. " : ""}Осы браузерде сақталды · ${new Date(autosave.savedAt).toLocaleTimeString("kk-KZ", { hour: "2-digit", minute: "2-digit" })}` :
+              "Өзгерістер осы браузерде автоматты сақталады"}
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Sidebar: Questions list & Global Settings */}

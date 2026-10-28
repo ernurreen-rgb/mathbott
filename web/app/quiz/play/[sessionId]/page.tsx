@@ -326,6 +326,11 @@ export default function PlayQuizPage({ params }: PageProps) {
           </div>
 
           <Link
+            href={`/quiz/review/${sessionId}?participant=${participantId}`}
+            className="mb-3 w-full rounded-2xl bg-purple-600 py-3.5 text-center text-sm font-bold text-white"
+          >Қателермен жұмыс</Link>
+          <Link href="/quiz/history" className="mb-4 text-sm font-semibold text-purple-700">Менің ойындарым · Нәтижелерді сақтау</Link>
+          <Link
             href="/quizzes"
             className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-2xl font-extrabold text-sm shadow-xl shadow-purple-600/25 transition-all text-center"
           >
@@ -447,9 +452,7 @@ export default function PlayQuizPage({ params }: PageProps) {
             )}
 
             {lastResult.explanation && (
-              <p className="text-xs text-gray-600 my-2 max-w-md mx-auto">
-                {lastResult.explanation}
-              </p>
+              <div className="text-xs text-gray-600 my-2 max-w-md mx-auto"><MathRender latex={lastResult.explanation} /></div>
             )}
 
             <button

@@ -16,6 +16,8 @@ const question = (id: number, question_text: string): QuizQuestion => ({
   correct_answer: "1", time_limit_seconds: 30, points: 1000, sort_order: id,
 });
 
+beforeEach(() => { localStorage.clear(); });
+
 it("renders fractions and mixed text as math in the question list, including after reordering and copying", () => {
   const formula = String.raw`\frac{1}{2}\times\frac{3}{4}\times\frac{5}{6}= ?`;
   const mixed = String.raw`Есептеңіз: \frac{2}{3}\times 3 = ?`;
