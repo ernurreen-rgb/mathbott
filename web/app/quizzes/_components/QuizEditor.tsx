@@ -12,6 +12,7 @@ import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { QuestionType, Quiz, QuizOption, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
 import { MCQ_EDITOR_OPTION_COUNTS, MCQ_OPTION_LABELS } from "@/lib/question-options";
+import styles from "./QuizEditor.module.css";
 
 interface DraftQuestion {
   id: string; // temporary local id
@@ -527,7 +528,7 @@ export default function QuizEditor({
                       setDragOverIndex(null);
                     }}
                     onClick={() => setActiveQuestionIndex(idx)}
-                    className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between group ${
+                    className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1 group ${
                       canMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                     } ${
                       isDragging
@@ -539,7 +540,7 @@ export default function QuizEditor({
                         : "bg-white border-gray-200/80 hover:border-purple-200 text-gray-700 shadow-sm"
                     }`}
                   >
-                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span
                         className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
                           activeQuestionIndex === idx
@@ -549,12 +550,14 @@ export default function QuizEditor({
                       >
                         {idx + 1}
                       </span>
-                      <span className="text-xs truncate">
-                        {q.question_text || "Жаңа сұрақ..."}
-                      </span>
+                      <div className={styles.questionPreview} aria-label={`Сұрақ ${idx + 1} мәтіні`}>
+                        <div className={styles.questionPreviewContent}>
+                          {q.question_text ? <MathRender latex={q.question_text} inline /> : "Жаңа сұрақ..."}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 shrink-0">
+                    <div className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 self-end shrink-0">
                       {canMove && (
                         <>
                           <button
