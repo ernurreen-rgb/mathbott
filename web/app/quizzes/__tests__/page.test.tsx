@@ -5,8 +5,16 @@ import { getQuizzes } from "@/lib/api/quizzes";
 const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock("next-auth/react", () => ({ useSession: () => ({ data: { user: { email: "owner@example.com" } } }) }));
-jest.mock("@/components/DesktopNav", () => () => <div data-testid="desktop-nav" />);
-jest.mock("@/components/MobileNav", () => () => <div data-testid="mobile-nav" />);
+jest.mock("@/components/DesktopNav", () => {
+  const MockDesktopNav = () => <div data-testid="desktop-nav" />;
+  MockDesktopNav.displayName = "MockDesktopNav";
+  return MockDesktopNav;
+});
+jest.mock("@/components/MobileNav", () => {
+  const MockMobileNav = () => <div data-testid="mobile-nav" />;
+  MockMobileNav.displayName = "MockMobileNav";
+  return MockMobileNav;
+});
 jest.mock("@/lib/api/quizzes", () => ({
   getQuizzes: jest.fn(),
   deleteQuiz: jest.fn(),

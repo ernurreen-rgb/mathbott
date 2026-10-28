@@ -483,8 +483,8 @@ export default function PlayQuizPage({ params }: PageProps) {
                       <span className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-black text-sm shrink-0">
                         <Icon name={theme.icon} size={20} />
                       </span>
-                      <div className="flex-1 overflow-y-auto">
-                        <MathRender latex={opt.text} />
+                      <div className="flex-1 overflow-y-auto max-h-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                        <MathRender latex={opt.text} inline />
                       </div>
                     </button>
                   );
@@ -541,7 +541,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                           <Icon name="check" />
                         </div>
                         <div className="flex-1">
-                          <MathRender latex={opt.text} />
+                          <MathRender latex={opt.text} inline />
                         </div>
                       </button>
                     );
