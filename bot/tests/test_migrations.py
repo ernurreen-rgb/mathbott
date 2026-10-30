@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0011_trial_test_category"
+HEAD_REVISION = "0012_quiz_participant_question_order"
 
 
 def test_quiz_upgrade_preserves_scores_and_detaches_question_fk(tmp_path):
