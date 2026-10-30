@@ -5,7 +5,7 @@ import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   MCQ_OPTION_LABELS,
   getMcqEditorLabels,
   isMcqQuestionType,
@@ -91,7 +91,7 @@ export default function BankTaskForm({
                       ...prev,
                       question_type: questionType,
                       legacyOptionCount: null,
-                      correctOptions: prev.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)),
+                      correctOptions: prev.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType)),
                       answer_mode: getTaskAnswerMode({ question_type: questionType }),
                     }));
                   }}
@@ -222,6 +222,7 @@ export default function BankTaskForm({
                           <button
                             key={label}
                             type="button"
+                            aria-pressed={isSelected}
                             onClick={() =>
                               setForm((prev) => {
                                 if (prev.correctOptions.includes(label) && prev.correctOptions.length <= 1) {
@@ -233,7 +234,7 @@ export default function BankTaskForm({
                                     toggleMcqAnswerLabel(
                                       serializeMcqAnswerLabels(prev.correctOptions),
                                       label,
-                                      MAX_MCQ_CORRECT_OPTIONS
+                                      getMcqCorrectOptionLimit(prev.question_type)
                                     )
                                   ),
                                 };
@@ -249,7 +250,7 @@ export default function BankTaskForm({
                         );
                       })}
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</p>
+                    <p className="mt-1 text-xs text-gray-500">{getMcqCorrectOptionLimit(form.question_type) === 1 ? "Тек бір дұрыс жауап таңдаңыз." : "1-ден 3-ке дейін дұрыс жауап таңдауға болады."}</p>
                   </div>
                 )}
               </>

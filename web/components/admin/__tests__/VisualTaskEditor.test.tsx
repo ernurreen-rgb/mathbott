@@ -14,6 +14,7 @@ jest.mock("next/image", () => ({
 }));
 
 const task: LessonTask = { id: 4, text: "Question", answer: "A", question_type: "mcq", sort_order: 1, options: [{ label: "A", text: "One" }, { label: "B", text: "Two" }, { label: "C", text: "Three" }, { label: "D", text: "Four" }] };
+const sixOptionTask: LessonTask = { ...task, question_type: "mcq6", options: [...task.options!, { label: "E", text: "Five" }, { label: "F", text: "Six" }] };
 
 it("toggles correct answers with one click and saves the chosen answer", async () => {
   const user = userEvent.setup();
@@ -22,9 +23,11 @@ it("toggles correct answers with one click and saves the chosen answer", async (
   await user.click(screen.getByRole("button", { name: "Өңдеу" }));
   await user.click(screen.getByRole("button", { name: "B Two" }));
   expect(screen.getByRole("button", { name: "B Two" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByLabelText("B жауап нұсқасы")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "A One" }));
   expect(screen.getByRole("button", { name: "A One" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.queryByLabelText("B жауап нұсқасы")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "B Two" }));
+  expect(screen.getByRole("button", { name: "B Two" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText(/Тек бір дұрыс жауап таңдаңыз/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сақтау" }));
   expect(save).toHaveBeenCalledWith(expect.objectContaining({ answer: "B" }));
 });
@@ -47,7 +50,7 @@ it.each(["A One", "B Two"])("opens %s on a double click without changing the sav
 it("allows clearing the final correct answer but requires a correct answer before saving", async () => {
   const user = userEvent.setup();
   const save = jest.fn();
-  render(<VisualTaskEditor tasks={[task]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
+  render(<VisualTaskEditor tasks={[sixOptionTask]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
   await user.click(screen.getByRole("button", { name: "Өңдеу" }));
   await user.click(screen.getByRole("button", { name: "A One" }));
   expect(screen.getByRole("button", { name: "A One" })).toHaveAttribute("aria-pressed", "false");
@@ -59,7 +62,7 @@ it("allows clearing the final correct answer but requires a correct answer befor
 it("keeps the three-answer limit and can edit another option at the limit", async () => {
   const user = userEvent.setup();
   const save = jest.fn().mockResolvedValue(undefined);
-  render(<VisualTaskEditor tasks={[{ ...task, answer: '["A","B","C"]' }]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
+  render(<VisualTaskEditor tasks={[{ ...sixOptionTask, answer: '["A","B","C"]' }]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
   await user.click(screen.getByRole("button", { name: "Өңдеу" }));
   await user.click(screen.getByRole("button", { name: "D Four" }));
   expect(screen.getByRole("button", { name: "D Four" })).toHaveAttribute("aria-pressed", "false");
@@ -88,7 +91,34 @@ it("supports keyboard selection and F2 editing, and ignores clicks outside edit 
   await user.keyboard("{F2}");
   await user.type(screen.getByRole("textbox", { name: "B жауап нұсқасы" }), " edited");
   await user.click(screen.getByRole("button", { name: "Сақтау" }));
-  expect(save).toHaveBeenCalledWith(expect.objectContaining({ answer: '["A","B"]' }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ answer: "B" }));
+});
+
+it("requires the author to resolve an old four-option multi-answer task", async () => {
+  const user = userEvent.setup();
+  const save = jest.fn().mockResolvedValue(undefined);
+  render(<VisualTaskEditor tasks={[{ ...task, answer: '["A","B"]' }]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
+  await user.click(screen.getByRole("button", { name: "Өңдеу" }));
+  await user.dblClick(screen.getByRole("button", { name: "C Three" }));
+  await user.type(screen.getByRole("textbox", { name: "C жауап нұсқасы" }), " edited");
+  await user.click(screen.getByRole("button", { name: "Сақтау" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("тек бір дұрыс жауап");
+  expect(save).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "B Two" }));
+  await user.click(screen.getByRole("button", { name: "Сақтау" }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ answer: "B" }));
+});
+
+it("keeps only one selected answer when switching from six to four options", async () => {
+  const user = userEvent.setup();
+  const save = jest.fn().mockResolvedValue(undefined);
+  render(<VisualTaskEditor tasks={[{ ...sixOptionTask, answer: '["A","C","F"]' }]} onSave={save} onAdd={jest.fn()} onDelete={jest.fn()} context="mini-lesson" email="editor@example.com" />);
+  await user.click(screen.getByRole("button", { name: "Өңдеу" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "Сұрақ түрі" }), "mcq");
+  expect(screen.getByRole("button", { name: "A One" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "C Three" })).toHaveAttribute("aria-pressed", "false");
+  await user.click(screen.getByRole("button", { name: "Сақтау" }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ question_type: "mcq", answer: "A" }));
 });
 
 it("creates six fields only after choosing six answers", async () => {

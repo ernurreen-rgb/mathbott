@@ -96,13 +96,15 @@ def _normalize_import_mcq_answer(
     labels = parse_mcq_answer_labels(raw_answer)
     if not labels:
         raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6")
+    allowed = _get_allowed_mcq_answer_labels(options)
+    if len(allowed) == 4 and len(labels) != 1:
+        raise ImportTaskValidationError("answer", "Four-option questions require exactly one correct answer")
     if len(labels) > MAX_MCQ_CORRECT_OPTIONS:
         raise ImportTaskValidationError(
             "answer",
             f"{question_type} answer can contain at most {MAX_MCQ_CORRECT_OPTIONS} correct options",
         )
 
-    allowed = _get_allowed_mcq_answer_labels(options)
     invalid = [label for label in labels if label not in allowed]
     if invalid:
         raise ImportTaskValidationError(

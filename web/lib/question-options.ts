@@ -11,6 +11,10 @@ export function getMcqEditorLabels(questionType?: string | null): McqOptionLabel
   return MCQ_OPTION_LABELS.slice(0, questionType === "mcq6" ? 6 : 4);
 }
 
+export function getMcqCorrectOptionLimit(questionType?: string | null, optionCount?: number): number {
+  return (optionCount ?? getMcqEditorLabels(questionType).length) === 4 ? 1 : MAX_MCQ_CORRECT_OPTIONS;
+}
+
 export function getMcqEditorQuestionType<T extends string>(questionType: T, options?: readonly unknown[] | null): T | "mcq" | "mcq6" {
   if (questionType !== "mcq" && questionType !== "mcq6") return questionType;
   if (options?.length === 6) return "mcq6";

@@ -52,12 +52,12 @@ it("sends a new section to the selected module and refreshes that module", async
   } finally { global.fetch = originalFetch; }
 });
 
-it("preserves multiple MCQ selections for the active preview slot", () => {
-  const placement = { question_type: "mcq", options: [{ label: "A", text: "One" }, { label: "B", text: "Two" }] } as BankPlacementTask;
+it.each([4, 6])("selects the allowed number of answers for a %s-option preview slot", (count) => {
+  const placement = { question_type: "mcq", options: "ABCDEF".slice(0, count).split("").map((label) => ({ label, text: label === "B" ? "Two" : "Option" })) } as BankPlacementTask;
   const onAnswer = jest.fn();
   render(<CurrentSlotControls currentPlacement={placement} currentSlotIndex={3} previewAnswers={{ 3: "A" }} setPreviewAnswer={onAnswer} />);
   fireEvent.click(screen.getByRole("button", { name: /B Two/ }));
-  expect(onAnswer).toHaveBeenCalledWith(3, '["A","B"]');
+  expect(onAnswer).toHaveBeenCalledWith(3, count === 4 ? "B" : '["A","B"]');
 });
 
 it("limits MCQ slots to four or six labels and preserves matching subquestions", () => {

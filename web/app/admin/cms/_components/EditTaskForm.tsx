@@ -5,7 +5,7 @@ import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   MCQ_OPTION_LABELS,
   getMcqEditorLabels,
   parseMcqAnswerLabels,
@@ -114,7 +114,7 @@ export default function EditTaskForm({
             aria-label="Тапсырма түрі"
             onChange={(e) => {
               const questionType = e.target.value as any;
-              setEditTaskForm({ ...editTaskForm, question_type: questionType, correctOptions: editTaskForm.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)) });
+              setEditTaskForm({ ...editTaskForm, question_type: questionType, correctOptions: editTaskForm.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType)) });
               setEditTaskAnswerMode(getTaskAnswerMode({ question_type: questionType }));
             }}
             className="p-2 rounded border text-sm"
@@ -174,7 +174,7 @@ export default function EditTaskForm({
                             toggleMcqAnswerLabel(
                               serializeMcqAnswerLabels(prev.correctOptions),
                               label,
-                              MAX_MCQ_CORRECT_OPTIONS
+                              getMcqCorrectOptionLimit(prev.question_type)
                             )
                           ),
                         };

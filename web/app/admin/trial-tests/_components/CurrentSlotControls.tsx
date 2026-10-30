@@ -1,7 +1,7 @@
 "use client";
 import MathRender from "@/components/ui/MathRender";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   McqOptionLabel,
   parseMcqAnswerLabels,
   toggleMcqAnswerLabel
@@ -115,7 +115,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
               onClick={() =>
                 setPreviewAnswer(
                   currentSlotIndex,
-                  toggleMcqAnswerLabel(value, label as McqOptionLabel, MAX_MCQ_CORRECT_OPTIONS)
+                  toggleMcqAnswerLabel(value, label as McqOptionLabel, getMcqCorrectOptionLimit(questionType, options.length))
                 )
               }
               className={`text-left border rounded-lg p-3 transition-colors ${isSelected

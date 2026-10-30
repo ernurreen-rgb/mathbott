@@ -6,9 +6,17 @@ import {
   toggleMcqAnswerLabel,
   getMcqEditorLabels,
   getMcqEditorQuestionType,
+  getMcqCorrectOptionLimit,
 } from "../question-options";
 
 describe("question-options", () => {
+  it("allows one correct answer for four options and up to three for six options", () => {
+    expect(getMcqCorrectOptionLimit("mcq")).toBe(1);
+    expect(getMcqCorrectOptionLimit("mcq6")).toBe(3);
+    expect(getMcqCorrectOptionLimit("mcq6", 4)).toBe(1);
+    expect(toggleMcqAnswerLabel("A", "B", getMcqCorrectOptionLimit("mcq"))).toBe("B");
+    expect(toggleMcqAnswerLabel("B", "B", getMcqCorrectOptionLimit("mcq"))).toBe("B");
+  });
   it("offers exactly four or six editor labels while preserving old answer parsing", () => {
     expect(getMcqEditorLabels("mcq")).toEqual(["A", "B", "C", "D"]);
     expect(getMcqEditorLabels("mcq6")).toEqual(["A", "B", "C", "D", "E", "F"]);

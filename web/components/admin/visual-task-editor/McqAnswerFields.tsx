@@ -5,7 +5,7 @@ import { useId, useRef } from "react";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   McqOptionLabel,
   getMcqEditorLabels,
   isMcqQuestionType,
@@ -26,6 +26,7 @@ type Props = {
 export default function McqAnswerFields({ qt, isEditing, taskData, editingField, updateTempTask, setEditingField }: Props) {
   const instructionsId = useId();
   const firstClick = useRef<{ label: string; answer: string } | null>(null);
+  const correctLimit = getMcqCorrectOptionLimit(qt);
 
   return (
     <>
@@ -33,7 +34,7 @@ export default function McqAnswerFields({ qt, isEditing, taskData, editingField,
         <div className="grid grid-cols-1 gap-2">
           {isEditing && <p id={instructionsId} className="mb-1 text-xs text-gray-500">
             Дұрыс жауапты бір рет басып белгілеңіз. Мәтінін өңдеу үшін екі рет басыңыз (F2).
-            {" "}1–{MAX_MCQ_CORRECT_OPTIONS} дұрыс жауап таңдауға болады.
+            {" "}{correctLimit === 1 ? "Тек бір дұрыс жауап таңдаңыз." : `1–${correctLimit} дұрыс жауап таңдауға болады.`}
           </p>}
           {(isEditing
             ? getMcqEditorLabels(qt)
@@ -47,7 +48,7 @@ export default function McqAnswerFields({ qt, isEditing, taskData, editingField,
             const toggleCorrectAnswer = () => {
               const current = String(taskData.answer || "");
               updateTempTask({
-                answer: toggleMcqAnswerLabel(current, label as McqOptionLabel, MAX_MCQ_CORRECT_OPTIONS),
+                answer: toggleMcqAnswerLabel(current, label as McqOptionLabel, correctLimit),
               });
             };
 

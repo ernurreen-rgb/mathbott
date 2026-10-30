@@ -10,7 +10,7 @@ import { apiPath, updateAdminReportTask } from "@/lib/api";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   MCQ_OPTION_LABELS,
   getMcqEditorLabels,
   McqOptionLabel,
@@ -579,7 +579,7 @@ function ReportsPageContent() {
                   </label>
                   <select
                     value={taskForm.question_type}
-                    onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any, correctOptions: taskForm.correctOptions.filter((label) => getMcqEditorLabels(e.target.value).includes(label)) })}
+                    onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any, correctOptions: taskForm.correctOptions.filter((label) => getMcqEditorLabels(e.target.value).includes(label)).slice(0, getMcqCorrectOptionLimit(e.target.value)) })}
                     className="border border-gray-300 rounded-md px-3 py-2 text-sm"
                   >
                     <option value="input">Мәтін енгізу</option>
@@ -672,7 +672,7 @@ function ReportsPageContent() {
                                       toggleMcqAnswerLabel(
                                         serializeMcqAnswerLabels(prev.correctOptions),
                                         label,
-                                        MAX_MCQ_CORRECT_OPTIONS
+                                        getMcqCorrectOptionLimit(prev.question_type)
                                       )
                                     ),
                                   };

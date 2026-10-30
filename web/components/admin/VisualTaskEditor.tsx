@@ -14,7 +14,7 @@ import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
+import { getMcqCorrectOptionLimit, getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
 import { createCroppedImageFile } from "@/lib/imageCrop";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { LessonTask, QuestionType } from "@/types";
@@ -221,6 +221,9 @@ export default function VisualTaskEditor({
       const labels = getMcqEditorLabels(taskToSave.question_type);
       taskToSave.options = labels.map((label) => ({ label, text: taskToSave.options?.find((option) => option.label === label)?.text || "" }));
       taskToSave.answer = serializeMcqAnswerLabels(parseMcqAnswerLabels(taskToSave.answer).filter((label) => labels.includes(label)));
+      if (labels.length === 4 && parseMcqAnswerLabels(taskToSave.answer).length !== 1) {
+        setValidationError("4 жауапты есепте тек бір дұрыс жауап болуы керек."); return;
+      }
       if (taskToSave.options.some((option) => !option.text.trim()) || !taskToSave.answer) {
         setValidationError("Барлық жауап нұсқаларын толтырып, дұрыс жауапты белгілеңіз."); return;
       }
@@ -769,7 +772,7 @@ export default function VisualTaskEditor({
                 question_type: questionType,
                 ...(isMcqQuestionType(questionType) ? {
                   options: getMcqEditorLabels(questionType).map((label) => ({ label, text: tempTaskData.options?.find((option) => option.label === label)?.text || "" })),
-                  answer: serializeMcqAnswerLabels(parseMcqAnswerLabels(tempTaskData.answer).filter((label) => getMcqEditorLabels(questionType).includes(label))),
+                  answer: serializeMcqAnswerLabels(parseMcqAnswerLabels(tempTaskData.answer).filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType))),
                 } : {}),
                 answer_mode: getTaskAnswerMode({ question_type: questionType }),
               });

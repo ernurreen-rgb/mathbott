@@ -6,7 +6,7 @@ import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import { getTaskAnswerMode, supportsAnswerModeSwitch } from "@/lib/answer-mode";
 import {
-  MAX_MCQ_CORRECT_OPTIONS,
+  getMcqCorrectOptionLimit,
   MCQ_OPTION_LABELS,
   getMcqEditorLabels,
   isMcqQuestionType,
@@ -52,7 +52,7 @@ export default function InlineTaskDialog({
                 <select aria-label="Сұрақ түрі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.question_type} onChange={(e) => {
                   const questionType = e.target.value as QuestionType;
                   setSlotForm((p) => ({ ...p, question_type: questionType,
-                      correctOptions: p.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)), answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
+                      correctOptions: p.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType)), answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
                 }}>
                   <option value="mcq">Көп таңдаулы (4 жауап)</option><option value="mcq6">Көп таңдаулы (6 жауап)</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
                 </select>
@@ -123,7 +123,7 @@ export default function InlineTaskDialog({
                                   toggleMcqAnswerLabel(
                                     serializeMcqAnswerLabels(prev.correctOptions),
                                     label,
-                                    MAX_MCQ_CORRECT_OPTIONS
+                                    getMcqCorrectOptionLimit(prev.question_type)
                                   )
                                 ),
                               };
@@ -137,7 +137,7 @@ export default function InlineTaskDialog({
                       );
                     })}
                   </div>
-                  <div className="text-xs text-gray-500">1-ден 3-ке дейін дұрыс жауап таңдауға болады.</div>
+                  <div className="text-xs text-gray-500">{getMcqCorrectOptionLimit(slotForm.question_type) === 1 ? "Тек бір дұрыс жауап таңдаңыз." : "1-ден 3-ке дейін дұрыс жауап таңдауға болады."}</div>
                 </div>
               )}
               {slotForm.question_type === "select" && (
