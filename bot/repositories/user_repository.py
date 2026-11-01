@@ -4,7 +4,7 @@ User repository for user-related database operations
 import storage as db_driver
 import json
 import logging
-import time
+import secrets
 from typing import Optional, Dict, Any, List
 from .base import BaseRepository
 
@@ -18,6 +18,12 @@ ALLOWED_ADMIN_ROLES = {
     ADMIN_ROLE_REVIEWER,
     ADMIN_ROLE_SUPER_ADMIN,
 }
+_WEB_USER_ID_ATTEMPTS = 5
+
+
+def _new_web_telegram_id() -> int:
+    """Keep synthetic IDs in the existing negative 32-bit namespace."""
+    return -(secrets.randbelow(2**31 - 1) + 1)
 
 
 class AdminRoleConflictError(Exception):
@@ -65,8 +71,8 @@ class UserRepository(BaseRepository):
                 return dict(row) if row else None
 
     async def create_user_by_email(self, email: str, check_admin_email: Optional[str] = None) -> Dict[str, Any]:
-        """Create new user by email (for web users without telegram_id)"""
-        async with self._connection() as db:
+        """Atomically get or create a web user without overwriting existing state."""
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             # Check if user already exists
             async with db.execute(
@@ -76,16 +82,6 @@ class UserRepository(BaseRepository):
                 if existing:
                     return dict(existing)
             
-            # Generate a unique negative telegram_id from email hash
-            email_hash = hash(email)
-            dummy_telegram_id = -(abs(email_hash) % (2**31 - 1))
-            
-            # Check if this ID already exists
-            async with db.execute("SELECT * FROM users WHERE telegram_id = ?", (dummy_telegram_id,)) as cursor:
-                existing_id = await cursor.fetchone()
-                if existing_id:
-                    dummy_telegram_id = -(abs(email_hash + int(time.time())) % (2**31 - 1))
-            
             # Check if this email should be admin
             is_admin = False
             admin_role = None
@@ -93,23 +89,33 @@ class UserRepository(BaseRepository):
                 is_admin = True
                 admin_role = ADMIN_ROLE_SUPER_ADMIN
             
-            await db.execute(
-                """INSERT INTO users (telegram_id, email, is_admin, admin_role)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    dummy_telegram_id,
-                    email,
-                    1 if is_admin else 0,
-                    admin_role,
-                )
-            )
-            await db.commit()
+            for _ in range(_WEB_USER_ID_ATTEMPTS):
+                dummy_telegram_id = _new_web_telegram_id()
+                try:
+                    await db.execute(
+                        """INSERT INTO users (telegram_id, email, is_admin, admin_role)
+                           VALUES (?, ?, ?, ?) ON CONFLICT(email) DO NOTHING""",
+                        (dummy_telegram_id, email, 1 if is_admin else 0, admin_role),
+                    )
+                except db_driver.IntegrityError:
+                    # An independent writer may have created the email, or the
+                    # synthetic ID may already belong to a different user.
+                    async with db.execute("SELECT * FROM users WHERE email = ?", (email,)) as cursor:
+                        existing = await cursor.fetchone()
+                    if existing:
+                        return dict(existing)
+                    async with db.execute("SELECT id FROM users WHERE telegram_id = ?", (dummy_telegram_id,)) as cursor:
+                        collision = await cursor.fetchone()
+                    if not collision:
+                        raise
+                    continue
 
-            async with db.execute(
-                "SELECT * FROM users WHERE email = ?", (email,)
-            ) as cursor:
-                row = await cursor.fetchone()
+                async with db.execute("SELECT * FROM users WHERE email = ?", (email,)) as cursor:
+                    row = await cursor.fetchone()
+                if row is None:
+                    raise RuntimeError("User creation did not return a user")
                 return dict(row)
+            raise RuntimeError("Unable to allocate a unique web user ID")
 
     async def update_user_nickname(self, email: str, nickname: str):
         """Update user nickname"""

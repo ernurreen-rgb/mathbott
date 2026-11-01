@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **8/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **9/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -14,8 +14,8 @@
 | A06 | P2 | Student options шешім metadata-сын ашады | Түзетілді, тексерілді |
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Түзетілді, тексерілді |
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Түзетілді, тексерілді |
-| A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Келесі |
-| A10 | P2 | Guest PIN lookup/join шектелмеген | Ашық |
+| A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Түзетілді, тексерілді |
+| A10 | P2 | Guest PIN lookup/join шектелмеген | Келесі |
 | A11 | P2 | Metrics raw path кілттері шексіз өседі | Ашық |
 | A12 | P2 | Frontend dependency security gate өтпейді | Ашық |
 | A13 | P3 | Rollback text_scale қалпына келтірмейді | Ашық |
@@ -138,3 +138,19 @@ Answer bank мазмұны, snapshot-тағы бастапқы correct answer ж
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A08/lint.log).
 
 Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL/browser E2E/deployment бұл қадамда іске қосылған жоқ. `repros/runtime.py` constant-equivalence тексерісі бастапқы ақауды күтеді; ағымдағы source үшін жаңа regression suite пайдаланылады.
+
+## A09
+
+[create_user_by_email](/E:/CursorMathbot/bot/repositories/user_repository.py:73) енді owned write transaction ішінде орындалады. SQLite writer reservation және PostgreSQL adapter advisory lock қолданбаның қатар creation әрекеттерін реттейді. INSERT `ON CONFLICT(email) DO NOTHING` қолданады; бұрыннан бар email табылса, сол user-дің жолы қайта оқылады. Profile, role, progress, primary ID және бұрынғы telegram ID қайта жазылмайды. Admin bootstrap matching new email үшін ғана орындалады; existing user-ді get-or-create арқылы promotion/demotion жасау енгізілген жоқ.
+
+Жаңа [synthetic telegram ID](/E:/CursorMathbot/bot/repositories/user_repository.py:24) бұрынғы negative 32-bit namespace ішінде random түрде бөлінеді және нөл болмайды. Unique ID басқа user-ге тиесілі болса, email бойынша дұрыс user пайда болғаны тексеріліп, кейін жаңа ID бес ретке дейін сыналады. Қақтығысқан басқа user ешқашан қайтарылмайды. Synthetic ID қақтығысы табылмаса, integrity error қайта көтеріледі. Retry аяқталса, transaction rollback жасалып, connection босатылады; schema немесе existing ID migration жоқ.
+
+[36 жаңа regression case](/E:/CursorMathbot/bot/tests/test_user_creation_concurrency.py) pool-сыз және capacity 1/2 нұсқаларында қатар repository/production-signed HTTP сұрауларын тексереді. Бір email-ге 16 сұрау бір user-ді қайтарады; 16 бөлек email жеке user болып қалады. ID collisions, бес retry шегі, unrelated constraint failure, connection reuse, existing positive telegram ID/profile/role сақтау және new admin bootstrap қамтылған. HTTP сұраулары proxy-дегі replay қорғанысын шынайы модельдеу үшін әрқайсысына бөлек UUID nonce қолданады.
+
+Бастапқы regression pool-сыз және pool 2 жағдайында `UNIQUE constraint failed: users.email` қатесін көрсетті; pool 1 сұрауларды connection арқылы кезекке қойғандықтан бастапқыда да өтетін.
+
+- Жаңа regression suite: **36 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A09/targeted-tests.log).
+- Толық backend suite: **568 passed, 5 skipped**, 99,78 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A09/backend-tests.log). Өткізілген бес test нақты PostgreSQL instance талап етеді.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A09/lint.log).
+
+Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL/browser OAuth/E2E/deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `concurrent_user_creation` бастапқы race-ті күтетін тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады.
