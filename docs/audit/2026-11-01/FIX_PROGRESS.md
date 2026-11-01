@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **10/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **11/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -16,8 +16,8 @@
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Түзетілді, тексерілді |
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Түзетілді, тексерілді |
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Түзетілді, тексерілді |
-| A11 | P2 | Metrics raw path кілттері шексіз өседі | Келесі |
-| A12 | P2 | Frontend dependency security gate өтпейді | Ашық |
+| A11 | P2 | Metrics raw path кілттері шексіз өседі | Түзетілді, тексерілді |
+| A12 | P2 | Frontend dependency security gate өтпейді | Келесі |
 | A13 | P3 | Rollback text_scale қалпына келтірмейді | Ашық |
 
 ## A01
@@ -186,3 +186,17 @@ DB quota бөлігі мен migration-дарды қосымша агент ор
 Алғашқы full backend run кезінде host ұзақ үзіліп, бір request қолтаңбасы 8 сағаттан кейін тексеріліп TTL қатесін қайтарды. TTL/auth шарттары әлсіретілген жоқ; сол үш параметрлік case бөлек қайта өтті, кейін full suite жоғарыдағы нәтижемен толық өтті.
 
 **Deployment алдында schema migration қажет:** SQLite Alembic `0013_quiz_entry_limits`, PostgreSQL `0006_quiz_entry_limits.sql`. Hosted ортада `bot/` ішінен configured migration URL-мен `python scripts/migrate_to_neon.py --schema-only` орындау керек; кейін API, содан кейін web deploy жасалады. [Толық release нұсқаулығы](/E:/CursorMathbot/deploy/NEON_VERCEL.md). Production DB migration/deployment бұл қадамда орындалған жоқ. Нақты PostgreSQL integration-дің бес opt-in тесті өткізілді; browser OAuth/E2E іске қосылған жоқ.
+
+## A11
+
+[MetricsMiddleware](/E:/CursorMathbot/bot/middleware/metrics_middleware.py) енді routing аяқталғаннан кейін route template-ті оқиды: мысалы, нақты email орнына `GET /users/{email}` сақталады. Сәйкес маршрут табылмаған барлық URL `<unmatched>` тобына, стандартты емес HTTP method-тар `OTHER` тобына біріктіріледі. Raw path, query string және Host метрика кілті ретінде қолданылмайды. Matched 404/422 және handler exception үшін route template сақталады; exception қайта көтеріледі. Request cancellation метрика қатесімен алмастырылмайды және аяқталған сұрау ретінде есептелмейді.
+
+[MetricsCollector](/E:/CursorMathbot/bot/utils/metrics.py) қосымша hard budgets қолданады: default бойынша endpoint counters үшін 512, error counters үшін 2048 кілт, әр input label үшін 256 таңба. Шектер overflow үшін ортақ `<other>` кілтін де қамтиды; ұзын label сақталмайды. Бұрын жиналған counter-лер өшірілмейді: шектен асқан жаңа белгілер біріктіріліп, сұраулар мен қателердің жиынтық саны сақталады. Label ring buffer-ге кірмей тұрып нормализацияланады. Events бұрынғыдай соңғы 10 000 сұраумен шектелген; rolling latency және 5xx error-rate есебі өзгерген жоқ. Metrics process-local болып қалады.
+
+[15 жаңа regression case](/E:/CursorMathbot/bot/tests/test_metrics_cardinality.py) dynamic email/query privacy, жүздеген unknown path/method, matched 404/422/500, timing header, malformed Host, cancellation, 20 000 бөлек label/status кезіндегі hard caps пен totals, oversized label, reset және invalid budget-ті қамтиды. Негізгі route-template regression түзетуден бұрын email-дер жеке кілт ретінде сақталғанын көрсетіп құлады.
+
+- Жаңа regression және бұрынғы metrics/middleware/ops suite: **41 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A11/targeted-tests.log).
+- Толық backend suite: **625 passed, 5 skipped**, 165,31 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A11/backend-tests.log). Өткізілген бес test нақты PostgreSQL instance талап етеді.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A11/lint.log).
+
+Schema/migration және frontend source өзгерісі жоқ. `repros/runtime.py` ішіндегі 20 000 unbounded key күтуі бастапқы ақауды сипаттайтын тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады. Deployment бұл қадамда орындалған жоқ.
