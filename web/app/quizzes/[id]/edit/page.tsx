@@ -33,6 +33,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
   const [loading, setLoading] = useState(true);
   const [forking, setForking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (routeParams?.id) {
@@ -64,9 +65,11 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
 
         if (quizRes.error || !quizRes.data) {
           setError(quizRes.error || "Квиз табылмады");
+        } else if (questionsRes.error || !Array.isArray(questionsRes.data)) {
+          setError(questionsRes.error || "Квиз сұрақтарын жүктеу мүмкін болмады");
         } else {
           setQuiz(quizRes.data);
-          setQuestions(questionsRes.data || []);
+          setQuestions(questionsRes.data);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -84,7 +87,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
     return () => {
       isMounted = false;
     };
-  }, [quizId, session?.user?.email]);
+  }, [quizId, session?.user?.email, loadAttempt]);
 
   const handleForkAndEdit = async () => {
     if (!quizId) return;
@@ -126,14 +129,22 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
         <DesktopNav currentPage="quizzes" />
         <MobileNav currentPage="quizzes" />
         <div className="text-center p-8 bg-white rounded-3xl shadow-md border border-gray-100 max-w-sm">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Квиз табылмады</h2>
-          <p className="text-sm text-gray-500 mb-4">{error || "Сілтеме қате болуы мүмкін."}</p>
-          <Link
-            href="/quizzes"
-            className="inline-block px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm"
-          >
-            Барлық квиздерге оралу
-          </Link>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Квизді жүктеу мүмкін болмады</h2>
+          <p role="alert" className="text-sm text-gray-500 mb-4">{error || "Сілтеме қате болуы мүмкін."}</p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+              className="px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm"
+            >
+              Қайта жүктеу
+            </button>
+            <Link
+              href="/quizzes"
+              className="inline-block px-5 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm"
+            >
+              Барлық квиздерге оралу
+            </Link>
+          </div>
         </div>
       </div>
     );

@@ -61,8 +61,110 @@ jest.mock("react-hot-toast", () => ({
 describe("EditQuizPage", () => {
   beforeEach(() => { localStorage.clear(); });
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockParams = { id: "42" };
+  });
+
+  it.each([
+    {
+      name: "the questions request fails",
+      result: { data: null, error: "Question API unavailable" },
+      message: "Question API unavailable",
+    },
+    {
+      name: "the questions payload is missing",
+      result: { data: null, error: null },
+      message: "Квиз сұрақтарын жүктеу мүмкін болмады",
+    },
+    {
+      name: "the questions payload is not an array",
+      result: { data: {}, error: null },
+      message: "Квиз сұрақтарын жүктеу мүмкін болмады",
+    },
+  ])("prevents editing when $name", async ({ result, message }) => {
+    (getQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 42, title: "Бастапқы квиз", is_public: true, can_manage: true },
+      error: null,
+    });
+    (getQuizQuestions as jest.Mock).mockResolvedValue(result);
+
+    await act(async () => {
+      render(<EditQuizPage params={Promise.resolve(mockParams)} />);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByRole("button", { name: /Өзгерістерді сақтау/ })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Бастапқы квиз")).not.toBeInTheDocument();
+    expect(updateQuiz).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed load and preserves every loaded question when saving", async () => {
+    (getQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 42, title: "Бастапқы квиз", is_public: true, can_manage: true },
+      error: null,
+    });
+    let resolveQuestions!: (result: unknown) => void;
+    const retryQuestions = new Promise((resolve) => { resolveQuestions = resolve; });
+    (getQuizQuestions as jest.Mock)
+      .mockResolvedValueOnce({ data: null, error: "Question API unavailable" })
+      .mockReturnValueOnce(retryQuestions);
+    (updateQuiz as jest.Mock).mockResolvedValue({ data: { id: 42 }, error: null });
+
+    await act(async () => {
+      render(<EditQuizPage params={Promise.resolve(mockParams)} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Қайта жүктеу" }));
+    });
+
+    expect(getQuiz).toHaveBeenCalledTimes(2);
+    expect(getQuizQuestions).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Квиз деректері жүктелуде...")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Өзгерістерді сақтау/ })).not.toBeInTheDocument();
+    expect(updateQuiz).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveQuestions({
+        data: [
+          { id: 101, quiz_id: 42, question_text: "2+2=?", question_type: "input", correct_answer: "4" },
+          { id: 102, quiz_id: 42, question_text: "3+3=?", question_type: "input", correct_answer: "6" },
+        ],
+        error: null,
+      });
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("2+2=?")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Өзгерістерді сақтау/ }));
+    });
+
+    expect(updateQuiz).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({ question_text: "2+2=?", correct_answer: "4" }),
+          expect.objectContaining({ question_text: "3+3=?", correct_answer: "6" }),
+        ],
+      }),
+      "author@example.com"
+    );
+  });
+
+  it("opens an existing quiz whose questions were successfully loaded as an empty list", async () => {
+    (getQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 42, title: "Бос квиз", is_public: true, can_manage: true },
+      error: null,
+    });
+    (getQuizQuestions as jest.Mock).mockResolvedValue({ data: [], error: null });
+
+    await act(async () => {
+      render(<EditQuizPage params={Promise.resolve(mockParams)} />);
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Бос квиз")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Өзгерістерді сақтау/ })).toBeInTheDocument();
   });
 
   it("loads existing quiz and questions, and saves updates atomically", async () => {
