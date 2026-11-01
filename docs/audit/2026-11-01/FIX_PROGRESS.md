@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **9/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **10/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -15,8 +15,8 @@
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Түзетілді, тексерілді |
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Түзетілді, тексерілді |
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Түзетілді, тексерілді |
-| A10 | P2 | Guest PIN lookup/join шектелмеген | Келесі |
-| A11 | P2 | Metrics raw path кілттері шексіз өседі | Ашық |
+| A10 | P2 | Guest PIN lookup/join шектелмеген | Түзетілді, тексерілді |
+| A11 | P2 | Metrics raw path кілттері шексіз өседі | Келесі |
 | A12 | P2 | Frontend dependency security gate өтпейді | Ашық |
 | A13 | P3 | Rollback text_scale қалпына келтірмейді | Ашық |
 
@@ -154,3 +154,35 @@ Answer bank мазмұны, snapshot-тағы бастапқы correct answer ж
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A09/lint.log).
 
 Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL/browser OAuth/E2E/deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `concurrent_user_creation` бастапқы race-ті күтетін тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады.
+
+## A10
+
+[DB-backed quota](/E:/CursorMathbot/bot/repositories/quiz_entry_limits.py) бір network key үшін бір row сақтайды және барлық API worker/instance үшін ортақ. Әр aligned 60-second window ішінде default шектер:
+
+| Backend setting | Default | Не есептеледі |
+| --- | --- | --- |
+| QUIZ_ENTRY_REQUESTS_PER_MINUTE | 1200 | PIN lookup және join сұраулары бірге |
+| QUIZ_ENTRY_DISTINCT_PINS_PER_MINUTE | 30 | Сол желі тексерген бөлек PIN-дер, жоқ PIN-дер де |
+| QUIZ_ENTRY_NEW_PARTICIPANTS_PER_MINUTE | 300 | Жаңа participant INSERT-тері; owned resume есептелмейді |
+| QUIZ_MAX_PARTICIPANTS | 500 | Бір room-дағы participant саны, барлық желіге ортақ |
+
+PIN сұрауының есебі lookup/join қатесі қайтарылғанға дейін жеке transaction-да commit болады; сондықтан 404/409 оны rollback жасамайды. Denial 429 және `Retry-After` қайтарады. PIN тізімі bounded, counter saturation тұтынуды азайтпайды; worker limit-і төмендегенде де жұмсалған counter кемімейді. Clock rollback window-ды қайта ашпайды. Row inactivity expiry — бір сағат; indexed opportunistic және maintenance cleanup қосылды. Бұл application admission budgets, provider/ingress traffic filtering орнатылған жоқ.
+
+[join_session](/E:/CursorMathbot/bot/repositories/quiz_sessions.py) жаңа participant алдында server room cap пен new-slot quota-ны сол INSERT transaction ішінде тексереді. Қатар соңғы орынға таласқан сұраулар cap-тан асырмайды. Existing nickname token/account иелігі алдымен тексеріледі: room толса немесе new-slot quota бітсе де valid resume жұмыс істейді; nickname-ді білу жеткіліксіз. Client session settings server cap-ты көтермейді, бұрыннан бар over-capacity participant-тар жойылмайды.
+
+[Web proxy](/E:/CursorMathbot/web/lib/quiz-entry-identity.ts) ingress-owned IP-ден HMAC network key жасайды; IPv4-mapped IPv6 бір IPv4 key-ге, басқа IPv6 /64 желіге нормализацияланады. Quota table raw IP сақтамайды. Vercel-де platform-owned `x-vercel-forwarded-for` пайдаланылады ([ресми header contract](https://vercel.com/docs/headers/request-headers)); self-hosting үшін `TRUSTED_CLIENT_IP_HEADER` тек ingress өзі overwrite жасайтын header-ге қойылады және Next.js-ке direct access жабылуы тиіс. Generic browser XFF default-та сенімді деп саналмайды.
+
+Network claim MAC-і timestamp, nonce және request V2 signature-ге байланған; browser жіберген claim/MAC proxy-де алынып тасталады. Production entry valid proxy V2 provenance талап етеді, Google login guest үшін міндетті емес. Unsigned direct backend entry — 401; invalid/tampered MAC — 401. Encoded-slash catchall path backend-пен бірдей классификацияланады. Missing/invalid ingress identity және metadata-сы жоқ ескі signed V2 proxy бір shared, bounded fallback bucket қолданады; бұл rollout кезінде жұмыс істеуге мүмкіндік береді, бірақ network isolation төмендейді.
+
+DB quota бөлігі мен migration-дарды қосымша агент орындады; бөлек security review encoded-slash классификациясын тексерді. Root review counter limit төмендегендегі saturation regression-ын қосты. Соңғы **42 жаңа backend case** quota persistence/restart, bad probes, NAT fairness, concurrent cap, owned resume, signatures, fallback және cleanup-ты қамтиды; **19 жаңа frontend case** IP normalization, header provenance, MAC binding және encoded-slash path-ты қамтиды. 200 student бір желіден бір PIN-ге 400 lookup/join request жасап сәтті қосылатыны нақты HTTP fixture-мен тексерілді; бұл production load-capacity кепілдігі емес.
+
+- Толық backend suite: **610 passed, 5 skipped**, 121,91 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/backend-tests.log).
+- Толық frontend Jest: **61 suite, 387 test өтті**, 45,695 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/frontend-tests.log).
+- Нысаналы frontend proxy/identity: **40 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/targeted-frontend.log).
+- Production build: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/build.log).
+- TypeScript және frontend ESLint: **exit 0** — [typecheck](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/typecheck.log), [lint](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/frontend-lint.log).
+- CI backend flake8 `E9,F63,F7,F82`: **0 қате** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A10/backend-lint.log).
+
+Алғашқы full backend run кезінде host ұзақ үзіліп, бір request қолтаңбасы 8 сағаттан кейін тексеріліп TTL қатесін қайтарды. TTL/auth шарттары әлсіретілген жоқ; сол үш параметрлік case бөлек қайта өтті, кейін full suite жоғарыдағы нәтижемен толық өтті.
+
+**Deployment алдында schema migration қажет:** SQLite Alembic `0013_quiz_entry_limits`, PostgreSQL `0006_quiz_entry_limits.sql`. Hosted ортада `bot/` ішінен configured migration URL-мен `python scripts/migrate_to_neon.py --schema-only` орындау керек; кейін API, содан кейін web deploy жасалады. [Толық release нұсқаулығы](/E:/CursorMathbot/deploy/NEON_VERCEL.md). Production DB migration/deployment бұл қадамда орындалған жоқ. Нақты PostgreSQL integration-дің бес opt-in тесті өткізілді; browser OAuth/E2E іске қосылған жоқ.

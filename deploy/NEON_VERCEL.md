@@ -86,6 +86,58 @@ for schema changes; never rewrite an applied SQL file. The baseline generator
 in `scripts/generate_postgres_schema.py` is a development utility for the
 initial baseline, not a release migration command.
 
+## Quiz entry protection
+
+Apply the schema-only migration before deploying this API version:
+
+```powershell
+# From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.
+python scripts/migrate_to_neon.py --schema-only
+```
+
+This adds `quiz_entry_limits` through PostgreSQL `0006` / SQLite Alembic
+`0013`; it does not change existing quiz participants or scores. Conventional
+SQLite startup applies Alembic normally. Hosted runtimes with auto-migration
+disabled must migrate explicitly. Deploy the API after the schema, then the web app.
+
+The database shares fixed 60-second entry budgets across workers. Defaults are
+1200 lookup/join requests, 30 distinct PINs and 300 newly created participants
+per network per window, with a server room cap of 500 participants. Repeated
+lookups of the same PIN do not consume another distinct-PIN allowance. A valid
+token/account resume does not create another participant or consume a new-slot
+allowance. All entry requests still count toward the total request budget.
+
+The backend settings are `QUIZ_ENTRY_REQUESTS_PER_MINUTE`,
+`QUIZ_ENTRY_DISTINCT_PINS_PER_MINUTE`, `QUIZ_ENTRY_NEW_PARTICIPANTS_PER_MINUTE`
+and `QUIZ_MAX_PARTICIPANTS`. They accept positive bounded integers; use the
+same values on every instance. Client-provided session settings cannot raise
+the server room cap. Denials return 429 with `Retry-After`; a full room returns
+409. Existing over-capacity rooms are retained and their owned participants can
+resume; new participants cannot join until below the cap.
+
+The web proxy creates an HMAC network key and binds it to the signed request's
+timestamp, nonce and V2 signature. Vercel uses its owned
+`x-vercel-forwarded-for` header, following the
+[Vercel request-header contract](https://vercel.com/docs/headers/request-headers).
+IPv4-mapped IPv6 is normalized as IPv4; other IPv6 clients share a /64 budget.
+No raw IP address is stored in the quota table.
+
+For self-hosting, set web-server `TRUSTED_CLIENT_IP_HEADER=x-real-ip` only if
+the ingress overwrites that header and direct access to Next.js is prevented.
+The tracked nginx examples overwrite it from the connecting peer. For another
+ingress, configure an owned header first; arbitrary browser XFF is not trusted.
+Missing, malformed or unconfigured ingress identity uses one shared, bounded
+fallback bucket. An older signed V2 web proxy without the new network claim
+uses the same fallback, so API-first rollout remains possible. This fallback
+reduces network isolation; deploy/configure the web proxy promptly.
+
+Production lookup/join requires trusted proxy V2 provenance, while Google
+authentication remains optional for guests. Direct unsigned backend entry is
+rejected. Other guest capability endpoints retain their existing access rules.
+Quota rows expire after an hour of inactivity and are removed opportunistically
+and by maintenance. These application admission budgets do not configure
+provider/ingress traffic filtering.
+
 ## Images
 
 The bucket stays private. The API reads and validates image keys and serves
@@ -152,8 +204,9 @@ decrease from approximately 60,000 to 30,000 API requests. With the current
 Next.js proxy this corresponds to about 120,000 versus 60,000 Vercel function
 invocations. These are arithmetic estimates, not load-test results or a
 capacity guarantee. Joining, activating questions, answers, host updates,
-presence and retries are additional traffic. These changes require no schema
-migration; deploy the API before the frontend.
+presence and retries are additional traffic. The polling optimization itself
+requires no schema migration; the quiz-entry protection above requires its
+schema-only migration before the API deployment.
 
 ## Verification and deployment
 

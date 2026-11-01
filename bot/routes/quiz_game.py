@@ -3,7 +3,7 @@ import json
 import logging
 from uuid import uuid4
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Query, Body, WebSocket, WebSocketDisconnect, Depends, Request
+from fastapi import FastAPI, HTTPException, Query, Path, Body, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
@@ -11,6 +11,7 @@ from dependencies import get_db, require_internal_identity, optional_internal_id
 from database import Database
 from utils.quiz import QuizError, public_question, public_participant
 from utils.quiz_ws_auth import issue_quiz_ws_ticket, verify_quiz_ws_ticket, QUIZ_WS_TTL
+from utils.quiz_entry_auth import quiz_entry_client_key
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,17 @@ quiz_manager = QuizConnectionManager()
 def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.exception_handler(QuizError)
     async def handle_quiz_error(request: Request, exc: QuizError):
-        codes = {'unauthorized': 401, 'forbidden': 403, 'not_found': 404, 'conflict': 409, 'invalid': 400}
-        return JSONResponse({'detail': str(exc)}, status_code=codes.get(exc.kind, 400))
+        codes = {'unauthorized': 401, 'forbidden': 403, 'not_found': 404, 'conflict': 409, 'invalid': 400, 'rate_limited': 429}
+        headers = ({'Retry-After': str(exc.retry_after or 60), 'Cache-Control': 'private, no-store'}
+                   if exc.kind == 'rate_limited' else None)
+        return JSONResponse({'detail': str(exc)}, status_code=codes.get(exc.kind, 400), headers=headers)
+
+    async def entry_client(request, pin_code, db):
+        key = quiz_entry_client_key(request)
+        retry_after = await db.quizzes.consume_entry_request(key, pin_code)
+        if retry_after:
+            raise QuizError('rate_limited', 'Квизге кіру сұраулары тым жиі. Кейінірек қайталаңыз.', retry_after=retry_after)
+        return key
 
     def token(request: Request):
         return request.headers.get('X-Quiz-Participant-Token', '')
@@ -106,21 +116,24 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.create_session(payload.quiz_id, current_user['id'], payload.settings)
 
     @app.get('/api/quiz-sessions/pin/{pin_code}')
-    async def lookup_session(pin_code: str, db: Database = Depends(get_db)):
+    async def lookup_session(request: Request, pin_code: str = Path(..., pattern=r"^[0-9]{6}$"), db: Database = Depends(get_db)):
+        await entry_client(request, pin_code, db)
         session = await db.quizzes.get_session_by_pin(pin_code)
         if not session:
             raise HTTPException(404, 'Session not found')
         return {k: session[k] for k in ('id', 'pin_code', 'quiz_title', 'status')}
 
     @app.post('/api/quiz-sessions/join')
-    async def join_game_session(payload: JoinSessionRequest,
+    async def join_game_session(payload: JoinSessionRequest, request: Request,
                                 user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
+        client_key = await entry_client(request, payload.pin_code, db)
         session = await db.quizzes.get_session_by_pin(payload.pin_code)
         if not session:
             raise HTTPException(404, 'Invalid PIN or finished game')
         user_id = user['id'] if user else None
         joined = await db.quizzes.join_session(session['id'], payload.nickname,
-            user_id=user_id, avatar_color=payload.avatar_color, participant_token=payload.participant_token)
+            user_id=user_id, avatar_color=payload.avatar_color, participant_token=payload.participant_token,
+            entry_client_key=client_key)
         credential = joined.pop('participant_token')
         if user_id:
             await db.quizzes.claim_participant(session['id'], credential, user_id)

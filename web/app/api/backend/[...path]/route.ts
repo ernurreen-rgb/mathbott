@@ -8,6 +8,10 @@ import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
 import { normalizeProxyRequestBody } from "@/lib/proxy-request-body";
+import {
+  isQuizEntryRequest, quizEntryClientKey, quizEntryClientSignature,
+  QUIZ_ENTRY_KEY_HEADER, QUIZ_ENTRY_SIGNATURE_HEADER,
+} from "@/lib/quiz-entry-identity";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -27,6 +31,10 @@ const STRIP_REQUEST_HEADERS = new Set([
   "host",
   "x-proxy-request-ts",
   "x-proxy-request-signature",
+  "x-proxy-request-nonce",
+  "x-proxy-request-signature-v2",
+  QUIZ_ENTRY_KEY_HEADER,
+  QUIZ_ENTRY_SIGNATURE_HEADER,
   "x-proxy-user-email",
   "x-proxy-body-sha256",
   "x-proxy-content-type",
@@ -453,6 +461,16 @@ async function proxyRequest(
       headers.set("X-Proxy-Request-Nonce", nonce);
       headers.set("X-Proxy-Request-Signature", legacySignature);
       headers.set("X-Proxy-Request-Signature-V2", signatureV2);
+      if (isQuizEntryRequest(request.method, effectivePathSegments)) {
+        const clientKey = quizEntryClientKey(request.headers, INTERNAL_PROXY_SHARED_SECRET, {
+          vercel: process.env.VERCEL === "1",
+          trustedIpHeader: process.env.TRUSTED_CLIENT_IP_HEADER,
+        });
+        headers.set(QUIZ_ENTRY_KEY_HEADER, clientKey);
+        headers.set(QUIZ_ENTRY_SIGNATURE_HEADER, quizEntryClientSignature({
+          clientKey, timestamp, nonce, requestSignature: signatureV2, secret: INTERNAL_PROXY_SHARED_SECRET,
+        }));
+      }
       if (signedBodySha256) {
         headers.set("X-Proxy-Body-Sha256", signedBodySha256);
         headers.set("X-Proxy-Content-Type", signedContentType);

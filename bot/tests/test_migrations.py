@@ -14,7 +14,7 @@ from migrations.runner import run_migrations
 from migrations.seeds import run_seeds
 
 _BASELINE_FILE = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0001_baseline.py"
-HEAD_REVISION = "0012_quiz_participant_question_order"
+HEAD_REVISION = "0013_quiz_entry_limits"
 
 
 def test_quiz_upgrade_preserves_scores_and_detaches_question_fk(tmp_path):
@@ -92,6 +92,9 @@ def test_fresh_database_gets_full_schema(tmp_path):
     assert "users" in tables
     assert "bank_tasks" in tables
     assert "alembic_version" in tables
+    assert "quiz_entry_limits" in tables
+    assert {"client_key", "window_start", "request_count", "pin_codes", "new_participants", "expires_at"} == _columns(path, "quiz_entry_limits")
+    assert "idx_quiz_entry_limits_expires_at" in _indexes(path)
     assert "submit_mode" in _columns(path, "trial_test_results")
     assert "answer_mode" in _columns(path, "bank_tasks")
     assert "accepted_answers" in _columns(path, "bank_tasks")

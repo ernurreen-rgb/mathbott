@@ -6,9 +6,10 @@ from utils.validation import is_task_answer_correct
 
 
 class QuizError(ValueError):
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, *, retry_after: int | None = None):
         super().__init__(message)
         self.kind = kind
+        self.retry_after = retry_after
 
 
 def token_hash(token: str) -> str:

@@ -8,11 +8,12 @@ from typing import Dict, Any, List, Optional
 
 from .base import BaseRepository
 from .quiz_sessions import QuizSessionsMixin
+from .quiz_entry_limits import QuizEntryLimitsMixin
 
 logger = logging.getLogger(__name__)
 
 
-class QuizRepository(QuizSessionsMixin, BaseRepository):
+class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
     """Repository handling quizzes, questions, game sessions and participants."""
 
     # --- Quiz CRUD ---

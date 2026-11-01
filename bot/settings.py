@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # Content
     bank_trash_retention_days: int = 30
     image_upload_max_bytes: Optional[int] = None
+
+    # Public quiz entry quotas are shared by all workers through the database.
+    quiz_entry_requests_per_minute: int = Field(default=1200, ge=1, le=100000)
+    quiz_entry_distinct_pins_per_minute: int = Field(default=30, ge=1, le=1000)
+    quiz_entry_new_participants_per_minute: int = Field(default=300, ge=1, le=10000)
+    quiz_max_participants: int = Field(default=500, ge=1, le=10000)
 
     # Observability
     sentry_dsn: str = ""

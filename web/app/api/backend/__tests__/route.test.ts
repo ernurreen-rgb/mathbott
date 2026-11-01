@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
@@ -28,9 +28,71 @@ beforeAll(() => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  delete process.env.VERCEL;
+  delete process.env.TRUSTED_CLIENT_IP_HEADER;
   mockGetToken.mockResolvedValue({ email: ownerEmail });
   mockFetch.mockResolvedValue(new Response("{}", { headers: { "Content-Type": "application/json" } }));
   global.fetch = mockFetch;
+});
+
+it("replaces forged quiz-entry metadata with a Vercel network claim bound to the request", async () => {
+  mockGetToken.mockResolvedValue(null);
+  process.env.VERCEL = "1";
+  const response = await GET(new NextRequest("https://mathbot.example/api/backend/quiz-sessions/pin/123456", {
+    headers: {
+      "x-vercel-forwarded-for": "192.0.2.1", "x-forwarded-for": "203.0.113.2",
+      "x-quiz-entry-client-key": "forged", "x-quiz-entry-client-signature": "forged",
+    },
+  }), context("quiz-sessions", "pin", "123456"));
+  expect(response.status).toBe(200);
+  const headers = mockFetch.mock.calls[0][1].headers as Headers;
+  const key = createHmac("sha256", "test-internal-proxy-secret").update("QUIZ-ENTRY-NETWORK\nv4:192.0.2.1").digest("hex");
+  expect(headers.get("x-quiz-entry-client-key")).toBe(key);
+  expect(headers.get("x-quiz-entry-client-signature")).toBe(createHmac("sha256", "test-internal-proxy-secret").update([
+    "QUIZ-ENTRY-CLIENT", headers.get("X-Proxy-Request-Ts"), headers.get("X-Proxy-Request-Nonce"),
+    headers.get("X-Proxy-Request-Signature-V2"), key,
+  ].join("\n")).digest("hex"));
+  expect(headers.get("X-Proxy-User-Email")).toBeNull();
+});
+
+it("signs guest join network identity after preparing the signed request body", async () => {
+  mockGetToken.mockResolvedValue(null);
+  process.env.TRUSTED_CLIENT_IP_HEADER = "x-real-ip";
+  const response = await POST(new NextRequest("https://mathbot.example/api/backend/quiz-sessions/join", {
+    method: "POST", body: JSON.stringify({ pin_code: "123456", nickname: "Guest" }),
+    headers: { Origin: "https://mathbot.example", "Content-Type": "application/json", "x-real-ip": "192.0.2.1" },
+  }), context("quiz-sessions", "join"));
+  expect(response.status).toBe(200);
+  const headers = mockFetch.mock.calls[0][1].headers as Headers;
+  const key = headers.get("x-quiz-entry-client-key");
+  expect(headers.get("x-quiz-entry-client-signature")).toBe(createHmac("sha256", "test-internal-proxy-secret").update([
+    "QUIZ-ENTRY-CLIENT", headers.get("X-Proxy-Request-Ts"), headers.get("X-Proxy-Request-Nonce"),
+    headers.get("X-Proxy-Request-Signature-V2"), key,
+  ].join("\n")).digest("hex"));
+  expect(headers.get("X-Proxy-Body-Sha256")).toBe(createHash("sha256").update(mockFetch.mock.calls[0][1].body).digest("hex"));
+});
+
+it("strips browser quiz-entry claims from unrelated guest capability requests", async () => {
+  mockGetToken.mockResolvedValue(null);
+  await GET(new NextRequest("https://mathbot.example/api/backend/quiz-sessions/1/progress", {
+    headers: { "x-quiz-entry-client-key": "forged", "x-quiz-entry-client-signature": "forged", "X-Quiz-Participant-Token": "guest" },
+  }), context("quiz-sessions", "1", "progress"));
+  const headers = mockFetch.mock.calls[0][1].headers as Headers;
+  expect(headers.get("x-quiz-entry-client-key")).toBeNull();
+  expect(headers.get("x-quiz-entry-client-signature")).toBeNull();
+  expect(headers.get("X-Quiz-Participant-Token")).toBe("guest");
+});
+
+it("uses the real network bucket for an entry path containing encoded catchall slashes", async () => {
+  mockGetToken.mockResolvedValue(null);
+  process.env.VERCEL = "1";
+  await GET(new NextRequest("https://mathbot.example/api/backend/quiz-sessions%2Fpin%2F123456", {
+    headers: { "x-vercel-forwarded-for": "192.0.2.1" },
+  }), context("quiz-sessions/pin/123456"));
+  const headers = mockFetch.mock.calls[0][1].headers as Headers;
+  expect(headers.get("x-quiz-entry-client-key")).toBe(createHmac("sha256", "test-internal-proxy-secret")
+    .update("QUIZ-ENTRY-NETWORK\nv4:192.0.2.1").digest("hex"));
+  expect(headers.get("x-quiz-entry-client-signature")).not.toBeNull();
 });
 
 afterAll(() => {

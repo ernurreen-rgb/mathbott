@@ -5,6 +5,7 @@ import secrets
 import time
 from typing import Optional, Dict, Any, List
 import storage as db_driver
+from settings import get_settings
 
 from utils.quiz import (QuizError, token_hash, public_participant, public_question,
                         answer_result, check_question_answer, calculate_speed_points)
@@ -118,7 +119,8 @@ class QuizSessionsMixin:
         '#f3f4f6:rabbit', '#f3f4f6:koala', '#f3f4f6:pug', '#f3f4f6:dragon',
     )
 
-    async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None):
+    async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None,
+                           *, entry_client_key: Optional[str] = None):
         nickname = nickname.strip()
         if not nickname:
             raise QuizError('invalid', 'Nickname is required')
@@ -143,6 +145,15 @@ class QuizSessionsMixin:
                 if clean_avatar:
                     await db.execute('UPDATE quiz_participants SET avatar_color = ? WHERE id = ?', (clean_avatar, participant_id))
             else:
+                async with db.execute('SELECT COUNT(*) FROM quiz_participants WHERE session_id = ?', (session_id,)) as cursor:
+                    participant_count = (await cursor.fetchone())[0]
+                if participant_count >= get_settings().quiz_max_participants:
+                    raise QuizError('conflict', 'Квиздегі қатысушылар шегіне жетті.')
+                if entry_client_key:
+                    retry_after = await self._reserve_quiz_entry_slot(db, entry_client_key)
+                    if retry_after:
+                        raise QuizError('rate_limited', 'Жаңа қатысушы қосу шегіне жетті. Кейінірек қайталаңыз.',
+                                        retry_after=retry_after)
                 issued_token = secrets.token_urlsafe(32)
                 color = clean_avatar or random.choice(self.DEFAULT_AVATARS)
                 cursor = await db.execute('''INSERT INTO quiz_participants
