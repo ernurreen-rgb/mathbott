@@ -1,0 +1,19 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.4, pytest-9.0.3, pluggy-1.6.0
+rootdir: E:\CursorMathbot\bot
+configfile: pytest.ini
+plugins: anyio-4.11.0, asyncio-1.3.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 110 items
+
+tests\test_bank_image_retention.py ..................                    [ 16%]
+tests\test_p1_image_updates.py ...............                           [ 30%]
+tests\test_routes_admin_content.py ...........                           [ 40%]
+tests\test_routes_admin_bank_versions.py ........                        [ 47%]
+tests\test_routes_admin_bank_quality_audit.py ..............             [ 60%]
+tests\test_hosted_runtime.py ...                                         [ 62%]
+tests\test_routes_admin_roles.py ................                        [ 77%]
+tests\test_routes_trial_tests.py ...................                     [ 94%]
+tests\test_quiz_review.py ......                                         [100%]
+
+============================ 110 passed in 30.20s =============================

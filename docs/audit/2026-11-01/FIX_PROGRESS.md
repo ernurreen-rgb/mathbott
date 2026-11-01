@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **2/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **3/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -8,8 +8,8 @@
 | --- | --- | --- | --- |
 | A01 | P1 | Questions жүктеу қатесі квиз мазмұнын ауыстырады | Түзетілді, тексерілді |
 | A02 | P2 | Version conflict кейін ескі форма сақталады | Түзетілді, тексерілді |
-| A03 | P2 | Тарихи суреттерді purge жояды | Келесі |
-| A04 | P2 | Сабақ құруда nested connection/pool timeout | Ашық |
+| A03 | P2 | Тарихи суреттерді purge жояды | Түзетілді, тексерілді |
+| A04 | P2 | Сабақ құруда nested connection/pool timeout | Келесі |
 | A05 | P2 | Co-op жауап кілті ерте ашылады | Ашық |
 | A06 | P2 | Student options шешім metadata-сын ашады | Ашық |
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Ашық |
@@ -47,3 +47,16 @@ Async save/reload жауаптары форманың ашылған сесси�
 - Frontend ESLint, zero warnings: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A02/lint.log).
 
 Backend source, browser E2E және deployment бұл қадамда өзгертілген/орындалған жоқ. `repros/audit_bank.tsx` бастапқы ақауды сипаттайтын тарихи репродукция болып қалады; ол қазіргі source үшін сәтті regression test ретінде пайдаланылмайды.
+
+## A03
+
+[Automatic cleanup](/E:/CursorMathbot/bot/repositories/bank/crud.py:594) пен [manual permanent delete](/E:/CursorMathbot/bot/routes/admin/bank.py:798) енді bank task жойылғанда оның суретін өшірмейді. Тапсырма жолдары мен тиісті DB cleanup бұрынғыдай орындалады; committed media тарихи және ортақ сілтемелер үшін сақталады. Нұсқа қақтығысы кезінде DB-ге бекітілмеген жаңа upload-ты жою бұрынғыдай жұмыс істейді.
+
+Бұл қадамда жалпы asset reference registry немесе garbage collector қосылған жоқ. Қауіпсіз сақтау саясаты барлық committed bank image-ке қолданылады, сондықтан сілтемесіз қалған суреттер де сақталады. Оларды бос орын үшін жою live tasks, task versions, solo/co-op results және quiz snapshots сілтемелерін ескеретін бөлек GC арқылы орындалуы тиіс. Осы талап [file deletion helper](/E:/CursorMathbot/bot/utils/file_storage.py:177) құжаттамасына енгізілді. Бұрын өшіп кеткен суреттер бұл өзгеріспен қалпына келмейді.
+
+[18 regression test](/E:/CursorMathbot/bot/tests/test_bank_image_retention.py) екі жою жолын local filesystem және in-memory S3 арқылы тексереді. Solo/co-op сақталған нәтижесі, frozen quiz snapshot және басқа bank task-тің ескі нұсқасы filename-ға сілтегенде, бастапқы task жойылса да `/api/images/{filename}` бұрынғы байттарды қайтарады. Жақында trash-ке түскен task пен оның суреті retention мерзімі бітпей сақталады; cleanup қайта шақырылғанда дұрыс count қайтарылады. Негізгі regression түзетуден бұрын saved result қалғанымен image endpoint `404` қайтарғанын көрсетті.
+
+- Image retention/update, admin deletion/version/audit/roles, hosted contracts, trial және quiz review: **110 backend test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A03/tests.log).
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A03/lint.log).
+
+Тексеру уақытша SQLite DB және S3 эмуляциясымен орындалды; нақты PostgreSQL/S3 немесе deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `cleanup_image_history` бастапқы ақауды assert етеді; түзетуден кейін бұл тарихи репродукцияның сол assert-і құлауы күтіледі.

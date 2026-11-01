@@ -4,7 +4,6 @@ Core CRUD, listing, export, usage and trial-test copy.
 from typing import Optional, List, Dict, Any
 import json
 import storage as db_driver
-from utils.file_storage import delete_image_file
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
 from .versions import BankTaskVersionConflictError
@@ -529,7 +528,7 @@ class BankTaskCrudMixin:
         actor_user_id: Optional[int] = None,
         actor_email: Optional[str] = None,
     ) -> bool:
-        """Permanently delete task from trash."""
+        """Delete trashed content, retaining media shared with historical snapshots."""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
@@ -593,12 +592,16 @@ class BankTaskCrudMixin:
         return deleted
 
     async def cleanup_old_deleted_tasks(self, days: int = 30) -> int:
-        """Permanently delete bank tasks that stayed in trash longer than N days."""
+        """Delete expired trash while retaining committed media for historical references.
+
+        Snapshots and other tasks can share these filenames. Reclaiming media
+        requires separate reference-aware garbage collection.
+        """
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 """
-                SELECT id, image_filename
+                SELECT id
                 FROM bank_tasks
                 WHERE deleted_at IS NOT NULL
                   AND deleted_at < datetime('now', '-' || ? || ' days')
@@ -610,7 +613,6 @@ class BankTaskCrudMixin:
                 return 0
 
             task_ids = [int(row["id"]) for row in rows]
-            image_filenames = [row["image_filename"] for row in rows if row["image_filename"]]
             placeholders = ",".join(["?"] * len(task_ids))
 
             await db.execute(
@@ -628,8 +630,6 @@ class BankTaskCrudMixin:
             )
             await db.commit()
 
-        for filename in image_filenames:
-            delete_image_file(filename)
         return len(task_ids)
 
     async def list_topics(self, query: Optional[str] = None, limit: int = 20) -> List[str]:

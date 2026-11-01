@@ -808,8 +808,6 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not existing.get("deleted_at"):
             raise HTTPException(status_code=400, detail="Bank task must be moved to trash first")
 
-        image_filename = existing.get("image_filename")
-
         deleted = await db.bank_tasks.hard_delete_task(
             task_id,
             actor_user_id=admin_user["id"],
@@ -817,8 +815,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         )
         if not deleted:
             raise HTTPException(status_code=404, detail="Bank task not found")
-        if image_filename:
-            delete_image_file(image_filename)
+        # Committed images may still be referenced by saved results, quiz
+        # snapshots or other tasks, even after this bank task is removed.
         return {"success": True}
 
     @app.get("/api/admin/bank/topics")

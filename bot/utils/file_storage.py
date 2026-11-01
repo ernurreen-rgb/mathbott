@@ -175,7 +175,11 @@ async def save_image_upload(image: UploadFile) -> str:
 
 
 def delete_image_file(filename: str) -> None:
-    """Delete an image file from the images directory."""
+    """Delete uncommitted uploads or assets proven unreferenced by a separate GC.
+
+    Task deletion/replacement must retain committed media: saved results,
+    versions and other tasks can still share the same filename.
+    """
     if uses_object_storage():
         safe_filename = normalize_stored_image_filename(filename)
         if safe_filename:
