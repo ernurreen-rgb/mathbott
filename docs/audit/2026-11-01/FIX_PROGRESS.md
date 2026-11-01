@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **7/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **8/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -13,8 +13,8 @@
 | A05 | P2 | Co-op жауап кілті ерте ашылады | Түзетілді, тексерілді |
 | A06 | P2 | Student options шешім metadata-сын ашады | Түзетілді, тексерілді |
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Түзетілді, тексерілді |
-| A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Келесі |
-| A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Ашық |
+| A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Түзетілді, тексерілді |
+| A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Келесі |
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Ашық |
 | A11 | P2 | Metrics raw path кілттері шексіз өседі | Ашық |
 | A12 | P2 | Frontend dependency security gate өтпейді | Ашық |
@@ -122,3 +122,19 @@ Draft load аяқталмай бос дерек жіберілмейді; өзг
 - Frontend ESLint, zero warnings: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A07/lint.log).
 
 Тексеру React/Jest ішінде mock network арқылы орындалды; нақты browser page-close/network E2E немесе deployment бұл қадамда іске қосылған жоқ. Flush бұрынғыдай best-effort keepalive сұрауын қолданады; offline backup қосылған жоқ. `repros/audit_trial.tsx` бастапқы ақауды күтетін тарихи репродукция, ағымдағы source үшін regression tests пайдаланылады.
+
+## A08
+
+[canonicalize_algebraic_expression](/E:/CursorMathbot/bot/utils/math_algebra.py:427) normalize нәтижесі тұрақты рационал сан болса, numeric parser пайдаланатын `n` немесе `n/d` форматын қайтарады. Мысалы, `x-x` → `0`, `x-x+1` → `1`, `(x-x+1)/2` → `1/2`. Нөл `is not None` арқылы ажыратылады, сондықтан false-like мән ретінде түсіп қалмайды. Айнымалысы қалған өрнектердің algebra canonical форматы бұрынғыдай сақталады.
+
+Есептеу `Fraction` арқылы дәл орындалады; float/approximate comparison қосылған жоқ. Parser grammar, expression/AST/number/power шектері және division-by-zero/unsupported-expression тексерістері өзгертілмеді. Бұрынғы рационал ықшамдау ережелері қолданылады. Жаңа біріздендіру input answer, accepted aliases, written MCQ және matching slot салыстыруларына ортақ нормализация арқылы тарайды.
+
+[44 жаңа regression case](/E:/CursorMathbot/bot/tests/test_constant_answer_equivalence.py) equivalent жауаптарды екі бағытта, оң/теріс бөлшектерді, дәл decimal precision-ды, root және көп айнымалы cancellation-ды тексереді. Бөлек сандық мән, айнымалысы қалған өрнек, division-by-zero, unsupported/oversized expression қабылданбайтыны қамтылған. Written choice labels пен matching slot реті сақталады. Module task check, solo submit, co-op finish, quiz answer және admin preview үшін он HTTP сценарий бар. Бастапқы он equivalent-case түзетуден бұрын false-negative қайтарды.
+
+Answer bank мазмұны, snapshot-тағы бастапқы correct answer және бұрын сақталған ұпайлар қайта жазылмайды; жаңа тексерістер жаңартылған салыстыруды қолданады. Schema/migration өзгерісі жоқ.
+
+- Жаңа regression және бұрынғы utility suite: **101 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A08/targeted-tests.log).
+- Толық backend suite: **532 passed, 5 skipped**, 98,16 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A08/backend-tests.log). Өткізілген бес test нақты PostgreSQL instance талап етеді.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A08/lint.log).
+
+Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL/browser E2E/deployment бұл қадамда іске қосылған жоқ. `repros/runtime.py` constant-equivalence тексерісі бастапқы ақауды күтеді; ағымдағы source үшін жаңа regression suite пайдаланылады.

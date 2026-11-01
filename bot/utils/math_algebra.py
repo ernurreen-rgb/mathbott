@@ -425,10 +425,15 @@ def _parse_algebraic_expression(
 
 
 def canonicalize_algebraic_expression(value: str) -> Optional[str]:
-    """Return an exact canonical form, or ``None`` outside the safe grammar."""
+    """Return an exact form, using the numeric answer representation for constants."""
     canonical = _parse_algebraic_expression(value)
     if canonical is None:
         return None
+    constant = _constant_value(canonical)
+    if constant is not None:
+        if constant.denominator == 1:
+            return str(constant.numerator)
+        return f"{constant.numerator}/{constant.denominator}"
     return f"__algebra__:{_serialize_polynomial(canonical.numerator)}|{_serialize_polynomial(canonical.denominator)}"
 
 
