@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **6/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **7/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -12,8 +12,8 @@
 | A04 | P2 | Сабақ құруда nested connection/pool timeout | Түзетілді, тексерілді |
 | A05 | P2 | Co-op жауап кілті ерте ашылады | Түзетілді, тексерілді |
 | A06 | P2 | Student options шешім metadata-сын ашады | Түзетілді, тексерілді |
-| A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Келесі |
-| A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Ашық |
+| A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Түзетілді, тексерілді |
+| A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Келесі |
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Ашық |
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Ашық |
 | A11 | P2 | Metrics raw path кілттері шексіз өседі | Ашық |
@@ -106,3 +106,19 @@ Backend source, browser E2E және deployment бұл қадамда өзгер
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A06/lint.log).
 
 Тексеру уақытша SQLite DB және production identity middleware арқылы орындалды; нақты PostgreSQL/browser E2E/deployment бұл қадамда іске қосылған жоқ. `repros/security.py` ішіндегі options leak assertion-ы бастапқы ақауды күтеді; ағымдағы source үшін жаңа regression suite пайдаланылады.
+
+## A07
+
+[Ортақ flushDraft](/E:/CursorMathbot/web/app/trial-test/[id]/page.tsx:188) browser `pagehide` және SPA cleanup үшін қолданылады. Cleanup соңғы жауаптар мен ағымдағы task index snapshot-ын `keepalive` сұрауымен writable draft key өшірілмей тұрып жібереді. 800 ms debounce аяқталмай navigation жасалса да соңғы өзгеріс жіберіледі. Ағымдағы in-flight normal save қажет болса тоқтатылып, соңғы snapshot keepalive арқылы жіберіледі; бір pending keepalive pagehide/unmount кезінде екі рет қайталанбайды.
+
+Snapshot email-і ағымдағы `useSession` identity-мен салыстырылады: identity ауысуы не sign-out render-і кезінде ескі аккаунттың жауабы жіберілмейді. Request marker және load generation кешіккен acknowledgement-тің жаңа тесттің save күйін өзгертуіне жол бермейді. Ескі submit жауабы жаңа тестке өткеннен кейін redirect/error немесе draft permission қалпына келтіру әрекетін орындамайды.
+
+Draft load аяқталмай бос дерек жіберілмейді; өзгермеген/сақталған draft қайталанбайды. Submit сәтті расталғаннан кейін cleanup draft-ты қайта құрмайды. Submit қатесі болып, сақталған attempt табылмаса, ағымдағы жауаптар cleanup кезінде сақтауға жіберіледі. Backend API мен schema өзгертілген жоқ.
+
+[14 жаңа regression case](/E:/CursorMathbot/web/app/trial-test/[id]/__tests__/page.test.tsx:227) SPA unmount/debounce, task index, normal save-ті keepalive-қа ауыстыру, pending keepalive deduplication, өзгертілген мәнді қайта бұрынғысына қайтару, test/account/sign-out ауысуы, кешіккен acknowledgement/submit, confirmed success және failed submit cleanup, Strict Mode hydration сценарийлерін қамтиды. Осы файлда бұрынғы он тестпен бірге 24 test бар. Негізгі regression түзетуден бұрын debounce ішіндегі unmount ешбір draft сұрауын жібермегенін көрсетті.
+
+- Толық frontend Jest: **60 suite, 368 test өтті**, 22,881 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A07/frontend-tests.log).
+- TypeScript `tsc --noEmit`: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A07/typecheck.log).
+- Frontend ESLint, zero warnings: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A07/lint.log).
+
+Тексеру React/Jest ішінде mock network арқылы орындалды; нақты browser page-close/network E2E немесе deployment бұл қадамда іске қосылған жоқ. Flush бұрынғыдай best-effort keepalive сұрауын қолданады; offline backup қосылған жоқ. `repros/audit_trial.tsx` бастапқы ақауды күтетін тарихи репродукция, ағымдағы source үшін regression tests пайдаланылады.

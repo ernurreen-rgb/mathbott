@@ -73,6 +73,8 @@ export default function TrialTestPage() {
   }, [taskNavigatorOpen]);
 
   const email = session?.user?.email || null;
+  const activeEmailRef = useRef(email);
+  activeEmailRef.current = email;
 
   // Реф для сохранения при уходе со страницы; обновляем синхронно при вводе, чтобы при мгновенном refresh не потерять данные
   const draftRef = useRef<{ answers: Record<number, string>; currentTaskIndex: number; email: string | null; testId: number }>({
@@ -103,6 +105,7 @@ export default function TrialTestPage() {
   const saveAbortRef = useRef<AbortController | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDraftSignatureRef = useRef("");
+  const pendingDraftSaveRef = useRef<{ signature: string; keepalive: boolean } | null>(null);
   const writableDraftKeyRef = useRef<string | null>(null);
   const submittedRef = useRef(false);
   const attemptIdRef = useRef<string | null>(null);
@@ -117,6 +120,7 @@ export default function TrialTestPage() {
     }
     saveAbortRef.current?.abort();
     saveAbortRef.current = null;
+    pendingDraftSaveRef.current = null;
     setLoading(true);
     router.replace(`/trial-test/${testId}/results${resultId ? `?attempt=${resultId}` : ""}`);
   }, [router, testId]);
@@ -137,11 +141,15 @@ export default function TrialTestPage() {
 
   const sendDraftSnapshot = useCallback(
     async (snapshot = draftRef.current, options?: { keepalive?: boolean }) => {
+      if (snapshot.email !== activeEmailRef.current) return;
       if (writableDraftKeyRef.current !== `${snapshot.email}:${snapshot.testId}`) return;
       const request = buildDraftSnapshot(snapshot);
-      if (!request || request.signature === lastSavedDraftSignatureRef.current) return;
+      if (!request) return;
 
       const keepalive = options?.keepalive === true;
+      const pending = pendingDraftSaveRef.current;
+      if (pending?.signature === request.signature && (pending.keepalive || !keepalive)) return;
+      if (request.signature === lastSavedDraftSignatureRef.current && !pending) return;
       if (saveAbortRef.current) {
         saveAbortRef.current.abort();
         saveAbortRef.current = null;
@@ -149,6 +157,9 @@ export default function TrialTestPage() {
 
       const controller = keepalive ? null : new AbortController();
       if (controller) saveAbortRef.current = controller;
+      const save = { signature: request.signature, keepalive };
+      const generation = loadGenerationRef.current;
+      pendingDraftSaveRef.current = save;
 
       try {
         const res = await fetch(request.url, {
@@ -158,19 +169,29 @@ export default function TrialTestPage() {
           keepalive,
           signal: controller?.signal,
         });
-        if (res.ok) {
+        if (res.ok && pendingDraftSaveRef.current === save && generation === loadGenerationRef.current &&
+          activeEmailRef.current === snapshot.email && writableDraftKeyRef.current === `${snapshot.email}:${snapshot.testId}`) {
           lastSavedDraftSignatureRef.current = request.signature;
-        } else {
+        } else if (!res.ok) {
           console.warn("[trial-draft] save failed", { testId: snapshot.testId, status: res.status });
         }
       } catch (err: any) {
         if (err?.name !== "AbortError") console.warn("[trial-draft] save error", err);
       } finally {
         if (controller && saveAbortRef.current === controller) saveAbortRef.current = null;
+        if (pendingDraftSaveRef.current === save) pendingDraftSaveRef.current = null;
       }
     },
     [buildDraftSnapshot]
   );
+
+  const flushDraft = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    void sendDraftSnapshot(draftRef.current, { keepalive: true });
+  }, [sendDraftSnapshot]);
 
   const fetchTest = useCallback(async () => {
     if (!email || !testId) return;
@@ -179,6 +200,7 @@ export default function TrialTestPage() {
     writableDraftKeyRef.current = null;
     submittedRef.current = false;
     attemptIdRef.current = null;
+    setSubmitting(false);
     setLoading(true);
     setError(null);
     setTest(null);
@@ -274,10 +296,14 @@ export default function TrialTestPage() {
       void fetchTest();
     }
     return () => {
+      flushDraft();
       loadGenerationRef.current += 1;
       writableDraftKeyRef.current = null;
+      pendingDraftSaveRef.current = null;
+      saveAbortRef.current?.abort();
+      saveAbortRef.current = null;
     };
-  }, [email, testId, fetchTest]);
+  }, [email, testId, fetchTest, flushDraft]);
 
   useEffect(() => {
     const totalTasks = test?.tasks?.length ?? 0;
@@ -297,7 +323,7 @@ export default function TrialTestPage() {
   useEffect(() => {
     if (loading || !test || !email || submitting) return;
     const snapshot = buildDraftSnapshot({ answers, currentTaskIndex, email, testId });
-    if (!snapshot || snapshot.signature === lastSavedDraftSignatureRef.current) return;
+    if (!snapshot || (snapshot.signature === lastSavedDraftSignatureRef.current && !pendingDraftSaveRef.current)) return;
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
@@ -312,18 +338,11 @@ export default function TrialTestPage() {
     };
   }, [answers, buildDraftSnapshot, currentTaskIndex, email, loading, sendDraftSnapshot, submitting, test, testId]);
 
-  // Сохранение при уходе со страницы (обновление, закрытие вкладки)
+  // Browser departure and SPA cleanup share the same final keepalive flush.
   useEffect(() => {
-    const onPageHide = () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-      void sendDraftSnapshot(draftRef.current, { keepalive: true });
-    };
-    window.addEventListener("pagehide", onPageHide);
-    return () => window.removeEventListener("pagehide", onPageHide);
-  }, [sendDraftSnapshot]);
+    window.addEventListener("pagehide", flushDraft);
+    return () => window.removeEventListener("pagehide", flushDraft);
+  }, [flushDraft]);
 
   const renderTaskControls = (task: LessonTask) => {
     const qt: QuestionType = (task.question_type || "input") as QuestionType;
@@ -438,7 +457,9 @@ export default function TrialTestPage() {
       }
     });
 
+    const generation = loadGenerationRef.current;
     writableDraftKeyRef.current = null;
+    pendingDraftSaveRef.current = null;
     setSubmitting(true);
     try {
       if (saveTimeoutRef.current) {
@@ -458,10 +479,13 @@ export default function TrialTestPage() {
           (byte) => byte.toString(16).padStart(2, "0")
         ).join(""),
       });
+
+      if (generation !== loadGenerationRef.current) return;
       
       if (err) {
         // Recover only this attempt; older results must not swallow a failed retake.
         const savedResults = await getTrialTestResults(testId, email);
+        if (generation !== loadGenerationRef.current) return;
         const savedAttempt = savedResults.data?.find((result) => result.attempt_id === attemptIdRef.current);
         if (savedAttempt) {
           openSavedResult(savedAttempt.id);
@@ -472,10 +496,12 @@ export default function TrialTestPage() {
         openSavedResult(data.result_id);
       }
     } catch (e: any) {
-      setError(e?.message || "Тестті жіберу қатесі");
+      if (generation === loadGenerationRef.current) setError(e?.message || "Тестті жіберу қатесі");
     } finally {
-      if (!submittedRef.current) writableDraftKeyRef.current = `${email}:${testId}`;
-      setSubmitting(false);
+      if (generation === loadGenerationRef.current) {
+        if (!submittedRef.current) writableDraftKeyRef.current = `${email}:${testId}`;
+        setSubmitting(false);
+      }
     }
   };
 
