@@ -62,7 +62,7 @@ export default function QuizEditor({
 
   const [title, setTitle] = useState(initialQuiz?.title || "");
   const [description, setDescription] = useState(initialQuiz?.description || "");
-  const [isPublic, setIsPublic] = useState(initialQuiz?.is_public ?? true);
+  const [isPublic, setIsPublic] = useState(initialQuiz?.is_public ?? false);
   const [submitting, setSubmitting] = useState(false);
 
   const [questions, setQuestions] = useState<DraftQuestion[]>(() => {
@@ -464,33 +464,6 @@ export default function QuizEditor({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsPublic(true)}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
-                    isPublic
-                      ? "bg-purple-50/80 border-purple-500 ring-1 ring-purple-500 text-purple-900"
-                      : "bg-white border-gray-200 hover:border-gray-300 text-gray-600"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold flex items-center gap-1.5">
-                      <span><Icon name="globe" /></span>
-                      <span>Ашық</span>
-                    </span>
-                    <input
-                      type="radio"
-                      name="quiz_privacy"
-                      checked={isPublic}
-                      onChange={() => setIsPublic(true)}
-                      className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500"
-                    />
-                  </div>
-                  <span className="text-[10px] leading-tight text-gray-500">
-                    Каталогта баршаға көрінеді
-                  </span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => setIsPublic(false)}
                   className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
                     !isPublic
@@ -513,6 +486,33 @@ export default function QuizEditor({
                   </div>
                   <span className="text-[10px] leading-tight text-gray-500">
                     Тек маған, PIN-кодпен ойнатылады
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPublic(true)}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                    isPublic
+                      ? "bg-purple-50/80 border-purple-500 ring-1 ring-purple-500 text-purple-900"
+                      : "bg-white border-gray-200 hover:border-gray-300 text-gray-600"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span><Icon name="globe" /></span>
+                      <span>Ашық</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="quiz_privacy"
+                      checked={isPublic}
+                      onChange={() => setIsPublic(true)}
+                      className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500"
+                    />
+                  </div>
+                  <span className="text-[10px] leading-tight text-gray-500">
+                    Каталогта баршаға көрінеді
                   </span>
                 </button>
               </div>

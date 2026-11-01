@@ -261,7 +261,7 @@ describe("EditQuizPage", () => {
     });
 
     (forkQuiz as jest.Mock).mockResolvedValue({
-      data: { id: 88, title: "Басқа мұғалімнің квизі (Көшірме)", can_manage: true },
+      data: { id: 88, title: "Басқа мұғалімнің квизі (Көшірме)", is_public: false, can_manage: true },
       error: null,
     });
 
@@ -280,6 +280,38 @@ describe("EditQuizPage", () => {
     expect(forkQuiz).toHaveBeenCalledWith(77, "author@example.com");
     expect(toast.success).toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith("/quizzes/88/edit");
+  });
+
+  it("preserves private privacy when editing a forked private quiz", async () => {
+    mockParams = { id: "88" };
+    (getQuiz as jest.Mock).mockResolvedValue({
+      data: { id: 88, title: "Басқа мұғалімнің квизі (Көшірме)", is_public: false, can_manage: true },
+      error: null,
+    });
+    (getQuizQuestions as jest.Mock).mockResolvedValue({
+      data: [
+        { id: 101, quiz_id: 88, question_text: "2+2=?", question_type: "input", correct_answer: "4" },
+      ],
+      error: null,
+    });
+    (updateQuiz as jest.Mock).mockResolvedValue({ data: { id: 88 }, error: null });
+
+    await act(async () => {
+      render(<EditQuizPage params={Promise.resolve(mockParams)} />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Өзгерістерді сақтау/ }));
+    });
+
+    expect(updateQuiz).toHaveBeenCalledWith(
+      88,
+      expect.objectContaining({
+        title: "Басқа мұғалімнің квизі (Көшірме)",
+        is_public: false,
+      }),
+      "author@example.com"
+    );
   });
 
   it("allows reordering questions via move buttons and saves updated sort_order", async () => {

@@ -50,7 +50,7 @@ async def test_quiz_crud(client, test_db, test_user):
 async def test_quiz_questions_crud(client, test_db, test_user):
     user_email = test_user["email"]
     quiz = await test_db.quizzes.create_quiz(
-        title="Тест сұрақтары", created_by=test_user["id"]
+        title="Тест сұрақтары", created_by=test_user["id"], is_public=True
     )
     quiz_id = quiz["id"]
 
@@ -102,7 +102,9 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
     user_email = test_user["email"]
 
     # Setup quiz with 2 questions
-    quiz = await test_db.quizzes.create_quiz(title="Quizizz Live Game", created_by=test_user["id"])
+    quiz = await test_db.quizzes.create_quiz(
+        title="Quizizz Live Game", created_by=test_user["id"], is_public=True
+    )
     q1 = await test_db.quizzes.add_question(
         quiz_id=quiz["id"],
         question_text="2 * 3 = ?",
@@ -355,10 +357,14 @@ async def test_quiz_live_session_gameplay(client, test_db, test_user):
 async def test_quiz_public_private_visibility(client, test_db, test_user):
     owner_email = test_user["email"]
 
-    # 1. Create a private quiz
+    # 0. Repository helper defaults to private when is_public is omitted
+    repo_default = await test_db.quizzes.create_quiz(title="Repo default", created_by=test_user["id"])
+    assert bool(repo_default["is_public"]) is False
+
+    # 1. Create a quiz without specifying is_public -> defaults to private (False)
     create_resp = client.post(
         "/api/quizzes",
-        json={"title": "Жеке квиз", "is_public": False},
+        json={"title": "Жеке квиз"},
         params={"email": owner_email},
     )
     assert create_resp.status_code == 200
@@ -493,7 +499,7 @@ async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
     assert updated_questions[1]["question_text"] == "10 / 2"
     assert updated_questions[1]["correct_answer"] == "5"
 
-    # 4. Other user forks the public quiz
+    # 4. Other user forks the public quiz -> cloned copy starts private
     fork_resp = client.post(
         f"/api/quizzes/{quiz_id}/fork",
         params={"email": other_user["email"]},
@@ -503,7 +509,26 @@ async def test_quiz_update_with_questions_and_fork(client, test_db, test_user):
     assert cloned_quiz["created_by"] == other_user["id"]
     assert cloned_quiz["id"] != quiz_id
     assert "Көшірме" in cloned_quiz["title"]
+    assert cloned_quiz["is_public"] is False
     assert cloned_quiz["can_manage"] is True
+
+    # Forked quiz does NOT appear in the public catalog, only in the new owner's list
+    public_catalog = client.get("/api/quizzes").json()
+    assert not any(q["id"] == cloned_quiz["id"] for q in public_catalog)
+    other_my_quizzes = client.get(
+        "/api/quizzes",
+        params={"my_only": "true", "email": other_user["email"]},
+    ).json()
+    assert any(q["id"] == cloned_quiz["id"] and q["is_public"] is False for q in other_my_quizzes)
+
+    # Other user can later publish their forked quiz without extra restrictions
+    publish_fork = client.put(
+        f"/api/quizzes/{cloned_quiz['id']}",
+        json={"is_public": True},
+        params={"email": other_user["email"]},
+    )
+    assert publish_fork.status_code == 200
+    assert publish_fork.json()["is_public"] is True
 
     # Other user can see full questions and answers in their cloned copy
     cloned_questions = client.get(

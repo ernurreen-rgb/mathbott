@@ -120,26 +120,50 @@ it("keeps formulas when switching and duplicating questions and saves a math inp
   }), "owner@example.com");
 });
 
-it("submits quiz with is_public: false when user selects private privacy option", async () => {
+it("defaults to private (is_public: false) initially and allows switching to public without restrictions", async () => {
   (createQuiz as jest.Mock).mockResolvedValue({ data: { id: 15 }, error: null });
-  render(<CreateQuizPage />);
-  fireEvent.change(screen.getByPlaceholderText("Мысалы: 9-сынып Теңдеулер жарысы"), { target: { value: "Жеке квиз" } });
+  const { unmount } = render(<CreateQuizPage />);
+  const radios = screen.getAllByRole("radio") as HTMLInputElement[];
+  expect(radios[0]).toBeChecked();
+  expect(radios[1]).not.toBeChecked();
+
+  fireEvent.change(screen.getByPlaceholderText("Мысалы: 9-сынып Теңдеулер жарысы"), { target: { value: "Әдепкі жеке квиз" } });
   fireEvent.change(screen.getByPlaceholderText(/Мысалы: Теңдеуді шешіңіз/), { target: { value: "Сұрақ" } });
   for (const label of ["A", "B", "C", "D"]) {
     fireEvent.change(screen.getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
   }
 
-  fireEvent.click(screen.getByRole("button", { name: /Жеке/ }));
-
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Сақтау және дайын/ })); });
   expect(createQuiz).toHaveBeenCalledWith(
     expect.objectContaining({
-      title: "Жеке квиз",
+      title: "Әдепкі жеке квиз",
       is_public: false,
     }),
     "owner@example.com"
   );
   expect(mockPush).toHaveBeenCalledWith("/quizzes/15");
+
+  unmount();
+  localStorage.clear();
+  (createQuiz as jest.Mock).mockClear();
+  mockPush.mockClear();
+
+  render(<CreateQuizPage />);
+  fireEvent.change(screen.getByPlaceholderText("Мысалы: 9-сынып Теңдеулер жарысы"), { target: { value: "Ашық квиз" } });
+  fireEvent.change(screen.getByPlaceholderText(/Мысалы: Теңдеуді шешіңіз/), { target: { value: "Бір сұрақ" } });
+  for (const label of ["A", "B", "C", "D"]) {
+    fireEvent.change(screen.getByLabelText(`${label} жауап нұсқасы`), { target: { value: label } });
+  }
+  fireEvent.click(screen.getByRole("button", { name: /Ашық/ }));
+
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Сақтау және дайын/ })); });
+  expect(createQuiz).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Ашық квиз",
+      is_public: true,
+    }),
+    "owner@example.com"
+  );
 });
 
 

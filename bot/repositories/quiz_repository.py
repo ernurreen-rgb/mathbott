@@ -24,7 +24,7 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
         created_by: int,
         description: str = "",
         cover_image: Optional[str] = None,
-        is_public: bool = True,
+        is_public: bool = False,
         questions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         async with self._write_transaction() as db:
@@ -115,7 +115,7 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
                 INSERT INTO quizzes (title, description, cover_image, created_by, is_public)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (title, quiz.get("description") or "", quiz.get("cover_image"), user_id, 1 if quiz.get("is_public") else 0),
+                (title, quiz.get("description") or "", quiz.get("cover_image"), user_id, 0),
             )
             new_quiz_id = cursor.lastrowid
             for q in questions:

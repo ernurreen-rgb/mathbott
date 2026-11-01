@@ -18,7 +18,7 @@ class CreateQuizRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default="", max_length=1000)
     cover_image: Optional[str] = None
-    is_public: bool = True
+    is_public: bool = False
     questions: List["QuizQuestionItem"] = Field(default_factory=list, max_length=200)
 
 
