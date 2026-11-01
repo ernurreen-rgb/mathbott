@@ -1,0 +1,6 @@
+{"artifact_directory": "E:\\Temp\\mathbot-domain-audit-izpgss3i"}
+{"coop_answer_key": {"b_is_finished": 0, "session_status": "active", "peer_correct_answer": "4"}}
+{"nested_pool": {"result_types": ["TimeoutError", "TimeoutError"], "persisted_lessons": 2, "mini_lesson_counts": [0, 0]}}
+{"concurrent_user_creation": {"result_types": ["dict", "IntegrityError", "IntegrityError", "IntegrityError", "dict", "dict", "IntegrityError", "dict"], "errors": ["UNIQUE constraint failed: users.email", "UNIQUE constraint failed: users.email", "UNIQUE constraint failed: users.email", "UNIQUE constraint failed: users.email"]}}
+{"cleanup_image_history": {"image_existed_before": true, "purged_tasks": 1, "saved_results_remaining": 1, "historic_filename": "audit-saved-result.png", "image_exists_after": false}}
+{"rollback_text_scale": {"target_scale": "sm", "before_rollback_scale": "lg", "after_rollback_scale": "lg"}}

@@ -1,0 +1,10 @@
+
+> mathbot-web@1.0.0 test
+> jest --runInBand --watchAll=false
+
+
+Test Suites: 58 passed, 58 total
+Tests:       337 passed, 337 total
+Snapshots:   0 total
+Time:        49.614 s
+Ran all test suites.
