@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **12/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **13/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -18,7 +18,7 @@
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Түзетілді, тексерілді |
 | A11 | P2 | Metrics raw path кілттері шексіз өседі | Түзетілді, тексерілді |
 | A12 | P2 | Frontend dependency security gate өтпейді | Түзетілді, тексерілді |
-| A13 | P3 | Rollback text_scale қалпына келтірмейді | Келесі |
+| A13 | P3 | Rollback text_scale қалпына келтірмейді | Түзетілді, тексерілді |
 
 ## A01
 
@@ -228,3 +228,19 @@ Next [ресми security advisory] бойынша patched 15.x нұсқасы �
 [10.75.2+ patch тармағы]: https://github.com/getsentry/sentry-javascript/security/advisories/GHSA-mchm-gjx6-7h55
 [Ресми minimatch advisory]: https://github.com/advisories/GHSA-g3hv-75wg-m249
 [glob advisory]: https://github.com/advisories/GHSA-3g3m-2fjr-6pw4
+
+## A13
+
+[Bank rollback](/E:/CursorMathbot/bot/repositories/bank/versions.py:282) енді snapshot-тағы `text_scale` мәнін де SQL UPDATE арқылы қалпына келтіреді. Missing/null/empty historical мән үшін default — `md`; жарамды numeric (`24`) және responsive (`16:24`) мәндері дәл сақталады. Қосымша агент snapshot schema-ның қалған 11 өрісін салыстырып, басқа omission таппады. Schema/migration өзгерісі қажет емес.
+
+Тек өлшем өзгерген жағдайда да rollback жаңа version, `changed_fields=["text_scale"]` және дұрыс previous/new version metadata-сы бар admin audit event жасайды. Optimistic lock сақталады: ескі expected version 409 қайтарады. Қайта орындалған, мазмұны өзгермейтін rollback артық history version құрмайды. Бұрынғы snapshot-тар қайта жазылмайды.
+
+[8 жаңа regression case](/E:/CursorMathbot/bot/tests/test_bank_rollback_snapshot.py) төрт scale-only HTTP round trip-ті, үш legacy default сценарийін және барлық 12 snapshot өрісі бір мезетте өзгертілгеннен кейінгі толық қалпына келуін қамтиды. Schema completeness тесті әр snapshot өрісі үшін нақты fixture мен before/after айырмасын талап етеді. Бастапқы төрт HTTP case түзетуден бұрын 200 қайтарылғанымен өлшем ескі нұсқаға қайтпағанын көрсетті — [red regression](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A13/red-regression.log).
+
+- Жаңа regression, bank version/quality-audit/image-retention suite: **48 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A13/targeted-tests.log).
+- Толық backend suite: **633 passed, 5 skipped**, 137,61 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A13/backend-tests.log). Бес opt-in PostgreSQL test өткізіліп жіберілді; suite SQLite ортасында орындалды.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A13/lint.log).
+
+Frontend source өзгерісі жоқ; frontend checks қайта орындалмады. Нақты PostgreSQL/browser E2E және deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `rollback_text_scale` бастапқы `lg` қатесін күтетін тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады.
+
+Бастапқы аудиттің A01–A13 коды бойынша түзетулері аяқталды. Release кезінде [A10 schema migration және deploy реті](/E:/CursorMathbot/deploy/NEON_VERCEL.md:89) сақталуы тиіс. Production DB migration бұл түзету сериясында орындалған жоқ; нақты PostgreSQL checks және A12-дегі қалған low development advisory-лері туралы шектеулер жоғарыда көрсетілген.
