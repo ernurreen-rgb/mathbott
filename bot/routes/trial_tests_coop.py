@@ -14,7 +14,7 @@ from database import Database
 from settings import get_settings
 from utils.cache import cache
 from utils.internal_proxy_auth import WEBSOCKET_TOKEN_TTL_SECONDS, build_ws_token, verify_ws_token
-from utils.public_payload import task_review_snapshot
+from utils.public_payload import public_review_answers, task_review_snapshot
 from utils.learning_progress import build_completion_identity
 from repositories.trial_test_repository import TrialTestAlreadySubmitted
 from utils.validation import is_task_answer_correct
@@ -342,6 +342,7 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
                         item["answers"] = json.loads(item["answers"]) if isinstance(item["answers"], str) else item["answers"]
                     except Exception:
                         item["answers"] = {}
+                item["answers"] = public_review_answers(item.get("answers"))
                 item["color"] = color_by_user.get(item.get("user_id"))
 
             return {

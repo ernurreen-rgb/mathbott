@@ -12,7 +12,7 @@ from slowapi import Limiter
 from dependencies import get_db
 from database import Database
 from utils.cache import cache
-from utils.public_payload import public_subquestions, task_review_snapshot
+from utils.public_payload import public_options, public_review_answers, public_subquestions, task_review_snapshot
 from utils.learning_progress import build_completion_identity
 from utils.validation import get_mcq_answer_count, is_task_answer_correct, normalize_answer_mode
 
@@ -151,7 +151,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                             else 1
                         ),
                         "text_scale": t.get("text_scale", "md"),
-                        "options": options,
+                        "options": public_options(options),
                         "subquestions": public_subquestions(subquestions),
                         "image_filename": t.get("image_filename"),
                         "sort_order": t.get("sort_order", 0),
@@ -291,7 +291,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     "score": saved_result["score"],
                     "total": saved_result["total"],
                     "percentage": round(saved_result["percentage"], 2),
-                    "results": json.loads(saved_answers) if isinstance(saved_answers, str) else saved_answers,
+                    "results": public_review_answers(json.loads(saved_answers) if isinstance(saved_answers, str) else saved_answers),
                 }
         except HTTPException:
             raise
@@ -385,6 +385,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         result["answers"] = json.loads(result["answers"]) if isinstance(result["answers"], str) else result["answers"]
                     except Exception:
                         result["answers"] = {}
+                result["answers"] = public_review_answers(result.get("answers"))
             
             return results
         except HTTPException:

@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **5/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **6/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -11,8 +11,8 @@
 | A03 | P2 | Тарихи суреттерді purge жояды | Түзетілді, тексерілді |
 | A04 | P2 | Сабақ құруда nested connection/pool timeout | Түзетілді, тексерілді |
 | A05 | P2 | Co-op жауап кілті ерте ашылады | Түзетілді, тексерілді |
-| A06 | P2 | Student options шешім metadata-сын ашады | Келесі |
-| A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Ашық |
+| A06 | P2 | Student options шешім metadata-сын ашады | Түзетілді, тексерілді |
+| A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Келесі |
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Ашық |
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Ашық |
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Ашық |
@@ -90,3 +90,19 @@ Backend source, browser E2E және deployment бұл қадамда өзгер
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A05/lint.log).
 
 Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL, browser OAuth/E2E және deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `coop_answer_key` бастапқы ақауды күтетін тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады.
+
+## A06
+
+[public_options](/E:/CursorMathbot/bot/utils/public_payload.py:34) оқушыға жіберілетін choice dict-терін string `label` және `text` өрістерімен қайта құрады. `correct`, `is_correct`, `answer`, `accepted_answers`, `solution`, белгісіз grading/teacher metadata және display өрісінің орнына берілген nested object сыртқа шықпайды. Сүзгі [lesson](/E:/CursorMathbot/bot/routes/modules.py:284), [trial details](/E:/CursorMathbot/bot/routes/trial_tests.py:154) және [legacy task](/E:/CursorMathbot/bot/routes/tasks.py:27) responses үшін қолданылады. LaTeX мәтіні, жауап нұсқаларының реті мен label-дері сақталады.
+
+Сәйкестендіру subquestion-дары display мәтінін ғана шығарады; legacy composite сұрақтағы `choices` мәтіні де сақталады. Белгісіз қосымша өрістер сүзгіден өтпейді. Бұрынғы legacy choices contract-ін тексеретін test өзгертілген жоқ: алғашқы толық тексерісте анықталған choice мәтінінің жоғалуын сүзгіні толықтыру арқылы түзеттік. Legacy recursive solution filter `is_correct` өрісін де алып тастайды.
+
+[Жаңа snapshot](/E:/CursorMathbot/bot/utils/public_payload.py:96) creation және ескі snapshot-тарды [оқу кезіндегі сүзу](/E:/CursorMathbot/bot/utils/public_payload.py:80) бір display schema-ны пайдаланады. Solo/co-op history GET және бұрынғы `attempt_id` бойынша submit retry response-тары да тазаланады. Бұл read-time сүзгі score, `correct_answer`, `correct_count` немесе DB-дегі тарихи жазбаларды өзгертпейді. Admin GET пен бастапқы bank options/subquestions metadata-сы сақталады; grading толық авторлық деректермен орындалады. DB backfill/migration қажет емес.
+
+[27 жаңа regression test](/E:/CursorMathbot/bot/tests/test_public_task_payloads.py) төрт/алты нұсқалы MCQ мен сәйкестендіруді, signed student және anonymous lesson reads-ті, admin metadata сақталуын, legacy endpoint-ті, grading мен жаңа/ескі review snapshot-тарын, submit retry-ді, дұрыс жауаптар санының сақталуын және malformed display payload-тарды қамтиды. Алғашқы тоғыз HTTP regression түзетуден бұрын lesson/trial endpoint-терінен артық metadata ашылғанын растады.
+
+- Жаңа regression және бұрынғы trial routes: **46 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A06/targeted-tests.log).
+- Толық backend suite: **488 passed, 5 skipped**, 93,92 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A06/backend-tests.log). Өткізілген бес test нақты PostgreSQL instance талап етеді.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A06/lint.log).
+
+Тексеру уақытша SQLite DB және production identity middleware арқылы орындалды; нақты PostgreSQL/browser E2E/deployment бұл қадамда іске қосылған жоқ. `repros/security.py` ішіндегі options leak assertion-ы бастапқы ақауды күтеді; ағымдағы source үшін жаңа regression suite пайдаланылады.

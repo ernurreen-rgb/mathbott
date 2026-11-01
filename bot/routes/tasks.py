@@ -6,7 +6,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from models.requests import TaskCheckRequest
-from utils.public_payload import strip_solution_fields
+from utils.public_payload import public_options, strip_solution_fields
 from utils.validation import is_task_answer_correct, normalize_task_answer_for_compare
 from utils.cache import cache
 
@@ -24,12 +24,17 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             raise HTTPException(status_code=404, detail="Task not found")
         
         questions = await db.progress.get_task_questions(task_id)
+        public_questions = (
+            public_options(questions)
+            if task.get("question_type") in {"mcq", "mcq6", "select"}
+            else strip_solution_fields(questions)
+        )
         
         return {
             "id": task["id"],
             "text": task["text"],
             "text_scale": task.get("text_scale", "md"),
-            "questions": strip_solution_fields(questions),
+            "questions": public_questions,
             "task_type": task.get("task_type", "standard"),
             "section_id": task.get("section_id")
         }

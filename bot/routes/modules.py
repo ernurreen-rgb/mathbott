@@ -5,7 +5,7 @@ import logging
 from typing import Optional, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from utils.cache import cache
-from utils.public_payload import public_subquestions
+from utils.public_payload import public_options, public_subquestions
 from utils.validation import get_mcq_answer_count, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def setup_modules_routes(app, db, limiter):
                         else 1
                     ),
                     "text_scale": t.get("text_scale", "md"),
-                    "options": options,
+                    "options": public_options(options),
                     "subquestions": public_subquestions(subquestions),
                     "sort_order": t.get("sort_order", 0),
                     "status": task_progress.get(t["id"], "not_started"),
