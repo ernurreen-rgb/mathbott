@@ -159,16 +159,14 @@ class CurriculumRepository(BaseRepository):
         title: Optional[str] = None,
         sort_order: int = 0
     ) -> Dict[str, Any]:
-        """Create a lesson in a section and ensure 4 mini-lessons exist."""
-        async with self._connection() as db:
-            await db.execute("PRAGMA foreign_keys = ON")
+        """Create a lesson and its four mini-lessons in one transaction."""
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             await db.execute(
                 """INSERT INTO lessons (section_id, lesson_number, title, sort_order)
                    VALUES (?, ?, ?, ?)""",
                 (section_id, lesson_number, title, sort_order),
             )
-            await db.commit()
             async with db.execute("SELECT * FROM lessons WHERE id = LAST_INSERT_ROWID()") as cursor:
                 row = await cursor.fetchone()
                 lesson = dict(row) if row else None
@@ -176,29 +174,29 @@ class CurriculumRepository(BaseRepository):
             if not lesson:
                 raise RuntimeError("Failed to create lesson")
 
-            # Ensure 4 mini-lessons
-            await self.ensure_default_mini_lessons(lesson["id"])
+            await self._ensure_default_mini_lessons(db, lesson["id"])
             return lesson
 
     async def ensure_default_mini_lessons(self, lesson_id: int) -> None:
-        """Ensure mini_lessons (1..4) exist for a lesson."""
-        async with self._connection() as db:
-            await db.execute("PRAGMA foreign_keys = ON")
-            async with db.execute(
-                "SELECT mini_index FROM mini_lessons WHERE lesson_id = ?",
-                (lesson_id,),
-            ) as cursor:
-                existing = {row[0] for row in await cursor.fetchall()}
+        """Atomically fill missing mini-lessons without replacing existing content."""
+        async with self._write_transaction() as db:
+            await self._ensure_default_mini_lessons(db, lesson_id)
 
-            for i in range(1, 5):
-                if i in existing:
-                    continue
-                await db.execute(
-                    """INSERT INTO mini_lessons (lesson_id, mini_index, title, sort_order)
-                       VALUES (?, ?, ?, ?)""",
-                    (lesson_id, i, f"Мини-урок {i}", i - 1),
-                )
-            await db.commit()
+    async def _ensure_default_mini_lessons(self, db: db_driver.Connection, lesson_id: int) -> None:
+        """Use the caller's transaction; never acquire another connection or commit."""
+        async with db.execute(
+            "SELECT mini_index FROM mini_lessons WHERE lesson_id = ?", (lesson_id,),
+        ) as cursor:
+            existing = {row[0] for row in await cursor.fetchall()}
+
+        for i in range(1, 5):
+            if i in existing:
+                continue
+            await db.execute(
+                """INSERT INTO mini_lessons (lesson_id, mini_index, title, sort_order)
+                   VALUES (?, ?, ?, ?)""",
+                (lesson_id, i, f"Мини-урок {i}", i - 1),
+            )
 
     async def get_lessons_by_section(self, section_id: int) -> List[Dict[str, Any]]:
         """Get lessons for section ordered by sort_order, lesson_number."""

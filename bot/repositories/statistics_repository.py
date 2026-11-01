@@ -97,7 +97,7 @@ class StatisticsRepository(BaseRepository):
                        FROM solutions GROUP BY task_id ORDER BY attempts DESC LIMIT 20""") as cursor:
                     popular_tasks = []
                     for row in await cursor.fetchall():
-                        task = await task_repo.get_task_by_id(row[0])
+                        task = await task_repo.get_task_by_id(row[0], conn=db)
                         if task:
                             success_rate = (row[2] / row[3] * 100) if row[3] > 0 else 0
                             popular_tasks.append({
@@ -116,7 +116,7 @@ class StatisticsRepository(BaseRepository):
                        ORDER BY (CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)) ASC LIMIT 10""") as cursor:
                     difficult_tasks = []
                     for row in await cursor.fetchall():
-                        task = await task_repo.get_task_by_id(row[0])
+                        task = await task_repo.get_task_by_id(row[0], conn=db)
                         if task:
                             success_rate = (row[2] / row[1] * 100) if row[1] > 0 else 0
                             difficult_tasks.append({
@@ -134,7 +134,7 @@ class StatisticsRepository(BaseRepository):
                        ORDER BY (CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)) DESC LIMIT 10""") as cursor:
                     easy_tasks = []
                     for row in await cursor.fetchall():
-                        task = await task_repo.get_task_by_id(row[0])
+                        task = await task_repo.get_task_by_id(row[0], conn=db)
                         if task:
                             success_rate = (row[2] / row[1] * 100) if row[1] > 0 else 0
                             easy_tasks.append({
@@ -213,7 +213,7 @@ class StatisticsRepository(BaseRepository):
                        GROUP BY task_id ORDER BY count DESC LIMIT 10""") as cursor:
                     problematic_tasks = []
                     for row in await cursor.fetchall():
-                        task = await task_repo.get_task_by_id(row[0])
+                        task = await task_repo.get_task_by_id(row[0], conn=db)
                         if task:
                             problematic_tasks.append({
                                 "task_id": row[0],

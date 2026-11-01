@@ -121,16 +121,19 @@ class TaskRepository(BaseRepository):
         )
         return int(cursor.lastrowid)
 
-    async def get_task_by_id(self, task_id: int) -> Optional[Dict[str, Any]]:
-        """Get task placement by id with joined bank content."""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute(
-                f"{self._TASK_SELECT} WHERE t.id = ?",
-                (task_id,),
-            ) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
+    async def get_task_by_id(
+        self, task_id: int, *, conn: Optional[db_driver.Connection] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Read joined content, borrowing a caller's connection without committing or closing it."""
+        if conn is None:
+            async with self._connection() as db:
+                return await self.get_task_by_id(task_id, conn=db)
+        conn.row_factory = db_driver.Row
+        async with conn.execute(
+            f"{self._TASK_SELECT} WHERE t.id = ?", (task_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
     async def get_random_task(self, exclude_ids: Optional[List[int]] = None) -> Optional[Dict[str, Any]]:
         """Get random active placement task with bank content."""

@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **3/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **4/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -9,8 +9,8 @@
 | A01 | P1 | Questions жүктеу қатесі квиз мазмұнын ауыстырады | Түзетілді, тексерілді |
 | A02 | P2 | Version conflict кейін ескі форма сақталады | Түзетілді, тексерілді |
 | A03 | P2 | Тарихи суреттерді purge жояды | Түзетілді, тексерілді |
-| A04 | P2 | Сабақ құруда nested connection/pool timeout | Келесі |
-| A05 | P2 | Co-op жауап кілті ерте ашылады | Ашық |
+| A04 | P2 | Сабақ құруда nested connection/pool timeout | Түзетілді, тексерілді |
+| A05 | P2 | Co-op жауап кілті ерте ашылады | Келесі |
 | A06 | P2 | Student options шешім metadata-сын ашады | Ашық |
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Ашық |
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Ашық |
@@ -60,3 +60,19 @@ Backend source, browser E2E және deployment бұл қадамда өзгер
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A03/lint.log).
 
 Тексеру уақытша SQLite DB және S3 эмуляциясымен орындалды; нақты PostgreSQL/S3 немесе deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `cleanup_image_history` бастапқы ақауды assert етеді; түзетуден кейін бұл тарихи репродукцияның сол assert-і құлауы күтіледі.
+
+## A04
+
+[Сабақ құру](/E:/CursorMathbot/bot/repositories/curriculum_repository.py:155) енді `BaseRepository._write_transaction()` арқылы бір connection ішінде өтеді. Сабақ пен оның төрт mini-lesson-ы бірге commit болады; mini-lesson құру қатесі сабақ пен оған дейін енгізілген бөлімдерді де rollback жасайды. Ортақ private helper connection алмайды және өздігінен commit жасамайды.
+
+[ensure_default_mini_lessons](/E:/CursorMathbot/bot/repositories/curriculum_repository.py:180) жеке шақырылғанда да сол helper-ді бір write transaction ішінде пайдаланады. Қатар жөндеу әрекеттері writer lock арқылы реттеледі; жетіспейтін бөлімдер толтырылады, бар бөлімдердің ID, атауы және sort order-і сақталады.
+
+[Статистикадағы төрт task lookup](/E:/CursorMathbot/bot/repositories/statistics_repository.py:100) қосымша connection алмайды. [TaskRepository.get_task_by_id](/E:/CursorMathbot/bot/repositories/task_repository.py:124) енді optional `conn` қабылдайды; берілген connection-ды commit/close жасамай оқиды. Бұрынғы `get_task_by_id(id)` шақырулары connection lifecycle-ін бұрынғыдай өздері басқарады. Pool capacity және timeout баптаулары өзгертілген жоқ.
+
+[12 regression test](/E:/CursorMathbot/bot/tests/test_repository_pool_transactions.py) pool capacity 1 және 2 үшін алты сценарийді тексереді: алты қатар сабақ құру; үшінші mini-lesson insert-індегі failure кезінде толық rollback; қатар repair кезінде бар мазмұнды сақтау; repair failure кезінде жартылай өзгеріс қалдырмау; екі қатар статистика сұрауының барлық task тізімдерін толтыруы; borrowed connection-ның ашық және commit жасалмаған күйін сақтау. Түзетуден бұрын lesson creation сценарийлері timeout-пен құлады, ал pool 2 кезіндегі insert failure commit болған толық емес сабақ қалдырды.
+
+- Жаңа regression suite: **12 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A04/targeted-tests.log).
+- Толық backend suite: **449 passed, 5 skipped**, 84,66 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A04/backend-tests.log). Өткізілген бес test нақты PostgreSQL instance талап етеді.
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A04/lint.log).
+
+Тексеру уақытша SQLite DB-де және нақты `ConnectionPool` арқылы орындалды. Нақты PostgreSQL сервері мен deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `nested_pool` тарихи репродукция бастапқы қате мінез-құлықты күтеді; ағымдағы source үшін regression suite пайдаланылады.
