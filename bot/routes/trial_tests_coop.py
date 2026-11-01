@@ -329,6 +329,9 @@ def setup_trial_tests_coop_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not participant:
                 raise HTTPException(status_code=403, detail="Not a participant")
 
+            if not participant.get("is_finished"):
+                raise HTTPException(status_code=409, detail="Нәтижелерді көру үшін алдымен тестті аяқтаңыз.")
+
             results = await db.trial_test_coop.get_results_for_session(session_id)
             participants = await db.trial_test_coop.list_participants(session_id)
             color_by_user = {p["user_id"]: p.get("color") for p in participants}

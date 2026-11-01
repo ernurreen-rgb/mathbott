@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **4/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **5/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -10,8 +10,8 @@
 | A02 | P2 | Version conflict кейін ескі форма сақталады | Түзетілді, тексерілді |
 | A03 | P2 | Тарихи суреттерді purge жояды | Түзетілді, тексерілді |
 | A04 | P2 | Сабақ құруда nested connection/pool timeout | Түзетілді, тексерілді |
-| A05 | P2 | Co-op жауап кілті ерте ашылады | Келесі |
-| A06 | P2 | Student options шешім metadata-сын ашады | Ашық |
+| A05 | P2 | Co-op жауап кілті ерте ашылады | Түзетілді, тексерілді |
+| A06 | P2 | Student options шешім metadata-сын ашады | Келесі |
 | A07 | P2 | SPA навигациясы соңғы trial draft өзгерісін жоғалтады | Ашық |
 | A08 | P2 | Constant algebra/numeric жауаптары теңестірілмейді | Ашық |
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Ашық |
@@ -76,3 +76,17 @@ Backend source, browser E2E және deployment бұл қадамда өзгер
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A04/lint.log).
 
 Тексеру уақытша SQLite DB-де және нақты `ConnectionPool` арқылы орындалды. Нақты PostgreSQL сервері мен deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `nested_pool` тарихи репродукция бастапқы қате мінез-құлықты күтеді; ағымдағы source үшін regression suite пайдаланылады.
+
+## A05
+
+[Co-op results endpoint](/E:/CursorMathbot/bot/routes/trial_tests_coop.py:332) membership тексерісінен кейін сұраушының DB-дегі `is_finished` күйін тексереді. Аяқтамаған қатысушыға `409` және «Нәтижелерді көру үшін алдымен тестті аяқтаңыз» хабары қайтады; response ішінде нәтижелер, snapshots немесе answer key жоқ. Session owner үшін де осы шарт қолданылады; session-ның `completed` flag-і сұраушының аяқтау шартын айналып өтпейді.
+
+Аяқтаған қатысушы session әлі `active` болса да өзінің сақталған review-ын көре алады. Екі қатысушы аяқтағанда бұрынғыдай екі нәтиже қайтады. Қатыспаған user/admin үшін `403`, жоқ session үшін `404`, production identity жоқ/қате болса `401` сақталады. Тірі workspace және оқушылардың өзара answer sync әрекеті өзгертілген жоқ; осы endpoint-тегі толық review ғана аяқтаумен шектелді.
+
+[12 жаңа regression test](/E:/CursorMathbot/bot/tests/test_trial_coop_results_access.py) нақты HTTP routes пен қолтаңбалы production identity middleware арқылы орындалады. Тексерістер owner/peer рөлдерін, бос submit арқылы алынған answer key-дің pending user-ге ашылмауын, аяқтағаннан кейін review ашылуын, cache `no-store` болуын, finished user-дің ұпайын қайта жаза алмауын, outsider/admin шектеуін, email spoofing және invalid signatures-ті қамтиды. Негізгі екі regression түзетуден бұрын pending owner/peer үшін endpoint `200` қайтарғанын көрсетті.
+
+- Жаңа regression suite: **12 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A05/targeted-tests.log).
+- Co-op access, trial routes, review regressions, proxy, draft және middleware: **88 test өтті**, 19,03 с — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A05/tests.log).
+- Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A05/lint.log).
+
+Тексеру уақытша SQLite DB-де орындалды; нақты PostgreSQL, browser OAuth/E2E және deployment бұл қадамда іске қосылған жоқ. `repros/domain.py` ішіндегі `coop_answer_key` бастапқы ақауды күтетін тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады.
