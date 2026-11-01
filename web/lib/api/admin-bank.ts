@@ -240,7 +240,8 @@ export async function getAdminBankTask(
   email: string
 ): Promise<{ data: BankTask | null; error: string | null }> {
   return fetchWithErrorHandling<BankTask>(
-    `${apiPath(`admin/bank/tasks/${taskId}`)}?email=${encodeURIComponent(email)}`
+    `${apiPath(`admin/bank/tasks/${taskId}`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
   );
 }
 

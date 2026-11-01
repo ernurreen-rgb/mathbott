@@ -1,14 +1,14 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **1/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **2/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
 | ID | Басымдық | Мәселе | Күйі |
 | --- | --- | --- | --- |
 | A01 | P1 | Questions жүктеу қатесі квиз мазмұнын ауыстырады | Түзетілді, тексерілді |
-| A02 | P2 | Version conflict кейін ескі форма сақталады | Келесі |
-| A03 | P2 | Тарихи суреттерді purge жояды | Ашық |
+| A02 | P2 | Version conflict кейін ескі форма сақталады | Түзетілді, тексерілді |
+| A03 | P2 | Тарихи суреттерді purge жояды | Келесі |
 | A04 | P2 | Сабақ құруда nested connection/pool timeout | Ашық |
 | A05 | P2 | Co-op жауап кілті ерте ашылады | Ашық |
 | A06 | P2 | Student options шешім metadata-сын ашады | Ашық |
@@ -31,3 +31,19 @@
 - Frontend ESLint, zero warnings: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A01/lint.log).
 
 Браузер E2E және жаңа production build бұл қадамда орындалған жоқ. Backend source өзгертілген жоқ. `repros/audit_edit.tsx` бастапқы ақаудың бар екенін assert ететін тарихи репродукция; A01 түзетілген соң оның AUDIT тексерісінің құлауы күтіледі. Ағымдағы дұрыс мінез-құлық source ішіндегі regression tests арқылы тексеріледі.
+
+## A02
+
+[Bank editor](/E:/CursorMathbot/web/app/admin/bank/page.tsx:326) conflict жауабынан алынған version token-ін ескі формаға көшірмейді. Пайдаланушының мәтіні формада қалады, ал Save және тікелей form submit бұғатталады. Duplicate confirmation арқылы сақтау conflict-ке түссе, modal жабылады және дәл сол қорғаныс іске қосылады.
+
+[Conflict хабарламасы](/E:/CursorMathbot/web/app/admin/bank/_components/BankTaskForm.tsx:77) жаңа нұсқаны жүктеу сақталмаған өзгерістерді алмастыратынын түсіндіреді. «Жаңа нұсқаны жүктеу» task detail-ды [cache қолданбай](/E:/CursorMathbot/web/lib/api/admin-bank.ts:238) алады; мәтін, жауап, опциялар, metadata және version бірге жаңарғаннан кейін ғана Save қолжетімді болады. Жүктеу қатесі, жоқ task, қате task ID, version-ның болмауы немесе trash күйі блокты алмайды. Қалыпты network save қатесін бұрынғы version token-мен қайта орындауға болады.
+
+Async save/reload жауаптары форманың ашылған сессиясымен байланыстырылды: пайдаланушы форманы жапса немесе басқа task ашса, бұрынғы кешіккен жауап ағымдағы форманы алмастырмайды.
+
+[UI regression tests](/E:/CursorMathbot/web/app/admin/bank/__tests__/page.test.tsx) 11 сценарийді, [API freshness test](/E:/CursorMathbot/web/lib/__tests__/admin-bank-api.test.ts) қатар жасалған екі detail сұрауының жаңа version/content қайтаратынын тексереді. Негізгі regression тесті түзетуден бұрын ескі формаға жаңа token көшірілгенін көрсетіп құлады.
+
+- Bank editor/API және admin composition/actions/API client: **5 suite, 55 test өтті** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A02/tests.log).
+- TypeScript `tsc --noEmit`: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A02/typecheck.log).
+- Frontend ESLint, zero warnings: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A02/lint.log).
+
+Backend source, browser E2E және deployment бұл қадамда өзгертілген/орындалған жоқ. `repros/audit_bank.tsx` бастапқы ақауды сипаттайтын тарихи репродукция болып қалады; ол қазіргі source үшін сәтті regression test ретінде пайдаланылмайды.

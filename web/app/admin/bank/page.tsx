@@ -24,6 +24,7 @@ import MathRender from "@/components/ui/MathRender";
 import {
   createAdminBankTask,
   deleteAdminBankTask,
+  getAdminBankTask,
   getAdminBankTasks,
   getAdminBankTopics,
   permanentlyDeleteAdminBankTask,
@@ -69,6 +70,9 @@ export default function AdminBankPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [versionConflict, setVersionConflict] = useState(false);
+  const [reloadingForm, setReloadingForm] = useState(false);
+  const formGenerationRef = useRef(0);
   const [importing, setImporting] = useState(false);
   const [confirmingImport, setConfirmingImport] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -191,12 +195,17 @@ export default function AdminBankPage() {
   }, [email, formTopicInput, form.topics]);
 
   const resetAndHideForm = () => {
+    formGenerationRef.current += 1;
     setForm(createEmptyForm());
     setShowForm(false);
     setEditingTaskId(null);
     setFormTopicInput("");
     setFormTopicSuggestions([]);
     setPendingDedup(null);
+    setVersionConflict(false);
+    setReloadingForm(false);
+    setSaving(false);
+    setError(null);
   };
 
   const addFilterTopic = (rawTopic: string) => {
@@ -278,7 +287,8 @@ export default function AdminBankPage() {
   };
 
   const submitBankForm = async (dedupConfirmed: boolean = false) => {
-    if (!email) return;
+    if (!email || saving || reloadingForm || versionConflict) return;
+    const generation = formGenerationRef.current;
 
     try {
       setSaving(true);
@@ -307,16 +317,16 @@ export default function AdminBankPage() {
         ? await updateAdminBankTask(editingTaskId, formData, email)
         : await createAdminBankTask(formData, email);
 
+      if (generation !== formGenerationRef.current) return;
+
       if (conflict?.code === "SIMILAR_TASKS_FOUND") {
         setPendingDedup({ similarTasks: conflict.similar_tasks || [] });
         setError(conflict.message || "Ұқсас тапсырмалар табылды");
         return;
       }
       if (conflict?.code === "VERSION_CONFLICT") {
-        setError(conflict.message || "Тапсырма нұсқасы ескірген. Деректерді жаңартып, қайта көріңіз.");
-        if (typeof conflict.current_version === "number") {
-          setForm((prev) => ({ ...prev, currentVersion: conflict.current_version || null }));
-        }
+        setVersionConflict(true);
+        setPendingDedup(null);
         return;
       }
 
@@ -329,9 +339,11 @@ export default function AdminBankPage() {
         await fetchTasks();
       }
     } catch (err: any) {
-      setError(err?.message || "Тапсырманы сақтау қатесі");
+      if (generation === formGenerationRef.current) {
+        setError(err?.message || "Тапсырманы сақтау қатесі");
+      }
     } finally {
-      setSaving(false);
+      if (generation === formGenerationRef.current) setSaving(false);
     }
   };
 
@@ -375,12 +387,46 @@ export default function AdminBankPage() {
   };
 
   const startEdit = (task: BankTask) => {
+    const nextForm = parseTaskToForm(task);
+    formGenerationRef.current += 1;
     setEditingTaskId(task.id);
-    setForm(parseTaskToForm(task));
+    setForm(nextForm);
     setShowForm(true);
     setFormTopicInput("");
     setFormTopicSuggestions([]);
     setPendingDedup(null);
+    setVersionConflict(false);
+    setReloadingForm(false);
+    setSaving(false);
+    setError(null);
+  };
+
+  const reloadConflictedForm = async () => {
+    if (!email || !editingTaskId || !versionConflict || saving || reloadingForm) return;
+    const generation = formGenerationRef.current;
+    setReloadingForm(true);
+    setError(null);
+    try {
+      const { data, error: err } = await getAdminBankTask(editingTaskId, email);
+      if (generation !== formGenerationRef.current) return;
+      if (err || !data || data.id !== editingTaskId ||
+        typeof data.current_version !== "number" || !Number.isInteger(data.current_version) || data.current_version < 1) {
+        setError(err || "Тапсырманың жаңа нұсқасын жүктеу мүмкін болмады.");
+        return;
+      }
+      if (data.deleted_at) {
+        setError("Тапсырма себетке жылжытылған. Өзгерістерді сақтау мүмкін емес.");
+        return;
+      }
+      startEdit(data);
+      setTasks((prev) => prev.map((task) => task.id === data.id ? data : task));
+    } catch (err: any) {
+      if (generation === formGenerationRef.current) {
+        setError(err?.message || "Тапсырманың жаңа нұсқасын жүктеу мүмкін болмады.");
+      }
+    } finally {
+      if (generation === formGenerationRef.current) setReloadingForm(false);
+    }
   };
 
   const { openHistory, openSnapshot, openJsonEdit, saveJsonEdit, handleRollbackVersion, handleDeleteVersion, openUsage } = createVersionActions({
@@ -601,8 +647,7 @@ export default function AdminBankPage() {
                       resetAndHideForm();
                       return;
                     }
-                    setEditingTaskId(null);
-                    setForm(createEmptyForm());
+                    resetAndHideForm();
                     setShowForm(true);
                   }}
                   className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
@@ -627,6 +672,9 @@ export default function AdminBankPage() {
               formPreviewTask={formPreviewTask}
               formImagePreview={formImagePreview}
               saving={saving}
+              versionConflict={versionConflict}
+              reloading={reloadingForm}
+              reloadTask={reloadConflictedForm}
               resetAndHideForm={resetAndHideForm}
             />
 

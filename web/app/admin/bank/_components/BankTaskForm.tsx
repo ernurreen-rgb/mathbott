@@ -38,6 +38,9 @@ type Props = {
   formPreviewTask: { id: number; text: string; answer?: string; accepted_answers?: string[] | null; question_type: QuestionType; answer_mode?: AnswerMode | null; correct_count?: number | null; text_scale?: TaskTextScale | null; options?: LessonTaskOption[] | null; subquestions?: LessonTaskSubquestion[] | null; image_filename?: string | null; solution_filename?: string | null; bank_task_id?: number | null; bank_difficulty?: BankDifficulty | null; bank_topics?: string[]; sort_order: number; status?: "not_started" | "in_progress" | "completed"; };
   formImagePreview: string | null;
   saving: boolean;
+  versionConflict: boolean;
+  reloading: boolean;
+  reloadTask: () => Promise<void>;
   resetAndHideForm: () => void;
 };
 
@@ -56,6 +59,9 @@ export default function BankTaskForm({
   formPreviewTask,
   formImagePreview,
   saving,
+  versionConflict,
+  reloading,
+  reloadTask,
   resetAndHideForm,
 }: Props) {
   return (
@@ -66,6 +72,20 @@ export default function BankTaskForm({
           {editingTaskId && (
             <div className="text-sm text-gray-600">
               Нұсқа: v{form.currentVersion ?? "?"}
+            </div>
+          )}
+          {versionConflict && (
+            <div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>Тапсырманы басқа редактор өзгертті. Өзгерістеріңіз сақталмады.</p>
+              <p>Жаңа нұсқаны жүктегенде осы пішіндегі сақталмаған өзгерістер алмастырылады.</p>
+              <button
+                type="button"
+                onClick={() => void reloadTask()}
+                disabled={saving || reloading}
+                className="rounded-lg bg-amber-700 px-3 py-2 font-semibold text-white disabled:opacity-60"
+              >
+                {reloading ? "Жүктелуде..." : "Жаңа нұсқаны жүктеу"}
+              </button>
             </div>
           )}
           <form onSubmit={handleSubmitForm} className="space-y-3">
@@ -309,7 +329,7 @@ export default function BankTaskForm({
             />
 
             <div className="flex gap-2">
-              <button type="submit" disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
+              <button type="submit" disabled={saving || reloading || versionConflict} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
                 {saving ? "Сақталуда..." : editingTaskId ? "Сақтау" : "Құру"}
               </button>
               <button type="button" onClick={resetAndHideForm} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">

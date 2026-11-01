@@ -1,0 +1,10 @@
+
+> mathbot-web@1.0.0 test
+> jest --runInBand --watch=false --runTestsByPath app/admin/bank/__tests__/page.test.tsx lib/__tests__/admin-bank-api.test.ts app/admin/__tests__/page-composition.test.tsx app/admin/__tests__/extracted-actions.test.tsx lib/__tests__/api.test.ts
+
+
+Test Suites: 5 passed, 5 total
+Tests:       55 passed, 55 total
+Snapshots:   0 total
+Time:        4.465 s
+Ran all test suites within paths "app/admin/bank/__tests__/page.test.tsx", "lib/__tests__/admin-bank-api.test.ts", "app/admin/__tests__/page-composition.test.tsx", "app/admin/__tests__/extracted-actions.test.tsx", "lib/__tests__/api.test.ts".
