@@ -4,6 +4,8 @@ WORKDIR /app
 
 # Install dependencies first for better layer caching
 COPY package*.json ./
+COPY .npmrc ./
+COPY tools/minimatch-compat ./tools/minimatch-compat
 RUN npm ci
 
 # Copy application source

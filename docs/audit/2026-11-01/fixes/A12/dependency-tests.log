@@ -1,0 +1,48 @@
+
+> mathbot-web@1.0.0 pretest
+> npm run test:dependencies
+
+
+> mathbot-web@1.0.0 test:dependencies
+> node --test tools/dependency-compat.test.cjs
+
+TAP version 13
+# Subtest: legacy callable matcher preserves path, dotfile, brace and native Windows glob matching
+ok 1 - legacy callable matcher preserves path, dotfile, brace and native Windows glob matching
+  ---
+  duration_ms: 81.75
+  ...
+# Subtest: ESLint glob enumeration, ignores and file-specific overrides still report violations
+ok 2 - ESLint glob enumeration, ignores and file-specific overrides still report violations
+  ---
+  duration_ms: 3881.0979
+  ...
+# Subtest: import rule matcher predicates permit public imports and reject private paths
+ok 3 - import rule matcher predicates permit public imports and reject private paths
+  ---
+  duration_ms: 4185.5834
+  ...
+# Subtest: React rule callable matcher still honors allowed component patterns
+ok 4 - React rule callable matcher still honors allowed component patterns
+  ---
+  duration_ms: 3403.6387
+  ...
+# Subtest: flat-cache deletion uses the scoped rimraf synchronous API
+ok 5 - flat-cache deletion uses the scoped rimraf synchronous API
+  ---
+  duration_ms: 225.994
+  ...
+# Subtest: coverage traversal and modern glob retain sync/async selection and cancellation
+ok 6 - coverage traversal and modern glob retain sync/async selection and cancellation
+  ---
+  duration_ms: 84.6595
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11951.3571

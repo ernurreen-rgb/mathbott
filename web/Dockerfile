@@ -4,6 +4,8 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY .npmrc ./
+COPY tools/minimatch-compat ./tools/minimatch-compat
 
 # Install dependencies
 RUN npm ci
@@ -35,6 +37,8 @@ RUN addgroup -S appuser && adduser -S appuser -G appuser
 
 # Copy package files
 COPY package*.json ./
+COPY .npmrc ./
+COPY tools/minimatch-compat ./tools/minimatch-compat
 
 # Install production dependencies only
 RUN npm ci --only=production

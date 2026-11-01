@@ -1,6 +1,6 @@
 # Аудиттен кейінгі түзетулер
 
-2026-11-01: **11/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
+2026-11-01: **12/13 мәселе түзетілді**. Түзетулер жеке commit ретінде сақталады. Deployment орындалған жоқ. Бастапқы [аудит есебі](/E:/CursorMathbot/docs/audit/2026-11-01/REPORT.md) тексерілген revision туралы тарихи жазба болып қалады.
 
 Жұмыс тәртібі: әр Axx түзетуінің коды, regression tests, тексеру журналдары және осы файлдағы күйі жеке commit-ке біріктіріледі; тексеруден кейін `origin` remote-ына push жасалады.
 
@@ -17,8 +17,8 @@
 | A09 | P2 | Қатар user creation UNIQUE қатесіне түседі | Түзетілді, тексерілді |
 | A10 | P2 | Guest PIN lookup/join шектелмеген | Түзетілді, тексерілді |
 | A11 | P2 | Metrics raw path кілттері шексіз өседі | Түзетілді, тексерілді |
-| A12 | P2 | Frontend dependency security gate өтпейді | Келесі |
-| A13 | P3 | Rollback text_scale қалпына келтірмейді | Ашық |
+| A12 | P2 | Frontend dependency security gate өтпейді | Түзетілді, тексерілді |
+| A13 | P3 | Rollback text_scale қалпына келтірмейді | Келесі |
 
 ## A01
 
@@ -200,3 +200,31 @@ DB quota бөлігі мен migration-дарды қосымша агент ор
 - Өзгертілген Python файлдарына CI flake8 `E9,F63,F7,F82`: **0 қате, exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A11/lint.log).
 
 Schema/migration және frontend source өзгерісі жоқ. `repros/runtime.py` ішіндегі 20 000 unbounded key күтуі бастапқы ақауды сипаттайтын тарихи репродукция; ағымдағы source үшін жаңа regression suite пайдаланылады. Deployment бұл қадамда орындалған жоқ.
+
+## A12
+
+[Frontend manifest/lockfile](/E:/CursorMathbot/web/package.json) қолдау көрсетілетін patched тармақтарға жаңартылды: Next және eslint-config-next **15.5.28**, next-auth **4.24.15**, Sentry **10.78.0**, Jest/jsdom **30.5.2**, PostCSS **8.5.32**, Tailwind **3.4.19**, sharp **0.35.5**. PostCSS override енді `$postcss` арқылы direct нұсқаға байланған. Қолданылмайтын KaTeX/react-katex dependencies алынды; қолданба MathLive арқылы render жасайды. React 18, Next 15, ESLint 8 және `.eslintrc.json` API-лері сақталды.
+
+Next [ресми security advisory] бойынша patched 15.x нұсқасы — 15.5.28 және image optimizer үшін sharp >=0.35.5 қажет. Auth.js [4.24.15 patch-і] және Sentry [10.75.2+ patch тармағы] да тексерілді. Қазіргі lockfile осы түзетілген тармақтардан жаңа нұсқаларды бекітеді.
+
+[Ресми minimatch advisory] <11.0.1 нұсқаларын, [glob advisory] 9.0.0–14.0.1 нұсқаларын affected деп көрсетеді. Modern consumers upstream **minimatch 11.0.3 / glob 14.0.3** қолданады. Ескі ESLint plugins callable minimatch 3 интерфейсін күтетіндіктен, private [adapter](/E:/CursorMathbot/web/tools/minimatch-compat/index.cjs) барлық matching-ті нақты minimatch 11-ге береді; осал ескі matcher коды сақталмайды. Adapter өз атымен `@mathbot/minimatch-compat@1.0.0` ретінде тіркеледі. Windows native glob жолдары мен ескі pattern trimming сақталған; `import/no-internal-modules` қолданатын `makeRe().test()` predicate интерфейсі бар. Бұл толық ескі RegExp/set internals API-і емес.
+
+Сол internals-қа тәуелді glob 7-ні алып тастау үшін тек flat-cache 3-тің rimraf тармағы 6.1.3-ке ауыстырылды; ол бұрынғыдай synchronous deletion API қолданады. Root dev dependency мен [.npmrc](/E:/CursorMathbot/web/.npmrc) ішіндегі `install-links=false` npm 10/11 clean install кезінде legacy adapter мен modern module орындарын дұрыс сақтайды. [Dockerfile](/E:/CursorMathbot/web/Dockerfile) және [Dockerfile.dev](/E:/CursorMathbot/web/Dockerfile.dev) adapter мен `.npmrc`-ты dependency install алдында көшіреді.
+
+[6 жаңа integration test](/E:/CursorMathbot/web/tools/dependency-compat.test.cjs) нақты ESLint glob enumeration/ignore/overrides, Windows native pattern, React және import rule violation-дары, flat-cache deletion, coverage traversal және aborted glob шақыруын тексереді. Олар `npm test` алдында автоматты орындалады. Қосымша агенттер dependency/API үйлесімділігін, npm 10/11 file override мінез-құлқын және соңғы diff-ті тексерді; actionable blocker табылмады.
+
+- Қайта алынған baseline audit: **57 affected package entry** — [бастапқы JSON](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/audit-before.json). Бастапқы тарихи есепте 51 болған; advisory feed өзгерген.
+- `npm audit --audit-level=moderate`: **exit 0**, critical/high/moderate — **0** — [соңғы JSON](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/audit-after.json). Қалған **5 low entry** бір deepmerge advisory-інің Jest арқылы таралуы; бұл бес бөлек exploit емес. Олар осы қадамда түзетілген жоқ. CI audit threshold/exception өзгерген жоқ; `npm audit fix --force` қолданылған жоқ.
+- `npm audit --omit=dev --audit-level=moderate`: **exit 0, 0 affected entry** — [production JSON](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/audit-production.json).
+- Clean npm **10.9.4** install: **exit 0** — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/ci.log). `npm ls --all` — exit 0, invalid dependency жоқ.
+- Бөлек Node **20.20.2 / npm 10.9.4** production fixture: `npm ci --omit=dev` және `npm ls --omit=dev --all` — **exit 0**; Next, NextAuth, Sentry config және sharp native module жүктелді — [журнал](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/production-install.log). MathLive transitive compute-engine-нің бұрыннан бар Node >=21.7.3 engine warning-і қалды; engine-strict қосылған орта бұл қадамда тексерілмеді.
+- Node **20.20.2**: **6 dependency integration test** және **61 Jest suite / 387 test**, coverage-пен өтті — [dependency tests](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/dependency-tests.log), [толық tests](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/tests.log).
+- Сол Node 20 ортасында production build, TypeScript және zero-warning ESLint: **exit 0** — [build](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/build.log), [typecheck](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/typecheck.log), [lint](/E:/CursorMathbot/docs/audit/2026-11-01/fixes/A12/lint.log).
+
+Тексеру `be0c336` revision-ының таза export-ына тек A12 файлдарын қосып орындалды; workspace-та қатар өзгерген quiz feature файлдары бұл commit-ке қосылмайды. Backend source/schema өзгерісі жоқ, backend suite қайта іске қосылмады. Docker engine қолжетімді болмағандықтан image build орындалмады; browser OAuth/E2E және deployment орындалған жоқ.
+
+[ресми security advisory]: https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw
+[4.24.15 patch-і]: https://github.com/nextauthjs/next-auth/security/advisories/GHSA-x445-f3h2-j279
+[10.75.2+ patch тармағы]: https://github.com/getsentry/sentry-javascript/security/advisories/GHSA-mchm-gjx6-7h55
+[Ресми minimatch advisory]: https://github.com/advisories/GHSA-g3hv-75wg-m249
+[glob advisory]: https://github.com/advisories/GHSA-3g3m-2fjr-6pw4
