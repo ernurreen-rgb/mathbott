@@ -183,3 +183,10 @@ artifact-і жарияланады, production archive CI-ге жіберілм�
 S3 image bytes, roles/ACL, provider PITR, scheduled/off-site retention бұл
 logical public-schema drill-ға кірмейді. Нақты Google OAuth және trial-test
 draft browser сценарийлері D04-тің келесі бөлігі болып қалады.
+
+`0f2c6b3` revision-ының [толық CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41432305249)
+**success**: барлық **6 job** өтті. Жаңа PostgreSQL 18 / Python 3.12 job-ында
+**6/6 restore test** өтті, synthetic JUnit artifact сақталды. [Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41432305382)
+да **success**: build, configured image scan gate-тері және push өтті.
+[Remote CI evidence](evidence/D03/restore-ci.json). Нақты production snapshot
+GitHub-қа немесе CI artifact-іне жіберілген жоқ.
