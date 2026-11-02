@@ -99,6 +99,13 @@ for schema changes; never rewrite an applied SQL file. The baseline generator
 in `scripts/generate_postgres_schema.py` is a development utility for the
 initial baseline, not a release migration command.
 
+## Backups and restore drills
+
+For a consistent PostgreSQL backup and a restore drill into a separate empty
+database, follow [PostgreSQL backup/restore](POSTGRES_BACKUP_RESTORE.md). This
+uses direct connections and read-only exported source snapshots; it never
+restores over the production database. S3 object bytes are handled separately.
+
 ## Quiz entry protection
 
 Apply the schema-only migration before deploying this API version:

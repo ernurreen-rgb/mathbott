@@ -8,6 +8,8 @@
 *.sqlite
 *.sqlite3
 csv_export/
+backups/
+*.dump
 
 # Python
 __pycache__/
