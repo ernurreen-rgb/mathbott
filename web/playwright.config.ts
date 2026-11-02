@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from 'playwright/test';
 import { webURL, apiURL } from './e2e/support/settings.cjs';
 
 export default defineConfig({

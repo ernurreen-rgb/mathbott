@@ -116,6 +116,21 @@ build, TypeScript және zero-warning ESLint өтті. Нәтиже экран
 exit 0; бұрын тіркелген 5 low development entry сақталды, жаңа advisory жоқ.
 GitHub Linux/Python 3.12 нәтижесі push-тен кейін тіркеледі.
 
+Runtime graph тексерісі Next-тің optional `@playwright/test` peer-і wrapper-ді
+production dependency ретінде де есептейтінін көрсетті. Follow-up сол runner-ді
+ресми `playwright/test` export-ынан импорттайды; direct `playwright` және
+`playwright-core` lockfile-де тек `dev: true`, wrapper package жоқ. Бөлек таза
+`npm ci --omit=dev --engine-strict` exit 0: үшеуі де production node_modules
+ішінде жоқ, production audit **0 affected package**.
+
+`f196dad` revision-ының алғашқы [CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41427125981)
+толық **success**: SQLite/backend, PostgreSQL/backend, frontend, security және
+жаңа browser-e2e job-тары өтті. Linux/Python 3.12-де **8/8 E2E**, HTML report
+artifact-і сақталды. Runtime graph follow-up-ының нәтижесі бөлек тіркеледі.
+
+Runtime graph өзгерісінен кейін clean full install, TypeScript, ESLint және
+**8/8 E2E** қайта өтті; test runner behavior сақталған.
+
 Қалған D04 көлемі: нақты Google sign-in/staging rehearsal және trial-test draft
 сценарийлері. PostgreSQL backup restore drill — бөлек D03 жұмысы; D05 тақырыптық
 прогресс/қатемен жұмыс кезегі осы тексерістерден кейін жалғасады.

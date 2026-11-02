@@ -59,5 +59,11 @@ Open the HTML report with `npx playwright show-report output/playwright/report`.
 No real staging service is provisioned by this suite. It is an isolated local/CI
 release check; staging OAuth and a PostgreSQL backup restore drill remain separate.
 
+The runner is imported from the public `playwright/test` export of the direct
+**dev** dependency `playwright`. Avoid adding the `@playwright/test` wrapper to
+the web root: Next declares it as an optional runtime peer, which makes npm retain
+the wrapper and its browser tooling even with `npm ci --omit=dev`. The public
+entry point provides the same runner without satisfying that runtime peer.
+
 Runner configuration follows Playwright's [web server](https://playwright.dev/docs/test-webserver)
 and [configuration](https://playwright.dev/docs/test-configuration) documentation.

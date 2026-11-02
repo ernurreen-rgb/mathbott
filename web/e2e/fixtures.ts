@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test as base, expect, type APIRequestContext, type Page } from 'playwright/test';
 import { encode } from 'next-auth/jwt';
 import { authSecret, teacherEmail, webURL } from './support/settings.cjs';
 
