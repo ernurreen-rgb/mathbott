@@ -7,7 +7,7 @@
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | API/web production deploy өтті; restore/E2E жоспарланған |
-| D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
+| D04 | Негізгі браузер сценарийлеріне E2E | Квиз ағынының 8 local тесті өтті; CI тексерілуде; OAuth/draft кейінгі кезеңде |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
@@ -78,3 +78,44 @@ Workflow YAML және secret ID/environment wiring тексерілді. Secret
 ## Production deploy
 
 Пайдаланушының production deploy сұрауы бойынша `a30708a` коды API → web ретімен жарияланды. Екі deployment READY, негізгі домендер жаңа ID-лерге бағытталған. Health/Auth/catalogue/proxy/static asset smoke checks өтті; sensitive secret мәндері ауыстырылмады. Толық [release есебі](../../deployments/2026-11-02/production-a30708a.md) және оның JSON нәтижесі rollback deployment ID-лері мен тексеру шектеулерін сақтайды.
+
+## D04: квизге қосылу және нәтижеге жету
+
+`web/e2e/` ішіне Playwright 1.64.1 браузерлік regression suite қосылды. Төрт
+сценарий desktop Chromium және Pixel 7 өлшемінде орындалады — барлығы 8 тест:
+
+- Қате PIN, бос есім және жоқ ойын кезіндегі UI/API validation.
+- Private квиздің source/catalogue visibility шектеулері; PIN → lobby → host
+  start → дұрыс/қате жауап → reload → 50% нәтиже → жеке review.
+- Сервер жауапты сақтағаннан кейін HTTP acknowledgement жоғалса, polling арқылы
+  қалпына келу; бір payload-ты қайта жіберу ұпай мен жауап санын арттырмайды.
+- Серверге жетпеген жауапты UI retry арқылы жіберу; reload нәтижені сақтайды.
+
+API production auth/CSRF режимінде, бөлек уақытша SQLite базасында жұмыс істейді.
+Web таза уақытша source copy-дан production build жасайды; `.env*`, `.vercel`
+және дайын build көшірілмейді. Child process ортасына тек OS essentials пен
+synthetic test configuration беріледі. URL-дер loopback-ке бекітілген және
+бұрын іске қосылған server қайта қолданылмайды. Application auth bypass немесе
+reset/seed HTTP endpoint қосылған жоқ.
+
+Мұғалімнің тесттік cookie-і NextAuth-тың қалыпты JWT encryption механизмімен
+жасалады. Бұл signed authenticated proxy flow-ды тексереді; нақты Google OAuth
+exchange-ті тексермейді. Guest join/answers/result/review браузер UI арқылы өтеді.
+Production деректері мен deploy өзгермейді. Қазір provision жасалған сыртқы
+staging ортасы жоқ: бұл local/CI ортасындағы оқшауланған release check.
+
+GitHub CI-ге `browser-e2e` job қосылды: Python 3.12, Node 24, Chromium, бөлек
+fixture server-лер және 7 күн сақталатын HTML report/failure trace artifact-тері.
+Jest, ESLint және Docker context generated E2E output-ты елемейді. Іске қосу
+нұсқаулығы мен шектеулер: [web/e2e/README.md](../../../web/e2e/README.md).
+
+Жергілікті Node 24.22.2 / Python 3.11 тексерістері: **8/8 Chromium E2E**,
+**61 Jest suite / 388 test**, **6 dependency integration test**, production
+build, TypeScript және zero-warning ESLint өтті. Нәтиже экрандарының desktop
+және mobile скриншоттары визуалды тексерілді. `npm audit --audit-level=moderate`
+exit 0; бұрын тіркелген 5 low development entry сақталды, жаңа advisory жоқ.
+GitHub Linux/Python 3.12 нәтижесі push-тен кейін тіркеледі.
+
+Қалған D04 көлемі: нақты Google sign-in/staging rehearsal және trial-test draft
+сценарийлері. PostgreSQL backup restore drill — бөлек D03 жұмысы; D05 тақырыптық
+прогресс/қатемен жұмыс кезегі осы тексерістерден кейін жалғасады.
