@@ -7,7 +7,7 @@
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | API/web production deploy өтті; restore/E2E жоспарланған |
-| D04 | Негізгі браузер сценарийлеріне E2E | Квиз ағынының 8 local тесті өтті; CI тексерілуде; OAuth/draft кейінгі кезеңде |
+| D04 | Негізгі браузер сценарийлеріне E2E | Квиздің 8 Windows/Linux E2E тесті және толық CI өтті; OAuth/draft жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
@@ -114,7 +114,7 @@ Jest, ESLint және Docker context generated E2E output-ты елемейді.
 build, TypeScript және zero-warning ESLint өтті. Нәтиже экрандарының desktop
 және mobile скриншоттары визуалды тексерілді. `npm audit --audit-level=moderate`
 exit 0; бұрын тіркелген 5 low development entry сақталды, жаңа advisory жоқ.
-GitHub Linux/Python 3.12 нәтижесі push-тен кейін тіркеледі.
+GitHub Linux/Python 3.12 нәтижелері төменде тіркелген.
 
 Runtime graph тексерісі Next-тің optional `@playwright/test` peer-і wrapper-ді
 production dependency ретінде де есептейтінін көрсетті. Follow-up сол runner-ді
@@ -126,10 +126,16 @@ production dependency ретінде де есептейтінін көрсет�
 `f196dad` revision-ының алғашқы [CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41427125981)
 толық **success**: SQLite/backend, PostgreSQL/backend, frontend, security және
 жаңа browser-e2e job-тары өтті. Linux/Python 3.12-де **8/8 E2E**, HTML report
-artifact-і сақталды. Runtime graph follow-up-ының нәтижесі бөлек тіркеледі.
+artifact-і сақталды.
 
 Runtime graph өзгерісінен кейін clean full install, TypeScript, ESLint және
 **8/8 E2E** қайта өтті; test runner behavior сақталған.
+
+Соңғы functional revision `550e57e` үшін [толық CI](https://github.com/ernurreen-rgb/mathbott/actions/runs/41428688329)
+**success**: бес job-тың бәрі өтті. Linux/Python 3.12 browser job-ында **8/8 E2E**,
+`browser-e2e-report` artifact ID `13133726139` (7 күн retention). Runtime/tooling
+және local/remote нәтижелердің [verification JSON-ы](evidence/D04/verification.json)
+сақталды. Бұл кезең production deployment жасамайды.
 
 Қалған D04 көлемі: нақты Google sign-in/staging rehearsal және trial-test draft
 сценарийлері. PostgreSQL backup restore drill — бөлек D03 жұмысы; D05 тақырыптық
