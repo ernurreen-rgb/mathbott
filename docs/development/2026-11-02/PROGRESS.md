@@ -7,7 +7,7 @@
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | Deploy және production PostgreSQL snapshot restore өтті; S3 бөлек |
-| D04 | Негізгі браузер сценарийлеріне E2E | Квиз + trial draft: 16 local E2E өтті; жаңа CI тексерісі дайындалуда; OAuth бөлек |
+| D04 | Негізгі браузер сценарийлеріне E2E | Квиз + trial draft: 16 Windows/Linux E2E және толық CI өтті; нақты OAuth бөлек |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
@@ -137,9 +137,9 @@ Runtime graph өзгерісінен кейін clean full install, TypeScript, 
 және local/remote нәтижелердің [verification JSON-ы](evidence/D04/verification.json)
 сақталды. Бұл кезең production deployment жасамайды.
 
-Қалған D04 көлемі: нақты Google sign-in/staging rehearsal және trial-test draft
-сценарийлері. PostgreSQL backup restore drill — бөлек D03 жұмысы; D05 тақырыптық
-прогресс/қатемен жұмыс кезегі осы тексерістерден кейін жалғасады.
+Нақты Google sign-in/staging rehearsal D04-тің бөлек тексерісі болып қалады.
+Trial-test draft және PostgreSQL restore нәтижелері төмендегі бөлімдерде тіркелді.
+D05 тақырыптық прогресс/қатемен жұмыс кезегі осы тексерістерден кейін жалғасады.
 
 ## D03: production PostgreSQL snapshot restore
 
@@ -181,8 +181,8 @@ artifact-і жарияланады, production archive CI-ге жіберілм�
 Толық [runbook](../../../deploy/POSTGRES_BACKUP_RESTORE.md) және
 [production restore evidence](evidence/D03/production-restore.json).
 S3 image bytes, roles/ACL, provider PITR, scheduled/off-site retention бұл
-logical public-schema drill-ға кірмейді. Нақты Google OAuth және trial-test
-draft browser сценарийлері D04-тің келесі бөлігі болып қалады.
+logical public-schema drill-ға кірмейді. Нақты Google OAuth бөлек тексеріледі;
+trial-test draft browser нәтижелері төменде тіркелген.
 
 `0f2c6b3` revision-ының [толық CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41432305249)
 **success**: барлық **6 job** өтті. Жаңа PostgreSQL 18 / Python 3.12 job-ында
@@ -219,3 +219,9 @@ integration test**, TypeScript және zero-warning ESLint өтті. Нәтиж
 desktop result сценарийі жеке қайта өтті.
 Production деректері мен deployment өзгермейді. Іске қосу және scope:
 [web/e2e/README.md](../../../web/e2e/README.md).
+
+`81a41e3` revision-ының [толық CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009)
+**success**: барлық **6 job** өтті. Linux/Python 3.12 browser job-ы **16/16 E2E**
+орындады; жаңа 8 trial draft test пен бұрынғы 8 quiz test бірге өтті. HTML report
+artifact ID `13136103453`, retention 7 күн. Local/remote тексерістердің
+[verification JSON-ы](evidence/D04/trial-draft-verification.json) сақталды.

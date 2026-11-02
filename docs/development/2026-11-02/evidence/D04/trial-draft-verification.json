@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-02",
+  "source_commit": "81a41e3345e4f352e21170ad72f392e194264c01",
+  "local_runtime": {
+    "python": "3.11.4",
+    "node": "24.22.2"
+  },
+  "local_checks": {
+    "typescript_exit_code": 0,
+    "screenshots_reviewed": [
+      "desktop trial result after layout settles",
+      "mobile trial result"
+    ],
+    "production_build": true,
+    "jest_tests_passed": 388,
+    "full_e2e_failed": 0,
+    "full_e2e_passed": 16,
+    "eslint_exit_code": 0,
+    "dependency_integration_tests_passed": 6,
+    "targeted_desktop_result_recheck_passed": 1,
+    "jest_suites_passed": 61
+  },
+  "ci": {
+    "status": "completed",
+    "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "postgres-restore-drill",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526367"
+      },
+      {
+        "name": "backend-postgres-tests",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526672"
+      },
+      {
+        "name": "security-audit",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526784"
+      },
+      {
+        "name": "browser-e2e",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526787"
+      },
+      {
+        "name": "frontend-tests",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526843"
+      },
+      {
+        "name": "backend-tests",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41435918009/job/125245526864"
+      }
+    ]
+  },
+  "remote_e2e": {
+    "quiz_cases": 8,
+    "passed": 16,
+    "failed": 0,
+    "job_id": 125245526787,
+    "report_artifact_id": 13136103453,
+    "trial_draft_cases": 8
+  },
+  "coverage": [
+    "choice and MathLive autosave, index restoration after reload",
+    "account identity binding and independent drafts",
+    "SPA unmount and actual tab close with debounce paused",
+    "failed draft GET preserves stored answers",
+    "lost submit acknowledgement, idempotent replay, cleared draft and blank retake"
+  ],
+  "scope": {
+    "application_code_changed": false,
+    "real_google_oauth_exchange": false,
+    "production_data_used": false,
+    "external_staging_provisioned": false,
+    "authentication": "ordinary encrypted NextAuth test JWT",
+    "backend": "isolated SQLite fixture"
+  }
+}
