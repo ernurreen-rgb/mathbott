@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:24-alpine AS builder
 
 WORKDIR /app
@@ -19,12 +20,11 @@ ARG NEXT_PUBLIC_WS_API_URL=
 ARG NEXT_PUBLIC_MODULES_UI_ENABLED=true
 ARG NEXT_PUBLIC_SENTRY_DSN=
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
-ARG SENTRY_AUTH_TOKEN=
 ARG SENTRY_ORG=
 ARG SENTRY_PROJECT=
 
 # Build the application
-RUN npm run build
+RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN npm run build
 
 # Production image
 FROM node:24-alpine AS runner

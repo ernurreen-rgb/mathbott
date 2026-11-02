@@ -16,6 +16,10 @@ running `npm ci` from `web/`. Minor and patch releases may differ by provider.
 The production web container starts Next.js directly with Node and removes
 the global npm/npx installation after installing its locked dependencies.
 The builder and development images retain npm for compilation and development.
+Docker source-map uploads receive `SENTRY_AUTH_TOKEN` through a BuildKit secret,
+not a build argument. For a local image build with uploads, use
+`docker build --secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN -t mathbot-web ./web`
+from the repository root. The secret is optional when uploads are disabled.
 
 Copy variable names from `bot/.env.example` and `web/.env.example`.
 Keep secrets in Vercel environment variables or ignored local `.env` files.

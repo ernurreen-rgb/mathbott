@@ -1,0 +1,28 @@
+{
+  "conclusion": "success",
+  "headSha": "0575de11dbedfce30439bc76dffaf111c1c24545",
+  "jobs": [
+    {
+      "conclusion": "success",
+      "name": "frontend-tests",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740/job/125110584139"
+    },
+    {
+      "conclusion": "success",
+      "name": "backend-postgres-tests",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740/job/125110584431"
+    },
+    {
+      "conclusion": "success",
+      "name": "backend-tests",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740/job/125110584445"
+    },
+    {
+      "conclusion": "success",
+      "name": "security-audit",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740/job/125110584562"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740"
+}

@@ -4,13 +4,14 @@
 
 | ID | Жұмыс | Күйі |
 | --- | --- | --- |
-| D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; action және backend build өтті |
-| D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті тексерістер өтті |
+| D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
+| D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | Migration/health өтті; restore/E2E жоспарланған |
 | D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
-| D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan нәтижесі күтіледі |
-| D07 | Production web image ішіндегі npm vendored осалдықтары | Runtime installer алынды; startup өтті, scan күтіледі |
+| D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
+| D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
+| D08 | Sentry build token-ін secret mount арқылы беру | Түзетілді; нақты build тексерісі күтіледі |
 
 ## D01
 
@@ -59,3 +60,11 @@ Vercel-дегі linked `qazmath-api` production environment мәндері ephem
 Production image locked app dependencies орнатылғаннан кейін қолданылмайтын global npm/npx-ті алып тастайды. Next.js бұрынғы host/port параметрлерімен тікелей Node арқылы басталады; package.json start script, development және builder installer-лері өзгерген жоқ. Scanner exception немесе threshold әлсірету қосылмады.
 
 Node 24.22.2-де production-only dependencies + нақты `.next` build арқылы direct startup тексерілді. Child process PATH ішінде npm жоқ: root page **HTTP 200**, Auth providers endpoint **HTTP 200 / Google provider**. Server test соңында тоқтатылды — [startup log](evidence/D07/runtime-smoke.log). Linux image scan/push нәтижесі келесі run-да бақыланады.
+
+`0575de1` revision-ында [толық CI](https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740) және [Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746) сәтті аяқталды. Екі image-тің configured HIGH/CRITICAL gate-тері өтті; backend және frontend Docker Hub-қа `latest` және commit SHA tag-терімен жарияланды — [CI evidence](evidence/D07/ci-remote.json), [release evidence](evidence/D07/release-remote.json). Бұл Docker Hub publication; production application deploy бұл тексерісте орындалған жоқ.
+
+## D08
+
+Сәтті Docker run annotation-ы `ARG SENTRY_AUTH_TOKEN` үшін `SecretsUsedInArgOrEnv` ескертуін шығарды. Token transport [Docker ұсынған secret mount](https://docs.docker.com/build/building/secrets/) үлгісіне ауыстырылды: GitHub build-push step `secrets` input береді, ал жалғыз build RUN instruction оны ephemeral environment ретінде алады. Token Dockerfile ARG/ENV және build-args тізімінен алынды.
+
+Workflow YAML және secret ID/environment wiring тексерілді. Secret берілмеген local build бұрынғыдай source-map upload-сыз орындала алады; local build нұсқаулығы жаңартылды. Нақты BuildKit build және annotation нәтижесі келесі GitHub run-да тексеріледі.

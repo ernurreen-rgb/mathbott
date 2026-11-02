@@ -1,0 +1,165 @@
+{
+  "conclusion": "success",
+  "headSha": "0575de11dbedfce30439bc76dffaf111c1c24545",
+  "jobs": [
+    {
+      "conclusion": "success",
+      "name": "frontend-tests",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job"
+        },
+        {
+          "conclusion": "success",
+          "name": "Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Set up Node.js"
+        },
+        {
+          "conclusion": "success",
+          "name": "Install frontend dependencies"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run frontend tests"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Set up Node.js"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job"
+        }
+      ],
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746/job/125110584205"
+    },
+    {
+      "conclusion": "success",
+      "name": "backend-tests",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job"
+        },
+        {
+          "conclusion": "success",
+          "name": "Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Set up Python"
+        },
+        {
+          "conclusion": "success",
+          "name": "Install backend dependencies"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run backend tests"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Set up Python"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job"
+        }
+      ],
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746/job/125110584502"
+    },
+    {
+      "conclusion": "success",
+      "name": "build-and-push",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job"
+        },
+        {
+          "conclusion": "success",
+          "name": "Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Set up Docker Buildx"
+        },
+        {
+          "conclusion": "success",
+          "name": "Log in to Docker Hub"
+        },
+        {
+          "conclusion": "success",
+          "name": "Build backend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Scan backend image (Trivy)"
+        },
+        {
+          "conclusion": "success",
+          "name": "Build frontend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Scan frontend image (Trivy)"
+        },
+        {
+          "conclusion": "success",
+          "name": "Push backend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Push frontend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Scan frontend image (Trivy)"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Build frontend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Scan backend image (Trivy)"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Build backend image"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Log in to Docker Hub"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Set up Docker Buildx"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Checkout"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job"
+        }
+      ],
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746/job/125111381520"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746"
+}
