@@ -6,10 +6,11 @@
 | --- | --- | --- |
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; action және backend build өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті тексерістер өтті |
-| D03 | Production migration/release және қалпына келтіру тексерістері | Жоспарланған |
+| D03 | Production migration/release және қалпына келтіру тексерістері | Migration/health өтті; restore/E2E жоспарланған |
 | D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan нәтижесі күтіледі |
+| D07 | Production web image ішіндегі npm vendored осалдықтары | Runtime installer алынды; startup өтті, scan күтіледі |
 
 ## D01
 
@@ -40,3 +41,21 @@ Node types 24.19.2 және undici-types 7.24.6 жаңартылды; басқа
 Backend image-тің Trivy scan-ы application requirements-тен бөлек, Python base image ішіндегі setuptools vendor metadata-сынан екі HIGH осалдық тапты — [бастапқы findings](evidence/D06/scan-before.log). Runtime stage енді installed application packages көшірілгеннен кейін `setuptools==80.10.2` орнатады. Сол рет pip uninstall арқылы ескі vendor файлдары мен metadata-сын да алып тастайды; COPY overlay арқылы жаңа файлды үстінен көшіру қолданылған жоқ.
 
 Ресми PyPI wheel archive-і және бөлек таза Python 3.11 virtualenv тексерісі pinned setuptools ішінде **jaraco.context 6.1.0 / wheel 0.46.3** барын растады. Ескі 5.3.0 / 0.45.1 metadata жоқ; setuptools import және `pip check` өтті — [журнал](evidence/D06/packaging.log). Scanner threshold және ignore policy өзгермеді. Нақты Linux container scan нәтижесі келесі GitHub run-да тексеріледі.
+
+## D03: production-ды тек оқу арқылы тексеру
+
+Vercel-дегі linked `qazmath-api` production environment мәндері ephemeral process арқылы алынды. PostgreSQL session ішінде `SET TRANSACTION READ ONLY` қолданылды; тек migration metadata және table existence оқылды. Жергілікті development `.env.local` production мәндерін алмастырмауы үшін CLI бөлек project-link fixture-ден орындалды. Secret мәндер журналға немесе repo-ға жазылмады.
+
+- PostgreSQL `0001_initial`–`0006_quiz_entry_limits` миграцияларының бәрі қолданылған; missing migration және local SQL checksum mismatch **жоқ**.
+- A10 `quiz_entry_limits` кестесі **бар**. Қайта migration apply жасау қажет емес.
+- Linked web project's production `BACKEND_URL` арқылы API health: **HTTP 200, healthy, database ok**.
+
+[Тексеру нәтижесі](evidence/D03/production-readiness.json). Бұл қадамда production DB schema/data өзгертілмеді және deployment орындалмады. Backup restore drill, staging-де authenticated/browser scenario-лар және толық release rehearsal келесі жұмыс болып қалады.
+
+## D07
+
+`231abc9` [Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41392089016) backend image build/scan кезеңдерінен өтті. Frontend scan production app packages-тен емес, `/usr/local/lib/node_modules/npm/node_modules/` ішінен 6 HIGH finding тапты: brace-expansion 5.0.9 үшін екі және undici 6.28.0 үшін төрт CVE — [бастапқы findings](evidence/D07/scan-before.log).
+
+Production image locked app dependencies орнатылғаннан кейін қолданылмайтын global npm/npx-ті алып тастайды. Next.js бұрынғы host/port параметрлерімен тікелей Node арқылы басталады; package.json start script, development және builder installer-лері өзгерген жоқ. Scanner exception немесе threshold әлсірету қосылмады.
+
+Node 24.22.2-де production-only dependencies + нақты `.next` build арқылы direct startup тексерілді. Child process PATH ішінде npm жоқ: root page **HTTP 200**, Auth providers endpoint **HTTP 200 / Google provider**. Server test соңында тоқтатылды — [startup log](evidence/D07/runtime-smoke.log). Linux image scan/push нәтижесі келесі run-да бақыланады.

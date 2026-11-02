@@ -41,7 +41,8 @@ COPY .npmrc ./
 COPY tools/minimatch-compat ./tools/minimatch-compat
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Copy built application from builder
 COPY --from=builder /app/.next ./.next
@@ -60,5 +61,5 @@ ENV HOSTNAME="0.0.0.0"
 USER appuser
 
 # Run the application
-CMD ["npm", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0"]
 

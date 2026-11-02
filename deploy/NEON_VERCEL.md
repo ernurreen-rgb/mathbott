@@ -13,6 +13,9 @@ major version for local development and GitHub Actions; `web/package.json`
 declares `engines.node=24.x` for Vercel builds and functions. Both web Docker
 images use `node:24-alpine`. Select Node 24 in your version manager before
 running `npm ci` from `web/`. Minor and patch releases may differ by provider.
+The production web container starts Next.js directly with Node and removes
+the global npm/npx installation after installing its locked dependencies.
+The builder and development images retain npm for compilation and development.
 
 Copy variable names from `bot/.env.example` and `web/.env.example`.
 Keep secrets in Vercel environment variables or ignored local `.env` files.
