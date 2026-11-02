@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
-| D03 | Production migration/release және қалпына келтіру тексерістері | API/web production deploy өтті; restore/E2E жоспарланған |
+| D03 | Production migration/release және қалпына келтіру тексерістері | Deploy және production PostgreSQL snapshot restore өтті; S3 бөлек |
 | D04 | Негізгі браузер сценарийлеріне E2E | Квиздің 8 Windows/Linux E2E тесті және толық CI өтті; OAuth/draft жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
@@ -140,3 +140,46 @@ Runtime graph өзгерісінен кейін clean full install, TypeScript, 
 Қалған D04 көлемі: нақты Google sign-in/staging rehearsal және trial-test draft
 сценарийлері. PostgreSQL backup restore drill — бөлек D03 жұмысы; D05 тақырыптық
 прогресс/қатемен жұмыс кезегі осы тексерістерден кейін жалғасады.
+
+## D03: production PostgreSQL snapshot restore
+
+`bot/scripts/postgres_backup.py` direct source URL-ді тек арнайы environment
+variable-ден алады; dotenv және application `DATABASE_URL` fallback қолданбайды.
+Source transaction **REPEATABLE READ / READ ONLY** режимінде snapshot экспорттайды.
+Manifest пен custom-format `pg_dump` бір snapshot пайдаланады, сондықтан қатар
+жазулар restore checksum-дарын бұзбайды. Құпия URL/password argv/log-қа шықпайды.
+
+Restore default-ы — read-only plan. `--apply` тек `mathbot_restore_*` аталған
+бөлек, бос database-ке рұқсат береді; бар кесте бос болса да операция тоқтайды.
+Archive SHA-256 тексерілгеннен кейін `pg_restore --single-transaction
+--exit-on-error` орындалады. Overwrite/drop/create-database command жоқ.
+Кейін table row count/content digest, schema definitions, алты migration
+checksum және ID sequence позициялары салыстырылады. Dropped column физикалық
+slot аралықтары логикалық баған ретімен нормализацияланды.
+
+Vercel-linked production Neon source **PostgreSQL 18.6** екені read-only query
+арқылы расталды. Ресми EDB 18.6 clients/server таза жеке fixture-ге дайындалды.
+Production snapshot authenticated, loopback-only PostgreSQL 18.6-дегі жаңа
+database-ке restore жасалды:
+
+- **44 кесте / 2 155 жол**; барлық schema/content/migration checksum сәйкес.
+- **38 sequence** тексерілді; users identity insert тек restore target-те
+  орындалып, row insert rollback жасалды.
+- Snapshot/export → restore → verification: **70.33 секунд**, archive **206 386
+  byte**. Production write, deployment немесе traffic switch орындалмады.
+- Backup және restored data Git-тен тыс ACL-restricted жеке directory-де.
+  Source URL/password backup manifest-інде жоқ; repo-ға тек sanitized evidence
+  сақталады. `backups/` және `*.dump` gitignored.
+
+Жергілікті PostgreSQL 18.6-де **6/6 regression test** өтті: real restore,
+Unicode/quiz answer/identity, concurrent source write кезінде бір snapshot,
+бұзылған архив, populated/empty-existing target-ті қабылдамау, preflight-тен
+кейінгі conflict кезінде restore DDL/data rollback. CI-ге PostgreSQL 18 /
+Python 3.12 `postgres-restore-drill` job қосылды; тек synthetic test report
+artifact-і жарияланады, production archive CI-ге жіберілмейді.
+
+Толық [runbook](../../../deploy/POSTGRES_BACKUP_RESTORE.md) және
+[production restore evidence](evidence/D03/production-restore.json).
+S3 image bytes, roles/ACL, provider PITR, scheduled/off-site retention бұл
+logical public-schema drill-ға кірмейді. Нақты Google OAuth және trial-test
+draft browser сценарийлері D04-тің келесі бөлігі болып қалады.

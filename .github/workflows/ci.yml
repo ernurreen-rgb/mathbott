@@ -75,6 +75,56 @@ jobs:
         working-directory: ./bot
         run: pytest tests/ -q --tb=short
 
+  postgres-restore-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: mathbot
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mathbot -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MATHBOT_RESTORE_ADMIN_URL: postgresql://mathbot:ci-only-password@127.0.0.1:5432/postgres
+      MATHBOT_PG_BIN: /usr/lib/postgresql/18/bin
+      SENTRY_DSN: ""
+      ALERTS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL 18 clients from the official repository
+        run: |
+          sudo apt-get update -qq
+          if ! apt-cache show postgresql-client-18 > /dev/null 2>&1; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl --fail --silent --show-error -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/mathbot-pgdg.list
+            sudo apt-get update -qq
+          fi
+          sudo apt-get install --yes --no-install-recommends postgresql-client-18
+      - name: Install backend dependencies
+        run: python -m pip install -r bot/requirements.txt
+      - name: Check real backups, live snapshots and restore refusal guards
+        working-directory: ./bot
+        run: pytest tests/test_postgres_backup.py -q --tb=short --junitxml="$RUNNER_TEMP/postgres-restore.xml"
+      - name: Upload synthetic restore test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-restore-report
+          path: ${{ runner.temp }}/postgres-restore.xml
+          retention-days: 7
+
   frontend-tests:
     runs-on: ubuntu-latest
     

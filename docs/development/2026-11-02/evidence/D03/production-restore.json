@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-02",
+  "source": "Vercel-linked production Neon database",
+  "source_access": "read-only exported snapshot",
+  "source_server_major": 18,
+  "snapshot_at": "2026-11-02T10:46:09.201393+00:00",
+  "target": "new authenticated loopback PostgreSQL database",
+  "target_server_major": 18,
+  "pg_client_version": "18.6",
+  "plan_verified": true,
+  "applied": true,
+  "content_verified": true,
+  "schema_verified": true,
+  "migration_checksums_verified": true,
+  "sequences_verified": 38,
+  "tables_verified": 44,
+  "rows_verified": 2155,
+  "user_identity_insert_rolled_back": true,
+  "duration_seconds": 70.33,
+  "archive_bytes": 206386,
+  "migrations": [
+    "0001_initial",
+    "0002_sql_functions",
+    "0003_remove_learning_points",
+    "0004_trial_test_category",
+    "0005_quiz_participant_question_order",
+    "0006_quiz_entry_limits"
+  ],
+  "production_writes": false,
+  "object_storage_included": false,
+  "local_restore_server_stopped": true,
+  "client_distribution_url": "https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip",
+  "client_distribution_sha256": "e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2",
+  "post_drill_health": {
+    "http_status": 200,
+    "status": "healthy",
+    "database": "ok"
+  }
+}
