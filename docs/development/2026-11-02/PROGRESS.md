@@ -11,7 +11,7 @@
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
-| D08 | Sentry build token-ін secret mount арқылы беру | Түзетілді; нақты build тексерісі күтіледі |
+| D08 | Sentry build token-ін secret mount арқылы беру | Түзетілді; нақты build/scan/push өтті |
 
 ## D01
 
@@ -35,13 +35,13 @@ Node types 24.19.2 және undici-types 7.24.6 жаңартылды; басқа
 - `npm audit --audit-level=moderate`: **exit 0**, 5 low development entry сақталды; production audit — **0 affected entry** — [full audit](evidence/D02/audit.json), [production audit](evidence/D02/audit-production.json).
 - `npm ls --all`: **exit 0**. Production install-да Next, NextAuth, Sentry config және sharp native module сәтті жүктелді.
 
-Жергілікті Docker engine жоқ; нақты container scan/push Node 24 commit-інен кейін GitHub Actions-та бақыланады. Backend source/requirements өзгертілген жоқ, local backend suite қайталанбады.
+Жергілікті Docker engine жоқ; нақты Linux container scan/push GitHub Actions арқылы D07/D08 нәтижелерінде расталды. D02-де backend source/requirements өзгертілген жоқ, local backend suite қайталанбады.
 
 ## D06
 
 Backend image-тің Trivy scan-ы application requirements-тен бөлек, Python base image ішіндегі setuptools vendor metadata-сынан екі HIGH осалдық тапты — [бастапқы findings](evidence/D06/scan-before.log). Runtime stage енді installed application packages көшірілгеннен кейін `setuptools==80.10.2` орнатады. Сол рет pip uninstall арқылы ескі vendor файлдары мен metadata-сын да алып тастайды; COPY overlay арқылы жаңа файлды үстінен көшіру қолданылған жоқ.
 
-Ресми PyPI wheel archive-і және бөлек таза Python 3.11 virtualenv тексерісі pinned setuptools ішінде **jaraco.context 6.1.0 / wheel 0.46.3** барын растады. Ескі 5.3.0 / 0.45.1 metadata жоқ; setuptools import және `pip check` өтті — [журнал](evidence/D06/packaging.log). Scanner threshold және ignore policy өзгермеді. Нақты Linux container scan нәтижесі келесі GitHub run-да тексеріледі.
+Ресми PyPI wheel archive-і және бөлек таза Python 3.11 virtualenv тексерісі pinned setuptools ішінде **jaraco.context 6.1.0 / wheel 0.46.3** барын растады. Ескі 5.3.0 / 0.45.1 metadata жоқ; setuptools import және `pip check` өтті — [журнал](evidence/D06/packaging.log). Scanner threshold және ignore policy өзгермеді. Нақты Linux container scan/push D07/D08 run-дарында өтті.
 
 ## D03: production-ды тек оқу арқылы тексеру
 
@@ -59,7 +59,7 @@ Vercel-дегі linked `qazmath-api` production environment мәндері ephem
 
 Production image locked app dependencies орнатылғаннан кейін қолданылмайтын global npm/npx-ті алып тастайды. Next.js бұрынғы host/port параметрлерімен тікелей Node арқылы басталады; package.json start script, development және builder installer-лері өзгерген жоқ. Scanner exception немесе threshold әлсірету қосылмады.
 
-Node 24.22.2-де production-only dependencies + нақты `.next` build арқылы direct startup тексерілді. Child process PATH ішінде npm жоқ: root page **HTTP 200**, Auth providers endpoint **HTTP 200 / Google provider**. Server test соңында тоқтатылды — [startup log](evidence/D07/runtime-smoke.log). Linux image scan/push нәтижесі келесі run-да бақыланады.
+Node 24.22.2-де production-only dependencies + нақты `.next` build арқылы direct startup тексерілді. Child process PATH ішінде npm жоқ: root page **HTTP 200**, Auth providers endpoint **HTTP 200 / Google provider**. Server test соңында тоқтатылды — [startup log](evidence/D07/runtime-smoke.log). Нақты Linux image scan/push төмендегі run-дарда расталды.
 
 `0575de1` revision-ында [толық CI](https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767740) және [Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41393767746) сәтті аяқталды. Екі image-тің configured HIGH/CRITICAL gate-тері өтті; backend және frontend Docker Hub-қа `latest` және commit SHA tag-терімен жарияланды — [CI evidence](evidence/D07/ci-remote.json), [release evidence](evidence/D07/release-remote.json). Бұл Docker Hub publication; production application deploy бұл тексерісте орындалған жоқ.
 
@@ -67,4 +67,10 @@ Node 24.22.2-де production-only dependencies + нақты `.next` build арқ
 
 Сәтті Docker run annotation-ы `ARG SENTRY_AUTH_TOKEN` үшін `SecretsUsedInArgOrEnv` ескертуін шығарды. Token transport [Docker ұсынған secret mount](https://docs.docker.com/build/building/secrets/) үлгісіне ауыстырылды: GitHub build-push step `secrets` input береді, ал жалғыз build RUN instruction оны ephemeral environment ретінде алады. Token Dockerfile ARG/ENV және build-args тізімінен алынды.
 
-Workflow YAML және secret ID/environment wiring тексерілді. Secret берілмеген local build бұрынғыдай source-map upload-сыз орындала алады; local build нұсқаулығы жаңартылды. Нақты BuildKit build және annotation нәтижесі келесі GitHub run-да тексеріледі.
+Workflow YAML және secret ID/environment wiring тексерілді. Secret берілмеген local build бұрынғыдай source-map upload-сыз орындала алады; local build нұсқаулығы жаңартылды.
+
+`a2726e4` revision-ының [CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41394998899) және [Docker run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41394998861) **success**. Нақты BuildKit frontend build, екі image scan және екі Docker Hub push өтті. Build журналында `SecretsUsedInArgOrEnv` ескертуі жоқ — [CI evidence](evidence/D08/ci-remote.json), [release evidence](evidence/D08/release-remote.json), [transport verification](evidence/D08/verification.json).
+
+Осы run token орнатылмаған кезде бос `sentry_auth_token=` input үшін action warning шығаратынын көрсетті. Follow-up expression secret input-ті тек token бар кезде береді; Dockerfile mount optional болып қалады. Dockerfile/application source өзгермеді, conditional wiring YAML арқылы тексерілді.
+
+Алғашқы инфрақұрылым кезеңі D01/D02/D06/D07/D08 бойынша аяқталды. Production migration/health read-only тексерістері өтті; келесі кезең — restore drill және staging/browser E2E. Тақырыптық прогресс пен қатемен жұмыс D05 ретінде жоспарланған.
