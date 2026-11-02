@@ -8,6 +8,12 @@ in AWS Ohio. No VPS is required for this configuration.
 
 ## Runtime configuration
 
+The web application uses Node.js 24 LTS. The repository `.nvmrc` selects the
+major version for local development and GitHub Actions; `web/package.json`
+declares `engines.node=24.x` for Vercel builds and functions. Both web Docker
+images use `node:24-alpine`. Select Node 24 in your version manager before
+running `npm ci` from `web/`. Minor and patch releases may differ by provider.
+
 Copy variable names from `bot/.env.example` and `web/.env.example`.
 Keep secrets in Vercel environment variables or ignored local `.env` files.
 Never use the `NEXT_PUBLIC_` prefix for database URLs, storage keys, OAuth

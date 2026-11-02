@@ -4,14 +4,33 @@
 
 | ID | Жұмыс | Күйі |
 | --- | --- | --- |
-| D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; GitHub run нәтижесі күтіледі |
-| D02 | CI, Docker және development ортасын Node 24-ке көшіру | Келесі |
+| D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; action және backend build өтті |
+| D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті тексерістер өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | Жоспарланған |
 | D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
+| D06 | Backend image ішіндегі setuptools vendored осалдықтары | Келесі |
 
 ## D01
 
 Соңғы [Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41337046615) `aquasecurity/trivy-action@0.28.0` нұсқасын таба алмай, action preparation кезеңінде тоқтаған. Екі scan step ресми [v0.36.0 release](https://github.com/aquasecurity/trivy-action/releases/tag/v0.36.0) commit-іне бекітілді: `ed142fd0673e97e23eac54620cfb913e5ce36c25`.
 
 Release tag/SHA және action input contract upstream GitHub API/manifest арқылы тексерілді. Image reference, HIGH/CRITICAL gate, exit-code=1 және scan-before-push реті сақталды. Жергілікті Docker engine қолжетімсіз; image build/scan/push нәтижесі GitHub Actions арқылы тексеріледі.
+
+`654a2a3` commit-інің [Docker run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41391193402) action preparation, backend/frontend tests, Docker Hub login және backend image build кезеңдерінен өтті. Backend scan енді нақты екі HIGH finding тапты: setuptools ішіндегі jaraco.context 5.3.0 (CVE-2026-23949) және wheel 0.45.1 (CVE-2026-24049). Image publication gate дұрыс тоқтатты; бұл D06 ретінде бөлек түзетіледі.
+
+## D02
+
+Root `.nvmrc` Node 24 тармағын таңдайды; төрт GitHub setup-node step сол файлды оқиды. Production/development web Docker image-тері `node:24-alpine` қолданады. `web/package.json` ішіндегі `engines.node=24.x` Vercel build/function runtime-ына да қолданылады ([provider contract](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions)). Node 24 [ресми LTS тармағы](https://nodejs.org/en/about/previous-releases), Node 20 EOL күйінде.
+
+Node types 24.19.2 және undici-types 7.24.6 жаңартылды; басқа dependency version-дар өзгерген жоқ. `install-links=false` және private matcher adapter сақталды. Release нұсқаулығына local/CI/Docker/Vercel runtime таңдауы енгізілді.
+
+Тексеру таза source export-та Node **24.22.2 / npm 11.6.2** арқылы орындалды:
+
+- Full және production-only `npm ci --engine-strict`: **exit 0**; бұрынғы compute-engine Node engine warning-і жоқ — [full install](evidence/D02/ci.log), [production install](evidence/D02/production.log).
+- **61 Jest suite / 388 test**, coverage-пен; pretest ішіндегі **6 dependency integration test** өтті — [журнал](evidence/D02/tests.log).
+- Production build, TypeScript және zero-warning ESLint: **exit 0** — [build](evidence/D02/build.log), [typecheck](evidence/D02/typecheck.log), [lint](evidence/D02/lint.log).
+- `npm audit --audit-level=moderate`: **exit 0**, 5 low development entry сақталды; production audit — **0 affected entry** — [full audit](evidence/D02/audit.json), [production audit](evidence/D02/audit-production.json).
+- `npm ls --all`: **exit 0**. Production install-да Next, NextAuth, Sentry config және sharp native module сәтті жүктелді.
+
+Жергілікті Docker engine жоқ; нақты container scan/push Node 24 commit-інен кейін GitHub Actions-та бақыланады. Backend source/requirements өзгертілген жоқ, local backend suite қайталанбады.
