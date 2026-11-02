@@ -32,8 +32,10 @@ npm run test:e2e
 
 Ports **3100** (web) and **8100** (API) must be free. Existing servers are never
 reused. Playwright starts and stops both process trees. The backend creates a new
-temporary SQLite database with a synthetic teacher. Each test creates its own
-private quiz/session through the normal authenticated proxy. No production DB,
+temporary SQLite database with a synthetic teacher, admin and two learner accounts.
+Teachers/learners remain non-admin. Each test creates its own private quiz/session
+or trial test through the normal authenticated proxy (trial creation uses the
+separate admin). No production DB,
 OAuth, email, S3 or monitoring credentials are forwarded to those processes.
 
 Next.js builds a disposable source copy in the OS temporary directory, excluding
@@ -44,9 +46,10 @@ shutdown; they contain only source and test configuration. The backend database
 is disposable too, and may remain in the OS temp directory after forced Windows
 process termination. No reset/seed HTTP endpoint is added to the application.
 
-The teacher cookie is a normally encrypted NextAuth JWT signed only with the
+Account cookies are normally encrypted NextAuth JWTs signed only with the
 local fixture secret. It verifies authenticated proxy behavior; it does **not**
-test the real Google OAuth exchange. Guests join and answer through the UI.
+test the real Google OAuth exchange. Guests join/answer through the UI; learners
+edit/submit trial answers through the UI, including actual MathLive keyboard input.
 
 Coverage: invalid PIN/nickname; private source visibility; PIN → lobby → start;
 correct/incorrect answers; reload persistence; final score/accuracy and review;
@@ -54,10 +57,27 @@ interrupted answer retry; lost-acknowledgement recovery and idempotent answer re
 The network failure is injected
 only into the browser transport; successful requests use the real backend.
 
+Trial draft coverage adds four scenarios at both sizes (16 browser tests total):
+
+- Autosave of choice/MathLive answers and current task index; restoration after
+  reload; separate account drafts even when query/body email names another user.
+- Final saves on Next Link SPA departure and actual tab close, then reopening.
+  Playwright's clock pauses the debounce timer before editing, so a periodic
+  autosave cannot accidentally make the departure test pass.
+- Failed initial draft GET keeps saved answers intact, including during cleanup;
+  normal reload restores them after the transport recovers.
+- Lost submit acknowledgement recovers the committed attempt, replaying the same
+  attempt does not create a second result, the server draft stays cleared, and a
+  retake opens with no old answers.
+
+These tests exercise real proxy/database operations. Only time and selected
+browser transport failures are controlled; API success payloads are not mocked.
+
 Reports, failure screenshots and traces: `web/output/playwright/` (gitignored).
 Open the HTML report with `npx playwright show-report output/playwright/report`.
 No real staging service is provisioned by this suite. It is an isolated local/CI
-release check; staging OAuth and a PostgreSQL backup restore drill remain separate.
+release check; real staging OAuth remains separate. PostgreSQL backup/restore
+verification is documented in the [restore runbook](../../deploy/POSTGRES_BACKUP_RESTORE.md).
 
 The runner is imported from the public `playwright/test` export of the direct
 **dev** dependency `playwright`. Avoid adding the `@playwright/test` wrapper to
@@ -67,3 +87,4 @@ entry point provides the same runner without satisfying that runtime peer.
 
 Runner configuration follows Playwright's [web server](https://playwright.dev/docs/test-webserver)
 and [configuration](https://playwright.dev/docs/test-configuration) documentation.
+The lifecycle scenario uses the documented [clock controls](https://playwright.dev/docs/clock).

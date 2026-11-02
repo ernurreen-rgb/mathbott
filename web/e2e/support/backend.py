@@ -37,6 +37,9 @@ async def seed(db_path):
     db = Database(db_path=db_path, use_pool=False, auto_migrate=True)
     await db.init()
     await db.users.create_user_by_email(os.environ["E2E_TEACHER_EMAIL"])
+    for key in ("E2E_ADMIN_EMAIL", "E2E_LEARNER_EMAIL", "E2E_OTHER_LEARNER_EMAIL"):
+        await db.users.create_user_by_email(os.environ[key])
+    await db.users.set_admin_with_role(email=os.environ["E2E_ADMIN_EMAIL"], is_admin=True, role="super_admin")
 
 
 if __name__ == "__main__":

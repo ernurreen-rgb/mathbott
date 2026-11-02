@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { webURL, apiURL, authSecret, proxySecret, teacherEmail } = require('./settings.cjs');
+const { webURL, apiURL, authSecret, proxySecret, teacherEmail, adminEmail, learnerEmail, otherLearnerEmail } = require('./settings.cjs');
 
 const webRoot = path.resolve(__dirname, '../..');
 // Start from OS essentials, rather than forwarding Vercel/database/cloud credentials.
@@ -19,6 +19,9 @@ Object.assign(env, {
   INTERNAL_PROXY_SHARED_SECRET: proxySecret,
   ALLOWED_ORIGINS: webURL,
   E2E_TEACHER_EMAIL: teacherEmail,
+  E2E_ADMIN_EMAIL: adminEmail,
+  E2E_LEARNER_EMAIL: learnerEmail,
+  E2E_OTHER_LEARNER_EMAIL: otherLearnerEmail,
   E2E_API_PORT: new URL(apiURL).port,
   NEXTAUTH_URL: webURL,
   NEXTAUTH_SECRET: authSecret,

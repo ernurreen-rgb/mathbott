@@ -5,4 +5,7 @@ module.exports = {
   authSecret: 'mathbot-local-e2e-auth-secret-never-use-in-production',
   proxySecret: 'mathbot-local-e2e-proxy-secret-never-use-in-production',
   teacherEmail: 'teacher@e2e.invalid',
+  adminEmail: 'admin@e2e.invalid',
+  learnerEmail: 'learner@e2e.invalid',
+  otherLearnerEmail: 'other-learner@e2e.invalid',
 };
