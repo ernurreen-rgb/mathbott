@@ -16,7 +16,8 @@
     "test": "jest",
     "test:dependencies": "node --test tools/dependency-compat.test.cjs",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.78.0",
@@ -35,7 +36,7 @@
     "typescript": "5.6.3"
   },
   "devDependencies": {
-    "minimatch": "file:tools/minimatch-compat",
+    "@playwright/test": "1.64.1",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.5.1",
@@ -45,6 +46,7 @@
     "eslint-config-next": "^15.5.28",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
+    "minimatch": "file:tools/minimatch-compat",
     "postcss": "8.5.32",
     "tailwindcss": "3.4.19"
   },

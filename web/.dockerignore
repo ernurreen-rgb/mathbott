@@ -11,6 +11,9 @@ build/
 dist/
 
 # Testing
+e2e/
+output/
+playwright.config.ts
 coverage/
 .nyc_output/
 .jest/
