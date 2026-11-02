@@ -1,0 +1,176 @@
+{
+  "date": "2026-11-02",
+  "verified_at_utc": "2026-11-02T06:58:14.997850+00:00",
+  "source_commit": "a30708a8fe10009a617b2ed376c281490144cdc8",
+  "production_deployments": {
+    "bot": {
+      "id": "dpl_6jQBRPAeSN7SjGTkYwjx3D5Mo3NC",
+      "url": "qazmath-citrf05ed-yera1.vercel.app",
+      "ready_state": "READY",
+      "source_commit": "a30708a8fe10009a617b2ed376c281490144cdc8",
+      "canonical_domain": "qazmath-api.vercel.app",
+      "alias_deployment_matches": true,
+      "node_version": "24.x"
+    },
+    "web": {
+      "id": "dpl_GTXSkjL6tUhfrXABwQxXUWazsqLq",
+      "url": "qazmath-fu7g9wb3l-yera1.vercel.app",
+      "ready_state": "READY",
+      "source_commit": "a30708a8fe10009a617b2ed376c281490144cdc8",
+      "canonical_domain": "qazmath.vercel.app",
+      "alias_deployment_matches": true,
+      "node_version": "24.x"
+    }
+  },
+  "previous_production": {
+    "bot": {
+      "id": "dpl_Efi3yb3WPzqDyFShkTZDFCmaooZG",
+      "url": "qazmath-ah6g87hgl-yera1.vercel.app",
+      "alias": [
+        "qazmath-api.vercel.app",
+        "qazmath-api-yera1.vercel.app"
+      ],
+      "readyState": "READY"
+    },
+    "web": {
+      "id": "dpl_BpqqVaMEfFpbGaoEg2VfZukPbUV2",
+      "url": "qazmath-5cy5ekblw-yera1.vercel.app",
+      "alias": [
+        "qazmath.vercel.app",
+        "qazmath-yera1.vercel.app"
+      ],
+      "readyState": "READY"
+    }
+  },
+  "migration_preflight": {
+    "all_six_applied": true,
+    "checksum_mismatches": [],
+    "quiz_entry_limits_table": true
+  },
+  "schema_migration_executed": false,
+  "configuration": {
+    "sensitive_proxy_secret_present_both_projects": true,
+    "sensitive_auth_secret_present": true,
+    "secret_values_modified": false,
+    "environment": "production",
+    "auto_migrate": false,
+    "background_tasks": false,
+    "image_storage": "s3",
+    "backend_url": "https://qazmath-api.vercel.app",
+    "web_url": "https://qazmath.vercel.app"
+  },
+  "public_configuration": {
+    "api_url": "/api/backend",
+    "realtime_transport": "polling",
+    "google_credentials_configured": true
+  },
+  "proxy_secret_runtime_signature_verified": true,
+  "api_rollout_checks": [
+    {
+      "check": "api_health",
+      "http_status": 200
+    },
+    {
+      "check": "existing_web_proxy_health",
+      "http_status": 200
+    },
+    {
+      "check": "unsigned_pin_lookup",
+      "http_status": 401
+    },
+    {
+      "check": "existing_web_signed_pin_lookup",
+      "http_status": 404
+    }
+  ],
+  "staged_web_checks": [
+    {
+      "check": "web_root",
+      "http_status": 200
+    },
+    {
+      "check": "auth_providers",
+      "http_status": 200
+    },
+    {
+      "check": "proxy_health",
+      "http_status": 200
+    },
+    {
+      "check": "public_catalogue",
+      "http_status": 200
+    },
+    {
+      "check": "anonymous_private_proxy",
+      "http_status": 401
+    },
+    {
+      "check": "signed_pin_lookup",
+      "http_status": 404
+    }
+  ],
+  "postdeploy_http_checks": [
+    {
+      "check": "api_health",
+      "http_status": 200
+    },
+    {
+      "check": "web_root",
+      "http_status": 200
+    },
+    {
+      "check": "web_quiz_catalogue_page",
+      "http_status": 200
+    },
+    {
+      "check": "google_auth_providers",
+      "http_status": 200
+    },
+    {
+      "check": "auth_csrf",
+      "http_status": 200
+    },
+    {
+      "check": "proxy_health",
+      "http_status": 200
+    },
+    {
+      "check": "public_quizzes",
+      "http_status": 200
+    },
+    {
+      "check": "modules_map",
+      "http_status": 200
+    },
+    {
+      "check": "anonymous_private_proxy",
+      "http_status": 401
+    },
+    {
+      "check": "unsigned_direct_admin",
+      "http_status": 401
+    },
+    {
+      "check": "unsigned_pin_lookup",
+      "http_status": 401
+    },
+    {
+      "check": "signed_guest_pin_lookup",
+      "http_status": 404
+    },
+    {
+      "check": "static_assets",
+      "sample_count": 5,
+      "http_status": 200
+    }
+  ],
+  "media_read_check": {
+    "sample_available": false,
+    "skip_reason": "No image_filename samples in active bank tasks or quiz questions"
+  },
+  "verification_limits": [
+    "Google OAuth account sign-in was not completed interactively",
+    "No quiz/answer/admin write fixtures were created in production",
+    "Positive image read/upload was not exercised because no image_filename sample was available"
+  ]
+}

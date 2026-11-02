@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
-| D03 | Production migration/release және қалпына келтіру тексерістері | Migration/health өтті; restore/E2E жоспарланған |
+| D03 | Production migration/release және қалпына келтіру тексерістері | API/web production deploy өтті; restore/E2E жоспарланған |
 | D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
@@ -74,3 +74,7 @@ Workflow YAML және secret ID/environment wiring тексерілді. Secret
 Осы run token орнатылмаған кезде бос `sentry_auth_token=` input үшін action warning шығаратынын көрсетті. Follow-up expression secret input-ті тек token бар кезде береді; Dockerfile mount optional болып қалады. Dockerfile/application source өзгермеді, conditional wiring YAML арқылы тексерілді.
 
 Алғашқы инфрақұрылым кезеңі D01/D02/D06/D07/D08 бойынша аяқталды. Production migration/health read-only тексерістері өтті; келесі кезең — restore drill және staging/browser E2E. Тақырыптық прогресс пен қатемен жұмыс D05 ретінде жоспарланған.
+
+## Production deploy
+
+Пайдаланушының production deploy сұрауы бойынша `a30708a` коды API → web ретімен жарияланды. Екі deployment READY, негізгі домендер жаңа ID-лерге бағытталған. Health/Auth/catalogue/proxy/static asset smoke checks өтті; sensitive secret мәндері ауыстырылмады. Толық [release есебі](../../deployments/2026-11-02/production-a30708a.md) және оның JSON нәтижесі rollback deployment ID-лері мен тексеру шектеулерін сақтайды.
