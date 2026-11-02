@@ -7,7 +7,7 @@
 | D01 | Docker workflow-дағы жарамсыз Trivy action сілтемесі | Түзетілді; толық Docker run өтті |
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | Deploy және production PostgreSQL snapshot restore өтті; S3 бөлек |
-| D04 | Негізгі браузер сценарийлеріне E2E | Квиздің 8 Windows/Linux E2E тесті және толық CI өтті; OAuth/draft жоспарланған |
+| D04 | Негізгі браузер сценарийлеріне E2E | Квиз + trial draft: 16 local E2E өтті; жаңа CI тексерісі дайындалуда; OAuth бөлек |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
@@ -190,3 +190,32 @@ draft browser сценарийлері D04-тің келесі бөлігі бо
 да **success**: build, configured image scan gate-тері және push өтті.
 [Remote CI evidence](evidence/D03/restore-ci.json). Нақты production snapshot
 GitHub-қа немесе CI artifact-іне жіберілген жоқ.
+
+## D04: trial-test draft lifecycle E2E
+
+`web/e2e/trial-draft.spec.ts` төрт жаңа сценарийді desktop Chromium және Pixel 7
+өлшемінде тексереді. Жалпы suite — **16 тест** (8 quiz + 8 trial):
+
+- Нақты choice және MathLive keyboard input autosave; жауаптар мен current task
+  index reload-тан кейін қалпына келеді. Екі learner draft-ы бөлек; query/body
+  email басқа аккаунтты көрсетсе де, signed identity қолданылады.
+- Debounce timer Playwright clock-пен кідіртіліп, Next Link арқылы SPA departure
+  және нақты tab close орындалады. Autosave іске қосылмай тұрып соңғы жауап
+  серверге жетіп, қайта ашылған tab-та қалпына келеді.
+- Draft GET transport failure кезінде бос жауаптар серверге жазылмайды; cleanup
+  сақталған draft-ты өшірмейді. Желі қалпына келгенде сол жауап қайта жүктеледі.
+- Submit серверде сақталып, acknowledgement жоғалса, сол attempt табылып нәтиже
+  ашылады. Replay екінші result құрмайды; draft бос, retake бұрынғы жауапсыз ашылады.
+
+Fixture-ге admin және екі learner қосылды. Teacher/learner admin болмайды;
+trial test/slot normal signed admin API арқылы жасалады. Account cookie-лері
+fixture secret-пен стандарт NextAuth JWT encryption арқылы беріледі. Application
+auth/config өзгермейді, Google OAuth exchange бұл suite-те тексерілмейді.
+
+Жергілікті алғашқы run: **16/16 E2E**, **61 Jest suite / 388 test**, **6 dependency
+integration test**, TypeScript және zero-warning ESLint өтті. Нәтиже экрандарының
+скриншоттары қаралды. Desktop result screenshot алдында sidebar/workspace
+геометриясы тексеріліп, layout transition бітуі күтіледі; осы қосымша assert бар
+desktop result сценарийі жеке қайта өтті.
+Production деректері мен deployment өзгермейді. Іске қосу және scope:
+[web/e2e/README.md](../../../web/e2e/README.md).
