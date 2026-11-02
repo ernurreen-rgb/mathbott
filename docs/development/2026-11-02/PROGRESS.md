@@ -9,7 +9,7 @@
 | D03 | Production migration/release және қалпына келтіру тексерістері | Жоспарланған |
 | D04 | Негізгі браузер сценарийлеріне E2E | Жоспарланған |
 | D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
-| D06 | Backend image ішіндегі setuptools vendored осалдықтары | Келесі |
+| D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan нәтижесі күтіледі |
 
 ## D01
 
@@ -34,3 +34,9 @@ Node types 24.19.2 және undici-types 7.24.6 жаңартылды; басқа
 - `npm ls --all`: **exit 0**. Production install-да Next, NextAuth, Sentry config және sharp native module сәтті жүктелді.
 
 Жергілікті Docker engine жоқ; нақты container scan/push Node 24 commit-інен кейін GitHub Actions-та бақыланады. Backend source/requirements өзгертілген жоқ, local backend suite қайталанбады.
+
+## D06
+
+Backend image-тің Trivy scan-ы application requirements-тен бөлек, Python base image ішіндегі setuptools vendor metadata-сынан екі HIGH осалдық тапты — [бастапқы findings](evidence/D06/scan-before.log). Runtime stage енді installed application packages көшірілгеннен кейін `setuptools==80.10.2` орнатады. Сол рет pip uninstall арқылы ескі vendor файлдары мен metadata-сын да алып тастайды; COPY overlay арқылы жаңа файлды үстінен көшіру қолданылған жоқ.
+
+Ресми PyPI wheel archive-і және бөлек таза Python 3.11 virtualenv тексерісі pinned setuptools ішінде **jaraco.context 6.1.0 / wheel 0.46.3** барын растады. Ескі 5.3.0 / 0.45.1 metadata жоқ; setuptools import және `pip check` өтті — [журнал](evidence/D06/packaging.log). Scanner threshold және ignore policy өзгермеді. Нақты Linux container scan нәтижесі келесі GitHub run-да тексеріледі.

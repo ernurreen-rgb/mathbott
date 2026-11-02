@@ -1,0 +1,5 @@
+build-and-push	Scan backend image (Trivy)	2026-11-02T05:00:59.5786112Z Total: 2 (HIGH: 2, CRITICAL: 0)
+build-and-push	Scan backend image (Trivy)	2026-11-02T05:00:59.5787735Z │          Library          │ Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                             │
+build-and-push	Scan backend image (Trivy)	2026-11-02T05:00:59.5789615Z │ jaraco.context (METADATA) │ CVE-2026-23949 │ HIGH     │ fixed  │ 5.3.0             │ 6.1.0         │ jaraco.context: jaraco.context: Path traversal via malicious │
+build-and-push	Scan backend image (Trivy)	2026-11-02T05:00:59.5793385Z │ wheel (METADATA)          │ CVE-2026-24049 │          │        │ 0.45.1            │ 0.46.2        │ wheel: wheel: Privilege Escalation or Arbitrary Code         │
+build-and-push	Scan backend image (Trivy)	2026-11-02T05:00:59.5808870Z ##[error]Process completed with exit code 1.

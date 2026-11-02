@@ -24,6 +24,9 @@ WORKDIR /app
 # Copy only installed packages from builder
 COPY --from=builder /install /usr/local
 
+# Replace the base image's vulnerable vendored jaraco.context and wheel copies.
+RUN python -m pip install --no-cache-dir --upgrade "setuptools==80.10.2"
+
 # Create a non-root runtime user and writable runtime directories
 RUN groupadd --system appuser \
     && useradd --system --gid appuser --home-dir /app --shell /usr/sbin/nologin appuser \

@@ -1,0 +1,16 @@
+Collecting setuptools==80.10.2
+  Downloading setuptools-80.10.2-py3-none-any.whl (1.1 MB)
+     ---------------------------------------- 1.1/1.1 MB 2.2 MB/s eta 0:00:00
+Installing collected packages: setuptools
+  Attempting uninstall: setuptools
+    Found existing installation: setuptools 65.5.0
+    Uninstalling setuptools-65.5.0:
+      Successfully uninstalled setuptools-65.5.0
+Successfully installed setuptools-80.10.2
+
+[notice] A new release of pip is available: 23.1.2 -> 26.2.2
+[notice] To update, run: E:\Temp\mathbot-d06-763ebc92e1834ce29107881265484440\Scripts\python.exe -m pip install --upgrade pip
+setuptools import/version: 80.10.2
+Patched vendor metadata: ['jaraco_context-6.1.0.dist-info', 'wheel-0.46.3.dist-info']
+Old vulnerable vendor metadata absent.
+No broken requirements found.
