@@ -1,0 +1,62 @@
+{
+  "source_commit": "375cb3cfe0c817e2b0afb2c1cd495247e9d0f0ab",
+  "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "postgres-restore-drill",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199382"
+    },
+    {
+      "name": "frontend-tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199461"
+    },
+    {
+      "name": "security-audit",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199543"
+    },
+    {
+      "name": "backend-tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199549"
+    },
+    {
+      "name": "browser-e2e",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199592"
+    },
+    {
+      "name": "backend-postgres-tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297/job/126173199622"
+    }
+  ],
+  "browser_job_id": 126173199592,
+  "browser_summary": [
+    "2026-11-03T20:07:21.7154837Z Running 20 tests using 1 worker",
+    "2026-11-03T20:08:27.0445249Z   20 passed (1.7m)"
+  ],
+  "browser_report": [
+    {
+      "id": 13266407380,
+      "name": "browser-e2e-report",
+      "size_in_bytes": 12068145
+    }
+  ],
+  "container_release": {
+    "conclusion": "success",
+    "headSha": "375cb3cfe0c817e2b0afb2c1cd495247e9d0f0ab",
+    "status": "completed",
+    "url": "https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401372"
+  }
+}

@@ -77,3 +77,34 @@ PNG-ге render жасалып, формулалар, қазақша glyph-те�
 Нақты Google OAuth бұл fixture-те орындалмайды: стандарт encrypted NextAuth
 test JWT + production auth/CSRF settings қолданылады. Production data-ға тест
 жазбалары қосылмайды.
+
+## CI және production release
+
+`375cb3c` revision-ының [CI run-ы](https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401297)
+**success**: барлық 6 job, соның ішінде **20/20 browser E2E** өтті.
+[CI evidence](evidence/bank-pdf-ci.json), [local PDF evidence](evidence/bank-pdf-local.json).
+[Docker run](https://github.com/ernurreen-rgb/mathbott/actions/runs/41709401372)
+да **success**: екі image build/scan gate-і және Docker Hub push өтті.
+
+Web production build негізгі доменге жіберілместен бұрын бөлек deployment ретінде
+дайындалды. Health/Auth providers/admin bank page/static assets тексерілді;
+anonymous bank API 401 қайтарды. Содан кейін `qazmath.vercel.app` alias-і жаңа
+`dpl_HLh9Gez6UHvVPeLpPqdynFWtNXag` deployment-ке ауыстырылды, сол checks негізгі
+доменде де өтті. Құрал: [Тапсырмалар банкі](https://qazmath.vercel.app/admin/bank).
+
+Release source: `375cb3cfe0c817e2b0afb2c1cd495247e9d0f0ab`, Node 24.x. Осы
+rollout тек web-ті жариялады; backend deployment немесе schema migration
+орындалған жоқ. Нақты production-да authenticated admin PDF flow автоматты түрде
+орындалмады; оның толық flow-ы оқшауланған production-build E2E ішінде тексерілді.
+[Sanitized production evidence](evidence/bank-pdf-production.json).
+
+Rollback қажет болса, linked `web/` project-тен:
+
+```sh
+vercel promote dpl_GTXSkjL6tUhfrXABwQxXUWazsqLq --yes
+```
+
+Алдыңғы deployment тек web кодына қатысты; DB rollback қажет емес. Release
+main-де бұрыннан бар `10b40c5` (bank picker row click) және `47604f9` (choice
+answer-count hint removal) өзгерістерін де сақтайды. Олар осы толық CI-де бірге
+тексерілді; банктің жалпы интерфейсін қайта жасау бұл task-қа кірмейді.

@@ -1,0 +1,99 @@
+{
+  "source_commit": "375cb3cfe0c817e2b0afb2c1cd495247e9d0f0ab",
+  "project_name": "qazmath",
+  "node_version": "24.x",
+  "canonical_url": "https://qazmath.vercel.app",
+  "previous_deployment": {
+    "id": "dpl_GTXSkjL6tUhfrXABwQxXUWazsqLq",
+    "url": "qazmath-fu7g9wb3l-yera1.vercel.app"
+  },
+  "new_deployment": {
+    "id": "dpl_HLh9Gez6UHvVPeLpPqdynFWtNXag",
+    "url": "https://qazmath-keeredj05-yera1.vercel.app",
+    "readyState": "READY"
+  },
+  "main_domain_promoted": true,
+  "staged_checks": [
+    {
+      "path": "/api/backend/health",
+      "http_status": 200,
+      "status": "healthy",
+      "database": "ok"
+    },
+    {
+      "path": "/api/auth/providers",
+      "http_status": 200,
+      "callback_origin_verified": true
+    },
+    {
+      "path": "/admin/bank",
+      "http_status": 200
+    },
+    {
+      "path": "/api/backend/admin/bank/tasks?email=release-check%40invalid.example",
+      "http_status": 401
+    },
+    {
+      "path": "/_next/static/chunks/app/admin/bank/page-1c4492f1812d9cf6.js",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/css/52095c5c0c38780d.css",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/css/c2efe28baa7f0c0e.css",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/chunks/webpack-0bc4f9f08e8ed105.js",
+      "http_status": 200
+    }
+  ],
+  "production_checks": [
+    {
+      "path": "/api/backend/health",
+      "http_status": 200,
+      "status": "healthy",
+      "database": "ok"
+    },
+    {
+      "path": "/api/auth/providers",
+      "http_status": 200,
+      "callback_origin_verified": true
+    },
+    {
+      "path": "/admin/bank",
+      "http_status": 200
+    },
+    {
+      "path": "/api/backend/admin/bank/tasks?email=release-check%40invalid.example",
+      "http_status": 401
+    },
+    {
+      "path": "/_next/static/chunks/app/admin/bank/page-1c4492f1812d9cf6.js",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/css/52095c5c0c38780d.css",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/css/c2efe28baa7f0c0e.css",
+      "http_status": 200
+    },
+    {
+      "path": "/_next/static/chunks/webpack-0bc4f9f08e8ed105.js",
+      "http_status": 200
+    }
+  ],
+  "runtime_metadata": {
+    "node_version": "24.x",
+    "source_commit_verified": true
+  },
+  "date": "2026-11-04",
+  "backend_deployed": false,
+  "schema_migrated": false,
+  "production_test_records_created": false,
+  "authenticated_production_pdf_flow": "not exercised; real production build covered by isolated E2E"
+}
