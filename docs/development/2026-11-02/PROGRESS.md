@@ -8,10 +8,11 @@
 | D02 | CI, Docker және development ортасын Node 24-ке көшіру | Түзетілді; жергілікті және GitHub CI өтті |
 | D03 | Production migration/release және қалпына келтіру тексерістері | Deploy және production PostgreSQL snapshot restore өтті; S3 бөлек |
 | D04 | Негізгі браузер сценарийлеріне E2E | Квиз + trial draft: 16 Windows/Linux E2E және толық CI өтті; нақты OAuth бөлек |
-| D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Жоспарланған |
+| D05 | Тақырыптық прогресс және қатемен жұмыс кезегі | Пайдаланушы сұрауымен кейінге қалдырылды |
 | D06 | Backend image ішіндегі setuptools vendored осалдықтары | Түзетілді; container scan/push өтті |
 | D07 | Production web image ішіндегі npm vendored осалдықтары | Түзетілді; startup және container scan/push өтті |
 | D08 | Sentry build token-ін secret mount арқылы беру | Түзетілді; нақты build/scan/push өтті |
+| D09 | Банктегі таңдалған есептерді бір PDF-ке жүктеу | Қосылды; [2026-11-04 есебі](../2026-11-04/BANK_PDF.md) |
 
 ## D01
 

@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-04",
+  "fixture_data": "synthetic bank tasks only",
+  "full_local_e2e": {
+    "passed": 20,
+    "failed": 0
+  },
+  "latest_pdf_branding_e2e": {
+    "passed": 4,
+    "failed": 0
+  },
+  "jest": {
+    "suites": 63,
+    "tests": 392,
+    "failed": 0
+  },
+  "dependency_tests": 6,
+  "typescript_exit_code": 0,
+  "eslint_exit_code": 0,
+  "production_npm_audit_vulnerabilities": 0,
+  "pdf": {
+    "selected_tasks": 20,
+    "pages": 5,
+    "bytes": 1337445,
+    "sha256": "37354b1cdf8ae4a7b35cefb0c57795215bb7fcc8a61ebbebd2d5787130696502",
+    "author": "Ернұр ағайдан есептер",
+    "a4": true,
+    "common_footer_images_all_pages": 1,
+    "all_pages_rendered_and_visually_reviewed": true,
+    "name_class_date_fields_removed": true,
+    "student_answer_keys_excluded": true
+  },
+  "product_scope": {
+    "direct_file_download": true,
+    "external_pdf_service": false,
+    "schema_migrations": false,
+    "database_writes_for_export": false,
+    "max_selected_tasks": 100
+  }
+}

@@ -47,5 +47,6 @@ if __name__ == "__main__":
 
     with tempfile.TemporaryDirectory(prefix="mathbot-e2e-db-") as directory:
         os.environ["DB_PATH"] = str(Path(directory) / "e2e.sqlite3")
+        os.environ["IMAGES_DIR"] = str(Path(directory) / "images")
         asyncio.run(seed(os.environ["DB_PATH"]))
         uvicorn.run("main:app", host="127.0.0.1", port=int(os.environ["E2E_API_PORT"]), log_level="warning")

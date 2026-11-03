@@ -57,7 +57,7 @@ interrupted answer retry; lost-acknowledgement recovery and idempotent answer re
 The network failure is injected
 only into the browser transport; successful requests use the real backend.
 
-Trial draft coverage adds four scenarios at both sizes (16 browser tests total):
+Trial draft coverage adds four scenarios at both sizes:
 
 - Autosave of choice/MathLive answers and current task index; restoration after
   reload; separate account drafts even when query/body email names another user.
@@ -72,6 +72,14 @@ Trial draft coverage adds four scenarios at both sizes (16 browser tests total):
 
 These tests exercise real proxy/database operations. Only time and selected
 browser transport failures are controlled; API success payloads are not mocked.
+
+Bank PDF coverage adds two scenarios at both sizes (**20 browser tests total**):
+20 selected tasks across pagination/topic filters, reorder and real PDF download
+with formulas/Cyrillic/diagram/all question types/long content; refusal of partial
+exports after task/image failures and a successful retry. The resulting PDF is
+parsed with pdf-lib and attached to the report. PDF visual QA is documented in
+[BANK_PDF.md](../../docs/development/2026-11-04/BANK_PDF.md). Uploaded fixture images
+are kept in the backend's temporary directory alongside its temporary database.
 
 Reports, failure screenshots and traces: `web/output/playwright/` (gitignored).
 Open the HTML report with `npx playwright show-report output/playwright/report`.
