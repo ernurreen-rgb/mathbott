@@ -1,5 +1,6 @@
 import type { PDFPage } from 'pdf-lib';
 import { WORKSHEET_BRAND, worksheetFilename } from './bank-worksheet';
+import { validateWorksheetFontCSS } from './worksheet-fonts';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -108,7 +109,10 @@ export async function exportBankWorksheet(
     }));
     await document.fonts.ready;
     signal.throwIfAborted();
-    const fontEmbedCSS = await getFontEmbedCSS(root, { preferredFontFormat: 'woff2' });
+    // html-to-image 1.11.13's preferredFontFormat filter retains a global regex
+    // cursor and drops src from alternating font-face rules/calls. MathLive's
+    // stylesheet already uses WOFF2: preserve every regular/bold/italic source.
+    const fontEmbedCSS = validateWorksheetFontCSS(await getFontEmbedCSS(root), !!root.querySelector('.ML__latex'));
     const pdf = await PDFDocument.create();
     pdf.setTitle(title.trim() || 'Есептер жинағы');
     pdf.setAuthor(WORKSHEET_BRAND);
@@ -121,7 +125,7 @@ export async function exportBankWorksheet(
       if (node.scrollHeight > 4000) throw new Error('Бір есептің мәтіні тым ұзын. Оны жинақтан алып тастаңыз.');
       const height = Math.max(node.scrollHeight, Math.ceil(node.getBoundingClientRect().height));
       const canvas = await toCanvas(node, { pixelRatio: 3, backgroundColor: '#ffffff', fontEmbedCSS,
-        preferredFontFormat: 'woff2', width: 720, height,
+        width: 720, height,
         style: { width: '720px', height: `${height}px`, margin: '0', boxSizing: 'border-box' } });
       signal.throwIfAborted();
       return canvas;
