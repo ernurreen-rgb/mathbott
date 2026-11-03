@@ -149,7 +149,6 @@ export default function StudentChoiceAnswerFields({
 
   return (
     <div className="space-y-2">
-      {requiredCount > 1 && <p className="text-sm text-gray-600">{requiredCount} жауап таңдаңыз</p>}
       <div className={optionLayoutClass}>
         {options.map((option) => {
           const label = option.label.toUpperCase() as McqOptionLabel;
