@@ -2,6 +2,9 @@
 import Icon from "@/components/ui/Icon";
 
 import BankTaskForm from "./_components/BankTaskForm";
+import BankWorksheetDialog from "@/components/admin/BankWorksheetDialog";
+import { useBankWorksheetSelection } from "@/lib/use-bank-worksheet-selection";
+import { MAX_WORKSHEET_TASKS } from "@/lib/bank-worksheet";
 import DuplicateDialog from "./_components/DuplicateDialog";
 import HistoryDialog from "./_components/HistoryDialog";
 import ImportPreviewDialog from "./_components/ImportPreviewDialog";
@@ -49,6 +52,10 @@ export default function AdminBankPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
   const { loading: accessLoading } = useAdminPageAccess("content", status, email);
+  const worksheet = useBankWorksheetSelection(email);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
+  const worksheetIds = new Set(worksheet.selected.map((task) => task.id));
+  useEffect(() => { setWorksheetOpen(false); }, [email]);
 
   const [tab, setTab] = useState<"active" | "trash" | "answers">("active");
   const [tasks, setTasks] = useState<BankTask[]>([]);
@@ -361,6 +368,7 @@ export default function AdminBankPage() {
       return;
     }
     if (editingTaskId === taskId) resetAndHideForm();
+    worksheet.remove(taskId);
     await fetchTasks();
   };
 
@@ -657,6 +665,25 @@ export default function AdminBankPage() {
               </div>
             )}
 
+            {tab === "active" && <section aria-label="Есептерді PDF-ке жинау" className="mb-4 rounded-2xl border border-purple-200 bg-purple-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div role="status" aria-live="polite" className="font-bold text-purple-900">PDF үшін таңдалды: {worksheet.selected.length}</div>
+                  <p className="mt-1 text-xs text-purple-800">Таңдау басқа бетке немесе сүзгіге өткенде сақталады. Ең көбі {MAX_WORKSHEET_TASKS} есеп.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={loading || !tasks.length || new Set([...worksheetIds, ...tasks.map((task) => task.id)]).size > MAX_WORKSHEET_TASKS}
+                    onClick={() => worksheet.togglePage(tasks)} className="rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm font-semibold text-purple-800 disabled:opacity-50">
+                    {tasks.length > 0 && tasks.every((task) => worksheetIds.has(task.id)) ? "Осы беттің таңдауын алып тастау" : "Осы беттегі есептерді таңдау"}
+                  </button>
+                  <button type="button" disabled={!worksheet.selected.length} onClick={worksheet.clear}
+                    className="rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm font-semibold text-purple-800 disabled:opacity-50">Таңдауды тазалау</button>
+                  <button type="button" disabled={!worksheet.selected.length} onClick={() => setWorksheetOpen(true)}
+                    className="rounded-lg bg-purple-600 px-4 py-2 font-bold text-white hover:bg-purple-700 disabled:opacity-50">PDF дайындау</button>
+                </div>
+              </div>
+            </section>}
+
             <BankTaskForm
               tab={tab}
               showForm={showForm}
@@ -689,6 +716,10 @@ export default function AdminBankPage() {
                     {tasks.map((task, idx) => (
                       <div key={task.id} className="bg-white/70 rounded-2xl p-4 border border-white/40">
                         <div className="flex items-start justify-between gap-4">
+                          {tab === "active" && <input type="checkbox" checked={worksheetIds.has(task.id)}
+                            disabled={!worksheetIds.has(task.id) && worksheet.selected.length >= MAX_WORKSHEET_TASKS}
+                            onChange={() => worksheet.toggle(task)} aria-label={`PDF үшін банк №${task.id} есебін таңдау`}
+                            className="mt-1 h-5 w-5 shrink-0 accent-purple-600" />}
                           <div className="flex-1 min-w-0">
                             <div
                               className={`font-semibold text-gray-900 break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
@@ -785,6 +816,9 @@ export default function AdminBankPage() {
                 </div>
               </>
             )}
+
+            {worksheetOpen && email && <BankWorksheetDialog key={email} email={email} tasks={worksheet.selected}
+              onMove={worksheet.move} onRemove={worksheet.remove} onClose={() => setWorksheetOpen(false)} />}
 
             <DuplicateDialog
               pendingDedup={pendingDedup}

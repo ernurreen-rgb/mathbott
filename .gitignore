@@ -26,3 +26,5 @@ node_modules/
 coverage/
 .playwright-cli/
 web/output/
+tmp/pdfs/
+output/pdf/
