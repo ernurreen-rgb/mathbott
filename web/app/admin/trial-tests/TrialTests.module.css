@@ -23,9 +23,23 @@
 .bankFilters { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 10px; align-items: end; margin-bottom: 18px; }
 .bankSelection { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-block: 1px solid #e1e4e8; padding: 12px 0; margin-bottom: 10px; }
 .bankList { display: grid; }
-.bankRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; border-bottom: 1px solid #e8eaed; padding: 16px 0; }
-.bankRow input { margin-top: 5px; accent-color: #303640; }
-.bankRowSelected { background: #f7f9fc; }
+.bankRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border-bottom: 1px solid #e8eaed;
+  padding: 14px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.bankRow:hover:not(.bankRowAssigned) { background: #f4f6f8; }
+.bankRowSelected { background: #eef3f9; }
+.bankRowSelected:hover:not(.bankRowAssigned) { background: #e2ebf5; }
+.bankRowAssigned { cursor: not-allowed; opacity: 0.6; }
+.bankRow input { margin-top: 5px; accent-color: #303640; cursor: pointer; }
+.bankRowAssigned input { cursor: not-allowed; }
 .bankMeta { font-size: 12px; line-height: 1.7; color: #777e89; margin-bottom: 8px; }
 .bankActions { position: sticky; bottom: -24px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 16px 0; border-top: 1px solid #e1e4e8; background: #fff; }
 @media (prefers-reduced-motion: reduce) { .slotGrid { scroll-behavior: auto; } }

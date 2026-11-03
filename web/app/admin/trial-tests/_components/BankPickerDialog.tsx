@@ -77,10 +77,61 @@ export default function BankPickerDialog({
       {bankItems.map((task) => {
         const assigned = assignedBankTaskIds.has(task.id);
         const selected = selectedBankTaskIds.includes(task.id);
-        return <article key={task.id} className={`${local.bankRow} ${selected ? local.bankRowSelected : ""}`}>
-          <input type="checkbox" aria-label={`Банк #${task.id} таңдау`} checked={selected} disabled={assigned || busy} onChange={() => toggleBankTaskSelection(task.id)} />
-          <div className="min-w-0"><div className={local.bankMeta}>#{task.id} · {task.difficulty} · {trialQuestionTypeLabel(task.question_type)}{assigned ? " · Тестке қосылған" : ""}</div><div className={`text-slate-800 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`} style={getTaskTextScaleStyle(task.text_scale)}><MathRender latex={task.text || ""} /></div></div>
-          <button type="button" className={styles.secondaryButton} disabled={assigned || busy} onClick={() => void onAssignBankTask(task.id)}>Осы ұяшыққа</button>
+        const handleRowClick = (e: React.MouseEvent) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("button") || target.closest("input")) {
+            return;
+          }
+          if (!assigned && !busy) {
+            toggleBankTaskSelection(task.id);
+          }
+        };
+        const handleRowKeyDown = (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            const target = e.target as HTMLElement;
+            if (!target.closest("button") && !target.closest("input")) {
+              e.preventDefault();
+              if (!assigned && !busy) {
+                toggleBankTaskSelection(task.id);
+              }
+            }
+          }
+        };
+        return <article
+          key={task.id}
+          className={`${local.bankRow} ${selected ? local.bankRowSelected : ""} ${assigned ? local.bankRowAssigned : ""}`}
+          onClick={handleRowClick}
+          onKeyDown={handleRowKeyDown}
+        >
+          <input
+            type="checkbox"
+            aria-label={`Банк #${task.id} таңдау`}
+            checked={selected}
+            disabled={assigned || busy}
+            onChange={() => toggleBankTaskSelection(task.id)}
+          />
+          <div className="min-w-0">
+            <div className={local.bankMeta}>
+              #{task.id} · {task.difficulty} · {trialQuestionTypeLabel(task.question_type)}{assigned ? " · Тестке қосылған" : ""}
+            </div>
+            <div
+              className={`text-slate-800 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
+              style={getTaskTextScaleStyle(task.text_scale)}
+            >
+              <MathRender latex={task.text || ""} />
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={assigned || busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              void onAssignBankTask(task.id);
+            }}
+          >
+            Осы ұяшыққа
+          </button>
         </article>;
       })}
       {!bankItems.length && <p className={styles.hint}>Тапсырмалар табылмады.</p>}

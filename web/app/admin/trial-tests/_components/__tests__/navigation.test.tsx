@@ -115,8 +115,18 @@ it("selects bank exercises without overwriting filled slots, and blocks duplicat
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Банктен қосу" })); });
   const dialog = screen.getByRole("dialog", { name: "Банктен таңдау · 2-ұяшық" });
   expect(within(dialog).getByRole("checkbox", { name: "Банк #7 таңдау" })).toBeDisabled();
-  fireEvent.click(within(dialog).getByRole("checkbox", { name: "Банк #8 таңдау" }));
-  fireEvent.click(within(dialog).getByRole("checkbox", { name: "Банк #11 таңдау" }));
+
+  // Clicking on task text/block toggles the checkbox for bank task #8
+  const chk8 = within(dialog).getByRole("checkbox", { name: "Банк #8 таңдау" });
+  expect(chk8).not.toBeChecked();
+  fireEvent.click(within(dialog).getByText("3+3"));
+  expect(chk8).toBeChecked();
+
+  // Clicking on the checkbox itself for bank task #11 also works
+  const chk11 = within(dialog).getByRole("checkbox", { name: "Банк #11 таңдау" });
+  fireEvent.click(chk11);
+  expect(chk11).toBeChecked();
+
   await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Таңдалғанды қосу (2)" })); });
   expect(mocked.upsertTrialTestSlot.mock.calls.map(([, slot]) => slot)).toEqual([2, 3]);
   expect(mocked.upsertTrialTestSlot.mock.calls.map(([, , payload]) => payload.bank_task_id).sort((a, b) => a - b)).toEqual([8, 11]);
