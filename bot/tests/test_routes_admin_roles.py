@@ -39,7 +39,6 @@ def test_admin_routes_contract_and_no_duplicates(client):
         ("GET", "/api/admin/ops/health/timeseries"),
         ("GET", "/api/admin/ops/incidents"),
         ("GET", "/api/admin/statistics"),
-        ("GET", "/api/admin/onboarding-statistics"),
     ]
     for method, path in expected_routes:
         assert (method, path) in route_set

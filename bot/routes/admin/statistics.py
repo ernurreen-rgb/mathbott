@@ -16,15 +16,3 @@ def register_statistics_routes(app: FastAPI, db: Database, limiter: Limiter):
         except Exception as e:
             logger.error(f"Error getting admin statistics: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
-
-    @app.get("/api/admin/onboarding-statistics")
-    async def get_onboarding_statistics(admin_user: dict = Depends(require_admin_review_manage), db: Database = Depends(get_db)):
-        """Get onboarding statistics (admin only)"""
-        try:
-            stats = await db.onboarding.get_onboarding_statistics()
-            return stats
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error getting onboarding statistics: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Internal server error")

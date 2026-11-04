@@ -134,10 +134,3 @@ export interface AdminStatistics {
   solutions_over_time: AdminSolutionsOverTimeItem[];
   module_progress: AdminModuleProgressItem[];
 }
-
-
-export interface OnboardingStatistics {
-  total_completed: number;
-  how_did_you_hear: Record<string, number>;
-  math_level: Record<string, number>;
-}

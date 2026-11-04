@@ -5,12 +5,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { getAdminStatistics, getOnboardingStatistics } from "@/lib/api";
+import { getAdminStatistics } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import StatsKpiGrid from "@/components/admin/statistics/StatsKpiGrid";
 import StatsChartsSection from "@/components/admin/statistics/StatsChartsSection";
 import StatsLegacySections from "@/components/admin/statistics/StatsLegacySections";
-import type { AdminStatistics, OnboardingStatistics } from "@/types";
+import type { AdminStatistics } from "@/types";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 
 export default function StatisticsPage() {
@@ -19,7 +19,6 @@ export default function StatisticsPage() {
   const sessionEmail = session?.user?.email || null;
   const { loading: accessLoading } = useAdminPageAccess("review", status, sessionEmail);
   const [stats, setStats] = useState<AdminStatistics | null>(null);
-  const [onboardingStats, setOnboardingStats] = useState<OnboardingStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,19 +28,12 @@ export default function StatisticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [statsResult, onboardingResult] = await Promise.all([
-        getAdminStatistics(sessionEmail),
-        getOnboardingStatistics(sessionEmail)
-      ]);
+      const statsResult = await getAdminStatistics(sessionEmail);
       
       if (statsResult.error) {
         setError(statsResult.error);
       } else if (statsResult.data) {
         setStats(statsResult.data);
-      }
-      
-      if (onboardingResult.data) {
-        setOnboardingStats(onboardingResult.data);
       }
     } catch (e: any) {
       setError(e?.message || "Статистиканы жүктеу қатесі");
@@ -322,59 +314,6 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* 10. Onboarding Statistics */}
-          {onboardingStats && (
-            <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Онбординг опросы статистикасы</h2>
-              
-              <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-4 text-white">
-                  <div className="text-sm mb-1">Барлығы опрос өткен</div>
-                  <div className="text-3xl font-bold">{onboardingStats.total_completed || 0}</div>
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-xl font-semibold mb-3">Бізді қалай білдіңіз?</h3>
-                  <div className="space-y-2">
-                    {Object.entries(onboardingStats.how_did_you_hear || {}).map(([key, value]: [string, any]) => (
-                      <div key={key} className="flex justify-between items-center bg-white/70 rounded p-3">
-                        <span className="font-medium">{key}</span>
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm text-gray-600">
-                            {onboardingStats.total_completed > 0 
-                              ? `${((value / onboardingStats.total_completed) * 100).toFixed(1)}%`
-                              : '0%'}
-                          </div>
-                          <span className="font-bold text-purple-600">{value}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-semibold mb-3">Математика деңгейі</h3>
-                  <div className="space-y-2">
-                    {Object.entries(onboardingStats.math_level || {}).map(([key, value]: [string, any]) => (
-                      <div key={key} className="flex justify-between items-center bg-white/70 rounded p-3">
-                        <span className="font-medium">{key}</span>
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm text-gray-600">
-                            {onboardingStats.total_completed > 0 
-                              ? `${((value / onboardingStats.total_completed) * 100).toFixed(1)}%`
-                              : '0%'}
-                          </div>
-                          <span className="font-bold text-blue-600">{value}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
           </StatsLegacySections>
         </div>
       </main>
