@@ -4,20 +4,20 @@ import TrialTestsCatalog from "../TrialTestsCatalog";
 
 let mockEmail = "editor@example.com";
 const mockPush = jest.fn();
-const mockRouter = { push: mockPush };
+const mockRouter = { push: mockPush, replace: jest.fn() };
 const mockAccess = jest.fn();
 const mockTests = jest.fn();
 jest.mock("next-auth/react", () => ({ useSession: () => ({ data: { user: { email: mockEmail } }, status: "authenticated" }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 jest.mock("@/components/DesktopNav", () => function Nav() { return <nav aria-label="Негізгі мәзір" />; });
 jest.mock("@/components/MobileNav", () => function Nav() { return null; });
-jest.mock("@/lib/api", () => ({ checkAdminStatus: (...args: unknown[]) => mockAccess(...args), getAdminTrialTests: (...args: unknown[]) => mockTests(...args) }));
+jest.mock("@/lib/api", () => ({ checkAdminStatus: (...args: unknown[]) => mockAccess(...args), getAdminTrialTestFolders: jest.fn().mockResolvedValue({ data: [{ id: 1, name: "Алгебра", parent_id: null, child_count: 0, test_count: 1 }], error: null }), getAdminTrialTests: (...args: unknown[]) => mockTests(...args) }));
 
 beforeEach(() => {
   mockEmail = "editor@example.com";
   jest.clearAllMocks();
   mockAccess.mockResolvedValue({ data: { is_admin: true, role: "content_editor" }, error: null });
-  mockTests.mockResolvedValue({ data: [{ id: 9, title: "Тест", category: "Алгебра", sort_order: 0 }], error: null });
+  mockTests.mockResolvedValue({ data: [{ id: 9, title: "Тест", category: "Алгебра", folder_id: 1, sort_order: 0 }], error: null });
 });
 
 it("keeps navigation and access checks stable between folders", async () => {

@@ -1,5 +1,17 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { TrialTest, TrialTestCategory, BankPlacementTask } from "@/types";
+import { TrialTest, TrialTestCategory, TrialTestFolder, BankPlacementTask } from "@/types";
+
+export const getAdminTrialTestFolders = (email: string) => fetchWithErrorHandling<TrialTestFolder[]>(
+  `${apiPath('admin/trial-tests/folders')}?email=${encodeURIComponent(email)}`, { cache: "no-store" });
+
+export function saveTrialTestFolder(email: string, payload: { name?: string; parent_id?: number | null; sort_order?: number; move_existing_tests?: boolean }, id?: number) {
+  return fetchWithErrorHandling<Pick<TrialTestFolder, "id" | "name" | "parent_id" | "sort_order">>(`${apiPath('admin/trial-tests/folders')}${id === undefined ? "" : `/${id}`}?email=${encodeURIComponent(email)}`, {
+    method: id === undefined ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+}
+
+export const deleteTrialTestFolder = (id: number, email: string) => fetchWithErrorHandling<{ success: boolean }>(
+  `${apiPath(`admin/trial-tests/folders/${id}`)}?email=${encodeURIComponent(email)}`, { method: "DELETE" });
 
 
 // Trial Tests Admin API
@@ -37,14 +49,16 @@ export async function createTrialTest(
   sort_order: number,
   expected_tasks_count: number,
   email: string,
-  category: string = "Жалпы"
+  category: string = "Жалпы",
+  folderId?: number
 ): Promise<{ data: TrialTest | null; error: string | null }> {
   const formData = new FormData();
   formData.append("title", title);
   if (description) formData.append("description", description);
   formData.append("sort_order", sort_order.toString());
   formData.append("expected_tasks_count", String(expected_tasks_count || 40));
-  formData.append("category", category || "Жалпы");
+  if (folderId === undefined) formData.append("category", category || "Жалпы");
+  else formData.append("folder_id", String(folderId));
   formData.append("email", email);
   return fetchWithErrorHandling<TrialTest>(apiPath('admin/trial-tests'), {
     method: "POST",
@@ -60,7 +74,8 @@ export async function updateTrialTest(
   sort_order: number | null,
   expected_tasks_count: number | null,
   email: string,
-  category?: string | null
+  category?: string | null,
+  folderId?: number
 ): Promise<{ data: TrialTest | null; error: string | null }> {
   const formData = new FormData();
   if (title !== null) formData.append("title", title);
@@ -69,7 +84,8 @@ export async function updateTrialTest(
   if (expected_tasks_count !== null) {
     formData.append("expected_tasks_count", expected_tasks_count.toString());
   }
-  if (category !== undefined && category !== null) {
+  if (folderId !== undefined) formData.append("folder_id", String(folderId));
+  else if (category !== undefined && category !== null) {
     formData.append("category", category);
   }
   formData.append("email", email);

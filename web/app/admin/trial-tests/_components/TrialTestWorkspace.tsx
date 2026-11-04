@@ -16,7 +16,8 @@ import InlineTaskDialog from "./InlineTaskDialog";
 import CurrentSlotControls from "./CurrentSlotControls";
 import TrialTestFormDialog from "./TrialTestFormDialog";
 import { getPlacementImageFilename, getPlacementText, getPlacementTextScale } from "./model";
-import { normalizeCategory, trialFolderPath, useTrialTests } from "./TrialTestsProvider";
+import { trialFolderPath, useTrialTests } from "./TrialTestsProvider";
+import TrialFolderBreadcrumbs from "./TrialFolderBreadcrumbs";
 import { useTrialTaskEditor } from "./useTrialTaskEditor";
 
 function TaskEditor({ test }: { test: TrialTest }) {
@@ -25,7 +26,7 @@ function TaskEditor({ test }: { test: TrialTest }) {
   const { tasks, loading, currentSlotIndex, currentPlacement, slotMap } = editor;
   const firstEmpty = Array.from({ length: slotCount }, (_, i) => i + 1).find((slot) => !slotMap.has(slot));
   const addSlot = !currentPlacement ? currentSlotIndex : firstEmpty;
-  const category = normalizeCategory(test.category);
+  const { folders } = useTrialTests();
   const [settings, setSettings] = useState(false);
   const slotNavigation = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -35,9 +36,9 @@ function TaskEditor({ test }: { test: TrialTest }) {
   }, [currentSlotIndex, loading]);
 
   return <>
-    <nav aria-label="Мазмұн жолы" className={styles.breadcrumbs}><Link href="/admin/trial-tests">Сынақ тесттері</Link><span className={styles.breadcrumbSeparator}>/</span><Link href={trialFolderPath(category)}>{category}</Link><span className={styles.breadcrumbSeparator}>/</span><span aria-current="page">{test.title}</span></nav>
+    <TrialFolderBreadcrumbs folders={folders} folderId={test.folder_id ?? null} testTitle={test.title} />
     <header className={styles.header}><h1 className={styles.title}>{test.title}</h1><div className={styles.actions}>
-      <Link href={trialFolderPath(category)} className={styles.textButton}><Icon name="arrowLeft" />Тесттер</Link>
+      <Link href={test.folder_id ? trialFolderPath(test.folder_id) : "/admin/trial-tests"} className={styles.textButton}><Icon name="arrowLeft" />Тесттер</Link>
       <button type="button" className={styles.textButton} onClick={() => setSettings(true)}><Icon name="edit" />Тестті өңдеу</button>
     </div></header>
     {test.description && <p className={local.description}>{test.description}</p>}

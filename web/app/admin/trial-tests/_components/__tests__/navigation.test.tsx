@@ -1,3 +1,4 @@
+jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import * as api from "@/lib/api";
 import type { BankPlacementTask, BankTask, TrialTest } from "@/types";
@@ -7,7 +8,7 @@ import { TrialTestsProvider } from "../TrialTestsProvider";
 
 jest.mock("next-auth/react", () => ({ useSession: () => ({ data: { user: { email: "editor@example.com" } }, status: "authenticated" }) }));
 jest.mock("@/lib/api", () => ({ apiPath: (path: string) => `/api/backend/${path}`,
-  getAdminTrialTests: jest.fn(), getAdminTrialTestTasks: jest.fn(), getAdminBankTasks: jest.fn(),
+  getAdminTrialTests: jest.fn(), getAdminTrialTestFolders: jest.fn(), saveTrialTestFolder: jest.fn(), deleteTrialTestFolder: jest.fn(), getAdminTrialTestTasks: jest.fn(), getAdminBankTasks: jest.fn(),
   createTrialTest: jest.fn(), updateTrialTest: jest.fn(), deleteTrialTest: jest.fn(),
   upsertTrialTestSlot: jest.fn(), clearTrialTestSlot: jest.fn(),
 }));
@@ -17,14 +18,19 @@ jest.mock("@/components/ui/MathFieldInput", () => function MathFieldInput({ valu
 });
 jest.mock("@/components/admin/StudentTaskPreview", () => function Preview() { return <p>Оқушы көрінісі</p>; });
 
-const test = { id: 9, title: "Алгебра тесті", category: " Геометрия ", description: "Бақылау", sort_order: 0, expected_tasks_count: 3, task_count: 1 } as TrialTest;
-const other = { ...test, id: 10, title: "Басқа тест", category: "all" };
+const test = { id: 9, title: "Алгебра тесті", category: " Геометрия ", folder_id: 1, description: "Бақылау", sort_order: 0, expected_tasks_count: 3, task_count: 1 } as TrialTest;
+const other = { ...test, id: 10, title: "Басқа тест", category: "all", folder_id: 2 };
 const placement = { id: 21, bank_task_id: 7, sort_order: 0, text: "2+2", answer: "4", question_type: "input", text_scale: "md" } as BankPlacementTask;
 const bank = [{ id: 7, text: "2+2", difficulty: "A", question_type: "input" }, { id: 8, text: "3+3", difficulty: "B", question_type: "input" }, { id: 11, text: "4+4", difficulty: "C", question_type: "input" }] as BankTask[];
 const mocked = jest.mocked(api);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mocked.getAdminTrialTestFolders.mockResolvedValue({ data: [
+    { id: 1, parent_id: null, name: "Геометрия", sort_order: 0, test_count: 1, direct_test_count: 1, child_count: 0 },
+    { id: 2, parent_id: null, name: "all", sort_order: 0, test_count: 1, direct_test_count: 1, child_count: 0 },
+    { id: 3, parent_id: null, name: "Жалпы", sort_order: 0, test_count: 0, direct_test_count: 0, child_count: 0 },
+  ], error: null });
   mocked.getAdminTrialTests.mockResolvedValue({ data: [test, other], error: null });
   mocked.getAdminTrialTestTasks.mockResolvedValue({ data: [placement], error: null });
   mocked.getAdminBankTasks.mockResolvedValue({ data: { items: bank, total: bank.length, has_more: false, limit: 20, offset: 0 }, error: null });
@@ -39,7 +45,7 @@ const workspace = (id = 9) => <TrialTestsProvider><TrialTestWorkspace key={id} t
 
 it("lists encoded folder links without showing forms or tasks", async () => {
   await act(async () => { render(catalog()); });
-  expect(screen.getByRole("link", { name: /Геометрия 1 тест/ })).toHaveAttribute("href", `/admin/trial-tests/folders/${encodeURIComponent("Геометрия")}`);
+  expect(screen.getByRole("link", { name: /Геометрия 1 тест/ })).toHaveAttribute("href", "/admin/trial-tests/folder/1");
   expect(screen.getByRole("link", { name: /Жалпы 0 тест/ })).toBeInTheDocument();
   expect(screen.queryByText("2+2")).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "Атауы" })).not.toBeInTheDocument();
@@ -62,7 +68,7 @@ it("keeps new test data after a failed save and passes its folder and task count
   await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Сақтау қатесі");
   expect(within(dialog).getByRole("textbox", { name: "Атауы" })).toHaveValue("Жаңа тест");
-  expect(mocked.createTrialTest).toHaveBeenCalledWith("Жаңа тест", "", 0, 12, "editor@example.com", "Геометрия");
+  expect(mocked.createTrialTest).toHaveBeenCalledWith("Жаңа тест", "", 0, 12, "editor@example.com", undefined, 1);
   await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
@@ -71,9 +77,9 @@ it("edits metadata in a dialog without opening or replacing a test's tasks", asy
   await act(async () => { render(catalog("Геометрия")); });
   fireEvent.click(screen.getByRole("button", { name: "Алгебра тесті өңдеу" }));
   const dialog = screen.getByRole("dialog", { name: "Тестті өңдеу" });
-  fireEvent.change(within(dialog).getByRole("combobox", { name: "Папка" }), { target: { value: "Жаңа папка" } });
+  fireEvent.change(within(dialog).getByRole("combobox", { name: "Папка" }), { target: { value: "3" } });
   await act(async () => { fireEvent.submit(dialog.querySelector("form")!); });
-  expect(mocked.updateTrialTest).toHaveBeenCalledWith(9, test.title, test.description, 0, 3, "editor@example.com", "Жаңа папка");
+  expect(mocked.updateTrialTest).toHaveBeenCalledWith(9, test.title, test.description, 0, 3, "editor@example.com", undefined, 3);
   expect(mocked.getAdminTrialTestTasks).not.toHaveBeenCalled();
 });
 

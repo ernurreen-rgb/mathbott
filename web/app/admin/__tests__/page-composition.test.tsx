@@ -1,3 +1,4 @@
+jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 import { act, render, screen } from "@testing-library/react";
 import BankPage from "../bank/page";
 import CMSPage from "../cms/page";
@@ -13,6 +14,7 @@ jest.mock("@/components/MobileNav", () => () => null);
 jest.mock("@/lib/api", () => ({
   apiPath: (path: string) => `/api/backend/${path}`,
   getAdminBankTasks: jest.fn().mockResolvedValue({ data: { items: [], total: 0 }, error: null }),
+  getAdminTrialTestFolders: jest.fn().mockResolvedValue({ data: [], error: null }),
   getAdminTrialTests: jest.fn().mockResolvedValue({ data: [], error: null }),
 }));
 

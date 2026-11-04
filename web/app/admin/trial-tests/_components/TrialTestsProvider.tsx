@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { getAdminTrialTests } from "@/lib/api";
-import type { BankPlacementTask, TrialTest } from "@/types";
+import { getAdminTrialTests, getAdminTrialTestFolders } from "@/lib/api";
+import type { BankPlacementTask, TrialTest, TrialTestFolder } from "@/types";
 
 const TASK_CACHE_AGE = 60_000;
 
@@ -11,6 +11,7 @@ function useTrialTestsData() {
   const { data: session } = useSession();
   const email = session?.user?.email || null;
   const [tests, setTests] = useState<TrialTest[]>([]);
+  const [folders, setFolders] = useState<TrialTestFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const version = useRef(0);
@@ -20,15 +21,16 @@ function useTrialTestsData() {
     if (!email) return;
     const request = ++version.current;
     try {
-      const response = await getAdminTrialTests(email);
+      const [response, folderResponse] = await Promise.all([getAdminTrialTests(email), getAdminTrialTestFolders(email)]);
       if (request !== version.current) return;
-      if (response.error) setError(response.error);
-      else { setTests(response.data || []); setError(null); }
+      if (response.error || folderResponse.error) setError(response.error || folderResponse.error);
+      else { setTests(response.data || []); setFolders(folderResponse.data || []); setError(null); }
     } catch { if (request === version.current) setError("Тесттерді жүктеу мүмкін болмады."); }
     finally { if (request === version.current) setLoading(false); }
   }, [email]);
 
   useEffect(() => {
+    setTests([]); setFolders([]); tasks.current.clear(); setLoading(true); setError(null);
     void refreshTests();
     return () => { version.current += 1; };
   }, [refreshTests]);
@@ -45,7 +47,7 @@ function useTrialTestsData() {
     setTests((previous) => previous.map((test) => test.id === testId ? { ...test, task_count: items.length } : test));
   }, []);
 
-  return { email, tests, loading, error, refreshTests, readTasks, writeTasks };
+  return { email, tests, folders, loading, error, refreshTests, readTasks, writeTasks };
 }
 
 const TrialTestsContext = createContext<ReturnType<typeof useTrialTestsData> | null>(null);
@@ -62,4 +64,4 @@ export function useTrialTests() {
 }
 
 export const normalizeCategory = (category?: string | null) => category?.trim() || "Жалпы";
-export const trialFolderPath = (category: string) => `/admin/trial-tests/folders/${encodeURIComponent(normalizeCategory(category))}`;
+export { trialFolderPath } from "@/lib/trial-folders";

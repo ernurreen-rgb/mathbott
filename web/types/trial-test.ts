@@ -7,6 +7,7 @@ export interface TrialTest {
   title: string;
   description?: string;
   category?: string | null;
+  folder_id?: number | null;
   sort_order: number;
   expected_tasks_count?: number;
   created_at: string;
@@ -18,6 +19,16 @@ export interface TrialTestCategory {
   category: string;
   test_count: number;
   min_sort_order?: number;
+}
+
+export interface TrialTestFolder {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  sort_order: number;
+  test_count: number;
+  direct_test_count: number;
+  child_count: number;
 }
 
 
