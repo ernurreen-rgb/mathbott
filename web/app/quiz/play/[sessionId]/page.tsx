@@ -412,11 +412,11 @@ export default function PlayQuizPage({ params }: PageProps) {
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-3xl mx-auto w-full p-4 flex flex-col justify-between">
+      <main className="flex-1 min-w-0 max-w-3xl mx-auto w-full p-4 flex flex-col justify-between">
         {/* Question Text Box */}
         <div className="my-auto py-4">
-          <div className="bg-white border border-purple-100 rounded-3xl p-6 sm:p-8 shadow-lg text-center">
-            <div className="text-lg sm:text-2xl font-bold text-gray-900 leading-relaxed">
+          <div className="min-w-0 bg-white border border-purple-100 rounded-3xl p-6 sm:p-8 shadow-lg text-center">
+            <div className="min-w-0 text-lg sm:text-2xl font-bold text-gray-900 leading-relaxed">
               <MathRender latex={currentQ.question_text} />
             </div>
           </div>

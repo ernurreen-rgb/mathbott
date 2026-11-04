@@ -2,6 +2,33 @@ import { render } from "@testing-library/react";
 import MathRender from "../ui/MathRender";
 
 describe("MathRender", () => {
+  it.each([false, true])("renders a text-wrapped word problem as wrapping prose (inline=%s)", (inline) => {
+    const question = "Әлиде 8 алма бар. Оған тағы 7 алма берілді. Енді неше алма болды?";
+    const { container } = render(<MathRender inline={inline} latex={`\\text{${question}}`} />);
+
+    expect(container.textContent).toBe(question);
+    expect(container.querySelector("math-span, math-div")).toBeNull();
+    expect(container.firstElementChild).toHaveStyle({ whiteSpace: "normal", overflowWrap: "anywhere" });
+  });
+
+  it("wraps prose around a fraction while preserving text nested inside math", () => {
+    const { container } = render(
+      <MathRender latex={String.raw`\text{Мына бөлшекті есептеңіз: }\frac{\text{a}}{2}\text{ және жауабын жазыңыз.}`} />
+    );
+
+    expect(container).toHaveTextContent("Мына бөлшекті есептеңіз:");
+    expect(container).toHaveTextContent("және жауабын жазыңыз.");
+    const math = container.querySelectorAll("math-span");
+    expect(math).toHaveLength(1);
+    expect(math[0].textContent).toBe(String.raw`\frac{\text{a}}{2}`);
+  });
+
+  it("keeps escaped LaTeX text in the math renderer", () => {
+    const { container } = render(<MathRender inline latex={String.raw`\text{50\%}`} />);
+
+    expect(container.querySelector("math-span")?.textContent).toBe(String.raw`\text{50\%}`);
+  });
+
   it("renders LaTeX commands attached to Cyrillic text without requiring a space", () => {
     const text = "\u0415\u0441\u0435\u043f\u0442\u0435\u04a3\u0456\u0437:";
 

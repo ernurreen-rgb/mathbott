@@ -500,8 +500,8 @@ const findNextTopLevelLatexCommand = (value: string, start: number): number => {
   return -1;
 };
 
-const splitTopLevelLatexCommandBlocks = (value: string): Array<{ type: "text" | "math"; value: string }> => {
-  const parts: Array<{ type: "text" | "math"; value: string }> = [];
+const splitTopLevelLatexCommandBlocks = (value: string): Array<{ type: "text" | "math" | "prose"; value: string }> => {
+  const parts: Array<{ type: "text" | "math" | "prose"; value: string }> = [];
   let cursor = 0;
   let found = false;
 
@@ -510,7 +510,10 @@ const splitTopLevelLatexCommandBlocks = (value: string): Array<{ type: "text" | 
     if (commandStart === -1) break;
 
     let commandEnd = consumeLatexCommand(value, commandStart);
-    while (value[commandEnd] === "\\") {
+    // Top-level text is prose: MathLive renders a whole text command as one
+    // unbreakable box. Keep text nested inside fractions/environments as math.
+    const prose = /^\\text\{([^{}\\]*)\}$/.exec(value.slice(commandStart, commandEnd));
+    while (!prose && value[commandEnd] === "\\" && !value.startsWith("\\text{", commandEnd)) {
       commandEnd = consumeLatexCommand(value, commandEnd);
     }
 
@@ -518,7 +521,9 @@ const splitTopLevelLatexCommandBlocks = (value: string): Array<{ type: "text" | 
     if (commandStart > cursor) {
       parts.push({ type: "text", value: value.slice(cursor, commandStart) });
     }
-    parts.push({ type: "math", value: value.slice(commandStart, commandEnd) });
+    parts.push(prose
+      ? { type: "prose", value: prose[1] }
+      : { type: "math", value: value.slice(commandStart, commandEnd) });
     cursor = commandEnd;
   }
 
@@ -716,24 +721,27 @@ export default function MathRender({
     part.type === "math" ? [part] : splitTopLevelLatexCommandBlocks(part.value)
   );
   const rawMixedParts = commandProtectedParts.flatMap((part) =>
-    part.type === "math" ? [{ type: "math" as const, value: part.value }] : splitMixedContent(part.value)
+    part.type === "prose"
+      ? [{ type: "text" as const, value: part.value }]
+      : part.type === "math" ? [{ type: "math" as const, value: part.value }] : splitMixedContent(part.value)
   );
   const mixedParts = addImplicitBoundarySpaces(mergeAdjacentMathParts(rawMixedParts));
   const hasTextPart = mixedParts.some((part) => part.type === "text");
   const hasMathPart = mixedParts.some((part) => part.type === "math");
 
-  if (shouldRenderAsPlainText(displayLatex)) {
+  if (shouldRenderAsPlainText(displayLatex) || !hasMathPart) {
+    const plainText = hasMathPart ? displayLatex : mixedParts.map((part) => part.value).join("");
     if (inline) {
       return (
         <span key={`plain-inline-${renderKey}`} className={className} style={wrapStyle}>
-          {displayLatex}
+          {plainText}
         </span>
       );
     }
 
     return (
       <div key={`plain-block-${renderKey}`} className={className} style={wrapStyle}>
-        {displayLatex}
+        {plainText}
       </div>
     );
   }
