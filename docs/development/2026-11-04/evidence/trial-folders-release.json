@@ -1,0 +1,198 @@
+{
+  "released_at": "2026-11-04T19:06:55.093231+00:00",
+  "commits": {
+    "api": "1bea693db93980cc76e9ac64ac87ace6efbe4f54",
+    "admin": "af70284806f94d0628f5c1b40950a78c3a2af6cd",
+    "web": "0f47ad4be346eb666b7610561ba300540774540f"
+  },
+  "local_tests": {
+    "sqlite_backend": {
+      "passed": 641,
+      "skipped_postgres_only": 8
+    },
+    "postgres_trial_routes_and_storage": 32,
+    "postgres_folders_and_import_regression": 13,
+    "jest_suites": 65,
+    "jest_tests": 406,
+    "dependency_integration": 6,
+    "typecheck": true,
+    "eslint_zero_warnings": true,
+    "playwright": {
+      "passed": 24,
+      "projects": [
+        "desktop-chromium",
+        "mobile-chromium"
+      ]
+    }
+  },
+  "backup_restore": {
+    "backup_verified": true,
+    "restore_verified": true,
+    "tables": 44,
+    "migrations": [
+      "0001_initial",
+      "0002_sql_functions",
+      "0003_remove_learning_points",
+      "0004_trial_test_category",
+      "0005_quiz_participant_question_order",
+      "0006_quiz_entry_limits"
+    ],
+    "seconds": 73.25,
+    "production_writes": false
+  },
+  "migration_on_restored_production": {
+    "restored_production_migration_passed": true,
+    "existing_tables_verified": 43,
+    "existing_contents_unchanged": true,
+    "test_count": 2,
+    "root_folder_count": 1,
+    "unassigned_tests": 0,
+    "mixed_folders": 0,
+    "production_writes": false
+  },
+  "production_schema": {
+    "production_migration_applied": true,
+    "migrations": [
+      "0001_initial",
+      "0002_sql_functions",
+      "0003_remove_learning_points",
+      "0004_trial_test_category",
+      "0005_quiz_participant_question_order",
+      "0006_quiz_entry_limits",
+      "0007_trial_test_folders"
+    ],
+    "unassigned_tests": 0,
+    "mixed_folders": 0,
+    "existing_counts_match": true,
+    "test_count": 2
+  },
+  "post_release_database": {
+    "production_read_only_verification": true,
+    "unassigned_or_missing_folders": 0,
+    "mixed_folders": 0,
+    "test_count": 2
+  },
+  "deployments": {
+    "api": {
+      "id": "dpl_D15PkXfgsKBQ4dTKC4Jdi7giaUJC",
+      "url": "https://qazmath-fs336r492-yera1.vercel.app",
+      "readyState": "READY"
+    },
+    "web": {
+      "id": "dpl_ZeQMZJgh9aDEppcNgVj3RxPERFKw",
+      "url": "https://qazmath-acamscn4d-yera1.vercel.app",
+      "readyState": "READY"
+    },
+    "previous": {
+      "api": "dpl_6Jmm229rfTuRXcRghBbfZxmVA12B",
+      "web": "dpl_7zVVWNnUCgRV2Bkcwb1L4W9MsGy8"
+    },
+    "api_built_after_migration": true
+  },
+  "staged_web_checks": [
+    {
+      "path": "/api/backend/health",
+      "status": 200
+    },
+    {
+      "path": "/trial-test",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/providers",
+      "status": 200
+    },
+    {
+      "path": "/api/backend/admin/trial-tests/folders?email=check%40invalid.example",
+      "status": 401
+    }
+  ],
+  "production_checks": [
+    {
+      "path": "/api/backend/health",
+      "status": 200
+    },
+    {
+      "path": "/trial-test",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/providers",
+      "status": 200
+    },
+    {
+      "path": "/api/backend/admin/trial-tests/folders?email=check%40invalid.example",
+      "status": 401
+    }
+  ],
+  "ci": {
+    "id": 41891814666,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "backend-postgres-tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "frontend-tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "security-audit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "backend-tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "browser-e2e",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "postgres-restore-drill",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "docker": {
+    "id": 41891814719,
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "frontend-tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "backend-tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "build-and-push",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "authenticated_browser": {
+    "localhost": {
+      "stale_api_restarted": true,
+      "folder_and_test_visible": true
+    },
+    "production": {
+      "folder_opened_by_id": true,
+      "existing_test_cards": 2,
+      "resume_badges_visible": true,
+      "test_data_created": false
+    }
+  }
+}
