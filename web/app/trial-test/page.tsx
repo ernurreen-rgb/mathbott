@@ -252,15 +252,16 @@ function TrialTestListPageContent() {
               : error ? <button type="button" onClick={() => void fetchTests()} className="text-purple-700">Қайта жүктеу</button>
               : selectedFolder !== null && !currentFolder ? <div className="text-center py-12 text-gray-600">Папка табылмады</div>
               : <>
-                {folders.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {folders.map((folder) => <button key={folder.id} type="button" onClick={() => navigateFolder(folder.id)} className="group text-left bg-white rounded-2xl p-5 border-2 border-slate-200 hover:border-purple-500 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 h-44 flex flex-col justify-between">
-                    <div className="flex items-center justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md"><Icon name="folder" /></div>
-                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600">{folder.test_count} тест</span>
-                    </div>
-                    <h2 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 line-clamp-2">{folder.name}</h2>
-                  </button>)}
-                </div>}
+                {folders.length > 0 && <ul aria-label="Папкалар" className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/60 divide-y divide-slate-200/70">
+                  {folders.map((folder) => <li key={folder.id}>
+                    <button type="button" onClick={() => navigateFolder(folder.id)} className="group flex min-h-[52px] w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-purple-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-500 sm:px-4">
+                      <Icon name="folder" size={20} className="shrink-0 text-purple-500" />
+                      <h2 className="min-w-0 flex-1 break-words text-sm font-medium leading-5 text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
+                      <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{folder.test_count} тест</span>
+                      <Icon name="arrowRight" size={16} className="shrink-0 text-slate-400" />
+                    </button>
+                  </li>)}
+                </ul>}
                 {currentFolderTests.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {currentFolderTests.map((test) => (
                       <Link

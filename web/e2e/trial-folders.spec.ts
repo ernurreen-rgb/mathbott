@@ -50,16 +50,16 @@ test('nested folders preserve a trial draft and support navigation and administr
     const student = await studentContext.newPage();
     await student.goto(`/trial-test?folder=${encodeURIComponent(name)}`);
     await expect(student).toHaveURL(`/trial-test?folderId=${root.id}`);
-    await student.getByRole('button', { name: '1 тест Алгебра' }).click();
-    await student.getByRole('button', { name: '1 тест Модуль теңдеулер' }).click();
+    await student.getByRole('button', { name: 'Алгебра 1 тест' }).click();
+    await student.getByRole('button', { name: 'Модуль теңдеулер 1 тест' }).click();
     await expect(student.getByRole('link', { name: new RegExp(trial.title) })).toContainText('Жалғастыру');
     await student.reload();
     await expect(student.getByRole('link', { name: new RegExp(trial.title) })).toBeVisible();
     await student.screenshot({ path: testInfo.outputPath('student-nested.png'), fullPage: true });
     await student.getByRole('button', { name: 'Артқа', exact: true }).click();
-    await expect(student.getByRole('button', { name: '1 тест Модуль теңдеулер' })).toBeVisible();
+    await expect(student.getByRole('button', { name: 'Модуль теңдеулер 1 тест' })).toBeVisible();
     await student.getByRole('navigation', { name: 'Мазмұн жолы' }).getByRole('button', { name: 'Сынақ тесттері', exact: true }).click();
-    await expect(student.getByRole('button', { name: `1 тест ${name}` })).toBeVisible();
+    await expect(student.getByRole('button', { name: `${name} 1 тест` })).toBeVisible();
     await expect(student.getByRole('button', { name: new RegExp(emptyName) })).not.toBeVisible();
   } finally { await studentContext.close(); }
 
