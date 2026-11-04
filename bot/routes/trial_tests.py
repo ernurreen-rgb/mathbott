@@ -38,12 +38,17 @@ def _answer_to_string(value) -> str:
 
 def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Настроить trial tests роуты"""
+
+    @app.get("/api/trial-tests/folders")
+    async def get_trial_test_folders(db: Database = Depends(get_db)):
+        return await db.trial_tests.get_trial_test_folders()
     
     @app.get("/api/trial-tests")
     async def get_trial_tests(
         email: Optional[str] = Query(None),
         attempted_only: Optional[bool] = Query(False),
         category: Optional[str] = Query(None),
+        folder_id: Optional[int] = Query(None, gt=0),
         db: Database = Depends(get_db)
     ):
         """Get all trial tests, or only those the user has attempted when attempted_only=true and email is provided"""
@@ -56,9 +61,9 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 attempted_ids = {r["trial_test_id"] for r in results}
                 if not attempted_ids:
                     return []
-                all_tests = await db.trial_tests.get_trial_tests(category=category)
+                all_tests = await db.trial_tests.get_trial_tests(category=category, folder_id=folder_id)
                 return [t for t in all_tests if t.get("id") in attempted_ids]
-            tests = await db.trial_tests.get_trial_tests(category=category)
+            tests = await db.trial_tests.get_trial_tests(category=category, folder_id=folder_id)
             return tests
         except HTTPException:
             raise

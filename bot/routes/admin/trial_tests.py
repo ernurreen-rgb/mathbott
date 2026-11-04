@@ -2,6 +2,21 @@
 Admin trial test routes.
 """
 from .common import *  # noqa: F401,F403
+from pydantic import BaseModel, Field
+from repositories.trial_folder_repository import TrialFolderError
+
+
+class TrialFolderCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: Optional[int] = Field(default=None, gt=0)
+    sort_order: int = 0
+    move_existing_tests: bool = False
+
+
+class TrialFolderUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    parent_id: Optional[int] = Field(default=None, gt=0)
+    sort_order: Optional[int] = None
 
 MAX_TRIAL_TEST_CATEGORY_LENGTH = 120
 
@@ -20,16 +35,46 @@ def _normalize_admin_category(category: Optional[str]) -> str:
 
 
 def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
+    @app.get("/api/admin/trial-tests/folders")
+    async def get_folders(admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
+        return await db.trial_tests.get_trial_test_folders(include_empty=True)
+
+    @app.post("/api/admin/trial-tests/folders")
+    async def create_folder(payload: TrialFolderCreate, admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
+        try:
+            return await db.trial_tests.create_trial_test_folder(**payload.model_dump())
+        except TrialFolderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    @app.patch("/api/admin/trial-tests/folders/{folder_id}")
+    async def update_folder(folder_id: int, payload: TrialFolderUpdate, admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
+        try:
+            values = payload.model_dump(exclude_unset=True)
+            if "name" in values and values["name"] is None or "sort_order" in values and values["sort_order"] is None:
+                raise HTTPException(status_code=400, detail="Атауы мен реті бос болмауы керек.")
+            return await db.trial_tests.update_trial_test_folder(folder_id, move="parent_id" in values, **values)
+        except TrialFolderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    @app.delete("/api/admin/trial-tests/folders/{folder_id}")
+    async def delete_folder(folder_id: int, admin_user: dict = Depends(require_admin), db: Database = Depends(get_db)):
+        try:
+            await db.trial_tests.delete_trial_test_folder(folder_id)
+            return {"success": True}
+        except TrialFolderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
     # Trial tests admin
     @app.get("/api/admin/trial-tests")
     async def get_admin_trial_tests(
         category: Optional[str] = Query(None),
+        folder_id: Optional[int] = Query(None, gt=0),
         admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db)
     ):
         """Get all trial tests (admin only)"""
         try:
-            tests = await db.trial_tests.get_trial_tests(category=category)
+            tests = await db.trial_tests.get_trial_tests(category=category, folder_id=folder_id)
             return tests
         except Exception as e:
             logger.error(f"Error getting trial tests: {e}", exc_info=True)
@@ -54,6 +99,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         sort_order: int = Form(0),
         expected_tasks_count: int = Form(40),
         category: str = Form("Жалпы"),
+        folder_id: Optional[int] = Form(None, gt=0),
         email: str = Form(...),
         db: Database = Depends(get_db)
     ):
@@ -69,8 +115,11 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 created_by=admin_user["id"],
                 expected_tasks_count=expected_tasks_count,
                 category=normalized_category,
+                folder_id=folder_id,
             )
             return test
+        except TrialFolderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
         except HTTPException:
             raise
         except Exception as e:
@@ -85,6 +134,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         sort_order: Optional[int] = Form(None),
         expected_tasks_count: Optional[int] = Form(None),
         category: Optional[str] = Form(None),
+        folder_id: Optional[int] = Form(None, gt=0),
         email: str = Form(...),
         db: Database = Depends(get_db)
     ):
@@ -100,10 +150,13 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 sort_order=sort_order,
                 expected_tasks_count=expected_tasks_count,
                 category=normalized_category,
+                folder_id=folder_id,
             )
             if not test:
                 raise HTTPException(status_code=404, detail="Trial test not found")
             return test
+        except TrialFolderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
         except HTTPException:
             raise
         except Exception as e:

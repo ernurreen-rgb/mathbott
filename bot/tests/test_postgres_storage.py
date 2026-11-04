@@ -80,6 +80,9 @@ def test_sqlite_import_preserves_rows_ids_and_source_and_refuses_overwrite(postg
         await db.init()
         user = await db.users.create_user_by_email("оқушы@example.com")
         await db.users.update_user_nickname(user["email"], "Әлібек")
+        trial = await db.trial_tests.create_trial_test("Migrated folders", category="Child")
+        later_parent = await db.trial_tests.create_trial_test_folder("Parent")
+        await db.trial_tests.update_trial_test_folder(trial["folder_id"], parent_id=later_parent["id"], move=True)
         return user
     user = asyncio.run(populate())
     before = source.read_bytes()

@@ -10,6 +10,7 @@ from uuid import uuid4
 from .base import BaseRepository
 from utils.learning_progress import calculate_next_streak, insert_task_completion
 from .bank_task_repository import BankTaskRepository
+from .trial_folder_repository import TrialFolderMixin
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class TrialTestAlreadySubmitted(Exception):
     """Raised when a cooperative participant can no longer submit."""
 
 
-class TrialTestRepository(BaseRepository):
+class TrialTestRepository(TrialFolderMixin, BaseRepository):
     """Repository for trial test operations."""
 
     _TRIAL_TASK_SELECT = """
@@ -106,18 +107,18 @@ class TrialTestRepository(BaseRepository):
         created_by: Optional[int] = None,
         expected_tasks_count: int = 40,
         category: str = "Жалпы",
+        folder_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
-            category_val = self._normalize_category(category)
+            folder_id, category_val = await self._test_folder(db, folder_id, self._normalize_category(category))
             await db.execute(
                 """
-                INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by, category)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by, category, folder_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (title, description, sort_order, max(1, int(expected_tasks_count or 40)), created_by, category_val),
+                (title, description, sort_order, max(1, int(expected_tasks_count or 40)), created_by, category_val, folder_id),
             )
-            await db.commit()
             async with db.execute("SELECT * FROM trial_tests WHERE id = last_insert_rowid()") as cursor:
                 row = await cursor.fetchone()
                 if not row:
@@ -126,7 +127,7 @@ class TrialTestRepository(BaseRepository):
                 res["category"] = self._normalize_category(res.get("category"))
                 return res
 
-    async def get_trial_tests(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_trial_tests(self, category: Optional[str] = None, folder_id: Optional[int] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             query = """
@@ -138,7 +139,10 @@ class TrialTestRepository(BaseRepository):
             """
             params = []
             category_filter = (category or "").strip()
-            if category_filter:
+            if folder_id is not None:
+                query += " WHERE t.folder_id = ?"
+                params.append(folder_id)
+            elif category_filter:
                 query += " WHERE COALESCE(NULLIF(TRIM(t.category), ''), 'Жалпы') = ?"
                 params.append(category_filter)
             query += """
@@ -190,8 +194,12 @@ class TrialTestRepository(BaseRepository):
         sort_order: Optional[int] = None,
         expected_tasks_count: Optional[int] = None,
         category: Optional[str] = None,
+        folder_id: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
+            async with db.execute("SELECT id FROM trial_tests WHERE id = ?", (test_id,)) as cursor:
+                if not await cursor.fetchone():
+                    return None
             updates = []
             params = []
             if title is not None:
@@ -206,22 +214,23 @@ class TrialTestRepository(BaseRepository):
             if expected_tasks_count is not None:
                 updates.append("expected_tasks_count = ?")
                 params.append(max(1, int(expected_tasks_count)))
-            if category is not None:
-                updates.append("category = ?")
-                params.append(self._normalize_category(category))
+            if category is not None or folder_id is not None:
+                target_id, root_category = await self._test_folder(db, folder_id, self._normalize_category(category))
+                updates.extend(["category = ?", "folder_id = ?"])
+                params.extend([root_category, target_id])
             if not updates:
-                return await self.get_trial_test_by_id(test_id)
+                db.row_factory = db_driver.Row
+                async with db.execute("SELECT * FROM trial_tests WHERE id = ?", (test_id,)) as cursor:
+                    return dict(await cursor.fetchone())
 
             updates.append("updated_at = CURRENT_TIMESTAMP")
             params.append(test_id)
             await db.execute(f"UPDATE trial_tests SET {', '.join(updates)} WHERE id = ?", params)
-            await db.commit()
         return await self.get_trial_test_by_id(test_id)
 
     async def delete_trial_test(self, test_id: int) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             await db.execute("DELETE FROM trial_tests WHERE id = ?", (test_id,))
-            await db.commit()
             return True
 
     async def create_trial_test_task(
