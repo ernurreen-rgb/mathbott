@@ -106,8 +106,10 @@ describe("TrialTestListPage - Pure Folder System", () => {
       fireEvent.click(ubtFolder);
     });
 
-    // Opened folder heading is displayed and URL query is pushed
-    expect(screen.getByRole("heading", { name: "ҰБТ 2025" })).toBeInTheDocument();
+    // Folder view is active with Back button, History link, and URL query pushed
+    expect(screen.getByRole("button", { name: /Артқа/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Өту тарихы/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "ҰБТ 2025" })).not.toBeInTheDocument();
     expect(mockRouter.push).toHaveBeenCalledWith(
       expect.stringContaining("/trial-test?folder="),
       { scroll: false }
@@ -141,7 +143,9 @@ describe("TrialTestListPage - Pure Folder System", () => {
       render(<TrialTestListPage />);
     });
 
-    expect(screen.getByRole("heading", { name: "Геометрия" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Артқа/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Өту тарихы/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Геометрия" })).not.toBeInTheDocument();
     expect(screen.getByText("Үшбұрыштар мен шеңберлер")).toBeInTheDocument();
     expect(screen.queryByText("ҰБТ 1-нұсқа")).not.toBeInTheDocument();
   });

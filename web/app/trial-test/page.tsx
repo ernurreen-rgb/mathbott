@@ -212,13 +212,15 @@ function TrialTestListPageContent() {
                   Сынақ тесті
                 </h1>
               </div>
-              <Link
-                href="/trial-test/history"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-semibold border border-purple-200 shadow-sm transition-all whitespace-nowrap self-start sm:self-auto"
-              >
-                <span>Өту тарихы</span>
-                <span className="text-lg"><Icon name="arrowRight" /></span>
-              </Link>
+              {selectedFolder === null && (
+                <Link
+                  href="/trial-test/history"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-semibold border border-purple-200 shadow-sm transition-all whitespace-nowrap self-start sm:self-auto"
+                >
+                  <span>Өту тарихы</span>
+                  <span className="text-lg"><Icon name="arrowRight" /></span>
+                </Link>
+              )}
             </div>
 
             {error && (
@@ -310,29 +312,23 @@ function TrialTestListPageContent() {
             ) : (
               /* INSIDE SPECIFIC FOLDER */
               <div>
-                {/* Folder header with Back button + active folder title */}
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <button
-                      type="button"
-                      onClick={handleCloseFolder}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-sm font-bold border border-slate-200 shadow-sm hover:shadow transition-all shrink-0"
-                    >
-                      <Icon name="arrowLeft" />
-                      <span>Артқа</span>
-                    </button>
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                        <Icon name="folder" />
-                      </div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                        {selectedFolder}
-                      </h2>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                    {currentFolderTests.length} тест
-                  </span>
+                {/* Folder header with Back button + History button */}
+                <div className="mb-6 flex items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={handleCloseFolder}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-sm font-bold border border-slate-200 shadow-sm hover:shadow transition-all shrink-0"
+                  >
+                    <Icon name="arrowLeft" />
+                    <span>Артқа</span>
+                  </button>
+                  <Link
+                    href="/trial-test/history"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-sm font-semibold border border-purple-200 shadow-sm transition-all whitespace-nowrap"
+                  >
+                    <span>Өту тарихы</span>
+                    <span className="text-base"><Icon name="arrowRight" /></span>
+                  </Link>
                 </div>
 
                 {/* Tests in Folder */}
