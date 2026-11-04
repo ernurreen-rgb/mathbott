@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import TrialTestListPage from "../page";
-import { getTrialTests, getTrialTestDraftIds, getCoopTestInvites } from "@/lib/api";
+import { getTrialTests, getTrialTestFolders, getTrialTestDraftIds, getCoopTestInvites } from "@/lib/api";
 import type { TrialTest } from "@/types";
 
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
@@ -21,6 +21,7 @@ jest.mock("@/components/MobileNav", () => function MockMobileNav() { return <div
 
 jest.mock("@/lib/api", () => ({
   getTrialTests: jest.fn(),
+  getTrialTestFolders: jest.fn(),
   getTrialTestDraftIds: jest.fn(),
   getCoopTestInvites: jest.fn(),
   acceptCoopTestInvite: jest.fn(),
@@ -32,7 +33,7 @@ const mockTests: TrialTest[] = [
     id: 1,
     title: "ҰБТ 1-нұсқа",
     description: "2025 жылғы 1-нұсқа",
-    category: "ҰБТ 2025",
+    category: "ҰБТ 2025", folder_id: 10,
     sort_order: 1,
     task_count: 40,
     created_at: "2026-10-15T00:00:00Z",
@@ -41,7 +42,7 @@ const mockTests: TrialTest[] = [
     id: 2,
     title: "ҰБТ 2-нұсқа",
     description: "2025 жылғы 2-нұсқа",
-    category: "ҰБТ 2025",
+    category: "ҰБТ 2025", folder_id: 10,
     sort_order: 2,
     task_count: 40,
     created_at: "2026-10-15T00:00:00Z",
@@ -50,7 +51,7 @@ const mockTests: TrialTest[] = [
     id: 3,
     title: "Үшбұрыштар мен шеңберлер",
     description: "Геометрия негіздері",
-    category: "Геометрия",
+    category: "Геометрия", folder_id: 20,
     sort_order: 3,
     task_count: 20,
     created_at: "2026-10-15T00:00:00Z",
@@ -59,7 +60,7 @@ const mockTests: TrialTest[] = [
     id: 4,
     title: "Жалпы тест",
     description: "Кіріспе тесті",
-    category: "Жалпы",
+    category: "Жалпы", folder_id: 30,
     sort_order: 4,
     task_count: 15,
     created_at: "2026-10-15T00:00:00Z",
@@ -70,6 +71,12 @@ describe("TrialTestListPage - Pure Folder System", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mockSearchParamsString = "";
+    mockRouter.push.mockImplementation((url: string) => { mockSearchParamsString = url.split("?")[1] || ""; });
+    (getTrialTestFolders as jest.Mock).mockResolvedValue({ data: [
+      { id: 10, parent_id: null, name: "ҰБТ 2025", sort_order: 1, test_count: 2 },
+      { id: 20, parent_id: null, name: "Геометрия", sort_order: 3, test_count: 1 },
+      { id: 30, parent_id: null, name: "Жалпы", sort_order: 4, test_count: 1 },
+    ], error: null });
     (getTrialTests as jest.Mock).mockResolvedValue({ data: mockTests, error: null });
     (getTrialTestDraftIds as jest.Mock).mockResolvedValue({ data: { test_ids: [1] }, error: null });
     (getCoopTestInvites as jest.Mock).mockResolvedValue({ data: { items: [] }, error: null });
@@ -96,22 +103,24 @@ describe("TrialTestListPage - Pure Folder System", () => {
   });
 
   it("opens a folder, displays tests inside it, and navigates back to folders", async () => {
+    let view!: ReturnType<typeof render>;
     await act(async () => {
-      render(<TrialTestListPage />);
+      view = render(<TrialTestListPage />);
     });
 
     // Click "ҰБТ 2025" folder
     const ubtFolder = screen.getByRole("button", { name: /ҰБТ 2025/i });
     await act(async () => {
       fireEvent.click(ubtFolder);
+      view.rerender(<TrialTestListPage />);
     });
 
     // Folder view is active with Back button, History link, and URL query pushed
     expect(screen.getByRole("button", { name: /Артқа/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Өту тарихы/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Өту тарихы/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "ҰБТ 2025" })).not.toBeInTheDocument();
     expect(mockRouter.push).toHaveBeenCalledWith(
-      expect.stringContaining("/trial-test?folder="),
+      expect.stringContaining("/trial-test?folderId="),
       { scroll: false }
     );
 
@@ -127,6 +136,7 @@ describe("TrialTestListPage - Pure Folder System", () => {
     const backBtn = screen.getByRole("button", { name: /Артқа/i });
     await act(async () => {
       fireEvent.click(backBtn);
+      view.rerender(<TrialTestListPage />);
     });
 
     expect(mockRouter.push).toHaveBeenLastCalledWith("/trial-test", { scroll: false });
@@ -144,7 +154,7 @@ describe("TrialTestListPage - Pure Folder System", () => {
     });
 
     expect(screen.getByRole("button", { name: /Артқа/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Өту тарихы/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Өту тарихы/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Геометрия" })).not.toBeInTheDocument();
     expect(screen.getByText("Үшбұрыштар мен шеңберлер")).toBeInTheDocument();
     expect(screen.queryByText("ҰБТ 1-нұсқа")).not.toBeInTheDocument();

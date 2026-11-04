@@ -1,5 +1,8 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
 import { TrialTest, TrialTestCategory, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse } from "@/types";
+import type { TrialTestFolder } from "@/types";
+
+export const getTrialTestFolders = () => fetchWithErrorHandling<TrialTestFolder[]>(apiPath('trial-tests/folders'), { cache: "no-store" });
 
 
 // Trial Tests API

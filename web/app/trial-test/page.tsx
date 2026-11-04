@@ -6,12 +6,14 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   getTrialTests,
+  getTrialTestFolders,
   getTrialTestDraftIds,
   getCoopTestInvites,
   acceptCoopTestInvite,
   declineCoopTestInvite,
 } from "@/lib/api";
-import { TrialTest } from "@/types";
+import { TrialTest, TrialTestFolder } from "@/types";
+import { folderAncestors, sortFolders } from "@/lib/trial-folders";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
@@ -21,47 +23,43 @@ function TrialTestListPageContent() {
   const router = useRouter();
   const pathname = usePathname() || "/trial-test";
   const searchParams = useSearchParams();
-  const folderParam = useMemo(() => {
-    const raw = searchParams?.get("folder");
-    return raw && raw.trim() ? raw.trim() : null;
-  }, [searchParams]);
-
+  const legacyFolder = searchParams?.get("folder")?.trim() || null;
+  const folderIdParam = searchParams?.get("folderId");
+  const [folderTree, setFolderTree] = useState<TrialTestFolder[]>([]);
+  const selectedFolder = useMemo(() => {
+    if (folderIdParam !== null && folderIdParam !== undefined) {
+      const id = Number(folderIdParam);
+      return /^\d+$/.test(folderIdParam) && Number.isSafeInteger(id) && id > 0 ? id : -1;
+    }
+    return legacyFolder ? folderTree.find((f) => f.parent_id === null && f.name === legacyFolder)?.id ?? -1 : null;
+  }, [folderIdParam, legacyFolder, folderTree]);
   const [tests, setTests] = useState<TrialTest[]>([]);
   const [draftTestIds, setDraftTestIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [coopInvites, setCoopInvites] = useState<any[]>([]);
 
-  // Navigation state synced with ?folder= query parameter
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(folderParam);
-
-  useEffect(() => {
-    setSelectedFolder(folderParam);
-  }, [folderParam]);
-
-  const handleOpenFolder = useCallback(
-    (folderName: string) => {
-      setSelectedFolder(folderName);
-      const params = new URLSearchParams(searchParams?.toString() || "");
-      params.set("folder", folderName);
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
-
-  const handleCloseFolder = useCallback(() => {
-    setSelectedFolder(null);
+  const navigateFolder = useCallback((id: number | null, replace = false) => {
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.delete("folder");
+    if (id === null) params.delete("folderId");
+    else params.set("folderId", String(id));
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    router[replace ? "replace" : "push"](query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (legacyFolder && !folderIdParam && selectedFolder !== null && selectedFolder > 0) navigateFolder(selectedFolder, true);
+  }, [legacyFolder, folderIdParam, selectedFolder, navigateFolder]);
 
   const fetchTests = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await getTrialTests();
+      const [response, folderResponse] = await Promise.all([getTrialTests(), getTrialTestFolders()]);
+      const { data } = response;
+      const err = response.error || folderResponse.error;
+      if (!err) setFolderTree(folderResponse.data || []);
       if (err) {
         if (process.env.NODE_ENV === "development") {
           console.error("Error fetching trial tests:", err);
@@ -150,41 +148,10 @@ function TrialTestListPageContent() {
     fetchDraftIds();
   }, [fetchTests, fetchCoopInvites, fetchDraftIds]);
 
-  // Group tests into folders
-  const folders = useMemo(() => {
-    const map = new Map<string, { name: string; tests: TrialTest[]; minSortOrder: number }>();
-    for (const test of tests) {
-      const cat = (test.category || "Жалпы").trim() || "Жалпы";
-      const testOrder = typeof test.sort_order === "number" ? test.sort_order : 0;
-      if (!map.has(cat)) {
-        map.set(cat, { name: cat, tests: [], minSortOrder: testOrder });
-      }
-      const group = map.get(cat)!;
-      group.tests.push(test);
-      if (testOrder < group.minSortOrder) {
-        group.minSortOrder = testOrder;
-      }
-    }
-
-    const list = Array.from(map.values());
-    for (const group of list) {
-      group.tests.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    }
-
-    return list.sort((a, b) => {
-      if (a.minSortOrder !== b.minSortOrder) {
-        return a.minSortOrder - b.minSortOrder;
-      }
-      return a.name.localeCompare(b.name, "kk");
-    });
-  }, [tests]);
-
-  // Tests inside the currently selected folder
-  const currentFolderTests = useMemo(() => {
-    if (!selectedFolder) return [];
-    const found = folders.find((f) => f.name === selectedFolder);
-    return found ? found.tests : [];
-  }, [folders, selectedFolder]);
+  const folders = useMemo(() => folderTree.filter((f) => f.parent_id === selectedFolder).sort(sortFolders), [folderTree, selectedFolder]);
+  const currentFolder = folderTree.find((f) => f.id === selectedFolder);
+  const ancestors = folderAncestors(folderTree, selectedFolder);
+  const currentFolderTests = tests.filter((t) => t.folder_id === selectedFolder);
 
   if (!session) {
     return (
@@ -270,75 +237,31 @@ function TrialTestListPageContent() {
               </div>
             )}
 
-            {/* Main Content Area */}
-            {loading ? (
-              <div className="text-center py-16">
-                <div className="text-4xl mb-4 text-purple-600">
-                  <Icon name="loader" className="animate-spin" />
-                </div>
-                <div className="text-gray-600 font-medium">Тесттер жүктелуде...</div>
-              </div>
-            ) : tests.length === 0 ? (
-              <div className="text-center py-16 text-gray-600">
-                <div className="text-6xl mb-4"><Icon name="test" /></div>
-                <div className="text-lg font-semibold">Сынақ тесттері әлі құрылмаған</div>
-              </div>
-            ) : selectedFolder === null ? (
-              /* ROOT FOLDERS GRID */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {folders.map((folder) => (
-                  <button
-                    key={folder.name}
-                    type="button"
-                    onClick={() => handleOpenFolder(folder.name)}
-                    className="group text-left bg-white rounded-2xl p-5 border-2 border-slate-200 hover:border-purple-500 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 h-44 flex flex-col justify-between"
-                  >
+            {selectedFolder !== null && !loading && <div className="mb-6 border-b border-slate-200/80 pb-4">
+              <nav aria-label="Мазмұн жолы" className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 break-words">
+                <button type="button" className="text-purple-700 hover:underline" onClick={() => navigateFolder(null)}>Сынақ тесттері</button>
+                {ancestors.map((folder, index) => <span key={folder.id} className="inline-flex min-w-0 items-center gap-2">
+                  <span>/</span>{index === ancestors.length - 1 ? <span aria-current="page">{folder.name}</span> : <button type="button" className="text-purple-700 hover:underline" onClick={() => navigateFolder(folder.id)}>{folder.name}</button>}
+                </span>)}
+              </nav>
+              <button type="button" onClick={() => navigateFolder(currentFolder?.parent_id ?? null)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 text-sm font-bold border border-slate-200 shadow-sm">
+                <Icon name="arrowLeft" />Артқа
+              </button>
+            </div>}
+            {loading ? <div className="text-center py-16 text-gray-600"><Icon name="loader" className="animate-spin" />Тесттер жүктелуде...</div>
+              : error ? <button type="button" onClick={() => void fetchTests()} className="text-purple-700">Қайта жүктеу</button>
+              : selectedFolder !== null && !currentFolder ? <div className="text-center py-12 text-gray-600">Папка табылмады</div>
+              : <>
+                {folders.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {folders.map((folder) => <button key={folder.id} type="button" onClick={() => navigateFolder(folder.id)} className="group text-left bg-white rounded-2xl p-5 border-2 border-slate-200 hover:border-purple-500 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 h-44 flex flex-col justify-between">
                     <div className="flex items-center justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/25 group-hover:scale-105 transition-transform">
-                        <Icon name="folder" />
-                      </div>
-                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 group-hover:bg-purple-100 group-hover:text-purple-700 transition-colors">
-                        {folder.tests.length} тест
-                      </span>
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md"><Icon name="folder" /></div>
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600">{folder.test_count} тест</span>
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors line-clamp-2">
-                        {folder.name}
-                      </h2>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              /* INSIDE SPECIFIC FOLDER */
-              <div>
-                {/* Folder header with Back button + History button */}
-                <div className="mb-6 flex items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
-                  <button
-                    type="button"
-                    onClick={handleCloseFolder}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-sm font-bold border border-slate-200 shadow-sm hover:shadow transition-all shrink-0"
-                  >
-                    <Icon name="arrowLeft" />
-                    <span>Артқа</span>
-                  </button>
-                  <Link
-                    href="/trial-test/history"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-sm font-semibold border border-purple-200 shadow-sm transition-all whitespace-nowrap"
-                  >
-                    <span>Өту тарихы</span>
-                    <span className="text-base"><Icon name="arrowRight" /></span>
-                  </Link>
-                </div>
-
-                {/* Tests in Folder */}
-                {currentFolderTests.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <div className="text-4xl mb-2"><Icon name="test" /></div>
-                    <p>Бұл папкада тесттер жоқ</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <h2 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 line-clamp-2">{folder.name}</h2>
+                  </button>)}
+                </div>}
+                {currentFolderTests.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {currentFolderTests.map((test) => (
                       <Link
                         key={test.id}
@@ -377,10 +300,10 @@ function TrialTestListPageContent() {
                         </div>
                       </Link>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
+                </div>}
+                {folders.length === 0 && currentFolderTests.length === 0 && <div className="text-center py-12 text-gray-600">Сынақ тесттері әлі құрылмаған</div>}
+              </>}
+
           </div>
         </div>
       </main>
