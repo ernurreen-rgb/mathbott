@@ -252,13 +252,25 @@ function TrialTestListPageContent() {
               : error ? <button type="button" onClick={() => void fetchTests()} className="text-purple-700">Қайта жүктеу</button>
               : selectedFolder !== null && !currentFolder ? <div className="text-center py-12 text-gray-600">Папка табылмады</div>
               : <>
-                {folders.length > 0 && <ul aria-label="Папкалар" className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/60 divide-y divide-slate-200/70">
-                  {folders.map((folder) => <li key={folder.id}>
-                    <button type="button" onClick={() => navigateFolder(folder.id)} className="group flex min-h-[52px] w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-purple-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-500 sm:px-4">
-                      <Icon name="folder" size={20} className="shrink-0 text-purple-500" />
-                      <h2 className="min-w-0 flex-1 break-words text-sm font-medium leading-5 text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
-                      <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{folder.test_count} тест</span>
-                      <Icon name="arrowRight" size={16} className="shrink-0 text-slate-400" />
+                {folders.length > 0 && <ul aria-label="Папкалар" className={selectedFolder === null
+                  ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                  : "overflow-hidden rounded-xl border border-slate-200/80 bg-white/60 divide-y divide-slate-200/70"}>
+                  {folders.map((folder) => <li key={folder.id} className="min-w-0">
+                    <button type="button" onClick={() => navigateFolder(folder.id)} className={`group w-full text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-500 ${selectedFolder === null
+                      ? "flex h-44 flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-purple-400 hover:bg-purple-50/30"
+                      : "flex min-h-[52px] items-center gap-3 px-3 py-3 hover:bg-purple-50/70 sm:px-4"}`}>
+                      {selectedFolder === null ? <>
+                        <div className="flex w-full items-center justify-between gap-3">
+                          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white"><Icon name="folder" size={24} /></span>
+                          <span className="shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{folder.test_count} тест</span>
+                        </div>
+                        <h2 className="line-clamp-2 break-words text-lg font-semibold text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
+                      </> : <>
+                        <Icon name="folder" size={20} className="shrink-0 text-purple-500" />
+                        <h2 className="min-w-0 flex-1 break-words text-sm font-medium leading-5 text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
+                        <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{folder.test_count} тест</span>
+                        <Icon name="arrowRight" size={16} className="shrink-0 text-slate-400" />
+                      </>}
                     </button>
                   </li>)}
                 </ul>}
