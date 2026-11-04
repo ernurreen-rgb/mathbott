@@ -230,18 +230,19 @@ schema-only migration before the API deployment.
 
 ## Verification and deployment
 
+Automated suites and runners were removed on 2026-11-05. CI checks Python
+syntax and lint, frontend lint/TypeScript/build, and dependency security.
+
 ```powershell
-# SQLite regression suite
-python -m pytest tests/ -q
+# From bot/
+python -m compileall -q .
+flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-# A disposable PostgreSQL database, never the production URL
-$env:MATHBOT_TEST_DATABASE_URL = 'postgresql://user:password@localhost:5432/mathbot_test'
-python -m pytest tests/ -q
+# From web/
+npm run lint
+npm run typecheck
+npm run build
 ```
-
-PostgreSQL tests create and remove isolated test schemas. CI runs the backend
-suite against both SQLite and PostgreSQL 17. Frontend changes need TypeScript
-checking and the relevant Jest tests.
 
 Deploy the API first, verify `/api/health`, then update the web project's
 `BACKEND_URL` to its verified production domain and deploy the web app. Check

@@ -20,5 +20,5 @@ consistently during clean installs. Its real upstream dependency is installed to
 Docker dependency layers must copy this directory and `.npmrc` before install.
 
 Remove this adapter and its version-specific overrides when the lint plugins
-support the patched upstream API. Compatibility tests exercise real lint rules,
-ESLint file selection, cache deletion, and glob/coverage traversal.
+support the patched upstream API. ESLint and its cache dependencies still need
+these compatibility interfaces.

@@ -85,22 +85,14 @@ leaves the target isolated for inspection; it does not delete or repair anything
 The test database must remain offline while the drill runs. Client/database
 exception details are suppressed to prevent credentials/data entering logs.
 
-## Repeatable regression check
+## Manual restore verification
 
-Set `MATHBOT_RESTORE_ADMIN_URL` to a **disposable loopback PostgreSQL** admin
-connection, and optionally `MATHBOT_PG_BIN` to its client directory:
-
-```sh
-cd bot
-pytest tests/test_postgres_backup.py -q
-```
-
-The integration fixtures create/drop only their unique `mathbot_restore_*`
-databases on loopback. They exercise a real archive, a live source write between
-manifest capture and dump, Unicode/quiz answers, a generated ID after restore,
-refusal to overwrite, corruption detection and transaction rollback when another
-actor creates a conflicting table after preflight. GitHub's `postgres-restore-drill`
-job uses PostgreSQL 18 and Python 3.12; its report is retained for seven days.
+Automated regression suites and the CI restore job were removed on 2026-11-05.
+Use the backup and restore commands above against a new, isolated empty target
+when a recovery drill is needed. The restore tool still verifies archive,
+schema/content/migration checksums and sequence positions, and refuses to
+overwrite an existing target. Historical drill results below remain evidence of
+the release at that date.
 
 ## Scope and recorded production drill
 
