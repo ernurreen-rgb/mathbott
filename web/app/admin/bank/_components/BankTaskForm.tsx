@@ -42,6 +42,8 @@ type Props = {
   reloading: boolean;
   reloadTask: () => Promise<void>;
   resetAndHideForm: () => void;
+  className?: string;
+  hidePreview?: boolean;
 };
 
 export default function BankTaskForm({
@@ -63,11 +65,13 @@ export default function BankTaskForm({
   reloading,
   reloadTask,
   resetAndHideForm,
+  className = "",
+  hidePreview = false,
 }: Props) {
   return (
     <>
       {tab === "active" && showForm && (
-        <div className="mb-6 p-4 bg-white/70 rounded-2xl border border-white/40 space-y-3">
+        <div className={`mb-6 p-4 bg-white/70 rounded-2xl border border-white/40 space-y-3 ${className}`}>
           <h2 className="text-xl font-bold text-gray-900">{editingTaskId ? `Өңдеу #${editingTaskId}` : "Жаңа тапсырма"}</h2>
           {editingTaskId && (
             <div className="text-sm text-gray-600">
@@ -89,13 +93,15 @@ export default function BankTaskForm({
             </div>
           )}
           <form onSubmit={handleSubmitForm} className="space-y-3">
-            <div>
+            <fieldset disabled={saving || reloading} className="contents">
+            <div data-bank-task-text>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Тапсырма мәтіні</label>
               <MathFieldInput
                 value={form.text}
                 onChange={(value) => setForm((prev) => ({ ...prev, text: value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                autoFocus
+                ariaLabel="Тапсырма мәтіні"
+                openVirtualKeyboardOnFocus={false}
               />
             </div>
 
@@ -131,6 +137,7 @@ export default function BankTaskForm({
                   value={form.difficulty}
                   onChange={(e) => setForm((prev) => ({ ...prev, difficulty: e.target.value as BankDifficulty }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  aria-label="Есептің күрделілігі"
                 >
                   <option value="A">A (оңай)</option>
                   <option value="B">B (орташа)</option>
@@ -202,6 +209,7 @@ export default function BankTaskForm({
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Дұрыс жауап</label>
                 <MathFieldInput
                   value={form.answer}
+                ariaLabel="Дұрыс жауап"
                   onChange={(value) => setForm((prev) => ({ ...prev, answer: value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
@@ -217,7 +225,7 @@ export default function BankTaskForm({
 
             {(isMcqQuestionType(form.question_type) || form.question_type === "select") && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div data-bank-options className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {(isMcqQuestionType(form.question_type) ? getMcqEditorLabels(form.question_type) : MCQ_OPTION_LABELS.slice(0, 4)).map((label) => (
                     <div key={label}>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -227,6 +235,7 @@ export default function BankTaskForm({
                         value={getBankFormOptionValue(form, label)}
                         onChange={(value) => setForm((prev) => setBankFormOptionValue(prev, label, value))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                        ariaLabel={`${label} нұсқасының мәтіні`}
                       />
                     </div>
                   ))}
@@ -322,13 +331,13 @@ export default function BankTaskForm({
               </label>
             )}
 
-            <StudentTaskPreview
+            {!hidePreview && <StudentTaskPreview
               task={formPreviewTask}
               imageSrc={form.removeImage ? null : formImagePreview || undefined}
               onTextScaleChange={(text_scale) => setForm((prev) => ({ ...prev, text_scale }))}
-            />
+            />}
 
-            <div className="flex gap-2">
+            <div data-bank-form-actions className="flex gap-2">
               <button type="submit" disabled={saving || reloading || versionConflict} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
                 {saving ? "Сақталуда..." : editingTaskId ? "Сақтау" : "Құру"}
               </button>
@@ -336,6 +345,7 @@ export default function BankTaskForm({
                 Бас тарту
               </button>
             </div>
+            </fieldset>
           </form>
         </div>
       )}

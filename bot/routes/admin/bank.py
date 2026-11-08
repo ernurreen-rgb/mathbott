@@ -4,6 +4,7 @@ Admin bank routes.
 from .common import *  # noqa: F401,F403
 from fastapi import Response
 from utils.validation import MAX_ACCEPTED_ANSWERS
+from typing import Literal
 
 def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Bank tasks admin
@@ -16,6 +17,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
+        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select"]] = Query(None),
+        usage: Literal["all", "used", "unused"] = Query("all"),
+        has_topics: Optional[bool] = Query(None),
+        topic_match: Literal["any", "all"] = Query("any"),
+        sort: Literal["newest", "oldest", "updated"] = Query("newest"),
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
@@ -26,6 +32,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             topics=topics_list,
             limit=limit,
             offset=offset,
+            question_type=question_type, usage=usage, has_topics=has_topics,
+            topic_match=topic_match, sort=sort,
         )
 
     @app.get("/api/admin/bank/tasks/trash")
@@ -37,6 +45,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
+        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select"]] = Query(None),
+        usage: Literal["all", "used", "unused"] = Query("all"),
+        has_topics: Optional[bool] = Query(None),
+        topic_match: Literal["any", "all"] = Query("any"),
+        sort: Literal["newest", "oldest", "updated"] = Query("newest"),
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
@@ -47,7 +60,18 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             topics=topics_list,
             limit=limit,
             offset=offset,
+            question_type=question_type, usage=usage, has_topics=has_topics,
+            topic_match=topic_match, sort=sort,
         )
+
+    @app.get("/api/admin/bank/catalog")
+    async def get_bank_catalog(
+        admin_user: dict = Depends(require_admin_any_admin),
+        db: Database = Depends(get_db),
+        q: Optional[str] = Query(None),
+        limit: int = Query(100, ge=1, le=200),
+    ):
+        return await db.bank_tasks.get_catalog(query=q, limit=limit)
 
     @app.get("/api/admin/bank/tasks/export")
     async def export_bank_tasks_json(

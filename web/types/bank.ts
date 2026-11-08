@@ -4,6 +4,18 @@ import type { AnswerMode, LessonTaskOption, LessonTaskSubquestion, QuestionType 
 // Bank tasks (admin pool for trial tests)
 export type BankDifficulty = "A" | "B" | "C";
 
+export type BankTaskSort = "newest" | "oldest" | "updated";
+export type BankTaskUsageFilter = "all" | "used" | "unused";
+export interface BankCatalogResponse {
+  active_total: number;
+  trash_total: number;
+  unused_total: number;
+  no_topics_total: number;
+  topics: Array<{ id: number; name: string; task_count: number }>;
+  topics_total: number;
+  has_more_topics: boolean;
+}
+
 export type TaskTextScale = "sm" | "md" | "lg" | (string & {});
 
 

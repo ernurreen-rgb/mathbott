@@ -26,6 +26,7 @@ interface StudentTaskPreviewProps {
   imageSrc?: string | null;
   className?: string;
   onTextScaleChange?: (scale: TaskTextScale) => void;
+  initialViewport?: PreviewViewport;
 }
 
 type PreviewViewport = "mobile" | "desktop";
@@ -51,13 +52,14 @@ export default function StudentTaskPreview({
   imageSrc,
   className = "",
   onTextScaleChange,
+  initialViewport = "mobile",
 }: StudentTaskPreviewProps) {
-  const [viewport, setViewport] = useState<PreviewViewport>("mobile");
+  const [viewport, setViewport] = useState<PreviewViewport>(initialViewport);
   const [localTextScale, setLocalTextScale] = useState<TaskTextScale>(() =>
     normalizeTaskTextScale(task.text_scale)
   );
   const [fontSizeDraft, setFontSizeDraft] = useState<string>(() =>
-    String(getTaskTextScaleFontSizePx(normalizeTaskTextScale(task.text_scale), "mobile"))
+    String(getTaskTextScaleFontSizePx(normalizeTaskTextScale(task.text_scale), initialViewport))
   );
   const [answer, setAnswer] = useState("");
   const [checking, setChecking] = useState(false);

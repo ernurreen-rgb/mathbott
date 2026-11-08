@@ -1,4 +1,5 @@
 import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
+import type { BankCatalogResponse, BankTaskSort, BankTaskUsageFilter, QuestionType } from "@/types";
 import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
@@ -81,6 +82,11 @@ export async function getAdminBankTasks(
     limit?: number;
     offset?: number;
     trash?: boolean;
+    questionType?: QuestionType | "";
+    usage?: BankTaskUsageFilter;
+    hasTopics?: boolean;
+    topicMatch?: "any" | "all";
+    sort?: BankTaskSort;
   }
 ): Promise<{ data: BankTaskListResponse | null; error: string | null }> {
   const search = params?.search?.trim();
@@ -98,10 +104,22 @@ export async function getAdminBankTasks(
   if (search) query.set("search", search);
   if (difficulty) query.set("difficulty", difficulty);
   if (topics.length > 0) query.set("topics", topics.join(","));
+  if (params?.questionType) query.set("question_type", params.questionType);
+  if (params?.usage && params.usage !== "all") query.set("usage", params.usage);
+  if (params?.hasTopics !== undefined) query.set("has_topics", String(params.hasTopics));
+  if (params?.topicMatch) query.set("topic_match", params.topicMatch);
+  if (params?.sort) query.set("sort", params.sort);
 
   return fetchWithErrorHandling<BankTaskListResponse>(
-    `${apiPath(endpoint)}?${query.toString()}`
+    `${apiPath(endpoint)}?${query.toString()}`,
+    { cache: "no-store" }
   );
+}
+
+export async function getAdminBankCatalog(email: string, search: string = "") {
+  const query = new URLSearchParams({ email, limit: "100" });
+  if (search.trim()) query.set("q", search.trim());
+  return fetchWithErrorHandling<BankCatalogResponse>(`${apiPath("admin/bank/catalog")}?${query.toString()}`, { cache: "no-store" });
 }
 
 

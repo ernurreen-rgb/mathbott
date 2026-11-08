@@ -5,6 +5,11 @@ type Glyph = { path: string; detail?: string; fill?: string };
 // QazMath icons share a 24px grid, rounded terminals and an optical 1.75px stroke.
 // The second layer adds depth without relying on colour to convey meaning.
 const glyphs = {
+  settings: { path: "M4 7h16M4 17h16M8 4v6M16 14v6", detail: "M6 7h4M14 17h4" },
+  upload: { path: "M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" },
+  download: { path: "M12 3v13m-5-5 5 5 5-5M4 16v5h16v-5" },
+  bookmark: { path: "M6 3h12v18l-6-4-6 4Z", fill: "M6 3h12v18l-6-4-6 4Z" },
+  tag: { path: "M3 3h8l10 10-8 8L3 11Z", detail: "M7 7h.01" },
   book: { path: "M12 6.5C9.5 4.8 6.3 4.3 3 5v14c3.3-.7 6.5-.2 9 1.5 2.5-1.7 5.7-2.2 9-1.5V5c-3.3-.7-6.5-.2-9 1.5Zm0 0v14", detail: "M6 8.5c1.2 0 2.2.2 3.2.6M6 12c1.2 0 2.2.2 3.2.6M15 9.1c1-.4 2-.6 3.2-.6", fill: "M12 6.5c2.5-1.7 5.7-2.2 9-1.5v14c-3.3-.7-6.5-.2-9 1.5Z" },
   test: { path: "M8 4H6a2 2 0 0 0-2 2v14h16V6a2 2 0 0 0-2-2h-2M8 3h8v4H8Z", detail: "m8 13 2 2 5-5M8 18h8", fill: "M4 16h16v4H4Z" },
   quiz: { path: "M7 3h12a2 2 0 0 1 2 2v12M3 7h12a2 2 0 0 1 2 2v12H5a2 2 0 0 1-2-2Z", detail: "m11 10-4 5h3l-1 3 4-5h-3Z", fill: "M3 7h12a2 2 0 0 1 2 2v12H5a2 2 0 0 1-2-2Z" },

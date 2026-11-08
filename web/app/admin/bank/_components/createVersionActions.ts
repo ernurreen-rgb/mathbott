@@ -150,7 +150,7 @@ export function createVersionActions({
       if (questionType === "select") {
         formData.append("subquestions", JSON.stringify(normalizeJsonEditArray(parsed.subquestions)));
       } else {
-        formData.append("subquestions", "");
+        formData.append("subquestions", "[]");
       }
       if (dedupConfirmed) formData.append("dedup_confirmed", "true");
       if (typeof jsonEdit.task.current_version === "number") {

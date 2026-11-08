@@ -28,3 +28,4 @@ coverage/
 web/output/
 tmp/pdfs/
 output/pdf/
+tmp/bank-workspace-*/

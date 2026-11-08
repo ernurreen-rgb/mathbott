@@ -18,6 +18,11 @@ class BankTaskCrudMixin:
         topics: Optional[List[str]] = None,
         limit: int = 20,
         offset: int = 0,
+        question_type: Optional[str] = None,
+        usage: str = "all",
+        has_topics: Optional[bool] = None,
+        topic_match: str = "any",
+        sort: str = "newest",
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
@@ -26,18 +31,45 @@ class BankTaskCrudMixin:
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
-                params.append(self._contains_like_pattern(cleaned_search))
+                search_id = cleaned_search.lstrip("#")
+                if search_id.isascii() and search_id.isdigit() and len(search_id) <= 15:
+                    where.append("(bt.id = ? OR LOWER(bt.text) LIKE ? ESCAPE '\\')")
+                    params.extend([int(search_id), self._contains_like_pattern(cleaned_search)])
+                else:
+                    where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                    params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
                 where.append("bt.difficulty = ?")
                 params.append(difficulty)
 
+            if question_type:
+                where.append("bt.question_type = ?")
+                params.append(question_type)
+
+            if usage in {"used", "unused"}:
+                usage_clause = """(
+                    EXISTS (SELECT 1 FROM tasks p WHERE p.bank_task_id = bt.id AND p.deleted_at IS NULL)
+                    OR EXISTS (SELECT 1 FROM trial_test_tasks p WHERE p.bank_task_id = bt.id AND p.deleted_at IS NULL)
+                )"""
+                where.append(usage_clause if usage == "used" else f"NOT {usage_clause}")
+
+            if has_topics is not None:
+                topic_clause = "EXISTS (SELECT 1 FROM bank_task_topic_map m WHERE m.bank_task_id = bt.id)"
+                where.append(topic_clause if has_topics else f"NOT {topic_clause}")
+
             normalized_topics = [self._normalize_topic(t) for t in self._normalize_topics(topics)]
             if normalized_topics:
                 placeholders = ",".join(["?"] * len(normalized_topics))
-                where.append(
-                    f"""
+                if topic_match == "all":
+                    where.append(f"""(
+                        SELECT COUNT(DISTINCT t.name_norm)
+                        FROM bank_task_topic_map m JOIN bank_topics t ON t.id = m.topic_id
+                        WHERE m.bank_task_id = bt.id AND t.name_norm IN ({placeholders})
+                    ) = ?""")
+                    params.extend([*normalized_topics, len(normalized_topics)])
+                else:
+                    where.append(f"""
                     EXISTS (
                         SELECT 1
                         FROM bank_task_topic_map m
@@ -45,9 +77,8 @@ class BankTaskCrudMixin:
                         WHERE m.bank_task_id = bt.id
                           AND t.name_norm IN ({placeholders})
                     )
-                    """
-                )
-                params.extend(normalized_topics)
+                    """)
+                    params.extend(normalized_topics)
 
             where_clause = " AND ".join(where)
             async with db.execute(
@@ -57,7 +88,11 @@ class BankTaskCrudMixin:
                 total_row = await count_cursor.fetchone()
                 total = int(total_row[0]) if total_row else 0
 
-            order_clause = "bt.deleted_at DESC, bt.id DESC" if include_deleted else "bt.created_at DESC, bt.id DESC"
+            order_clause = {
+                "newest": "bt.deleted_at DESC, bt.id DESC" if include_deleted else "bt.created_at DESC, bt.id DESC",
+                "oldest": "bt.created_at ASC, bt.id ASC",
+                "updated": "bt.updated_at DESC, bt.id DESC",
+            }.get(sort, "bt.created_at DESC, bt.id DESC")
             query_params = [*params, limit, offset]
             async with db.execute(
                 f"""

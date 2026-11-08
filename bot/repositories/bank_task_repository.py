@@ -8,6 +8,7 @@ re-exported here because existing imports reference this module.
 """
 from .base import BaseRepository
 from .bank.audit import BankTaskAuditMixin
+from .bank.catalog import BankTaskCatalogMixin
 from .bank.crud import BankTaskCrudMixin
 from .bank.helpers import BankTaskHelpersMixin
 from .bank.quality import BankTaskQualityMixin
@@ -27,6 +28,7 @@ __all__ = [
 
 
 class BankTaskRepository(
+    BankTaskCatalogMixin,
     BankTaskCrudMixin,
     BankTaskUnrecognizedAnswersMixin,
     BankTaskVersionsMixin,

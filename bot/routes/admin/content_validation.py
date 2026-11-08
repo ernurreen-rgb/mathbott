@@ -166,8 +166,8 @@ def _parse_subquestions_json(subquestions: Optional[str]) -> Optional[List[dict]
         parsed = json.loads(subquestions)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
-    if not isinstance(parsed, list) or len(parsed) != 2:
-        raise HTTPException(status_code=400, detail="subquestions must be a JSON array of length 2")
+    if not isinstance(parsed, list) or len(parsed) not in (0, 2):
+        raise HTTPException(status_code=400, detail="subquestions must be an empty JSON array or contain 2 items")
     return parsed
 
 
