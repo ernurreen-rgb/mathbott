@@ -713,6 +713,7 @@ export interface QuizAvatarPickerProps {
   nickname?: string;
   onChange: (encodedAvatar: string) => void;
   compact?: boolean;
+  showCharacterNames?: boolean;
 }
 
 export function QuizAvatarPicker({
@@ -720,6 +721,7 @@ export function QuizAvatarPicker({
   nickname = "Ойыншы",
   onChange,
   compact = false,
+  showCharacterNames = true,
 }: QuizAvatarPickerProps) {
   const parsed = parseQuizAvatar(value, nickname);
 
@@ -744,9 +746,11 @@ export function QuizAvatarPicker({
           <span className="block text-xs font-bold uppercase tracking-wider text-gray-600">
             Кейіпкерді таңдаңыз
           </span>
-          <span className="text-xs font-semibold text-purple-700">
-            {parsed.character.name}
-          </span>
+          {showCharacterNames && (
+            <span className="text-xs font-semibold text-purple-700">
+              {parsed.character.name}
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -782,7 +786,7 @@ export function QuizAvatarPicker({
                 size={compact ? "md" : "lg"}
                 className="group-hover:scale-105 transition-transform"
               />
-              {!compact && (
+              {!compact && showCharacterNames && (
                 <span className="mt-1 text-[10px] font-bold text-gray-700 truncate w-full text-center">
                   {char.name.split(" ").pop()}
                 </span>

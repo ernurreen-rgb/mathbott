@@ -12,7 +12,6 @@ import {
   QuizAvatar,
   QuizAvatarPicker,
   encodeQuizAvatar,
-  parseQuizAvatar,
   QUIZ_AVATAR_COLORS,
   QUIZ_AVATAR_CHARACTERS,
 } from "@/components/quiz/QuizAvatar";
@@ -47,8 +46,6 @@ function JoinForm() {
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, [step]);
-
-  const parsedAvatar = parseQuizAvatar(selectedAvatar, nickname || "Ойыншы");
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,7 +184,6 @@ function JoinForm() {
                 <QuizAvatar avatarColor={selectedAvatar} nickname={nickname} size="lg" />
                 <div className="min-w-0">
                   <p className="break-words text-base font-bold text-gray-900">{nickname}</p>
-                  <p className="text-sm font-semibold text-purple-700" aria-live="polite">{parsedAvatar.character.name}</p>
                 </div>
               </div>
               <QuizAvatarPicker
@@ -195,6 +191,7 @@ function JoinForm() {
                 nickname={nickname}
                 onChange={setSelectedAvatar}
                 compact
+                showCharacterNames={false}
               />
             </div>
           )}
