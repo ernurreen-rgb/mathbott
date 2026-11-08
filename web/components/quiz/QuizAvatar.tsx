@@ -768,6 +768,8 @@ export function QuizAvatarPicker({
               key={char.id}
               onClick={() => handleSelectCharacter(char.id)}
               title={char.name}
+              aria-label={char.name}
+              aria-pressed={isSelected}
               className={`group relative flex flex-col items-center p-1.5 rounded-2xl border-2 transition-all ${
                 isSelected
                   ? "border-purple-600 bg-purple-50/80 shadow-md scale-105"
@@ -804,6 +806,8 @@ export function QuizAvatarPicker({
                 key={c.hex}
                 onClick={() => handleSelectColor(c.hex)}
                 title={c.name}
+                aria-label={`Фон: ${c.name}`}
+                aria-pressed={isSelected}
                 className={`w-7 h-7 rounded-full transition-all border ${
                   isSelected
                     ? "ring-2 ring-offset-2 ring-purple-600 scale-110 border-purple-500"
