@@ -405,7 +405,9 @@ async function proxyRequest(
       }
     }
 
-    const searchString = searchParams.toString();
+    // Keep spaces in URL form so forwarding preserves the exact signed bytes.
+    // Literal plus signs stay encoded as %2B by URLSearchParams.
+    const searchString = searchParams.toString().replace(/\+/g, "%20");
     const backendPath = `api/${encodeBackendPath(effectivePathSegments)}`;
     const backendSignaturePath = `/api/${effectivePathSegments.join("/")}`;
     const url = `${BACKEND_URL}/${backendPath}${searchString ? `?${searchString}` : ""}`;
