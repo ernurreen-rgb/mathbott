@@ -102,8 +102,37 @@ class BankTaskUnrecognizedAnswersMixin:
             ) as cursor:
                 trial_rows = await cursor.fetchall()
 
+            # Twins are graded on their own content, so a missing alias shows up here too.
+            async with db.execute(
+                """
+                SELECT
+                    a.user_id AS attempt_user_id,
+                    a.answer AS student_answer,
+                    a.created_at AS attempted_at,
+                    'module_review' AS source,
+                    bt.id AS bank_task_id,
+                    bt.text AS task_text,
+                    bt.answer AS correct_answer,
+                    bt.accepted_answers,
+                    bt.question_type,
+                    bt.answer_mode,
+                    bt.options,
+                    bt.subquestions,
+                    bt.current_version
+                FROM module_review_attempts a
+                JOIN bank_tasks bt ON bt.id = a.bank_task_id
+                WHERE a.is_correct = 0
+                  AND bt.deleted_at IS NULL
+                  AND TRIM(a.answer) <> ''
+                ORDER BY a.id DESC
+                LIMIT ?
+                """,
+                (self._UNRECOGNIZED_EVENT_LIMIT,),
+            ) as cursor:
+                review_rows = await cursor.fetchall()
+
         grouped: Dict[tuple[int, str], Dict[str, Any]] = {}
-        for row in [*lesson_rows, *trial_rows]:
+        for row in [*lesson_rows, *trial_rows, *review_rows]:
             raw_answer = str(row["student_answer"] or "").strip()
             if not raw_answer:
                 continue

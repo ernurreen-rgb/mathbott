@@ -44,6 +44,8 @@ type Props = {
   resetAndHideForm: () => void;
   className?: string;
   hidePreview?: boolean;
+  /** Twins must keep their source's question type. */
+  lockQuestionType?: boolean;
 };
 
 export default function BankTaskForm({
@@ -67,6 +69,7 @@ export default function BankTaskForm({
   resetAndHideForm,
   className = "",
   hidePreview = false,
+  lockQuestionType = false,
 }: Props) {
   return (
     <>
@@ -110,6 +113,8 @@ export default function BankTaskForm({
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Түрі</label>
                 <select
                   aria-label="Тапсырма түрі"
+                  disabled={lockQuestionType}
+                  title={lockQuestionType ? "Егіз бастапқы есеппен бірдей түрде болады" : undefined}
                   value={form.legacyOptionCount != null ? "" : form.question_type}
                   onChange={(e) => {
                     const questionType = e.target.value as QuestionType;

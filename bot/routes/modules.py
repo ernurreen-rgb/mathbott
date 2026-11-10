@@ -247,6 +247,9 @@ def setup_modules_routes(app, db, limiter):
         mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson_id)
 
         lesson_progress = await db.calculate_lesson_completion(user_id, lesson_id) if user_id else None
+        review_summaries = (
+            await db.module_review.get_lesson_summaries(user_id, [ml["id"] for ml in mini_lessons]) if user_id else {}
+        )
 
         result_mini = []
         for ml in mini_lessons:
@@ -294,6 +297,7 @@ def setup_modules_routes(app, db, limiter):
                 "mini_index": ml["mini_index"],
                 "title": ml.get("title"),
                 "progress": ml_progress,
+                "review": review_summaries.get(ml["id"]),
                 "tasks": tasks_data
             })
 

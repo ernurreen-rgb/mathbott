@@ -22,6 +22,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         has_topics: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         sort: Literal["newest", "oldest", "updated"] = Query("newest"),
+        twins: Literal["exclude", "only", "include"] = Query("exclude"),
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
@@ -33,7 +34,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             limit=limit,
             offset=offset,
             question_type=question_type, usage=usage, has_topics=has_topics,
-            topic_match=topic_match, sort=sort,
+            topic_match=topic_match, sort=sort, twins=twins,
         )
 
     @app.get("/api/admin/bank/tasks/trash")
@@ -53,6 +54,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
+        # Trash lists every deleted task, twins included, so each one can be restored.
         return await db.bank_tasks.list_tasks(
             include_deleted=True,
             search=search,
@@ -61,7 +63,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             limit=limit,
             offset=offset,
             question_type=question_type, usage=usage, has_topics=has_topics,
-            topic_match=topic_match, sort=sort,
+            topic_match=topic_match, sort=sort, twins="include",
         )
 
     @app.get("/api/admin/bank/catalog")

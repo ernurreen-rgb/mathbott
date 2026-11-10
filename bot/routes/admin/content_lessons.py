@@ -120,7 +120,11 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
         """Get all tasks for a mini-lesson"""
         await require_admin(email=email, db=db)
         tasks = await db.tasks.get_tasks_by_mini_lesson(mini_lesson_id)
-        return [_serialize_bank_placement_task(task) for task in tasks]
+        twin_counts = await db.bank_tasks.count_twins_for_bank_tasks([task.get("bank_task_id") for task in tasks])
+        return [
+            {**_serialize_bank_placement_task(task), "twin_count": twin_counts.get(task.get("bank_task_id"), 0)}
+            for task in tasks
+        ]
 
     @app.put("/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder")
     @app.post("/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder")

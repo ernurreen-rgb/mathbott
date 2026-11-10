@@ -6,6 +6,7 @@ import json
 import storage as db_driver
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
+from .twins import IS_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
 
@@ -23,11 +24,16 @@ class BankTaskCrudMixin:
         has_topics: Optional[bool] = None,
         topic_match: str = "any",
         sort: str = "newest",
+        twins: str = "exclude",
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             where = ["bt.deleted_at IS NOT NULL" if include_deleted else "bt.deleted_at IS NULL"]
             params: List[Any] = []
+            if twins == "exclude":
+                where.append(NOT_TWIN_SQL)
+            elif twins == "only":
+                where.append(IS_TWIN_SQL)
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
@@ -116,6 +122,7 @@ class BankTaskCrudMixin:
                 item["active_usage_count"] = usage_counts.get(int(row["id"]), 0)
                 item["current_version"] = int(item.get("current_version") or 1)
                 items.append(item)
+            await self._attach_twin_info(db, items)
 
             return {
                 "items": items,
@@ -175,6 +182,7 @@ class BankTaskCrudMixin:
             item = self._serialize_task_row(row, topics_map.get(task_id, []))
             item["active_usage_count"] = usage_counts.get(task_id, 0)
             item["current_version"] = int(item.get("current_version") or 1)
+            await self._attach_twin_info(db, [item])
             return item
 
     async def create_task(
@@ -197,50 +205,91 @@ class BankTaskCrudMixin:
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            answer_mode = normalize_answer_mode(answer_mode, question_type)
-            cursor = await db.execute(
-                """
-                INSERT INTO bank_tasks
-                (text, answer, question_type, answer_mode, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                """,
-                (
-                    text,
-                    answer,
-                    question_type,
-                    answer_mode,
-                    json.dumps(normalize_accepted_answers(accepted_answers), ensure_ascii=False),
-                    text_scale or "md",
-                    json.dumps(options, ensure_ascii=False) if options is not None else None,
-                    json.dumps(subquestions, ensure_ascii=False) if subquestions is not None else None,
-                    image_filename,
-                    solution_filename,
-                    difficulty,
-                    created_by,
-                ),
+            task_id = await self._insert_bank_task(
+                db,
+                text=text,
+                answer=answer,
+                question_type=question_type,
+                difficulty=difficulty,
+                answer_mode=answer_mode,
+                accepted_answers=accepted_answers,
+                text_scale=text_scale,
+                topics=topics,
+                options=options,
+                subquestions=subquestions,
+                image_filename=image_filename,
+                solution_filename=solution_filename,
+                created_by=created_by,
+                source=source,
+                reason=reason,
             )
-            task_id = int(cursor.lastrowid)
-            await self._set_task_topics(db, task_id, topics or [])
-
-            row = await self._fetch_task_row(db, task_id)
-            if row:
-                topic_list = await self._fetch_topics_for_task(db, task_id)
-                snapshot = self._build_snapshot(row, topic_list)
-                await self._record_version_event(
-                    db,
-                    task_id=task_id,
-                    event_type="create",
-                    snapshot=snapshot,
-                    changed_fields=list(self.SNAPSHOT_FIELDS),
-                    source=source,
-                    actor_user_id=created_by,
-                    reason=reason,
-                    initial=True,
-                )
             await db.commit()
 
         task = await self.get_task_by_id(task_id, include_deleted=True)
         return task or {}
+
+    async def _insert_bank_task(
+        self,
+        db: db_driver.Connection,
+        *,
+        text: str,
+        answer: str,
+        question_type: str,
+        difficulty: str,
+        answer_mode: str = "choices",
+        accepted_answers: Optional[List[str]] = None,
+        text_scale: str = "md",
+        topics: Optional[List[str]] = None,
+        options: Optional[List[Dict[str, Any]]] = None,
+        subquestions: Optional[List[Dict[str, Any]]] = None,
+        image_filename: Optional[str] = None,
+        solution_filename: Optional[str] = None,
+        created_by: Optional[int] = None,
+        source: Optional[str] = "admin_bank_create",
+        reason: Optional[str] = None,
+    ) -> int:
+        """Insert content with topics and its first version; the caller commits."""
+        answer_mode = normalize_answer_mode(answer_mode, question_type)
+        cursor = await db.execute(
+            """
+            INSERT INTO bank_tasks
+            (text, answer, question_type, answer_mode, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            """,
+            (
+                text,
+                answer,
+                question_type,
+                answer_mode,
+                json.dumps(normalize_accepted_answers(accepted_answers), ensure_ascii=False),
+                text_scale or "md",
+                json.dumps(options, ensure_ascii=False) if options is not None else None,
+                json.dumps(subquestions, ensure_ascii=False) if subquestions is not None else None,
+                image_filename,
+                solution_filename,
+                difficulty,
+                created_by,
+            ),
+        )
+        task_id = int(cursor.lastrowid)
+        await self._set_task_topics(db, task_id, topics or [])
+
+        row = await self._fetch_task_row(db, task_id)
+        if row:
+            topic_list = await self._fetch_topics_for_task(db, task_id)
+            snapshot = self._build_snapshot(row, topic_list)
+            await self._record_version_event(
+                db,
+                task_id=task_id,
+                event_type="create",
+                snapshot=snapshot,
+                changed_fields=list(self.SNAPSHOT_FIELDS),
+                source=source,
+                actor_user_id=created_by,
+                reason=reason,
+                initial=True,
+            )
+        return task_id
 
     async def create_tasks_bulk_atomic(
         self,
@@ -571,6 +620,7 @@ class BankTaskCrudMixin:
                 return False
 
             existing_topics = await self._fetch_topics_for_task(db, task_id)
+            twins_trashed = await self._trash_twins_of(db, [task_id]) if existing.get("deleted_at") else 0
             module_update_cursor = await db.execute(
                 """
                 UPDATE tasks
@@ -612,6 +662,7 @@ class BankTaskCrudMixin:
                         "image_filename_present": bool(existing.get("image_filename")),
                         "module_placements_soft_deleted": int(module_update_cursor.rowcount or 0),
                         "trial_test_placements_soft_deleted": int(trial_update_cursor.rowcount or 0),
+                        "twins_moved_to_trash": twins_trashed,
                     },
                 )
                 await db.execute(
@@ -650,6 +701,7 @@ class BankTaskCrudMixin:
             task_ids = [int(row["id"]) for row in rows]
             placeholders = ",".join(["?"] * len(task_ids))
 
+            await self._trash_twins_of(db, task_ids)
             await db.execute(
                 f"DELETE FROM bank_tasks WHERE id IN ({placeholders})",
                 task_ids,

@@ -5,6 +5,8 @@ from typing import Optional, List, Dict, Any
 from difflib import SequenceMatcher
 import storage as db_driver
 
+from .twins import NOT_TWIN_SQL
+
 
 class BankTaskQualityMixin:
     async def get_quality_summary(self) -> Dict[str, Any]:
@@ -14,16 +16,16 @@ class BankTaskQualityMixin:
             no_topics_total = 0
 
             async with db.execute(
-                "SELECT COUNT(*) FROM bank_tasks bt WHERE bt.deleted_at IS NULL"
+                f"SELECT COUNT(*) FROM bank_tasks bt WHERE bt.deleted_at IS NULL AND {NOT_TWIN_SQL}"
             ) as cursor:
                 row = await cursor.fetchone()
                 active_total = int(row[0]) if row else 0
 
             async with db.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM bank_tasks bt
-                WHERE bt.deleted_at IS NULL
+                WHERE bt.deleted_at IS NULL AND {NOT_TWIN_SQL}
                   AND NOT EXISTS (
                       SELECT 1
                       FROM tasks t
@@ -40,10 +42,10 @@ class BankTaskQualityMixin:
                 dead_total = int(row[0]) if row else 0
 
             async with db.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM bank_tasks bt
-                WHERE bt.deleted_at IS NULL
+                WHERE bt.deleted_at IS NULL AND {NOT_TWIN_SQL}
                   AND NOT EXISTS (
                       SELECT 1
                       FROM bank_task_topic_map m
@@ -71,7 +73,7 @@ class BankTaskQualityMixin:
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            where = list(base_where)
+            where = [*base_where, NOT_TWIN_SQL]
             params: List[Any] = []
 
             cleaned_search = (search or "").strip().lower()
@@ -193,7 +195,7 @@ class BankTaskQualityMixin:
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            where = ["bt.deleted_at IS NULL"]
+            where = ["bt.deleted_at IS NULL", NOT_TWIN_SQL]
             params: List[Any] = []
 
             cleaned_search = (search or "").strip().lower()

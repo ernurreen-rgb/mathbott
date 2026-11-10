@@ -48,6 +48,8 @@ export default function LessonPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
   const [showCongrats, setShowCongrats] = useState(false);
+  // Mini-lesson whose mistake review the congratulations dialog offers instead of redirecting.
+  const [congratsReviewMiniId, setCongratsReviewMiniId] = useState<number | null>(null);
   const [reportDialog, setReportDialog] = useState<{ taskId: number; show: boolean }>({ taskId: 0, show: false });
   const [reportMessage, setReportMessage] = useState("");
   const [submittingReport, setSubmittingReport] = useState(false);
@@ -129,19 +131,31 @@ export default function LessonPage() {
       congratsShownRef.current = true;
       setShowCongrats(true);
 
-      const moduleId = lesson?.module_id;
-      const sectionId = lesson?.section_id;
-      const target =
-        moduleId && sectionId ? `/modules/${moduleId}#section-${sectionId}` : "/modules";
+      // With mistakes left to review, the student chooses instead of being redirected.
+      const reviewMini = lesson.mini_lessons
+        .slice()
+        .sort((a, b) => a.mini_index - b.mini_index)
+        .find((ml) => (ml.review?.pending ?? 0) > 0);
+      setCongratsReviewMiniId(reviewMini?.id ?? null);
+      if (!reviewMini) {
+        const moduleId = lesson?.module_id;
+        const sectionId = lesson?.section_id;
+        const target =
+          moduleId && sectionId ? `/modules/${moduleId}#section-${sectionId}` : "/modules";
 
-      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
-      redirectTimerRef.current = setTimeout(() => {
-        router.push(target);
-      }, 2200);
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = setTimeout(() => {
+          router.push(target);
+        }, 2200);
+      }
     }
 
     prevLessonCompletedRef.current = completed;
   }, [lesson, router]);
+
+  const sectionHref =
+    lesson?.module_id && lesson?.section_id ? `/modules/${lesson.module_id}#section-${lesson.section_id}` : "/modules";
+  const reviewHref = (miniLessonId: number) => `/lessons/${lessonId}/review/${miniLessonId}`;
 
   const selectedMini: LessonMiniLesson | null = useMemo(() => {
     if (!lesson || !selectedMiniId) return null;
@@ -247,6 +261,11 @@ export default function LessonPage() {
     if (firstIncomplete) {
       resetTaskAttempt(firstIncomplete.id);
       setActiveTaskId(firstIncomplete.id);
+      return;
+    }
+    // Stop on the completion screen so the mistake review is offered before moving on.
+    if ((selectedMini?.review?.pending ?? 0) > 0) {
+      setActiveTaskId(null);
       return;
     }
     if (nextMiniId) {
@@ -651,10 +670,30 @@ export default function LessonPage() {
             <div className="text-6xl mb-3 animate-bounce"><Icon name="sparkles" /></div>
             <div className="text-2xl font-extrabold text-gray-900">Құттықтаймыз!</div>
             <div className="text-sm text-gray-600 mt-1">Сабақ аяқталды</div>
-            <div className="mt-5 flex items-center justify-center gap-2 text-gray-700">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
-              <span className="text-sm font-semibold">Бөлімге оралу...</span>
-            </div>
+            {congratsReviewMiniId ? (
+              <div className="mt-5 space-y-2">
+                <p className="text-sm text-gray-700">Қате кеткен есептерді ұқсас есептермен талдап шығыңыз.</p>
+                <button
+                  type="button"
+                  onClick={() => router.push(reviewHref(congratsReviewMiniId))}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg"
+                >
+                  Қателерді талдау
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(sectionHref)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg"
+                >
+                  Бөлімге оралу
+                </button>
+              </div>
+            ) : (
+              <div className="mt-5 flex items-center justify-center gap-2 text-gray-700">
+                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+                <span className="text-sm font-semibold">Бөлімге оралу...</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -681,11 +720,13 @@ export default function LessonPage() {
                   .map((ml, idx, arr) => {
                     const completed = !!ml.progress?.completed;
                     const active = selectedMiniId === ml.id;
+                    const pendingReview = completed ? ml.review?.pending ?? 0 : 0;
                     return (
                       <div key={ml.id} className="flex-1 flex items-center">
                         <button
                           onClick={() => setSelectedMiniId(ml.id)}
-                          className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
+                          aria-label={pendingReview ? `${ml.mini_index}-кіші сабақ, талданбаған қате: ${pendingReview}` : undefined}
+                          className={`relative w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
                             completed
                               ? "bg-green-600 border-green-700 text-white"
                               : active
@@ -694,6 +735,11 @@ export default function LessonPage() {
                           }`}
                         >
                           {ml.mini_index}
+                          {pendingReview > 0 && (
+                            <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-500 text-white text-[11px] leading-5 text-center">
+                              {pendingReview}
+                            </span>
+                          )}
                         </button>
                         {idx < arr.length - 1 && (
                           <div className="flex-1 h-1 mx-2 rounded bg-gray-200">
@@ -713,6 +759,30 @@ export default function LessonPage() {
           {/* Selected mini-lesson */}
           {selectedMini ? (
             <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
+              {selectedMini.progress?.completed && (selectedMini.review?.mistakes ?? 0) > 0 && (
+                selectedMini.review!.pending > 0 ? (
+                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                    <div className="text-gray-800">
+                      <div className="font-bold">Қателерді талдау</div>
+                      <div className="text-sm">Бірінші әрекетте {selectedMini.review!.mistakes} есепте қате кетті. Оларды ұқсас есептермен қайта шығарып көріңіз.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => router.push(reviewHref(selectedMini.id))}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
+                    >
+                      Талдауды бастау ({selectedMini.review!.pending}) <Icon name="arrowRight" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
+                    <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />Қателер талданды: түзетілді {selectedMini.review!.resolved}{selectedMini.review!.weak ? `, әлсіз тұс ${selectedMini.review!.weak}` : ""}.</span>
+                    <button type="button" onClick={() => router.push(reviewHref(selectedMini.id))} className="font-semibold text-purple-700 hover:underline">
+                      Нәтижені көру
+                    </button>
+                  </div>
+                )
+              )}
 
               {orderedMiniTasks.length === 0 ? (
                 <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>

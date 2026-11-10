@@ -42,7 +42,7 @@ MIN_MCQ_OPTIONS = 4
 MAX_MCQ_OPTIONS = 6
 
 
-BANK_AUDIT_ACTIONS = {"import_confirm", "version_delete", "rollback", "hard_delete", "role_change"}
+BANK_AUDIT_ACTIONS = {"import_confirm", "version_delete", "rollback", "hard_delete", "role_change", "twin_create"}
 
 
 OPS_TIMESERIES_RANGES = {"1h": "-1 hour", "24h": "-24 hours", "7d": "-7 days"}

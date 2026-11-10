@@ -123,6 +123,54 @@ export interface LessonTask {
 
 export interface LessonMiniLesson extends MiniLessonSummary {
   tasks: LessonTask[];
+  review?: MiniLessonReviewSummary | null;
+}
+
+
+/** First-attempt mistakes of a completed mini-lesson and how far their review has got. */
+export interface MiniLessonReviewSummary {
+  mistakes: number;
+  resolved: number;
+  weak: number;
+  pending: number;
+}
+
+export type MiniLessonReviewState = "pending" | "resolved" | "weak";
+
+export interface MiniLessonReviewTask {
+  bank_task_id: number;
+  text: string;
+  image_filename?: string | null;
+  question_type: QuestionType;
+  answer_mode?: AnswerMode | null;
+  correct_count?: number | null;
+  text_scale?: TaskTextScale | null;
+  options?: LessonTaskOption[] | null;
+  subquestions?: LessonTaskSubquestion[] | null;
+}
+
+export interface MiniLessonReview {
+  mini_lesson_id: number;
+  lesson_id: number;
+  summary: MiniLessonReviewSummary;
+  items: Array<{ task_id: number; state: MiniLessonReviewState; attempts: number }>;
+  /** Next task to solve: an unseen twin, or the original when the task has no twins. */
+  current: {
+    task_id: number;
+    kind: "twin" | "original";
+    position: number;
+    attempt: number;
+    task: MiniLessonReviewTask;
+  } | null;
+}
+
+export interface MiniLessonReviewAnswerResult {
+  correct: boolean;
+  correct_answer: string | null;
+  solution_filename: string | null;
+  state: MiniLessonReviewState;
+  has_next_twin: boolean;
+  summary: MiniLessonReviewSummary;
 }
 
 

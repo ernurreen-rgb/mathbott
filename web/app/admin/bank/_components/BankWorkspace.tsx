@@ -13,11 +13,12 @@ import { hasContentAccess, hasReviewAccess, hasSuperAccess } from "@/lib/admin-a
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { useBankWorksheetSelection } from "@/lib/use-bank-worksheet-selection";
 import { getMcqEditorLabels, isMcqQuestionType, serializeMcqAnswerLabels } from "@/lib/question-options";
-import { createAdminBankTask, deleteAdminBankTask, getAdminBankCatalog, getAdminBankTask, getAdminBankTasks, getAdminBankTopics, permanentlyDeleteAdminBankTask, restoreAdminBankTask, updateAdminBankTask } from "@/lib/api";
+import { createAdminBankTask, createAdminBankTwin, deleteAdminBankTask, getAdminBankCatalog, getAdminBankTask, getAdminBankTasks, getAdminBankTopics, permanentlyDeleteAdminBankTask, restoreAdminBankTask, updateAdminBankTask } from "@/lib/api";
 import type { BankCatalogResponse, BankTask, BankTaskUsageItem, BankTaskVersionItem } from "@/types";
 import BankLibrary, { type BankLibraryTab } from "./BankLibrary";
 import BankTaskForm from "./BankTaskForm";
 import BankTaskDetail from "./BankTaskDetail";
+import BankTwinsPanel from "./BankTwinsPanel";
 import DuplicateDialog from "./DuplicateDialog";
 import HistoryDialog from "./HistoryDialog";
 import ImportPreviewDialog from "./ImportPreviewDialog";
@@ -31,14 +32,18 @@ import { questionTypeLabel } from "./library-model";
 import { buildBankFormPreviewTask, buildMcqOptionsFromBankForm, createEmptyForm, parseTaskToForm, type BankFormState, type ImportPreviewState, type JsonEditState, type PendingDedupState, type SnapshotViewState } from "./model";
 import styles from "../BankWorkspace.module.css";
 
-type WorkspaceMode = "view" | "edit" | "student";
-const modes: WorkspaceMode[] = ["view", "edit", "student"];
+type WorkspaceMode = "view" | "edit" | "student" | "twins";
+const modes: WorkspaceMode[] = ["view", "edit", "student", "twins"];
 const signature = (form: BankFormState) => JSON.stringify({ ...form, imageFile: form.imageFile ? [form.imageFile.name, form.imageFile.size, form.imageFile.lastModified] : null });
 
-function workspaceUrl(task: number | "new" | null, mode: WorkspaceMode = "view", replace = false) {
+function workspaceUrl(task: number | "new" | null, mode: WorkspaceMode = "view", replace = false, twinOf: number | null = null) {
   const url = new URL(window.location.href);
+  url.searchParams.delete("twin_of");
   if (task === null) { url.searchParams.delete("task"); url.searchParams.delete("mode"); }
-  else { url.searchParams.set("task", String(task)); if (mode === "view") url.searchParams.delete("mode"); else url.searchParams.set("mode", mode); }
+  else {
+    url.searchParams.set("task", String(task)); if (mode === "view") url.searchParams.delete("mode"); else url.searchParams.set("mode", mode);
+    if (task === "new" && twinOf) url.searchParams.set("twin_of", String(twinOf));
+  }
   window.history[replace ? "replaceState" : "pushState"](window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -69,6 +74,8 @@ export default function BankWorkspace() {
   const [baseline, setBaseline] = useState(() => signature(createEmptyForm()));
   const [showForm, setShowForm] = useState(false);
   const [workspaceTask, setWorkspaceTask] = useState<BankTask | null>(null);
+  // Set while a new twin of this source task is being written.
+  const [twinSource, setTwinSource] = useState<BankTask | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("view");
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -155,7 +162,7 @@ export default function BankWorkspace() {
     setLoading(true); setListError(null);
     const { data, error: err } = await getAdminBankTasks(email, {
       search: debouncedSearch, difficulty: filters.difficulty, topics: filters.topics, limit: filters.limit, offset: filters.offset,
-      trash: tab === "trash", questionType: filters.questionType, usage: filters.usage,
+      trash: tab === "trash", questionType: filters.questionType, usage: filters.usage, twins: filters.twins,
       hasTopics: filters.hasTopics ? filters.hasTopics === "yes" : undefined, topicMatch: filters.topicMatch, sort: filters.sort,
     });
     if (request !== listRequest.current) return;
@@ -179,12 +186,12 @@ export default function BankWorkspace() {
 
   const populateTask = (task: BankTask, mode: WorkspaceMode) => {
     const next = parseTaskToForm(task);
-    setWorkspaceTask(task); setEditingTaskId(task.id); setForm(next); setBaseline(signature(next));
-    setWorkspaceMode(task.deleted_at && mode === "edit" ? "view" : mode); setShowForm(true);
+    setWorkspaceTask(task); setEditingTaskId(task.id); setForm(next); setBaseline(signature(next)); setTwinSource(null);
+    setWorkspaceMode((task.deleted_at && mode === "edit") || (task.twin_source_id && mode === "twins") ? "view" : mode); setShowForm(true);
     setFormTopicInput(""); setFormTopicSuggestions([]); setPendingDedup(null); setVersionConflict(false); setWorkspaceError(null); setError(null);
   };
   const resetAndHideForm = (updateUrl = true) => {
-    formGenerationRef.current += 1; setShowForm(false); setWorkspaceTask(null); setEditingTaskId(null);
+    formGenerationRef.current += 1; setShowForm(false); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(null);
     const next = createEmptyForm(); setForm(next); setBaseline(signature(next)); setWorkspaceMode("view");
     setFormTopicInput(""); setFormTopicSuggestions([]); setPendingDedup(null); setVersionConflict(false);
     setReloadingForm(false); setWorkspaceLoading(false); setWorkspaceError(null); setSaving(false); setError(null);
@@ -213,13 +220,37 @@ export default function BankWorkspace() {
     if (!canLeave()) return;
     if (!workspaceRef.current.open) listScroll.current = window.scrollY;
     formGenerationRef.current += 1;
-    const next = createEmptyForm(); setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null);
+    const next = createEmptyForm(); setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(null);
     setShowForm(true); setWorkspaceMode("edit"); setWorkspaceLoading(false); setWorkspaceError(null); setVersionConflict(false); setPendingDedup(null);
     setError(null); setFormTopicInput(""); setFormTopicSuggestions([]);
     if (updateUrl) workspaceUrl("new", "edit");
     window.scrollTo({ top: 0, behavior: "instant" });
   };
+  const openNewTwin = (source: BankTask, updateUrl = true) => {
+    if (source.twin_source_id || source.deleted_at || !canLeave()) return;
+    if (!workspaceRef.current.open) listScroll.current = window.scrollY;
+    formGenerationRef.current += 1;
+    // The twin starts as a copy: the editor changes numbers and the answer, never the question type.
+    const next = { ...parseTaskToForm(source), currentVersion: null };
+    setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(source);
+    setShowForm(true); setWorkspaceMode("edit"); setWorkspaceLoading(false); setWorkspaceError(null); setVersionConflict(false); setPendingDedup(null);
+    setError(null); setFormTopicInput(""); setFormTopicSuggestions([]);
+    if (updateUrl) workspaceUrl("new", "edit", false, source.id);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const openNewTwinById = async (sourceId: number) => {
+    if (!email) return;
+    const { data, error: err } = await getAdminBankTask(sourceId, email);
+    if (!data || err) { setError(err || "Бастапқы есепті жүктеу мүмкін болмады."); return; }
+    openNewTwin(data, false);
+  };
+  const openSourceTask = (sourceId: number) => {
+    if (!canLeave()) return;
+    workspaceRef.current = { ...workspaceRef.current, dirty: false };
+    void openTask(sourceId, "twins");
+  };
   const cancelEditing = () => {
+    if (twinSource) { openSourceTask(twinSource.id); return; }
     if (!canLeave()) return;
     if (workspaceTask) { populateTask(workspaceTask, "view"); workspaceUrl(workspaceTask.id, "view", true); }
     else resetAndHideForm();
@@ -233,8 +264,8 @@ export default function BankWorkspace() {
     const { data } = await getAdminBankTask(current.id, email);
     if (generation === formGenerationRef.current && data && !workspaceRef.current.dirty) populateTask(data, workspaceRef.current.mode);
   };
-  const navigation = useRef({ openTask, openNewTask, resetAndHideForm });
-  navigation.current = { openTask, openNewTask, resetAndHideForm };
+  const navigation = useRef({ openTask, openNewTask, openNewTwinById, resetAndHideForm });
+  navigation.current = { openTask, openNewTask, openNewTwinById, resetAndHideForm };
   const initialized = useRef(false);
   useEffect(() => {
     if (!authorized || !preferences.ready) return;
@@ -248,7 +279,9 @@ export default function BankWorkspace() {
       if (current.dirty && !window.confirm("Сақталмаған өзгерістер бар. Өзгерістерді сақтамай шығу керек пе?")) { workspaceUrl(current.id ?? "new", current.mode); return; }
       // The dirty choice was handled above; the called open function reads the same ref.
       workspaceRef.current = { ...current, dirty: false };
-      if (target === "new") navigation.current.openNewTask(false);
+      const twinOf = params.get("twin_of");
+      if (target === "new" && twinOf && /^\d{1,15}$/.test(twinOf)) void navigation.current.openNewTwinById(Number(twinOf));
+      else if (target === "new") navigation.current.openNewTask(false);
       else if (target && /^\d{1,15}$/.test(target) && Number(target) > 0) void navigation.current.openTask(Number(target), mode, false);
       else if (current.open) navigation.current.resetAndHideForm(false);
     };
@@ -293,12 +326,14 @@ export default function BankWorkspace() {
       if (form.removeImage) body.append("remove_image", "true");
       if (dedupConfirmed) body.append("dedup_confirmed", "true");
       if (editingTaskId && form.currentVersion != null) body.append("expected_current_version", String(form.currentVersion));
-      const result = editingTaskId ? await updateAdminBankTask(editingTaskId, body, email) : await createAdminBankTask(body, email);
+      if (twinSource && !form.imageFile && !form.removeImage && form.existingImageFilename) body.append("keep_source_image", "true");
+      const result = editingTaskId ? await updateAdminBankTask(editingTaskId, body, email)
+        : twinSource ? await createAdminBankTwin(twinSource.id, body, email) : await createAdminBankTask(body, email);
       if (generation !== formGenerationRef.current) return;
       if (result.conflict?.code === "SIMILAR_TASKS_FOUND") { setPendingDedup({ similarTasks: result.conflict.similar_tasks || [] }); setError(result.conflict.message); return; }
       if (result.conflict?.code === "VERSION_CONFLICT") { setVersionConflict(true); setPendingDedup(null); return; }
       if (result.error || !result.data) { setError(result.error || "Есепті сақтау мүмкін болмады."); return; }
-      populateTask(result.data, "view"); workspaceUrl(result.data.id, "view", true); setImportResult(`Есеп #${result.data.id} сақталды.`);
+      populateTask(result.data, "view"); workspaceUrl(result.data.id, "view", true); setImportResult(twinSource ? `№${twinSource.id} есептің егізі #${result.data.id} сақталды.` : `Есеп #${result.data.id} сақталды.`);
       await Promise.all([fetchTasks(), fetchCatalog()]);
     } catch (err) { if (generation === formGenerationRef.current) setError(err instanceof Error ? err.message : "Есепті сақтау қатесі"); }
     finally { if (generation === formGenerationRef.current) setSaving(false); }
@@ -355,16 +390,19 @@ export default function BankWorkspace() {
         onRestore={(id) => void handleRestoreTask(id)} onDeletePermanently={(id) => void handlePermanentDeleteTask(id)} answersPanel={<UnrecognizedAnswersPanel email={email!} />} />
         : <section className={styles.taskShell} aria-label="Есеппен жұмыс">
           <button type="button" className={styles.back} onClick={() => { if (!busy && canLeave()) resetAndHideForm(); }} disabled={busy}><Icon name="arrowLeft" /> Есептер тізіміне</button>
-          <header className={styles.taskHeader}><div><h1>{editingTaskId ? `Банк №${editingTaskId}` : "Жаңа есеп"}</h1><p>{form.topics.length ? form.topics.join(" / ") : "Тақырып берілмеген"}{editingTaskId ? ` · v${form.currentVersion ?? "—"}` : ""}</p></div>
+          <header className={styles.taskHeader}><div><h1>{twinSource ? `№${twinSource.id} есептің жаңа егізі` : editingTaskId ? `Банк №${editingTaskId}` : "Жаңа есеп"}</h1><p>{form.topics.length ? form.topics.join(" / ") : "Тақырып берілмеген"}{editingTaskId ? ` · v${form.currentVersion ?? "—"}` : ""}</p></div>
             <div className={styles.actions}><span className={styles.level}>{form.difficulty}</span><span className={styles.subtitle}>{questionTypeLabel(form.question_type)}</span>
               {workspaceTask && <details className={styles.menu}><summary className={styles.button}>Әрекеттер <Icon name="chevronDown" /></summary><div className={styles.menuPanel}>
                 <button type="button" className={styles.quiet} disabled={busy} onClick={() => void openHistory(workspaceTask)}><Icon name="clock" /> Тарих</button>
                 <button type="button" className={styles.quiet} disabled={busy} onClick={() => void openUsage(workspaceTask)}><Icon name="share" /> Қай жерде қолданылады</button>
+                {!workspaceTask.deleted_at && !workspaceTask.twin_source_id && <button type="button" className={styles.quiet} disabled={busy} onClick={() => openNewTwin(workspaceTask)}><Icon name="copy" /> Егіз жасау</button>}
                 {workspaceTask.deleted_at ? <><button type="button" className={styles.quiet} disabled={busy} onClick={() => void handleRestoreTask(workspaceTask.id)}>Қалпына келтіру</button>{hasSuperAccess(access?.role) && <button type="button" className={styles.danger} disabled={busy} onClick={() => void handlePermanentDeleteTask(workspaceTask.id)}>Біржола жою</button>}</> : <button type="button" className={styles.danger} disabled={busy} onClick={() => void handleDeleteTask(workspaceTask.id)}><Icon name="trash" /> Себетке</button>}
               </div></details>}
             </div>
           </header>
-          <nav className={styles.tabs} aria-label="Есеп режимдері">{[{ mode: "view", label: "Есеп" }, { mode: "edit", label: "Өңдеу" }, { mode: "student", label: "Оқушы көрінісі" }].map(({ mode, label }) => <button type="button" key={mode} className={styles.tab} aria-pressed={workspaceMode === mode} disabled={busy || !!workspaceError || (mode === "view" && !workspaceTask) || (mode === "edit" && !!workspaceTask?.deleted_at)} onClick={() => switchMode(mode as WorkspaceMode)}>{label}</button>)}{isDirty && <span className={styles.dirty}>Сақталмаған өзгеріс</span>}</nav>
+          {twinSource && <div className={styles.twinBanner}><span>Бұл есеп №{twinSource.id} есептің егізі болады. Сұрақ түрі өзгермейді: сандарды және жауапты өзгертіңіз.</span><button type="button" className={styles.button} disabled={busy} onClick={() => openSourceTask(twinSource.id)}>Бастапқы есеп</button></div>}
+          {workspaceTask?.twin_source_id && <div className={styles.twinBanner}><span>Бұл — №{workspaceTask.twin_source_id} есептің егізі. Кітапханада көрсетілмейді, оқушыға тек қателерді талдауда беріледі.</span><button type="button" className={styles.button} disabled={busy} onClick={() => openSourceTask(workspaceTask.twin_source_id!)}>Бастапқы есепті ашу</button></div>}
+          <nav className={styles.tabs} aria-label="Есеп режимдері">{[{ mode: "view", label: "Есеп" }, { mode: "edit", label: "Өңдеу" }, { mode: "student", label: "Оқушы көрінісі" }, ...(workspaceTask && !workspaceTask.twin_source_id ? [{ mode: "twins", label: `Егіздер (${workspaceTask.twin_count ?? 0})` }] : [])].map(({ mode, label }) => <button type="button" key={mode} className={styles.tab} aria-pressed={workspaceMode === mode} disabled={busy || !!workspaceError || (mode === "view" && !workspaceTask) || (mode === "edit" && !!workspaceTask?.deleted_at)} onClick={() => switchMode(mode as WorkspaceMode)}>{label}</button>)}{isDirty && <span className={styles.dirty}>Сақталмаған өзгеріс</span>}</nav>
           {workspaceLoading ? <div className={styles.loading}>Есеп жүктелуде...</div> : workspaceError ? <div role="alert" className={styles.alert}>{workspaceError}<br /><button type="button" className={styles.button} onClick={() => editingTaskId && void openTask(editingTaskId, workspaceMode, false)}>Қайта жүктеу</button></div> : <>
             {workspaceTask?.deleted_at && <div className={styles.alert}>Есеп себетте. Өңдеу үшін оны қалпына келтіріңіз.</div>}
             {workspaceMode === "view" && previewTask && <><BankTaskDetail task={previewTask} imageSrc={imageSrc} /><footer className={styles.taskFooter}><p>Қолданыста: {workspaceTask?.active_usage_count ?? 0} · Таңдау мен сүзгілер тізімге қайтқанда сақталады</p><div className={styles.actions}>{!workspaceTask?.deleted_at && <><button type="button" className={styles.button} onClick={() => worksheet.toggle(workspaceTask!)}>{worksheet.selected.some((task) => task.id === editingTaskId) ? "PDF таңдауынан алу" : "PDF үшін таңдау"}</button><button type="button" className={styles.primary} onClick={() => switchMode("edit")}><Icon name="edit" /> Есепті өңдеу</button></>}</div></footer></>}
@@ -372,7 +410,9 @@ export default function BankWorkspace() {
               handleSubmitForm={async (event) => { event.preventDefault(); await submitBankForm(); }} removeFormTopic={(topic) => setForm((previous) => ({ ...previous, topics: previous.topics.filter((value) => value !== topic) }))}
               formTopicInput={formTopicInput} setFormTopicInput={setFormTopicInput} addFormTopic={addFormTopic} formTopicSuggestions={formTopicSuggestions}
               formPreviewTask={formPreviewTask} formImagePreview={formImagePreview} saving={saving} versionConflict={versionConflict} reloading={reloadingForm}
-              reloadTask={reloadConflictedForm} resetAndHideForm={cancelEditing} className={styles.form} hidePreview />}
+              reloadTask={reloadConflictedForm} resetAndHideForm={cancelEditing} className={styles.form} hidePreview lockQuestionType={!!twinSource} />}
+            {workspaceMode === "twins" && workspaceTask && !workspaceTask.twin_source_id && email && <BankTwinsPanel source={workspaceTask} email={email} busy={busy}
+              onCreate={() => openNewTwin(workspaceTask)} onOpen={(twin, mode) => void openTask(twin, mode)} onDelete={(twin) => void handleDeleteTask(twin.id)} />}
             {workspaceMode === "student" && <StudentTaskPreview task={formPreviewTask} imageSrc={imageSrc} initialViewport="desktop" className={styles.studentPreview}
               onTextScaleChange={workspaceTask?.deleted_at ? undefined : (text_scale) => setForm((previous) => ({ ...previous, text_scale }))} />}
           </>}

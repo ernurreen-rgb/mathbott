@@ -241,6 +241,7 @@ function pathRequiresProxyUserEmail(pathSegments: string[]): boolean {
     "/api/export/admin/",
     "/api/export/user/",
     "/api/friends",
+    "/api/mini-lessons",
     "/api/presence",
     "/api/reports",
     "/api/task/check",

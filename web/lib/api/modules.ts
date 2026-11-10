@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { Module, ModuleDetails, LessonDetails } from "@/types";
+import { Module, ModuleDetails, LessonDetails, MiniLessonReview, MiniLessonReviewAnswerResult } from "@/types";
 
 
 // Module System API
@@ -24,4 +24,25 @@ export async function getLessonDetails(lessonId: number, email?: string): Promis
     ? `${apiPath(`lessons/${lessonId}`)}?email=${encodeURIComponent(email)}`
     : apiPath(`lessons/${lessonId}`);
   return fetchWithErrorHandling<LessonDetails>(url);
+}
+
+
+// Mistake review (Қателерді талдау): the proxy replaces the email with the signed-in account.
+export async function getMiniLessonReview(miniLessonId: number, email: string) {
+  return fetchWithErrorHandling<MiniLessonReview>(
+    `${apiPath(`mini-lessons/${miniLessonId}/review`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
+  );
+}
+
+
+export async function submitMiniLessonReviewAnswer(
+  miniLessonId: number,
+  payload: { task_id: number; bank_task_id: number; answer: string },
+  email: string
+) {
+  return fetchWithErrorHandling<MiniLessonReviewAnswerResult>(
+    `${apiPath(`mini-lessons/${miniLessonId}/review/answers`)}?email=${encodeURIComponent(email)}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+  );
 }

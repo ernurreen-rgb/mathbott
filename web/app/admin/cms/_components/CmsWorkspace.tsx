@@ -515,6 +515,9 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                     <div className={styles.taskToolbar}>
                       <div>
                         <h2 className={styles.taskTitle}>Тапсырмалар <span className={styles.count}>{miniTasks.length}</span></h2>
+                        {miniTasks.length > 0 && <p className={styles.count} title="Қателерді талдауда егізі бар есептің орнына егіз беріледі, егізі жоқ есеп қайталанады. Егізді банктегі есептің «Егіздер» бөлімінде қосыңыз.">
+                          Егізі бар есептер: {miniTasks.filter((task) => (task.twin_count ?? 0) > 0).length} / {miniTasks.length}
+                        </p>}
                       </div>
                       <div className={styles.actions}>
                         <button type="button" className={styles.primaryButton}

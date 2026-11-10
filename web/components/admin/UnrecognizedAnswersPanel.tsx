@@ -17,6 +17,7 @@ const SOURCE_LABELS: Record<BankAnswerSource, string> = {
   lesson: "Сабақ",
   trial_test: "Пробный тест",
   trial_test_coop: "Бірлескен тест",
+  module_review: "Қателерді талдау",
 };
 
 const formatDateTime = (value: string): string => {

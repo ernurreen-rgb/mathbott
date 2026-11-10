@@ -52,6 +52,8 @@ export interface MiniLessonTask {
   bank_task_id?: number | null;
   bank_difficulty?: "A" | "B" | "C" | null;
   bank_topics?: string[];
+  /** Approved twins of the bank task, served by mistake review. */
+  twin_count?: number;
   text_scale?: TaskTextScale | null;
 }
 

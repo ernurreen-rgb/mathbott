@@ -11,6 +11,7 @@ export interface BankCatalogResponse {
   trash_total: number;
   unused_total: number;
   no_topics_total: number;
+  twins_total?: number;
   topics: Array<{ id: number; name: string; task_count: number }>;
   topics_total: number;
   has_more_topics: boolean;
@@ -39,6 +40,18 @@ export interface BankTask {
   deleted_at?: string | null;
   current_version?: number;
   active_usage_count?: number;
+  /** Source bank task when this task is a twin used by module mistake review. */
+  twin_source_id?: number | null;
+  /** Approved, active twins of this task. */
+  twin_count?: number;
+}
+
+export type BankTwinsFilter = "exclude" | "only";
+
+export interface BankTaskTwinsResponse {
+  source_id: number;
+  twin_source_id: number | null;
+  items: BankTask[];
 }
 
 
@@ -51,7 +64,7 @@ export interface BankTaskListResponse {
 }
 
 
-export type BankAnswerSource = "lesson" | "trial_test" | "trial_test_coop";
+export type BankAnswerSource = "lesson" | "trial_test" | "trial_test_coop" | "module_review";
 
 
 export interface BankUnrecognizedAnswerItem {

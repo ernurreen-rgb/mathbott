@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
-import type { BankCatalogResponse, BankTaskSort, BankTaskUsageFilter, QuestionType } from "@/types";
+import type { BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
 import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
@@ -87,6 +87,7 @@ export async function getAdminBankTasks(
     hasTopics?: boolean;
     topicMatch?: "any" | "all";
     sort?: BankTaskSort;
+    twins?: BankTwinsFilter;
   }
 ): Promise<{ data: BankTaskListResponse | null; error: string | null }> {
   const search = params?.search?.trim();
@@ -109,6 +110,7 @@ export async function getAdminBankTasks(
   if (params?.hasTopics !== undefined) query.set("has_topics", String(params.hasTopics));
   if (params?.topicMatch) query.set("topic_match", params.topicMatch);
   if (params?.sort) query.set("sort", params.sort);
+  if (params?.twins && params.twins !== "exclude" && !trash) query.set("twins", params.twins);
 
   return fetchWithErrorHandling<BankTaskListResponse>(
     `${apiPath(endpoint)}?${query.toString()}`,
@@ -270,6 +272,27 @@ export async function createAdminBankTask(
 ): Promise<{ data: BankTask | null; error: string | null; conflict: BankMutationConflict | null }> {
   formData.append("email", email);
   return mutateBankTask(apiPath("admin/bank/tasks"), "POST", formData);
+}
+
+
+export async function getAdminBankTaskTwins(
+  taskId: number,
+  email: string
+): Promise<{ data: BankTaskTwinsResponse | null; error: string | null }> {
+  return fetchWithErrorHandling<BankTaskTwinsResponse>(
+    `${apiPath(`admin/bank/tasks/${taskId}/twins`)}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
+  );
+}
+
+
+export async function createAdminBankTwin(
+  sourceTaskId: number,
+  formData: FormData,
+  email: string
+): Promise<{ data: BankTask | null; error: string | null; conflict: BankMutationConflict | null }> {
+  formData.append("email", email);
+  return mutateBankTask(apiPath(`admin/bank/tasks/${sourceTaskId}/twins`), "POST", formData);
 }
 
 

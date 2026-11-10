@@ -73,6 +73,7 @@ def _is_sensitive_identity_path(path: str) -> bool:
         "/api/export/admin/",
         "/api/export/user/",
         "/api/friends",
+        "/api/mini-lessons",
         "/api/presence",
         "/api/reports",
         "/api/task/check",

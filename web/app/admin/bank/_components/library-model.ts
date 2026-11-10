@@ -1,4 +1,4 @@
-import type { BankDifficulty, BankTaskSort, BankTaskUsageFilter, QuestionType } from "@/types";
+import type { BankDifficulty, BankTaskSort, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
 
 export type BankLibraryFilters = {
   search: string;
@@ -9,13 +9,15 @@ export type BankLibraryFilters = {
   topics: string[];
   topicMatch: "any" | "all";
   sort: BankTaskSort;
+  /** Twins live under their source task; "only" lists them for maintenance. */
+  twins: BankTwinsFilter;
   limit: number;
   offset: number;
 };
 export type BankSavedView = { id: string; name: string; filters: BankLibraryFilters };
 export const emptyLibraryFilters = (): BankLibraryFilters => ({
   search: "", difficulty: "", questionType: "", usage: "all", hasTopics: "", topics: [],
-  topicMatch: "any", sort: "newest", limit: 50, offset: 0,
+  topicMatch: "any", sort: "newest", twins: "exclude", limit: 50, offset: 0,
 });
 export const questionTypeLabel = (type: string) => ({ input: "Жазбаша", tf: "Шын / Жалған", mcq: "4 нұсқа", mcq6: "6 нұсқа", select: "Сәйкестендіру" })[type] || type;
 
@@ -32,6 +34,7 @@ export function readLibraryFilters(value: unknown): BankLibraryFilters {
     topics: Array.isArray(raw.topics) ? Array.from(new Set(raw.topics.filter((t): t is string => typeof t === "string" && !!t.trim() && t.length <= 64))).slice(0, 20) : [],
     topicMatch: raw.topicMatch === "all" ? "all" : "any",
     sort: raw.sort === "oldest" || raw.sort === "updated" ? raw.sort : "newest",
+    twins: raw.twins === "only" ? "only" : "exclude",
     limit: [20, 50, 100].includes(Number(raw.limit)) ? Number(raw.limit) : defaults.limit,
     offset: typeof raw.offset === "number" && Number.isInteger(raw.offset) && raw.offset >= 0 ? raw.offset : 0,
   };

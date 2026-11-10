@@ -27,6 +27,7 @@ from repositories.friends_repository import FriendsRepository
 from repositories.ops_repository import OpsRepository
 from repositories.onboarding_repository import OnboardingRepository
 from repositories.quiz_repository import QuizRepository
+from repositories.module_review_repository import ModuleReviewRepository
 from utils.connection_pool import ConnectionPool
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class Database:
         self.ops = OpsRepository(db_path, connection_pool=self.connection_pool)
         self.onboarding = OnboardingRepository(db_path, connection_pool=self.connection_pool)
         self.quizzes = QuizRepository(db_path, connection_pool=self.connection_pool)
+        self.module_review = ModuleReviewRepository(db_path, connection_pool=self.connection_pool)
 
     async def _configure_connection(self, db: db_driver.Connection) -> None:
         # Improve concurrency (readers don't block writers as much)
