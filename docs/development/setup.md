@@ -69,6 +69,10 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `ALERT_TELEGRAM_ENABLED` | `false` | Optional | Enables Telegram delivery for operational alerts. |
 | `ALERT_TELEGRAM_BOT_TOKEN` | `""` | When Telegram alerts on | Telegram Bot API token for ops alerts. |
 | `ALERT_TELEGRAM_CHAT_ID` | `""` | When Telegram alerts on | Target Telegram chat ID for ops alerts. |
+| `AI_TWIN_BASE_URL` | `""` | Optional | Base URL of an OpenAI-compatible Chat Completions API (e.g. `https://api.openai.com/v1`) for AI twin drafts. |
+| `AI_TWIN_API_KEY` | `""` | With AI drafts | API key of that provider; stays on the server. |
+| `AI_TWIN_MODEL` | `""` | With AI drafts | Model id with JSON mode. AI drafts stay off until all three `AI_TWIN_*` values are set. |
+| `AI_TWIN_TIMEOUT_SECONDS` | `45` | Optional | Provider request timeout (`5`–`55`), kept under the 60-second Vercel function limit. |
 | `OPS_HEALTH_SAMPLE_RETENTION_DAYS` | `30` | No | Retention window for `ops_health_samples`. |
 | `OPS_INCIDENT_RETENTION_DAYS` | `365` | No | Retention window for resolved rows in `ops_incidents`. |
 
@@ -112,7 +116,7 @@ python main.py
 On startup (`lifespan` in [`bot/app.py`](../../bot/app.py)):
 1. [`bot/instrument.py`](../../bot/instrument.py) loads `bot/.env.local` and `bot/.env`.
 2. `validate_configuration()` validates runtime settings.
-3. When `migrate_on_startup` is true (default outside Vercel), `run_migrations()` applies SQLite Alembic migrations up to `0014_trial_test_folders` (or PostgreSQL SQL migrations `0001`–`0007` when `DATABASE_URL` is set) and runs `ensure_initial_data()`.
+3. When `migrate_on_startup` is true (default outside Vercel), `run_migrations()` applies SQLite Alembic migrations up to `0016_ai_twin_checks` (or PostgreSQL SQL migrations `0001`–`0009` when `DATABASE_URL` is set) and runs `ensure_initial_data()`.
 4. Verify health at `http://localhost:8000/api/health`.
 
 ### 3.2 Start the Frontend (`web/`)

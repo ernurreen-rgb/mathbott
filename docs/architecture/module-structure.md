@@ -61,6 +61,7 @@ Middlewares are registered in [`bot/app.py`](../../bot/app.py). In Starlette/Fas
 | [`onboarding.py`](../../bot/routes/onboarding.py) | `GET /api/user/onboarding/status` and `POST /api/user/onboarding`. |
 | [`modules.py`](../../bot/routes/modules.py) | `GET /api/modules/map`, `GET /api/modules/{module_id}`, `GET /api/lessons/{lesson_id}`. |
 | [`tasks.py`](../../bot/routes/tasks.py) | `GET /api/tasks/{task_id}` and `POST /api/task/check` (grades module/mini-lesson tasks, updates streaks, progress, and achievements). |
+| [`module_review.py`](../../bot/routes/module_review.py) | Mistake review after a mini-lesson: `GET /api/mini-lessons/{id}/review` and `POST /api/mini-lessons/{id}/review/answers`. |
 | [`questions.py`](../../bot/routes/questions.py) | Legacy subquestion endpoints: `GET /api/tasks/{task_id}/questions` and `POST /api/tasks/{task_id}/questions/check`. |
 | [`trial_tests.py`](../../bot/routes/trial_tests.py) | Solo trial test catalog, nested folder tree (`GET /api/trial-tests/folders`), test details, draft save/load (`/draft`), submission (`/submit`), and history (`/results`). |
 | [`trial_tests_coop.py`](../../bot/routes/trial_tests_coop.py) | Cooperative 2-player trial test sessions, invites, answer synchronization, finish grading, results access, and `/ws/trial-tests/coop/{session_id}` WebSocket. |
@@ -87,6 +88,8 @@ Middlewares are registered in [`bot/app.py`](../../bot/app.py). In Starlette/Fas
 | [`reports.py`](../../bot/routes/admin/reports.py) | Admin moderation of curriculum and trial test reports, plus inline task updates (`PUT /api/admin/reports/tasks/{task_id}`). |
 | [`statistics.py`](../../bot/routes/admin/statistics.py) | Platform-wide statistics (`GET /api/admin/statistics`). |
 | [`ops.py`](../../bot/routes/admin/ops.py) | `super_admin` operational health summary, time-series charts, and incident feed (`/api/admin/ops/*`). |
+| [`bank_twins.py`](../../bot/routes/admin/bank_twins.py) | Twin tasks of a bank task (list, manual create) and AI twin drafts (status, generate, independent re-solve check, approve). |
+| [`mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py) | Read-only mistake analytics for every admin role (`GET /api/admin/mistake-analytics`). |
 
 ### 2.4 Repositories (`bot/repositories/`)
 
@@ -95,7 +98,8 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 | Repository | Underlying Mixins / Files | Primary Tables Managed |
 | :--- | :--- | :--- |
 | `UserRepository` | [`user_repository.py`](../../bot/repositories/user_repository.py) | `users`, `admin_audit_logs` |
-| `BankTaskRepository` | [`bank_task_repository.py`](../../bot/repositories/bank_task_repository.py) + [`bank/crud.py`](../../bot/repositories/bank/crud.py), [`bank/catalog.py`](../../bot/repositories/bank/catalog.py), [`bank/versions.py`](../../bot/repositories/bank/versions.py), [`bank/quality.py`](../../bot/repositories/bank/quality.py), [`bank/similarity.py`](../../bot/repositories/bank/similarity.py), [`bank/audit.py`](../../bot/repositories/bank/audit.py), [`bank/unrecognized_answers.py`](../../bot/repositories/bank/unrecognized_answers.py), [`bank/helpers.py`](../../bot/repositories/bank/helpers.py) | `bank_tasks`, `bank_topics`, `bank_task_topic_map`, `bank_task_versions`, `admin_audit_logs` |
+| `BankTaskRepository` | [`bank_task_repository.py`](../../bot/repositories/bank_task_repository.py) + [`bank/crud.py`](../../bot/repositories/bank/crud.py), [`bank/catalog.py`](../../bot/repositories/bank/catalog.py), [`bank/versions.py`](../../bot/repositories/bank/versions.py), [`bank/quality.py`](../../bot/repositories/bank/quality.py), [`bank/similarity.py`](../../bot/repositories/bank/similarity.py), [`bank/audit.py`](../../bot/repositories/bank/audit.py), [`bank/unrecognized_answers.py`](../../bot/repositories/bank/unrecognized_answers.py), [`bank/twins.py`](../../bot/repositories/bank/twins.py), [`bank/helpers.py`](../../bot/repositories/bank/helpers.py) | `bank_tasks`, `bank_topics`, `bank_task_topic_map`, `bank_task_versions`, `bank_task_twins`, `admin_audit_logs` |
+| `ModuleReviewRepository` | [`module_review_repository.py`](../../bot/repositories/module_review_repository.py) | `module_review_attempts`; reads `solutions`, `user_progress` and `bank_task_twins` for mistake review and mistake analytics |
 | `CurriculumRepository` | [`curriculum_repository.py`](../../bot/repositories/curriculum_repository.py) | `modules`, `sections`, `lessons`, `mini_lessons` |
 | `TaskRepository` | [`task_repository.py`](../../bot/repositories/task_repository.py) | `tasks`, `user_task_question_progress`, `user_task_completions` |
 | `ProgressRepository` | [`progress_repository.py`](../../bot/repositories/progress_repository.py) | `user_progress`, `user_task_completions` |
@@ -121,6 +125,8 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 - **Security & Payload Filtering (`bot/utils/`):**
   - [`public_payload.py`](../../bot/utils/public_payload.py) — Whitelists student-facing `options` (`label`, `text`) and `subquestions` so answer keys and authoring metadata never leak before submission.
   - [`internal_proxy_auth.py`](../../bot/utils/internal_proxy_auth.py), [`quiz_entry_auth.py`](../../bot/utils/quiz_entry_auth.py), [`quiz_ws_auth.py`](../../bot/utils/quiz_ws_auth.py) — HMAC signature verification for proxy requests, quiz entry quotas, and WebSocket tokens.
+- **AI Twin Drafts (`bot/services/`):**
+  - [`ai_twins.py`](../../bot/services/ai_twins.py) — Provider-neutral client for OpenAI-compatible Chat Completions (`AI_TWIN_*` settings): generates number-only twin drafts and re-solves a task without its answer; validates output with Pydantic.
 - **Migrations & Operational Scripts (`bot/migrations/` & `bot/scripts/`):**
   - [`migrations/runner.py`](../../bot/migrations/runner.py) & [`migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) — Migration runners for SQLite (Alembic) and PostgreSQL (checksum-verified SQL).
   - [`migrations/sqlite_to_postgres.py`](../../bot/migrations/sqlite_to_postgres.py) & [`scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) — Transactional SQLite-to-PostgreSQL snapshot importer with row-count and multiset SHA-256 verification.
@@ -138,6 +144,7 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 | :--- | :--- | :--- | :--- |
 | `/` | [`app/page.tsx`](../../web/app/page.tsx) | Public / Student | Landing / dashboard redirect and onboarding entry. |
 | `/modules`, `/modules/[id]`, `/lessons/[id]` | [`app/modules/page.tsx`](../../web/app/modules/page.tsx), [`app/modules/[id]/page.tsx`](../../web/app/modules/[id]/page.tsx), [`app/lessons/[id]/page.tsx`](../../web/app/lessons/[id]/page.tsx) | Student | Curriculum map (gated by `NEXT_PUBLIC_MODULES_UI_ENABLED`), module detail, and interactive mini-lesson player. |
+| `/lessons/[id]/review/[miniId]` | [`app/lessons/[id]/review/[miniId]/page.tsx`](../../web/app/lessons/[id]/review/[miniId]/page.tsx) | Authenticated Student | Mistake review on twin tasks after a mini-lesson; does not change lesson progress. |
 | `/trial-test`, `/trial-test/history`, `/trial-test/[id]`, `/trial-test/[id]/results` | [`app/trial-test/page.tsx`](../../web/app/trial-test/page.tsx), [`app/trial-test/[id]/page.tsx`](../../web/app/trial-test/[id]/page.tsx), [`app/trial-test/[id]/results/page.tsx`](../../web/app/trial-test/[id]/results/page.tsx) | Student | Nested folder browser, solo timed trial test player with draft autosave, and post-submission review. |
 | `/trial-test/[id]/coop/[sessionId]`, `.../results` | [`app/trial-test/[id]/coop/[sessionId]/page.tsx`](../../web/app/trial-test/[id]/coop/[sessionId]/page.tsx) | Student | 2-player cooperative trial test workspace and comparative results view. |
 | `/quizzes`, `/quizzes/create`, `/quizzes/[id]`, `/quizzes/[id]/edit` | [`app/quizzes/page.tsx`](../../web/app/quizzes/page.tsx), [`app/quizzes/_components/QuizEditor.tsx`](../../web/app/quizzes/_components/QuizEditor.tsx) | Public / Host | Quiz catalog, creation/editing workspace, and session launcher. |
@@ -148,6 +155,7 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 | `/admin/cms/**` | [`app/admin/cms/_components/CmsWorkspace.tsx`](../../web/app/admin/cms/_components/CmsWorkspace.tsx) | `content_manage` | Hierarchical curriculum editor (`Modules -> Sections -> Lessons -> Mini-lessons -> Tasks`). |
 | `/admin/trial-tests/**` | [`app/admin/trial-tests/_components/TrialTestsCatalog.tsx`](../../web/app/admin/trial-tests/_components/TrialTestsCatalog.tsx), [`TrialTestWorkspace.tsx`](../../web/app/admin/trial-tests/_components/TrialTestWorkspace.tsx) | `content_manage` | Nested folder management (`folder/[folderId]`) and 40-slot trial test composer. |
 | `/admin/reports`, `/admin/statistics`, `/admin/roles`, `/admin/ops`, `/admin/guides` | [`app/admin/reports/page.tsx`](../../web/app/admin/reports/page.tsx), [`app/admin/roles/page.tsx`](../../web/app/admin/roles/page.tsx), [`app/admin/ops/page.tsx`](../../web/app/admin/ops/page.tsx) | Role-gated | Issue report moderation, platform analytics, `super_admin` role manager, ops health dashboard, and authoring guides. |
+| `/admin/mistakes` | [`app/admin/mistakes/page.tsx`](../../web/app/admin/mistakes/page.tsx) | Any Admin | Mistake analytics: first-attempt mistakes by task, topic and student, review outcomes and twin coverage. |
 | `/api/auth/[...nextauth]` | [`app/api/auth/[...nextauth]/route.ts`](../../web/app/api/auth/[...nextauth]/route.ts) | Public | NextAuth Google OAuth and JWT session handler. |
 | `/api/backend/[...path]` | [`app/api/backend/[...path]/route.ts`](../../web/app/api/backend/[...path]/route.ts) | Proxy Boundary | Authenticates, normalizes, signs (HMAC V2), and forwards requests to FastAPI. |
 

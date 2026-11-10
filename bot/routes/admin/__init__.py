@@ -11,6 +11,7 @@ from .content import register_content_routes
 from .trial_tests import register_trial_tests_routes
 from .bank import register_bank_routes
 from .bank_twins import register_bank_twin_routes
+from .mistake_analytics import register_mistake_analytics_routes
 from .reports import register_reports_routes
 from .ops import register_ops_routes
 from .statistics import register_statistics_routes
@@ -24,6 +25,7 @@ def setup_admin_routes(app: FastAPI, db: Database, limiter: Limiter):
     register_trial_tests_routes(app, db, limiter)
     register_bank_routes(app, db, limiter)
     register_bank_twin_routes(app, db, limiter)
+    register_mistake_analytics_routes(app, db, limiter)
     register_reports_routes(app, db, limiter)
     register_ops_routes(app, db, limiter)
     register_statistics_routes(app, db, limiter)

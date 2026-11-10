@@ -1,6 +1,6 @@
 # Implemented Features
 
-This document inventories all features that are **currently implemented and active** in the codebase (`HEAD = d1d83b3`), mapped directly to their backend routes, repositories, and frontend pages.
+This document inventories all features that are **currently implemented and active** in the codebase (last reviewed 2026-11-10, after mistake review, twin tasks, AI twin drafts and mistake analytics), mapped directly to their backend routes, repositories, and frontend pages.
 
 ---
 
@@ -15,8 +15,10 @@ This document inventories all features that are **currently implemented and acti
     - `tf` (True/False)
 - **Progress Tracking (`user_progress`, `user_task_completions`)**:
   - Submitting a correct answer via `POST /api/task/check` ([`bot/routes/tasks.py`](../../bot/routes/tasks.py)) records completion in `user_progress` and `user_task_completions` ([`bot/repositories/progress_repository.py`](../../bot/repositories/progress_repository.py)) and updates module/section/lesson completion percentages (`GET /api/modules/map`, `GET /api/modules/{module_id}`, `GET /api/lessons/{lesson_id}`).
+- **Mistake Review after a Mini-Lesson**:
+  - Tasks answered wrong on the first attempt are re-practised on number-only twin tasks once the mini-lesson task is solved (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)).
 - **Note on `/modules` UI Availability**:
-  - While the curriculum backend and student lesson player (`/lessons/[id]`) are implemented, the `/modules` map entry page (`web/app/modules/page.tsx`) is currently behind the `NEXT_PUBLIC_MODULES_UI_ENABLED` build/env flag (see [Planned & Flagged Features](planned-features.md)).
+  - The `/modules` map entry page (`web/app/modules/page.tsx`) is enabled by default; setting `NEXT_PUBLIC_MODULES_UI_ENABLED=false` at build time shows a blurred preview instead (see [Planned & Flagged Features](planned-features.md)).
 
 ---
 
@@ -96,6 +98,8 @@ Implemented in [`bot/routes/admin/bank.py`](../../bot/routes/admin/bank.py), [`b
   - `POST /api/admin/bank/tasks/similar` and `POST /api/admin/bank/tasks/import` detect near-duplicate tasks (`SequenceMatcher`) and use stateless HMAC-signed preview tokens (`bot/routes/admin/import_tokens.py`).
 - **Quality & Audit Dashboards (`/admin/bank/quality`, `/admin/bank/audit`)**:
   - Surfaces unused ("dead") tasks, tasks missing topics, duplicate clusters, unrecognized student answers, and bank audit history.
+- **Twin Tasks (Егіздер)**:
+  - Each task workspace has a **Twins** tab for number-only variants used by mistake review, created manually or as AI drafts (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)). Twins are hidden from the library, task pickers, catalog counts and quality reports; the catalog's **Twin tasks** entry lists them.
 - **Client-Side Printable PDF Worksheet Export**:
   - Admins select up to 100 tasks across pages/filters, reorder them in [`BankWorksheetDialog.tsx`](../../web/components/admin/BankWorksheetDialog.tsx), and download a multi-page A4 `.pdf` generated client-side via `html-to-image` + `pdf-lib` (`web/lib/export-bank-worksheet.ts`) with MathLive formulas and embedded images, without exposing answer keys.
 
@@ -111,3 +115,34 @@ Implemented in [`bot/routes/admin/bank.py`](../../bot/routes/admin/bank.py), [`b
   - `super_admin` assignment and emergency bootstrap recovery (`POST /api/admin/roles/restore`) across `super_admin`, `content_editor`, and `reviewer` roles.
 - **Platform Statistics & Ops Health Monitor** (`/admin/statistics`, `/admin/ops`, [`bot/routes/admin/statistics.py`](../../bot/routes/admin/statistics.py), [`bot/routes/admin/ops.py`](../../bot/routes/admin/ops.py)):
   - Platform analytics, CSV/JSON exports (`/api/export/admin/stats`), rolling latency/error metrics (`ops_health_samples`), deduplicated incidents (`ops_incidents`), and optional Telegram alerts (`bot/utils/alerts.py`).
+- **Mistake Analytics** (`/admin/mistakes`): first-attempt mistakes by task, topic and student, with review outcomes and twin coverage (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)).
+
+---
+
+## 9. Mistake Review, Twin Tasks, AI Drafts & Mistake Analytics
+
+### 9.1 Mistake Review for Students (`/lessons/[id]/review/[miniId]`)
+Implemented in [`bot/routes/module_review.py`](../../bot/routes/module_review.py), [`bot/repositories/module_review_repository.py`](../../bot/repositories/module_review_repository.py) and [`web/app/lessons/[id]/review/[miniId]/page.tsx`](../../web/app/lessons/[id]/review/[miniId]/page.tsx):
+- **What is reviewed**: a mini-lesson task whose **first** recorded attempt in `solutions` was wrong and which the student has since solved (`user_progress.status = 'completed'`). This works retroactively for lessons solved before the feature existed.
+- **What is served**: the next approved twin the student has not seen yet, in twin order; when a task has no twins, the original task once. A wrong answer shows the correct answer and the solution image (if any) and offers the next twin; with no twins left the task becomes a **weak spot** (`weak`). Statuses: `pending`, `resolved`, `weak`.
+- **No effect on progress**: attempts are stored in `module_review_attempts`, never in `solutions`, so lesson progress, solved counters, streaks and achievements do not change.
+- **Lesson page**: completed mini-lessons with unreviewed mistakes show a badge and a **Талдауды бастау** card; finishing the last task stops on the completion screen to offer the review, and a completed lesson offers the review instead of redirecting. The lesson back button opens the parent module section.
+- **API**: `GET /api/mini-lessons/{mini_lesson_id}/review` and `POST /api/mini-lessons/{mini_lesson_id}/review/answers` (the server accepts an answer only for the twin it currently serves, otherwise `409`); `GET /api/lessons/{lesson_id}` includes a `review` summary per mini-lesson.
+
+### 9.2 Twin Tasks in the Bank
+Implemented in [`bot/repositories/bank/twins.py`](../../bot/repositories/bank/twins.py), [`bot/routes/admin/bank_twins.py`](../../bot/routes/admin/bank_twins.py) and [`BankTwinsPanel.tsx`](../../web/app/admin/bank/_components/BankTwinsPanel.tsx):
+- A twin is an ordinary bank task linked to exactly one source in `bank_task_twins`; twins of twins are refused, the question type must match the source, and a copy identical to the source (text, answer, options, sub-questions, no new image) is refused.
+- **Create twin** opens the editor pre-filled from the source with the question type locked; topics, difficulty and the source image are copied. Twins are edited, versioned and moved to trash like any bank task; permanently deleting a source moves its active twins to trash.
+- The CMS mini-lesson view shows how many tasks have twins (`twin_count` on `GET /api/admin/mini-lessons/{id}/tasks`), and wrong answers on twins appear in **Unrecognized answers** with the source `module_review`.
+
+### 9.3 AI Twin Drafts (optional)
+Implemented in [`bot/services/ai_twins.py`](../../bot/services/ai_twins.py):
+- Works with any provider that speaks the OpenAI Chat Completions format (JSON mode). It is **off** until `AI_TWIN_BASE_URL`, `AI_TWIN_API_KEY` and `AI_TWIN_MODEL` are all set on the API (see [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md#ai-twin-drafts)); the key never reaches the browser.
+- `POST /api/admin/bank/tasks/{task_id}/twins/ai-drafts` (content editors, 20 per hour) asks for three number-only twins and stores those that pass the bank's own payload rules as **drafts** (`status = 'draft'`, `origin = 'ai'`); drafts are never served to students. Tasks with an image are refused because numbers may be drawn in the picture.
+- Every draft is then re-solved by a separate request that does not see the draft's answer (`POST /api/admin/bank/tasks/{task_id}/ai-check`, 120 per hour); the platform's answer checker compares the two and stores `match`, `mismatch` or `error` with the checked version, so an edit afterwards marks the check stale.
+- A teacher approves a draft with `POST /api/admin/bank/tasks/{task_id}/approve`; approval of a mismatch asks for confirmation. `GET /api/admin/bank/ai-twins/status` reports whether the feature is configured and the model name, never the key.
+
+### 9.4 Mistake Analytics (`/admin/mistakes`)
+Implemented in [`bot/routes/admin/mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py) and [`web/app/admin/mistakes/page.tsx`](../../web/app/admin/mistakes/page.tsx):
+- `GET /api/admin/mistake-analytics?period=7d|30d|all&module_id=` is open to every admin role (read-only). The period applies to the time of the first attempt.
+- Shows totals (first attempts, mistakes and rate, resolved, weak, pending, tasks without twins), the 50 tasks with the most first-attempt mistakes with their review outcomes and twin counts (linking to the bank twins tab), mistakes by bank topic, and up to 100 students ordered by weak spots with their weak topics. Review states use the same rules as the student review page. Student e-mail addresses are returned to `super_admin` only.

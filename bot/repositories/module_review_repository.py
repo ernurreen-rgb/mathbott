@@ -31,6 +31,16 @@ def _placeholders(values: List[Any]) -> str:
     return ",".join(["?"] * len(values))
 
 
+def _chunks(values: List[Any], size: int = 500) -> List[List[Any]]:
+    # Keeps IN lists well below the SQLite and PostgreSQL parameter limits.
+    return [values[index:index + size] for index in range(0, len(values), size)]
+
+
+def _text_preview(value: Optional[str], limit: int = 140) -> str:
+    text = " ".join((value or "").split())
+    return text if len(text) <= limit else f"{text[:limit]}..."
+
+
 def resolve_review_item(source_bank_task_id: int, twin_ids: List[int], attempts: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Pick the next unseen approved twin; the original task is served once when no twin exists."""
     if any(attempt["is_correct"] for attempt in attempts):
@@ -236,4 +246,145 @@ class ModuleReviewRepository(BaseRepository):
             "state": updated_item["state"],
             "has_next_twin": updated_item["state"] == STATE_PENDING,
             "summary": _summarize(updated),
+        }
+
+    async def get_mistake_analytics(self, *, module_id: Optional[int], since: Optional[str]) -> Dict[str, Any]:
+        """First-attempt mistakes in module lessons and how their review ended, for teachers.
+
+        `since` filters by the time of the first attempt ("YYYY-MM-DD HH:MM:SS", UTC).
+        Review states use the same rules students see, so the numbers match the review page.
+        """
+        conditions = ["t.deleted_at IS NULL", "bt.deleted_at IS NULL"]
+        params: List[Any] = []
+        if module_id:
+            conditions.append("sec.module_id = ?")
+            params.append(module_id)
+        if since:
+            conditions.append("s.created_at >= ?")
+            params.append(since)
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                f"""
+                SELECT s.user_id, s.task_id, s.is_correct, t.bank_task_id, up.status AS progress_status,
+                       m.id AS module_id, m.name AS module_name, sec.name AS section_name,
+                       l.id AS lesson_id, l.title AS lesson_title, l.lesson_number, ml.mini_index,
+                       bt.text AS task_text, bt.question_type, u.nickname, u.email
+                FROM solutions s
+                JOIN (SELECT user_id, task_id, MIN(id) AS first_id FROM solutions GROUP BY user_id, task_id) f ON f.first_id = s.id
+                JOIN tasks t ON t.id = s.task_id
+                JOIN mini_lessons ml ON ml.id = t.mini_lesson_id
+                JOIN lessons l ON l.id = ml.lesson_id
+                JOIN sections sec ON sec.id = l.section_id
+                JOIN modules m ON m.id = sec.module_id
+                JOIN bank_tasks bt ON bt.id = t.bank_task_id
+                JOIN users u ON u.id = s.user_id
+                LEFT JOIN user_progress up ON up.user_id = s.user_id AND up.task_id = s.task_id
+                WHERE {" AND ".join(conditions)}
+                """,
+                params,
+            ) as cursor:
+                rows = [dict(row) for row in await cursor.fetchall()]
+            async with db.execute("SELECT id, name FROM modules ORDER BY sort_order ASC, id ASC") as cursor:
+                modules = [{"id": int(row["id"]), "name": row["name"]} for row in await cursor.fetchall()]
+
+            mistakes = [row for row in rows if not row["is_correct"]]
+            reviewable = [row for row in mistakes if row["progress_status"] == "completed"]
+            twins: Dict[int, List[int]] = {}
+            for chunk in _chunks(sorted({row["bank_task_id"] for row in reviewable})):
+                twins.update(await self._approved_twins(db, chunk))
+            attempts: Dict[tuple, List[Dict[str, Any]]] = {}
+            for chunk in _chunks(sorted({row["task_id"] for row in reviewable})):
+                async with db.execute(
+                    f"SELECT user_id, task_id, bank_task_id, is_correct FROM module_review_attempts "
+                    f"WHERE task_id IN ({_placeholders(chunk)}) ORDER BY id ASC",
+                    chunk,
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        attempts.setdefault((int(row[0]), int(row[1])), []).append(
+                            {"bank_task_id": int(row[2]), "is_correct": bool(row[3])}
+                        )
+            topics: Dict[int, List[str]] = {}
+            for chunk in _chunks(sorted({row["bank_task_id"] for row in mistakes})):
+                async with db.execute(
+                    f"""
+                    SELECT m.bank_task_id, t.name FROM bank_task_topic_map m JOIN bank_topics t ON t.id = m.topic_id
+                    WHERE m.bank_task_id IN ({_placeholders(chunk)}) ORDER BY t.name_norm ASC
+                    """,
+                    chunk,
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        topics.setdefault(int(row[0]), []).append(row[1])
+
+        tasks: Dict[int, Dict[str, Any]] = {}
+        for row in rows:
+            task = tasks.setdefault(row["task_id"], {
+                "task_id": row["task_id"],
+                "bank_task_id": row["bank_task_id"],
+                "text_preview": _text_preview(row["task_text"]),
+                "question_type": row["question_type"] or "input",
+                "topics": topics.get(row["bank_task_id"], []),
+                "location": {
+                    "module_id": row["module_id"], "module_name": row["module_name"], "section_name": row["section_name"],
+                    "lesson_id": row["lesson_id"], "lesson_title": row["lesson_title"],
+                    "lesson_number": row["lesson_number"], "mini_index": row["mini_index"],
+                },
+                "attempted": 0, "mistakes": 0, "resolved": 0, "weak": 0, "pending": 0,
+            })
+            task["attempted"] += 1
+
+        by_topic: Dict[str, Dict[str, Any]] = {}
+        students: Dict[int, Dict[str, Any]] = {}
+        for row in mistakes:
+            if row["progress_status"] == "completed":
+                state = resolve_review_item(
+                    row["bank_task_id"], twins.get(row["bank_task_id"], []), attempts.get((row["user_id"], row["task_id"]), []),
+                )["state"]
+            else:
+                state = STATE_PENDING  # Review opens once the student finishes the task.
+            task = tasks[row["task_id"]]
+            task["mistakes"] += 1
+            task[state] += 1
+            student = students.setdefault(row["user_id"], {
+                "user_id": row["user_id"], "nickname": row["nickname"], "email": row["email"],
+                "mistakes": 0, "resolved": 0, "weak": 0, "pending": 0, "weak_topics": set(),
+            })
+            student["mistakes"] += 1
+            student[state] += 1
+            for name in task["topics"] or ["Тақырыпсыз"]:
+                topic = by_topic.setdefault(name, {"topic": name, "mistakes": 0, "resolved": 0, "weak": 0, "pending": 0, "_students": set()})
+                topic["mistakes"] += 1
+                topic[state] += 1
+                topic["_students"].add(row["user_id"])
+                if state == STATE_WEAK:
+                    student["weak_topics"].add(name)
+
+        task_list = sorted(
+            (task for task in tasks.values() if task["mistakes"]),
+            key=lambda task: (-task["mistakes"], -task["mistakes"] / task["attempted"], task["task_id"]),
+        )
+        for task in task_list:
+            task["mistake_rate"] = round(task["mistakes"] / task["attempted"], 4)
+        topic_list = sorted(by_topic.values(), key=lambda topic: (-topic["mistakes"], topic["topic"]))
+        for topic in topic_list:
+            topic["students"] = len(topic.pop("_students"))
+        student_list = sorted(students.values(), key=lambda student: (-student["weak"], -student["mistakes"], student["user_id"]))
+        for student in student_list:
+            student["weak_topics"] = sorted(student["weak_topics"])
+
+        return {
+            "modules": modules,
+            "summary": {
+                "first_attempts": len(rows),
+                "mistakes": len(mistakes),
+                "mistake_rate": round(len(mistakes) / len(rows), 4) if rows else 0.0,
+                "resolved": sum(task["resolved"] for task in task_list),
+                "weak": sum(task["weak"] for task in task_list),
+                "pending": sum(task["pending"] for task in task_list),
+                "tasks_with_mistakes": len(task_list),
+                "students_with_mistakes": len(student_list),
+            },
+            "tasks": task_list,
+            "topics": topic_list,
+            "students": student_list,
         }

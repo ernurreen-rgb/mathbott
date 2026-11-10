@@ -67,11 +67,18 @@ class BankTaskTwinsMixin:
             item["twin_draft_count"] = info["drafts"].get(task_id, 0)
 
     async def count_twins_for_bank_tasks(self, bank_task_ids: List[int]) -> Dict[int, int]:
+        return (await self.twin_counts(bank_task_ids))["approved"]
+
+    async def twin_counts(self, bank_task_ids: List[int]) -> Dict[str, Dict[int, int]]:
+        """Approved and draft twin counts per source task."""
         ids = sorted({int(task_id) for task_id in bank_task_ids if task_id})
-        if not ids:
-            return {}
+        counts: Dict[str, Dict[int, int]] = {"approved": {}, "drafts": {}}
         async with self._connection() as db:
-            return (await self._fetch_twin_info(db, ids))["approved"]
+            for start in range(0, len(ids), 500):
+                info = await self._fetch_twin_info(db, ids[start:start + 500])
+                counts["approved"].update(info["approved"])
+                counts["drafts"].update(info["drafts"])
+        return counts
 
     async def list_twins(self, source_task_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:

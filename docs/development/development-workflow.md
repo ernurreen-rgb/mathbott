@@ -26,15 +26,19 @@ All frontend commands are run from [`web/`](../../web/package.json) using Node.j
 
 ### Current Test Suite Status
 > [!IMPORTANT]
-> On `2026-11-05` (commit `b201538`), legacy backend `pytest` suites (51 test files), Jest unit tests (`web/jest.config.js`), and Playwright E2E suites (`web/e2e/*`) were removed from the repository. On `2026-11-08` (commit `d1d83b3`), targeted tests and browser verification scripts for the Bank Workspace were introduced.
+> On `2026-11-05` (commit `b201538`), legacy backend `pytest` suites (51 test files), Jest unit tests (`web/jest.config.js`), and Playwright E2E suites (`web/e2e/*`) were removed from the repository. On `2026-11-08` (commit `d1d83b3`), targeted tests and browser verification scripts for the Bank Workspace were introduced; tests for mistake review, AI twin drafts and mistake analytics followed on `2026-11-10`.
 
 Currently present verification assets in the repository:
 
-1. **Backend Unit/Integration Test (`pytest`)**:
+1. **Backend Unit/Integration Tests (`pytest`)**, each against its own temporary SQLite database:
    - [`bot/tests/test_bank_catalog.py`](../../bot/tests/test_bank_catalog.py): Verifies `/api/admin/bank/catalog` and `/api/admin/bank/tasks` across a 10,000-task temporary SQLite database (pagination, ID/text search, `ANY`/`ALL` topic matching, usage filters, counts, sorting, auth, and clearing stale `options`/`subquestions` on question-type change).
-   - Run from `bot/`:
+   - [`bot/tests/test_module_review.py`](../../bot/tests/test_module_review.py): First-attempt mistakes, twin order and the original-task fallback, answers bound to the served task, unchanged progress, twins hidden from library and quality reports, twin rules, and route auth without leaking answers.
+   - [`bot/tests/test_ai_twins.py`](../../bot/tests/test_ai_twins.py): AI drafts with the provider replaced by a fake (drafts hidden until approved, bank payload rules, independent re-solve check, refusals, output parsing) and one request against a local Chat Completions server; no network calls.
+   - [`bot/tests/test_mistake_analytics.py`](../../bot/tests/test_mistake_analytics.py): Summary, task, topic and student aggregation, period and module filters, and e-mail visibility by role.
+   - Run from `bot/` (`httpx` is a test-only dependency, not in `requirements.txt`):
      ```powershell
-     python -m pytest tests/test_bank_catalog.py
+     python -m pip install pytest "httpx==0.28.1"
+     python -m pytest tests
      ```
 2. **Backend Syntax & Static Error Check**:
    - Executed in CI ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)):
@@ -56,8 +60,8 @@ Currently present verification assets in the repository:
 ### 3.1 Main CI Gate ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml))
 Triggered on `push` and `pull_request` to `main` or `develop`:
 1. **`backend-checks`** (Python `3.11`):
-   - Installs `bot/requirements.txt`, `flake8`, `pip-audit`, and `pytest`.
-   - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests/test_bank_catalog.py`, and `pip-audit --desc -r requirements.txt`.
+   - Installs `bot/requirements.txt`, `flake8`, `pip-audit`, `pytest`, and `httpx` (test-only).
+   - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests`, and `pip-audit --desc -r requirements.txt`.
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):
    - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm audit --audit-level=moderate` in `web/`.
 
@@ -75,8 +79,8 @@ Triggered weekly (`0 6 * * 1` — Mondays at 06:00 UTC) or via `workflow_dispatc
 ## 4. Database Migrations Workflow
 
 The backend maintains two synchronized migration tracks:
-1. **SQLite (Alembic)**: [`bot/migrations/versions/0001_baseline.py`](../../bot/migrations/versions/0001_baseline.py) through [`0014_trial_test_folders.py`](../../bot/migrations/versions/0014_trial_test_folders.py), orchestrated by [`bot/migrations/runner.py`](../../bot/migrations/runner.py).
-2. **PostgreSQL (SQL)**: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0007_trial_test_folders.sql`](../../bot/migrations/postgres/0007_trial_test_folders.sql), orchestrated by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums.
+1. **SQLite (Alembic)**: [`bot/migrations/versions/0001_baseline.py`](../../bot/migrations/versions/0001_baseline.py) through [`0016_ai_twin_checks.py`](../../bot/migrations/versions/0016_ai_twin_checks.py), orchestrated by [`bot/migrations/runner.py`](../../bot/migrations/runner.py).
+2. **PostgreSQL (SQL)**: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql), orchestrated by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums.
 
 ### Rules When Modifying the Database Schema
 1. **Always update both tracks** when changing runtime tables:

@@ -82,6 +82,17 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | `GET` | `/api/tasks/{task_id}/questions` | Optional Auth | Lists sub-questions for a multi-question task and user progress (`user_task_question_progress`). |
 | `POST` | `/api/tasks/{task_id}/questions/check` | Authenticated | Checks an answer to an individual sub-question within a task. |
 
+`GET /api/lessons/{lesson_id}` also returns `review` (`mistakes`, `resolved`, `weak`, `pending`) per mini-lesson for the signed-in student.
+
+### 2.3.1 Mistake Review ([`bot/routes/module_review.py`](../../bot/routes/module_review.py))
+
+The proxy treats `/api/mini-lessons` as an identity path: it always signs these requests with the session email, and production rejects them without a valid signature.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/mini-lessons/{mini_lesson_id}/review` | Authenticated | First-attempt mistakes of the mini-lesson with their state (`pending`, `resolved`, `weak`) and the next task to solve (an unseen approved twin, or the original once when the task has no twins). Answers are never included. |
+| `POST` | `/api/mini-lessons/{mini_lesson_id}/review/answers` | Authenticated (`30/minute`) | Grades `{task_id, bank_task_id, answer}` for the task the server currently serves (`409` otherwise). Stores the attempt in `module_review_attempts` only; progress, streaks and achievements are unchanged. Returns the correct answer and solution image on a wrong answer. |
+
 ### 2.4 Trial Tests — Solo Mode ([`bot/routes/trial_tests.py`](../../bot/routes/trial_tests.py))
 
 | Method | Path | Auth | Description |
@@ -234,6 +245,19 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | `GET` | `/api/admin/bank/unrecognized-answers` | `bank.view` | Lists frequent student answers that failed grading to assist content reviewers. |
 | `POST` | `/api/admin/bank/tasks/{task_id}/accepted-answers` | `bank.write` | Appends an alternative accepted answer alias to a bank task. |
 
+`GET /api/admin/bank/tasks` excludes twin tasks by default (`twins=exclude|only|include`); the trash list includes them. Task payloads carry `twin_source_id`, `twin_status`, `twin_count` (approved) and `twin_draft_count`.
+
+#### Twin Tasks & AI Drafts ([`bot/routes/admin/bank_twins.py`](../../bot/routes/admin/bank_twins.py))
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/api/admin/bank/tasks/{task_id}/twins` | Any admin | Lists a source task's twins (drafts included) with `twin_status`, `twin_origin`, `twin_ai_model` and `ai_check`. |
+| `POST` | `/api/admin/bank/tasks/{task_id}/twins` | `content_manage` | Creates a manual twin (same form fields as bank task creation, plus `keep_source_image`). Refuses twins of twins, a changed question type, and an unchanged copy. |
+| `GET` | `/api/admin/bank/ai-twins/status` | Any admin | `{enabled, model, drafts_per_request}`; never returns the provider URL or key. |
+| `POST` | `/api/admin/bank/tasks/{task_id}/twins/ai-drafts` | `content_manage` (`20/hour`) | Asks the configured AI provider for 3 twins and stores valid ones as drafts. `503` when not configured, `400` for tasks with an image, `502`/`504` on provider errors. Returns `{items, skipped, model}`. |
+| `POST` | `/api/admin/bank/tasks/{task_id}/ai-check` | `content_manage` (`120/hour`) | Re-solves a twin without its answer and stores `match`, `mismatch` or `error` with the checked version. |
+| `POST` | `/api/admin/bank/tasks/{task_id}/approve` | `content_manage` | Approves a twin draft so mistake review can serve it (`409` if it is not a draft). |
+
 ### 3.3 Curriculum CMS ([`content_curriculum.py`](../../bot/routes/admin/content_curriculum.py), [`content_lessons.py`](../../bot/routes/admin/content_lessons.py), [`content_tasks.py`](../../bot/routes/admin/content_tasks.py))
 
 | Method | Path | Permission | Description |
@@ -254,7 +278,7 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | `DELETE` | `/api/admin/lessons/{lesson_id}` | `content.write` | Deletes a lesson. |
 | `GET` | `/api/admin/lessons/{lesson_id}/mini-lessons` | `content.view` | Lists the 4 mini-lessons for a lesson. |
 | `PUT` | `/api/admin/mini-lessons/{mini_lesson_id}` | `content.write` | Updates a mini-lesson title/order. |
-| `GET` | `/api/admin/mini-lessons/{mini_lesson_id}/tasks` | `content.view` | Lists tasks placed in a mini-lesson. |
+| `GET` | `/api/admin/mini-lessons/{mini_lesson_id}/tasks` | `content.view` | Lists tasks placed in a mini-lesson, each with `twin_count` (approved twins of its bank task). |
 | `POST` | `/api/admin/mini-lessons/{mini_lesson_id}/tasks` | `content.write` | Places a bank task or creates a new task inside a mini-lesson. |
 | `PUT` / `POST` | `/api/admin/mini-lessons/{mini_lesson_id}/tasks/reorder` | `content.write` | Reorders tasks within a mini-lesson. |
 | `GET` | `/api/admin/tasks` | `content.view` | Lists curriculum tasks with optional filters. |
@@ -301,6 +325,7 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | `DELETE` | `/api/admin/reports/{report_id}` | `reports.update` | Deletes a curriculum task report. |
 | `DELETE` | `/api/admin/trial-test-reports/{report_id}` | `reports.update` | Deletes a trial test task report. |
 | `GET` | `/api/admin/statistics` | `stats.view` | Returns DAU/WAU/MAU, retention cohorts, hardest tasks, and activity analytics. |
+| `GET` | `/api/admin/mistake-analytics` | Any admin | First-attempt mistakes in module lessons (`period=7d\|30d\|all`, optional `module_id`): summary, top 50 tasks with review outcomes and twin counts, topics, and up to 100 students by weak spots. E-mail addresses only for `super_admin` ([`mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py)). |
 | `GET` | `/api/admin/ops/health/summary` | `ops.view` | Returns live operational health status, latency `p95`, error rate, DB status, and online count. |
 | `GET` | `/api/admin/ops/health/timeseries` | `ops.view` | Returns historical time-series samples from `ops_health_samples` (`range=1h\|24h\|7d`). |
 | `GET` | `/api/admin/ops/incidents` | `ops.view` | Lists open and resolved operational incidents from `ops_incidents`. |

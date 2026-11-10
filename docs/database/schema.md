@@ -1,6 +1,6 @@
 # Database Schema & Migration Reference
 
-This document describes the complete database schema of QazMath (`CursorMathbot`, `HEAD = d1d83b3`), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0007`), SQLite Alembic migrations in [`bot/migrations/versions/`](../../bot/migrations/versions/) (`0001` through `0014`), and the dual-dialect storage adapter in [`bot/storage.py`](../../bot/storage.py).
+This document describes the complete database schema of QazMath (`CursorMathbot`, last reviewed 2026-11-10), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0009`), SQLite Alembic migrations in [`bot/migrations/versions/`](../../bot/migrations/versions/) (`0001` through `0016`), and the dual-dialect storage adapter in [`bot/storage.py`](../../bot/storage.py).
 
 ---
 
@@ -11,7 +11,7 @@ QazMath supports two relational backends via [`bot/storage.py`](../../bot/storag
 | Aspect | Local / Development (`DATABASE_URL=""`) | Production (`DATABASE_URL="postgresql://..."`) |
 |---|---|---|
 | **Driver** | `aiosqlite` (`0.22.1`) | `psycopg[binary]` (`>=3.2,<4`) via `PostgresConnection` |
-| **Migration Tool** | Alembic ([`bot/migrations/runner.py`](../../bot/migrations/runner.py), `0001`–`0014`) | Custom checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0007`) |
+| **Migration Tool** | Alembic ([`bot/migrations/runner.py`](../../bot/migrations/runner.py), `0001`–`0016`) | Custom checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0009`) |
 | **Migration Tracking Table** | `alembic_version` | `mathbot_schema_migrations` (stores `version`, `name`, `checksum`, `applied_at`) |
 | **Query Placeholder Translation** | Native `?` | `postgres_sql()` rewrites `?` -> `%s` outside quotes/comments, `INSERT OR IGNORE` -> `ON CONFLICT DO NOTHING`, and `INSERT OR REPLACE` -> `ON CONFLICT ... DO UPDATE` |
 | **Write Serialization** | `BEGIN IMMEDIATE` + process `asyncio.Lock` | `SELECT pg_advisory_xact_lock(724831921)` |
@@ -41,6 +41,10 @@ erDiagram
     bank_topics ||--o{ bank_task_topic_map : "tags"
     bank_tasks ||--o{ tasks : "placed in curriculum"
     bank_tasks ||--o{ trial_test_tasks : "placed in exam"
+    bank_tasks ||--o{ bank_task_twins : "source of twins"
+    bank_tasks ||--o| bank_task_twins : "is a twin"
+    users ||--o{ module_review_attempts : "reviews mistakes"
+    tasks ||--o{ module_review_attempts : "reviewed placement"
 
     trial_test_folders ||--o{ trial_test_folders : "parent_id"
     trial_test_folders ||--o{ trial_tests : "organizes"
@@ -58,7 +62,7 @@ erDiagram
 
 ---
 
-## 3. Application Tables by Domain (35 Active Schema Tables)
+## 3. Application Tables by Domain (37 Active Schema Tables)
 
 ### 3.1 Users, Roles, Gamification & Onboarding
 
@@ -70,7 +74,8 @@ erDiagram
 | `user_progress` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `status TEXT`, `completed_at TEXT` | Tracks per-user completion status (`solved`) for curriculum tasks (`UNIQUE(user_id, task_id)`). |
 | `user_task_completions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `completion_key TEXT`, `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE SET NULL`, `source TEXT`, `completed_at TEXT` | Renamed from `user_task_rewards` in PG `0003` / SQLite `0010` (`points_awarded` and `difficulty` dropped). Deduplicates task completions across curriculum and bank placements (`UNIQUE(user_id, completion_key)`). |
 | `user_task_question_progress` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `question_index INTEGER`, `is_completed INTEGER` | Tracks per-subquestion progress on multi-question curriculum tasks (`UNIQUE(user_id, task_id, question_index)`). |
-| `solutions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `answer TEXT`, `is_correct INTEGER` | Historical log of student task answer submissions. |
+| `solutions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `answer TEXT`, `is_correct INTEGER` | Historical log of student task answer submissions. The earliest row per `(user_id, task_id)` is the first attempt used by mistake review and analytics (index `idx_solutions_user_task_id`, PG `0008` / SQLite `0015`). |
+| `module_review_attempts` | `id` (Identity) | `user_id FK -> users.id ON DELETE CASCADE`, `task_id FK -> tasks.id ON DELETE CASCADE` (the reviewed placement), `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE` (the twin or original served), `answer TEXT`, `is_correct`, `created_at` | Added in PG `0008` / SQLite `0015`. Mistake-review answers, kept apart from `solutions` so review never changes progress, streaks or achievements. |
 | `user_progress_summary` | `id` (Identity) | `user_id`, `module_id`, `section_id`, `lesson_id`, `mini_lesson_id`, `completed_tasks`, `total_tasks`, `completion_percent` | **Unused / Legacy**: Created in `0001_initial.sql` with cascading FKs, but no repository currently reads or writes to this table (progress is aggregated on the fly from `user_progress`). |
 
 ### 3.2 Centralized Question Bank (`/admin/bank`)
@@ -81,6 +86,7 @@ erDiagram
 | `bank_topics` | `id` (Identity) | `name TEXT NOT NULL`, `norm_name TEXT UNIQUE NOT NULL`, `created_at TEXT` | Normalized topic taxonomy tags for bank tasks (`GET /api/admin/bank/catalog`). |
 | `bank_task_topic_map` | `(bank_task_id, topic_id)` | `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE`, `topic_id FK -> bank_topics.id ON DELETE CASCADE` | Many-to-many join table linking `bank_tasks` to `bank_topics`. |
 | `bank_task_versions` | `id` (Identity) | `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE CASCADE`, `version_no INTEGER`, `event_type TEXT`, `snapshot_json TEXT`, `actor_user_id INTEGER FK -> users.id ON DELETE SET NULL`, `reason TEXT`, `source TEXT` | Immutable audit/rollback history (`UNIQUE(bank_task_id, version_no)`) recording every change to a bank task. |
+| `bank_task_twins` | `id` (Identity) | `source_bank_task_id FK -> bank_tasks.id ON DELETE CASCADE`, `twin_bank_task_id FK -> bank_tasks.id ON DELETE CASCADE UNIQUE`, `status TEXT` (`draft`/`approved`), `origin TEXT` (`manual`/`ai`), `sort_order`, `created_by FK -> users.id ON DELETE SET NULL`; AI check columns `ai_model`, `ai_check_status` (`match`/`mismatch`/`error`), `ai_check_answer`, `ai_checked_version`, `ai_checked_at` | Added in PG `0008` / SQLite `0015` (AI columns in PG `0009` / SQLite `0016`). Links a number-only twin to exactly one source task. Only `approved` twins are served by mistake review; twin tasks are hidden from the bank library, pickers, catalog counts and quality reports. |
 
 ### 3.3 Curriculum Hierarchy (`modules` -> `sections` -> `lessons` -> `mini_lessons` -> `tasks`)
 
@@ -153,6 +159,8 @@ erDiagram
 | `0005` | [`0005_quiz_participant_question_order.sql`](../../bot/migrations/postgres/0005_quiz_participant_question_order.sql) | Adds `question_order TEXT DEFAULT NULL` to `quiz_participants`. |
 | `0006` | [`0006_quiz_entry_limits.sql`](../../bot/migrations/postgres/0006_quiz_entry_limits.sql) | Creates `quiz_entry_limits` table and `idx_quiz_entry_limits_updated_at` for distributed quiz PIN rate limiting. |
 | `0007` | [`0007_trial_test_folders.sql`](../../bot/migrations/postgres/0007_trial_test_folders.sql) | Creates `trial_test_folders` table and adds `folder_id INTEGER REFERENCES trial_test_folders(id) ON DELETE RESTRICT` to `trial_tests`. |
+| `0008` | [`0008_module_review.sql`](../../bot/migrations/postgres/0008_module_review.sql) | Creates `bank_task_twins` and `module_review_attempts`, and adds `idx_solutions_user_task_id` for first-attempt lookups. |
+| `0009` | [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql) | Adds `ai_model`, `ai_check_status`, `ai_check_answer`, `ai_checked_version` and `ai_checked_at` to `bank_task_twins`. |
 
 ### 4.2 SQLite Alembic Revisions (`bot/migrations/versions/`)
 
@@ -172,3 +180,5 @@ erDiagram
 | `0012` | [`0012_quiz_participant_question_order.py`](../../bot/migrations/versions/0012_quiz_participant_question_order.py) | SQLite equivalent of PG `0005` (`quiz_participants.question_order`). |
 | `0013` | [`0013_quiz_entry_limits.py`](../../bot/migrations/versions/0013_quiz_entry_limits.py) | SQLite equivalent of PG `0006` (`quiz_entry_limits`). |
 | `0014` | [`0014_trial_test_folders.py`](../../bot/migrations/versions/0014_trial_test_folders.py) | SQLite equivalent of PG `0007` (`trial_test_folders` + `trial_tests.folder_id`). |
+| `0015` | [`0015_module_review.py`](../../bot/migrations/versions/0015_module_review.py) | SQLite equivalent of PG `0008` (`bank_task_twins`, `module_review_attempts`, `idx_solutions_user_task_id`). |
+| `0016` | [`0016_ai_twin_checks.py`](../../bot/migrations/versions/0016_ai_twin_checks.py) | SQLite equivalent of PG `0009` (AI draft and check columns on `bank_task_twins`). |

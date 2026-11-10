@@ -122,3 +122,13 @@ flowchart LR
 - **Session & Invites:** A host starts a session (`POST /api/trial-tests/{id}/coop/session`) and invites a friend (`POST /api/trial-tests/{id}/coop/invite`). Accepting an invite adds the friend to `trial_test_coop_participants` (max 2 participants: `red` and `blue` slots) and transitions the session to `active`.
 - **Shared Answer Sync:** Both players' answers are stored in `trial_test_coop_answers` and synchronized via `PUT /api/trial-tests/coop/session/{id}/answers` (with `keepalive: true` on `pagehide`) and either `/ws/trial-tests/coop/{id}` broadcasts or 2.5-second polling.
 - **Completion & Results Gate:** Each participant finishes independently via `POST /api/trial-tests/{id}/coop/finish`. Full review results (`GET /api/trial-tests/coop/session/{id}/results`) return `409` until the requesting participant has `is_finished = 1`.
+
+---
+
+## 6. Mistake Review on Twin Tasks
+
+1. **Mistakes:** `POST /api/task/check` keeps every attempt in `solutions`. A mini-lesson task enters review when the student's earliest attempt was wrong and the task is now completed in `user_progress`; no extra writes happen at check time.
+2. **Serving:** `GET /api/mini-lessons/{id}/review` resolves each mistake from `bank_task_twins` (approved only) and `module_review_attempts`: any correct attempt -> `resolved`; otherwise the first approved twin not yet attempted, or the original task once when there are no twins -> `pending`; nothing left -> `weak`. Only the public task payload is returned.
+3. **Answering:** `POST /api/mini-lessons/{id}/review/answers` recomputes the item inside a write transaction, accepts the answer only for the task currently served (`409` otherwise), grades it with `is_task_answer_correct`, and appends to `module_review_attempts`. Progress, solved counters, streaks and achievements are untouched.
+4. **Twins:** Teachers add twins in the bank (manual, or AI drafts that must be approved). An AI draft is re-solved by a second provider call that never sees its answer; the platform checker compares the two and stores the result on the twin link.
+5. **Analytics:** `GET /api/admin/mistake-analytics` replays the same resolution rules over all students, so the outcome counts on `/admin/mistakes` match what students see on the review page.

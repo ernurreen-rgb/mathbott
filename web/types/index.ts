@@ -7,3 +7,4 @@ export * from "./trial-test";
 export * from "./bank";
 export * from "./admin-statistics";
 export * from "./ops";
+export * from "./mistake-analytics";

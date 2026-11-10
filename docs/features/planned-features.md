@@ -16,11 +16,16 @@ This document distinguishes between features that are **feature-flagged**, **pla
 
 ## 2. Planned / Deferred Functionality (Not Implemented)
 
-### 2.1 Topic-Based Student Progress & Mistake-Review Queue (`D05`)
-- **Status**: Explicitly deferred. While admin bank tasks have topics (`bank_topics`, `bank_task_topic_map`), student-facing topic mastery analytics and a dedicated mistake-review queue are **not implemented**.
+### 2.1 Student-Facing Topic Mastery (`D05`, partly superseded)
+- **Status**: The mistake-review queue and teacher-facing analytics by topic and student are now implemented (see [Implemented Features §9](implemented-features.md#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)). A **student-facing** topic mastery view (students seeing their own weak topics) is still **not implemented**.
 
 ### 2.2 Bank Task Editorial Lifecycle Statuses (`Draft / In Review / Ready`)
-- **Status**: Explicitly excluded from the current bank workspace implementation. Bank tasks have active (`deleted_at IS NULL`) vs. trash (`deleted_at IS NOT NULL`) states and version history (`bank_task_versions`), but no editorial workflow status column.
+- **Status**: Explicitly excluded from the current bank workspace implementation. Bank tasks have active (`deleted_at IS NULL`) vs. trash (`deleted_at IS NOT NULL`) states and version history (`bank_task_versions`), but no editorial workflow status column. The only draft state is on twin links (`bank_task_twins.status = 'draft'` for AI twin drafts awaiting approval).
+
+### 2.3 Not Yet Built for Mistake Review
+- **CSV export of mistake analytics**: deliberately left out of `/admin/mistakes`.
+- **AI drafts for tasks with images**: refused by design; such twins are created manually.
+- **Provider-specific AI clients**: AI twin drafts use the OpenAI-compatible Chat Completions format only; no native SDK for any provider is bundled.
 
 ---
 

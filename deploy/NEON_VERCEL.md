@@ -47,6 +47,7 @@ Backend production settings:
 | `IMPORT_PREVIEW_TOKEN_SECRET` | Optional dedicated HMAC secret for bank JSON import preview tokens (falls back to `INTERNAL_PROXY_SHARED_SECRET`) |
 | `SENTRY_DSN` | Optional Sentry DSN for backend error/trace reporting |
 | `ALERTS_ENABLED`, `ALERT_TELEGRAM_ENABLED`, `ALERT_TELEGRAM_BOT_TOKEN`, `ALERT_TELEGRAM_CHAT_ID` | Optional Telegram operational alert settings |
+| `AI_TWIN_BASE_URL`, `AI_TWIN_API_KEY`, `AI_TWIN_MODEL` | Optional; enable AI twin drafts in the bank (see [AI twin drafts](#ai-twin-drafts)) |
 
 Web production settings:
 
@@ -162,6 +163,42 @@ Quota rows expire after an hour of inactivity and are removed opportunistically
 and by maintenance. These application admission budgets do not configure
 provider/ingress traffic filtering.
 
+## Mistake review and twin tasks
+
+PostgreSQL `0008_module_review` (SQLite Alembic `0015`) adds `bank_task_twins`,
+`module_review_attempts` and the `idx_solutions_user_task_id` index; `0009_ai_twin_checks`
+(SQLite `0016`) adds the AI draft and check columns to `bank_task_twins`. Both only
+add objects, so the API that is already running keeps working with them. As with
+every schema release, apply them before deploying the API that needs them:
+
+```powershell
+# From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.
+python scripts/migrate_to_neon.py --schema-only
+```
+
+The web proxy treats `/api/mini-lessons` as an identity path and allows functions
+to run for 60 seconds (`maxDuration`), matching the API function in `bot/vercel.json`.
+
+## AI twin drafts
+
+Teachers can ask an AI provider for three number-only twin drafts of a bank task.
+Any provider with an OpenAI-compatible Chat Completions API and JSON mode works.
+The feature stays off until all three variables are set on the **API** project
+(`qazmath-api`), and the key never reaches the browser:
+
+| Variable | Example |
+| --- | --- |
+| `AI_TWIN_BASE_URL` | `https://api.openai.com/v1`, `https://api.deepseek.com/v1`, `https://openrouter.ai/api/v1`, `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `AI_TWIN_API_KEY` | The provider's API key |
+| `AI_TWIN_MODEL` | A model id of that provider that supports `response_format: {"type": "json_object"}` |
+
+Redeploy the API after changing them. One press of the button costs four model
+calls (one generation, three independent re-solves). Requests time out after
+`AI_TWIN_TIMEOUT_SECONDS` (default `45`, at most `55`) to stay inside the 60-second
+function limit; per-admin limits are 20 generations and 120 checks per hour.
+Drafts are stored with `status = 'draft'` and are never served to students until a
+teacher approves them in the bank's **Twins** tab.
+
 ## Images
 
 The bucket stays private. The API reads and validates image keys and serves
@@ -234,13 +271,15 @@ schema-only migration before the API deployment.
 
 ## Verification and deployment
 
-Legacy automated test suites (`web/e2e/*`, Jest unit suites, and the 51-file backend `pytest` suite) were removed on 2026-11-05 (`b201538`). Targeted Bank Workspace verification (`bot/tests/test_bank_catalog.py`, `bot/scripts/preview_bank_workspace.py`, and Playwright CLI check scripts in `web/tools/check-bank-*.js`) was added on 2026-11-08 (`d1d83b3`). CI checks Python
-syntax and lint, frontend lint/TypeScript/build, and dependency security.
+Legacy automated test suites (`web/e2e/*`, Jest unit suites, and the 51-file backend `pytest` suite) were removed on 2026-11-05 (`b201538`). Targeted backend tests live in `bot/tests/` (bank catalog, mistake review, AI twin drafts with a fake provider, mistake analytics) and run against isolated SQLite databases; `httpx` is installed only for tests. CI checks Python
+syntax and lint, runs `python -m pytest tests`, checks frontend lint/TypeScript/build, and dependency security.
 
 ```powershell
 # From bot/
 python -m compileall -q .
 flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+python -m pip install pytest "httpx==0.28.1"   # test-only tools, once
+python -m pytest tests
 
 # From web/
 npm run lint

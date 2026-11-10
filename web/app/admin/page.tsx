@@ -75,6 +75,13 @@ export default function AdminPage() {
         section: "review",
       },
       {
+        title: "Қателер талдауы",
+        description: "Бірінші әрекет қателері, егіздермен талдау және оқушылардың әлсіз тұстары",
+        href: "/admin/mistakes",
+        icon: "target",
+        section: "any",
+      },
+      {
         title: "Хабарламалар",
         description: "Пайдаланушылардың хабарламаларын басқару",
         href: "/admin/reports",

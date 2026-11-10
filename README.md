@@ -1,6 +1,6 @@
 # QazMath (`CursorMathbot`)
 
-QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, solo and cooperative trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons, computer-algebra answer equivalence checking, social friend/invite workflows, and a role-based administrative workspace.
+QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, solo and cooperative trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons with a mistake review on number-only twin tasks (optionally drafted by an AI provider) and teacher-facing mistake analytics, computer-algebra answer equivalence checking, social friend/invite workflows, and a role-based administrative workspace.
 
 ---
 
@@ -21,7 +21,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 
 ### Reference
 - **[API Overview](docs/api/api-overview.md)** — Complete catalog of FastAPI HTTP/WebSocket endpoints and Next.js API routes, proxy authentication contract, rate limits, and RBAC requirements.
-- **[Database Schema](docs/database/schema.md)** — Complete reference of all 35 application tables, foreign-key relationships, dual-engine SQL translation (`bot/storage.py`), and migration history (`0001`–`0014` SQLite / `0001`–`0007` PostgreSQL).
+- **[Database Schema](docs/database/schema.md)** — Complete reference of all 37 application tables, foreign-key relationships, dual-engine SQL translation (`bot/storage.py`), and migration history (`0001`–`0016` SQLite / `0001`–`0009` PostgreSQL).
 - **[Implemented Features](docs/features/implemented-features.md)** — Verified inventory of active production and administrative features in the current codebase.
 - **[Planned, Flagged & Retired Features](docs/features/planned-features.md)** — Feature-flagged UI, logging stubs, deferred roadmap items, and retired legacy tables/features.
 
@@ -55,7 +55,7 @@ Copy-Item .env.example .env.local
 python main.py
 ```
 
-By default, the backend listens on `http://localhost:8000`, creates a local SQLite database (`bot/mathbot.db`), and runs Alembic migrations (`0001_baseline` through `0014_trial_test_folders`) and initial seeds automatically on startup.
+By default, the backend listens on `http://localhost:8000`, creates a local SQLite database (`bot/mathbot.db`), and runs Alembic migrations (`0001_baseline` through `0016_ai_twin_checks`) and initial seeds automatically on startup.
 
 ### 2. Frontend (`web/`)
 
@@ -82,7 +82,8 @@ The commands below match the checks executed in [`.github/workflows/ci.yml`](.gi
 # Backend syntax, lint, tests, and dependency audit (from bot/)
 python -m compileall -q .
 flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-python -m pytest tests/test_bank_catalog.py
+python -m pip install pytest "httpx==0.28.1"   # test-only tools, as in CI
+python -m pytest tests
 pip-audit --desc -r requirements.txt
 
 # Frontend lint, typecheck, production build, and audit (from web/)
