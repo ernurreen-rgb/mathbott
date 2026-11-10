@@ -13,6 +13,9 @@ import {
   QUIZ_ENTRY_KEY_HEADER, QUIZ_ENTRY_SIGNATURE_HEADER,
 } from "@/lib/quiz-entry-identity";
 
+// Matches the API function limit: AI twin drafts can take most of a minute.
+export const maxDuration = 60;
+
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const INTERNAL_PROXY_SHARED_SECRET =

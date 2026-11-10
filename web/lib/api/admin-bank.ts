@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
-import type { BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
+import type { AiTwinCheck, AiTwinDraftsResponse, AiTwinStatus, BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
 import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
@@ -293,6 +293,46 @@ export async function createAdminBankTwin(
 ): Promise<{ data: BankTask | null; error: string | null; conflict: BankMutationConflict | null }> {
   formData.append("email", email);
   return mutateBankTask(apiPath(`admin/bank/tasks/${sourceTaskId}/twins`), "POST", formData);
+}
+
+
+export async function getAdminAiTwinStatus(email: string) {
+  return fetchWithErrorHandling<AiTwinStatus>(
+    `${apiPath("admin/bank/ai-twins/status")}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
+  );
+}
+
+
+const adminForm = (email: string) => {
+  const body = new FormData();
+  body.append("email", email);
+  return body;
+};
+
+
+/** Drafts take one provider call; the proxy and API allow up to 60 seconds. */
+export async function generateAdminAiTwinDrafts(sourceTaskId: number, email: string) {
+  return fetchWithErrorHandling<AiTwinDraftsResponse>(
+    apiPath(`admin/bank/tasks/${sourceTaskId}/twins/ai-drafts`),
+    { method: "POST", body: adminForm(email), timeoutMs: 60000 }
+  );
+}
+
+
+export async function checkAdminAiTwin(twinTaskId: number, email: string) {
+  return fetchWithErrorHandling<AiTwinCheck>(
+    apiPath(`admin/bank/tasks/${twinTaskId}/ai-check`),
+    { method: "POST", body: adminForm(email), timeoutMs: 60000 }
+  );
+}
+
+
+export async function approveAdminBankTwin(twinTaskId: number, email: string) {
+  return fetchWithErrorHandling<BankTask>(
+    apiPath(`admin/bank/tasks/${twinTaskId}/approve`),
+    { method: "POST", body: adminForm(email) }
+  );
 }
 
 

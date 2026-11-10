@@ -44,6 +44,32 @@ export interface BankTask {
   twin_source_id?: number | null;
   /** Approved, active twins of this task. */
   twin_count?: number;
+  /** AI drafts waiting for a teacher's approval. */
+  twin_draft_count?: number;
+  /** Set on a twin: drafts are never served to students. */
+  twin_status?: "draft" | "approved" | null;
+  twin_origin?: "manual" | "ai" | null;
+  twin_ai_model?: string | null;
+  /** Independent AI re-solve of a twin; stale when checked_version differs from current_version. */
+  ai_check?: AiTwinCheck | null;
+}
+
+export interface AiTwinCheck {
+  status: "match" | "mismatch" | "error";
+  answer: string | null;
+  checked_version: number | null;
+}
+
+export interface AiTwinStatus {
+  enabled: boolean;
+  model: string | null;
+  drafts_per_request: number;
+}
+
+export interface AiTwinDraftsResponse {
+  items: BankTask[];
+  skipped: Array<{ index: number; reason: string }>;
+  model: string;
 }
 
 export type BankTwinsFilter = "exclude" | "only";

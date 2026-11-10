@@ -134,6 +134,14 @@
 .twinItem .taskStatement { padding-bottom: 8px; }
 .twinItem .answerKey { margin-top: 10px; font-size: 13px; }
 .twinField { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; color: #5f6878; font-size: 13px; }
+.twinDraft { border-style: dashed; border-color: #cdb8f2; background: #fcfaff; }
+.draftBadge { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: 5px; background: #fff4dc; color: #8a5a00; font-weight: 600; }
+.twinItemHeader .twinBadge { margin-left: 8px; }
+.checkMatch, .checkMismatch, .checkNeutral { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; font-size: 13px; line-height: 1.6; }
+.checkMatch { color: #2f6b47; }
+.checkMismatch { color: #9c3030; }
+.checkNeutral { color: #6f7888; }
+.checkMatch .quiet, .checkMismatch .quiet, .checkNeutral .quiet { min-height: 30px; padding: 4px 8px; }
 @media(min-width:768px) { .page { padding-bottom: 0; } }
 @media(max-width:767px) { .selectionBar { bottom: 82px; } }
 @media(max-width:1180px) { .main { padding: 24px 20px; } .library { grid-template-columns: minmax(0,1fr); gap: 16px; } .content { padding: 17px; } .typeColumn { display: none; } .sidebar { position: static; padding: 0; } .sidebarToggle { display: flex; justify-content: space-between; width: 100%; } .sidebarBody { display: none; padding: 16px 10px; border: 1px solid #e1e5ed; border-radius: 9px; background: #fff; margin-top: 8px; } .sidebarBody[data-open="true"] { display: block; } .topicList { max-height: 290px; } }

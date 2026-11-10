@@ -37,9 +37,11 @@ export const apiPath = (path: string): string => {
 
 export async function fetchWithErrorHandling<T>(
   url: string,
-  options?: RequestInit
+  requestOptions?: RequestInit & { timeoutMs?: number }
 ): Promise<FetchResult<T>> {
-  const method = (options?.method || "GET").toUpperCase();
+  // Slow endpoints (AI drafts) raise the timeout; everything else keeps 30 seconds.
+  const { timeoutMs = 30000, ...options } = requestOptions || {};
+  const method = (options.method || "GET").toUpperCase();
 
   const doFetch = async (): Promise<FetchResult<T>> => {
     try {
@@ -47,7 +49,7 @@ export async function fetchWithErrorHandling<T>(
 
       // Add timeout to fetch
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
         ...options,
@@ -170,7 +172,7 @@ export async function fetchWithErrorHandling<T>(
       if (error.name === "AbortError") {
         return {
           data: null,
-          error: "Превышено время ожидания ответа от сервера (30 секунд)",
+          error: `Превышено время ожидания ответа от сервера (${Math.round(timeoutMs / 1000)} секунд)`,
         };
       }
 

@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     bank_trash_retention_days: int = 30
     image_upload_max_bytes: Optional[int] = None
 
+    # AI twin drafts: any OpenAI-compatible Chat Completions provider; off until all three are set.
+    ai_twin_base_url: str = ""
+    ai_twin_api_key: str = ""
+    ai_twin_model: str = ""
+    # Stays under the 60 s Vercel function limit of the API and the web proxy.
+    ai_twin_timeout_seconds: int = Field(default=45, ge=5, le=55)
+
     # Public quiz entry quotas are shared by all workers through the database.
     quiz_entry_requests_per_minute: int = Field(default=1200, ge=1, le=100000)
     quiz_entry_distinct_pins_per_minute: int = Field(default=30, ge=1, le=1000)
@@ -142,6 +149,9 @@ class Settings(BaseSettings):
 
     @field_validator(
         "internal_proxy_shared_secret",
+        "ai_twin_base_url",
+        "ai_twin_api_key",
+        "ai_twin_model",
         "sentry_dsn",
         "alert_telegram_bot_token",
         "alert_telegram_chat_id",
@@ -172,6 +182,10 @@ class Settings(BaseSettings):
         if self.database_auto_migrate is not None:
             return self.database_auto_migrate
         return os.environ.get("VERCEL") != "1"
+
+    @property
+    def ai_twins_enabled(self) -> bool:
+        return bool(self.ai_twin_base_url and self.ai_twin_api_key and self.ai_twin_model)
 
     @property
     def image_upload_limit_bytes(self) -> int:
