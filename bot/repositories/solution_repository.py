@@ -19,7 +19,6 @@ class SolutionRepository(BaseRepository):
             raise ValueError("Task not found")
         completion = build_completion_identity(task, surface="module")
         recorded = False
-        milestone = None
         async with self._write_transaction() as db:
             await db.execute(
                 "INSERT INTO solutions (user_id, task_id, answer, is_correct) VALUES (?, ?, ?, ?)",
@@ -54,8 +53,6 @@ class SolutionRepository(BaseRepository):
                         "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
                         (streak, streak_date, user_id),
                     )
-                    if streak > int(user[0] or 0) and streak in (7, 30, 100):
-                        milestone = streak
 
         # Optional effects run only after durable progress has committed.
         if recorded:
@@ -63,11 +60,3 @@ class SolutionRepository(BaseRepository):
                 await achievement_repo.check_and_unlock_achievements(user_id, user_repo)
             except Exception:
                 logger.exception("Failed to check achievements")
-        if milestone:
-            try:
-                from utils.notifications import send_streak_notification
-                user = await user_repo.get_user_by_id(user_id)
-                if user and user.get("email"):
-                    await send_streak_notification(user["email"], milestone)
-            except Exception:
-                logger.exception("Failed to send streak notification")

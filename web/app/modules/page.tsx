@@ -12,7 +12,7 @@ import { getModulesMap } from "@/lib/api";
 import type { Module } from "@/types";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
-const MODULES_UI_ENABLED = process.env.NEXT_PUBLIC_MODULES_UI_ENABLED === "true";
+const MODULES_UI_ENABLED = process.env.NEXT_PUBLIC_MODULES_UI_ENABLED !== "false";
 
 const PREVIEW_MODULES: Module[] = [
   { id: 1, name: "Арифметика", icon: "book", sort_order: 1, progress: { completed: false, progress: 0, completed_sections: 0, total_sections: 2 } },

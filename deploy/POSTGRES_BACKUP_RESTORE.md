@@ -34,7 +34,7 @@ modes alone do not restrict Windows access. The tool creates:
 
 - `database.dump`: PostgreSQL custom-format archive of the entire `public` schema.
 - `manifest.json`: archive SHA-256, exported snapshot time, schema/content
-  fingerprints, and the six current migration checksums. No source URL/password.
+  fingerprints, and all current migration checksums in `bot/migrations/postgres/` (seven migrations as of `0007_trial_test_folders`; six at the time of the 2026-11-02 drill). No source URL/password.
 
 The exporter holds a **REPEATABLE READ, READ ONLY** transaction open, exports its
 snapshot and uses that same snapshot for `pg_dump --snapshot` and row fingerprints.
@@ -101,7 +101,7 @@ matching schema/data/migration checksums and **38 sequence positions**. A new us
 ID was generated only in the restored database and its insert was rolled back.
 The source had no writes. The local restore server was authenticated, bound to
 loopback, kept in an ACL-restricted private directory and stopped after the drill.
-See [sanitized verification](../docs/development/2026-11-02/evidence/D03/production-restore.json).
+The local restore server was authenticated, bound to loopback, kept in an ACL-restricted private directory and stopped after the drill.
 
 This is a logical `public`-schema recovery drill. It does not include S3 image
 bytes, database roles/ACLs/tablespaces, other schemas, provider point-in-time

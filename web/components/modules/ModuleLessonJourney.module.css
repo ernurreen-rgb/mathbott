@@ -11,7 +11,7 @@
 
 @container lesson-journey (max-width: 639px) {
   .journey .activeStart {
-    padding-top: 44px;
+    padding-top: 48px;
   }
 
   .viewportSection {
@@ -76,8 +76,9 @@
     scroll-snap-type: x proximity;
   }
 
-  .journey .activeStart {
-    padding-top: 44px;
+  .journey .activeStart,
+  .journey .activeSection {
+    padding-top: 52px;
   }
 
   .journey .shortList {

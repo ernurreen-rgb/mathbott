@@ -29,6 +29,7 @@ from .common import (
     FastAPI,
     Limiter,
 )
+from fastapi import Request
 
 
 def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -59,6 +60,7 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
     @app.put("/api/admin/lessons/{lesson_id}")
     async def update_lesson_cms(
         lesson_id: int,
+        request: Request,
         lesson_number: Optional[int] = Form(None),
         title: Optional[str] = Form(None),
         sort_order: Optional[int] = Form(None),
@@ -67,7 +69,9 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
     ):
         """Update lesson via CMS"""
         await require_admin(email=email, db=db)
-        await db.curriculum.update_lesson(lesson_id, lesson_number=lesson_number, title=title, sort_order=sort_order)
+        form = await request.form()
+        resolved_title = str(form.get("title") or "") if "title" in form else title
+        await db.curriculum.update_lesson(lesson_id, lesson_number=lesson_number, title=resolved_title, sort_order=sort_order)
         lesson = await db.curriculum.get_lesson_by_id(lesson_id)
         if not lesson:
             raise HTTPException(status_code=404, detail="Lesson not found")
@@ -98,6 +102,7 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
     @app.put("/api/admin/mini-lessons/{mini_lesson_id}")
     async def update_mini_lesson_cms(
         mini_lesson_id: int,
+        request: Request,
         title: Optional[str] = Form(None),
         sort_order: Optional[int] = Form(None),
         email: str = Form(...),
@@ -105,7 +110,9 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
     ):
         """Update mini-lesson via CMS"""
         await require_admin(email=email, db=db)
-        await db.curriculum.update_mini_lesson(mini_lesson_id, title=title, sort_order=sort_order)
+        form = await request.form()
+        resolved_title = str(form.get("title") or "") if "title" in form else title
+        await db.curriculum.update_mini_lesson(mini_lesson_id, title=resolved_title, sort_order=sort_order)
         ml = await db.curriculum.get_mini_lesson_by_id(mini_lesson_id)
         if not ml:
             raise HTTPException(status_code=404, detail="Mini-lesson not found")

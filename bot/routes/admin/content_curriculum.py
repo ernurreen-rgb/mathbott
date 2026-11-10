@@ -29,6 +29,8 @@ from .common import (
     FastAPI,
     Limiter,
 )
+from fastapi import Request
+from utils.cache import cache
 
 
 def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -69,6 +71,7 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
 
         try:
             module = await db.curriculum.create_module(name, description, icon, sort_order)
+            cache.invalidate_pattern("modules:")
             return module
         except Exception as e:
             logger.error(f"Error creating module: {e}", exc_info=True)
@@ -77,6 +80,7 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
     @app.put("/api/admin/modules/{module_id}")
     async def update_module_cms(
         module_id: int,
+        request: Request,
         name: Optional[str] = Form(None),
         description: Optional[str] = Form(None),
         icon: Optional[str] = Form(None),
@@ -87,7 +91,12 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
         """Update module via CMS"""
         await require_admin(email=email, db=db)
 
-        await db.curriculum.update_module(module_id, name, description, icon, sort_order)
+        form = await request.form()
+        resolved_description = str(form.get("description") or "") if "description" in form else description
+        resolved_icon = str(form.get("icon") or "") if "icon" in form else icon
+
+        await db.curriculum.update_module(module_id, name, resolved_description, resolved_icon, sort_order)
+        cache.invalidate_pattern("modules:")
         module = await db.curriculum.get_module_by_id(module_id)
         if not module:
             raise HTTPException(status_code=404, detail="Module not found")
@@ -102,6 +111,7 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
         """Delete module via CMS"""
         await require_admin(email=email, db=db)
         await db.curriculum.delete_module(module_id)
+        cache.invalidate_pattern("modules:")
         return {"success": True}
 
     @app.get("/api/admin/modules/{module_id}/sections")
@@ -127,11 +137,13 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
         """Create section via CMS"""
         await require_admin(email=email, db=db)
         section = await db.curriculum.create_section(module_id, name, sort_order, description)
+        cache.invalidate_pattern("modules:")
         return section
 
     @app.put("/api/admin/sections/{section_id}")
     async def update_section_cms(
         section_id: int,
+        request: Request,
         name: Optional[str] = Form(None),
         sort_order: Optional[int] = Form(None),
         description: Optional[str] = Form(None),
@@ -141,7 +153,11 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
     ):
         """Update section via CMS"""
         await require_admin(email=email, db=db)
-        await db.curriculum.update_section(section_id, name, sort_order, description, guide)
+        form = await request.form()
+        resolved_description = str(form.get("description") or "") if "description" in form else description
+        resolved_guide = str(form.get("guide") or "") if "guide" in form else guide
+        await db.curriculum.update_section(section_id, name, sort_order, resolved_description, resolved_guide)
+        cache.invalidate_pattern("modules:")
         section = await db.curriculum.get_section_by_id(section_id)
         if not section:
             raise HTTPException(status_code=404, detail="Section not found")
@@ -156,6 +172,7 @@ def register_curriculum_content_routes(app: FastAPI, db: Database, limiter: Limi
         """Delete section via CMS"""
         await require_admin(email=email, db=db)
         await db.curriculum.delete_section(section_id)
+        cache.invalidate_pattern("modules:")
         return {"success": True}
 
     @app.get("/api/admin/sections/{section_id}/tasks")

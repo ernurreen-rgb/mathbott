@@ -59,10 +59,10 @@ class CurriculumRepository(BaseRepository):
                 params.append(name)
             if description is not None:
                 updates.append("description = ?")
-                params.append(description)
+                params.append(description.strip() or None)
             if icon is not None:
                 updates.append("icon = ?")
-                params.append(icon)
+                params.append(icon.strip() or None)
             if sort_order is not None:
                 updates.append("sort_order = ?")
                 params.append(sort_order)
@@ -132,10 +132,10 @@ class CurriculumRepository(BaseRepository):
                 params.append(sort_order)
             if description is not None:
                 updates.append("description = ?")
-                params.append(description)
+                params.append(description.strip() or None)
             if guide is not None:
                 updates.append("guide = ?")
-                params.append(guide)
+                params.append(guide.strip() or None)
             
             if updates:
                 updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -233,7 +233,7 @@ class CurriculumRepository(BaseRepository):
                 params.append(lesson_number)
             if title is not None:
                 updates.append("title = ?")
-                params.append(title)
+                params.append(title.strip() or None)
             if sort_order is not None:
                 updates.append("sort_order = ?")
                 params.append(sort_order)
@@ -287,7 +287,7 @@ class CurriculumRepository(BaseRepository):
             params: List[Any] = []
             if title is not None:
                 updates.append("title = ?")
-                params.append(title)
+                params.append(title.strip() or None)
             if sort_order is not None:
                 updates.append("sort_order = ?")
                 params.append(sort_order)

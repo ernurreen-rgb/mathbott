@@ -55,14 +55,6 @@ class AchievementRepository(BaseRepository):
 
                 await self._run_with_lock_retry(operation)
                 unlocked.append(achievement)
-                
-                try:
-                    from utils.notifications import send_achievement_notification
-                    user_email = user.get("email")
-                    if user_email:
-                        await send_achievement_notification(user_email, achievement["name"])
-                except Exception as e:
-                    logger.error(f"Error sending achievement notification: {e}", exc_info=True)
         
         return unlocked
 

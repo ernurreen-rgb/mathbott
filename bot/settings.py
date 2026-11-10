@@ -71,13 +71,11 @@ class Settings(BaseSettings):
     sentry_release: Optional[str] = None
     sentry_traces_sample_rate: float = 0.1
 
-    # Alerts / notifications
+    # Alerts
     alerts_enabled: bool = False
     alert_telegram_enabled: bool = False
     alert_telegram_bot_token: str = ""
     alert_telegram_chat_id: str = ""
-    email_notifications_enabled: bool = False
-    push_notifications_enabled: bool = False
 
     # Ops monitor retention
     ops_health_sample_retention_days: int = 30
@@ -95,8 +93,6 @@ class Settings(BaseSettings):
         "allow_legacy_admin_bootstrap",
         "alerts_enabled",
         "alert_telegram_enabled",
-        "email_notifications_enabled",
-        "push_notifications_enabled",
         mode="before",
     )
     @classmethod

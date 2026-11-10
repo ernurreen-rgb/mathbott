@@ -22,7 +22,7 @@ import ModuleLessonJourney, {
   sortJourneySections,
 } from "@/components/modules/ModuleLessonJourney";
 import { getModuleDetails } from "@/lib/api";
-import type { ModuleDetails, Section } from "@/types";
+import type { ModuleDetails } from "@/types";
 import styles from "./ModuleDetail.module.css";
 
 function OrnamentRail({ side }: { side: "left" | "right" }) {
@@ -99,7 +99,6 @@ export default function ModuleDetailPage() {
   const [module, setModule] = useState<ModuleDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeSectionId, setActiveSectionId] = useState<number | null>(null);
   const [guideSectionId, setGuideSectionId] = useState<number | null>(null);
   const didScrollToHashRef = useRef(false);
   const guideButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -134,7 +133,6 @@ export default function ModuleDetailPage() {
 
   useEffect(() => {
     didScrollToHashRef.current = false;
-    setActiveSectionId(null);
   }, [moduleId]);
 
   useEffect(() => {
@@ -157,16 +155,6 @@ export default function ModuleDetailPage() {
   );
 
   useEffect(() => {
-    if (sortedSections.length === 0) {
-      setActiveSectionId(null);
-      return;
-    }
-    if (!sortedSections.some((section) => section.id === activeSectionId)) {
-      setActiveSectionId(sortedSections[0].id);
-    }
-  }, [activeSectionId, sortedSections]);
-
-  useEffect(() => {
     if (didScrollToHashRef.current || sortedSections.length === 0) return;
     const match = window.location.hash.match(/^#section-(\d+)$/);
     if (!match) return;
@@ -175,7 +163,6 @@ export default function ModuleDetailPage() {
     if (!sortedSections.some((section) => section.id === sectionId)) return;
 
     didScrollToHashRef.current = true;
-    setActiveSectionId(sectionId);
     const timeoutId = window.setTimeout(() => {
       document.getElementById(`section-${sectionId}`)?.scrollIntoView({
         behavior: "smooth",
@@ -185,55 +172,6 @@ export default function ModuleDetailPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [sortedSections]);
-
-  useEffect(() => {
-    if (sortedSections.length === 0) return;
-
-    let animationFrameId: number | null = null;
-    const updateActiveSection = () => {
-      animationFrameId = null;
-      const activationLine = 190;
-      let nextSectionId = sortedSections[0].id;
-
-      for (const section of sortedSections) {
-        const element = document.getElementById(`section-${section.id}`);
-        if (!element) continue;
-        if (element.getBoundingClientRect().top <= activationLine) {
-          nextSectionId = section.id;
-        } else {
-          break;
-        }
-      }
-
-      setActiveSectionId((current) =>
-        current === nextSectionId ? current : nextSectionId,
-      );
-    };
-
-    const scheduleUpdate = () => {
-      if (animationFrameId !== null) return;
-      animationFrameId = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    scheduleUpdate();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-      if (animationFrameId !== null)
-        window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [sortedSections]);
-
-  const currentSection = useMemo(
-    () =>
-      sortedSections.find((section) => section.id === activeSectionId) ||
-      sortedSections[0] ||
-      null,
-    [activeSectionId, sortedSections],
-  );
 
   const guideSection = useMemo(
     () =>
@@ -261,8 +199,10 @@ export default function ModuleDetailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeGuide, guideSection]);
 
-  const sectionSummary = useMemo(() => {
-    const lessons = sortJourneyLessons(currentSection?.lessons);
+  const moduleSummary = useMemo(() => {
+    const lessons = sortedSections.flatMap((section) =>
+      sortJourneyLessons(section.lessons),
+    );
     const completed = lessons.filter(isLessonJourneyCompleted).length;
     const progress = lessons.length
       ? Math.round(
@@ -275,7 +215,7 @@ export default function ModuleDetailPage() {
         )
       : 0;
     return { completed, progress, total: lessons.length };
-  }, [currentSection]);
+  }, [sortedSections]);
 
   if (sessionStatus === "loading")
     return <PageLoader label="Сессия жүктелуде" />;
@@ -367,7 +307,7 @@ export default function ModuleDetailPage() {
                 Прогресс
               </div>
               <div className="whitespace-nowrap text-sm font-black text-slate-800 sm:text-lg">
-                {sectionSummary.completed}/{sectionSummary.total}
+                {moduleSummary.completed}/{moduleSummary.total}
                 &nbsp;сабақ
               </div>
             </div>
@@ -376,15 +316,15 @@ export default function ModuleDetailPage() {
 
           <div
             role="progressbar"
-            aria-label="Бөлім прогресі"
+            aria-label="Модуль прогресі"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={sectionSummary.progress}
+            aria-valuenow={moduleSummary.progress}
             className="mt-4 h-2 overflow-hidden rounded-full bg-purple-100"
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-purple-600 to-blue-500 transition-[width] duration-700"
-              style={{ width: `${sectionSummary.progress}%` }}
+              style={{ width: `${moduleSummary.progress}%` }}
             />
           </div>
         </div>

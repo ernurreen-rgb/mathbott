@@ -395,28 +395,36 @@ export default function LessonPage() {
     }
   };
 
+  const getTaskCurrentAnswer = (task: LessonTask) =>
+    answers[task.id] ||
+    selectedAnswers[task.id] ||
+    (task.status === "completed" ? task.answer || "" : "");
+
+  const isTaskAnswerReady = (task: LessonTask, currentAnswer: string) => {
+    const qt: QuestionType = (task.question_type || "input") as QuestionType;
+    if (qt === "select") {
+      return getTaskAnswerMode(task) === "choices"
+        ? isSelectAnswerComplete(currentAnswer)
+        : isWrittenAnswerComplete(currentAnswer, 2);
+    }
+    if (qt === "mcq" || qt === "mcq6") {
+      const requiredCount = getTaskMcqCorrectCount(task);
+      return getTaskAnswerMode(task) === "choices"
+        ? isMcqAnswerComplete(currentAnswer, requiredCount)
+        : isWrittenAnswerComplete(currentAnswer, requiredCount);
+    }
+    return Boolean(currentAnswer.trim());
+  };
+
   const renderTaskControls = (task: LessonTask) => {
     const qt: QuestionType = (task.question_type || "input") as QuestionType;
     const isTaskAnswered =
       task.status === "completed" ||
       selectedAnswers[task.id] !== undefined;
     const isTaskCorrect = task.status === "completed" || !!feedback[task.id]?.ok;
-    const currentAnswer =
-      answers[task.id] ||
-      selectedAnswers[task.id] ||
-      (task.status === "completed" ? task.answer || "" : "");
+    const currentAnswer = getTaskCurrentAnswer(task);
     const taskCorrectAnswer =
       correctAnswers[task.id] || (isTaskCorrect && currentAnswer ? currentAnswer : task.answer || "");
-    const retryButton =
-      isTaskAnswered && !isTaskCorrect ? (
-        <button
-          type="button"
-          onClick={() => resetTaskAttempt(task.id)}
-          className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2.5 px-5 rounded-lg transition-colors self-start"
-        >
-          Қайта көру
-        </button>
-      ) : null;
 
     if (qt === "tf") {
       const selectedAnswer = currentAnswer;
@@ -479,7 +487,6 @@ export default function LessonPage() {
               Жалған
             </button>
           </div>
-          {retryButton}
         </div>
       );
     }
@@ -500,17 +507,6 @@ export default function LessonPage() {
               correctAnswer={taskCorrectAnswer}
               selectedAnswer={currentAnswer}
             />
-            {!isTaskAnswered ? (
-              <button
-                onClick={() => submitCheck(task, currentAnswer)}
-                disabled={!!checking[task.id] || !isSelectAnswerComplete(currentAnswer)}
-                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-              >
-                Тексеру
-              </button>
-            ) : (
-              retryButton
-            )}
           </div>
         );
       }
@@ -528,17 +524,6 @@ export default function LessonPage() {
               )}
             />
           </div>
-          {!isTaskAnswered ? (
-            <button
-              onClick={() => submitCheck(task, currentAnswer)}
-              disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, 2)}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-            >
-              Тексеру
-            </button>
-          ) : (
-            retryButton
-          )}
         </div>
       );
     }
@@ -559,17 +544,6 @@ export default function LessonPage() {
               correctAnswer={taskCorrectAnswer}
               selectedAnswer={currentAnswer}
             />
-            {!isTaskAnswered ? (
-              <button
-                onClick={() => submitCheck(task, currentAnswer)}
-                disabled={!!checking[task.id] || !isMcqAnswerComplete(currentAnswer, requiredCount)}
-                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-              >
-                Тексеру
-              </button>
-            ) : (
-              retryButton
-            )}
           </div>
         );
       }
@@ -587,17 +561,6 @@ export default function LessonPage() {
               disabled={isTaskAnswered}
             />
           </div>
-          {!isTaskAnswered ? (
-            <button
-              onClick={() => submitCheck(task, currentAnswer)}
-              disabled={!!checking[task.id] || !isWrittenAnswerComplete(currentAnswer, requiredCount)}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-            >
-              Тексеру
-            </button>
-          ) : (
-            retryButton
-          )}
         </div>
       );
     }
@@ -612,17 +575,6 @@ export default function LessonPage() {
             placeholder="Жауапты жазыңыз"
           />
         </div>
-        {!isTaskAnswered ? (
-          <button
-            onClick={() => submitCheck(task, currentAnswer)}
-            disabled={!!checking[task.id] || !currentAnswer.trim()}
-            className="self-stretch sm:self-end bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-3 px-6 rounded-lg"
-          >
-            Тексеру
-          </button>
-        ) : (
-          retryButton
-        )}
       </div>
     );
   };
@@ -866,17 +818,39 @@ export default function LessonPage() {
                       >
                         Шағым
                       </button>
-                      {canGoNext ? (
+                      {!isActiveTaskAnswered && (activeTask.question_type || "input") !== "tf" ? (
                         <button
                           type="button"
-                          onClick={() => goToNextTaskOrMini(activeTask.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                          onClick={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
+                          disabled={!!checking[activeTask.id] || !isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
+                          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center transition-colors"
                         >
-                          Келесі <Icon name="arrowRight" />
+                          Тексеру
                         </button>
+                      ) : isActiveTaskAnswered && (!isTaskCompleted || canGoNext) ? (
+                        <div className="flex items-center gap-2">
+                          {!isTaskCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => resetTaskAttempt(activeTask.id)}
+                              className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors"
+                            >
+                              Қайта көру
+                            </button>
+                          )}
+                          {canGoNext && (
+                            <button
+                              type="button"
+                              onClick={() => goToNextTaskOrMini(activeTask.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                            >
+                              Келесі <Icon name="arrowRight" />
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <div
-                          className="invisible py-2 px-3 sm:px-4 font-bold inline-flex items-center gap-1.5 select-none"
+                          className="invisible py-2 px-4 sm:px-5 font-bold inline-flex items-center gap-1.5 select-none"
                           aria-hidden="true"
                         >
                           Келесі <Icon name="arrowRight" />

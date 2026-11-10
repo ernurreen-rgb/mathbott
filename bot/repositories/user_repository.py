@@ -637,21 +637,7 @@ class UserRepository(BaseRepository):
                         await db.commit()
                         return current_streak, new_streak
 
-            streak_result = await self._run_with_lock_retry(operation)
-            if not streak_result:
-                return
-
-            current_streak, new_streak = streak_result
-            if new_streak > current_streak and new_streak in [7, 30, 100]:
-                try:
-                    from utils.notifications import send_streak_notification
-                    user = await self.get_user_by_id(user_id)
-                    if user and user.get("email"):
-                        await send_streak_notification(user["email"], new_streak)
-                except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Error sending streak notification: {e}", exc_info=True)
+            await self._run_with_lock_retry(operation)
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

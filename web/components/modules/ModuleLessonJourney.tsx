@@ -225,7 +225,9 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                 className={`${styles.lessonList} relative mx-auto w-full max-w-2xl list-none px-2 pb-2 ${
                   lessons.length <= 5 ? styles.shortList : ""
                 } ${
-                  lessons[0]?.id === activeLessonId ? `${styles.activeStart} pt-10` : "pt-5"
+                  lessons[0]?.id === activeLessonId ? `${styles.activeStart} pt-12` : "pt-5"
+                } ${
+                  lessons.some((lesson) => lesson.id === activeLessonId) ? styles.activeSection : ""
                 }`}
               >
                 {lessons.map((lesson, lessonIndex) => {

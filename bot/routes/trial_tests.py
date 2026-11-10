@@ -273,13 +273,6 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
 
-                if submit_result.get("streak_milestone") and user.get("email"):
-                    try:
-                        from utils.notifications import send_streak_notification
-                        await send_streak_notification(user["email"], int(submit_result["streak_milestone"]))
-                    except Exception as e:
-                        logger.error(f"Failed to send streak notification after trial submit: {e}", exc_info=True)
-
                 if submit_result.get("recorded_any") or had_any_correct:
                     try:
                         await db.check_and_unlock_achievements(user["id"])

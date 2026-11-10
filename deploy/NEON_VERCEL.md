@@ -43,6 +43,10 @@ Backend production settings:
 | `CRON_SECRET` | Random bearer secret for scheduled maintenance |
 | `DATABASE_AUTO_MIGRATE` | `false` |
 | `BACKGROUND_TASKS_ENABLED` | `false` |
+| `ADMIN_EMAIL` | Optional bootstrap `super_admin` email |
+| `IMPORT_PREVIEW_TOKEN_SECRET` | Optional dedicated HMAC secret for bank JSON import preview tokens (falls back to `INTERNAL_PROXY_SHARED_SECRET`) |
+| `SENTRY_DSN` | Optional Sentry DSN for backend error/trace reporting |
+| `ALERTS_ENABLED`, `ALERT_TELEGRAM_ENABLED`, `ALERT_TELEGRAM_BOT_TOKEN`, `ALERT_TELEGRAM_CHAT_ID` | Optional Telegram operational alert settings |
 
 Web production settings:
 
@@ -115,8 +119,8 @@ Apply the schema-only migration before deploying this API version:
 python scripts/migrate_to_neon.py --schema-only
 ```
 
-This adds `quiz_entry_limits` through PostgreSQL `0006` / SQLite Alembic
-`0013`; it does not change existing quiz participants or scores. Conventional
+This adds `quiz_entry_limits` through PostgreSQL `0006` / SQLite Alembic `0013` (and subsequent schema migrations such as `trial_test_folders` in PostgreSQL `0007` / SQLite Alembic `0014`);
+it does not change existing quiz participants or scores. Conventional
 SQLite startup applies Alembic normally. Hosted runtimes with auto-migration
 disabled must migrate explicitly. Deploy the API after the schema, then the web app.
 
@@ -230,7 +234,7 @@ schema-only migration before the API deployment.
 
 ## Verification and deployment
 
-Automated suites and runners were removed on 2026-11-05. CI checks Python
+Legacy automated test suites (`web/e2e/*`, Jest unit suites, and the 51-file backend `pytest` suite) were removed on 2026-11-05 (`b201538`). Targeted Bank Workspace verification (`bot/tests/test_bank_catalog.py`, `bot/scripts/preview_bank_workspace.py`, and Playwright CLI check scripts in `web/tools/check-bank-*.js`) was added on 2026-11-08 (`d1d83b3`). CI checks Python
 syntax and lint, frontend lint/TypeScript/build, and dependency security.
 
 ```powershell

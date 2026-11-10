@@ -1,3 +1,0 @@
-{"finding": "student_options_solution_metadata_leak", "admin_create_status": 200, "student_detail_status": 200, "leaked_options": [{"label": "A", "text": "A", "correct": true, "answer": "hidden-solution"}, {"label": "B", "text": "B", "correct": false, "answer": "hidden-solution"}, {"label": "C", "text": "C", "correct": false, "answer": "hidden-solution"}, {"label": "D", "text": "D", "correct": false, "answer": "hidden-solution"}]}
-{"finding": "unrestricted_guest_quiz_lookup_and_join", "same_client_pin_lookup_statuses": {"200": 120}, "same_client_anonymous_join_statuses": {"200": 120}, "persisted_participants": 120}
-Both vulnerable behaviors reproduced; temporary SQLite data removed.

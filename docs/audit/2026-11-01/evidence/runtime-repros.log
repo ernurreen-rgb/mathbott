@@ -1,2 +1,0 @@
-{"constant_equivalence": [{"expected": "x-x", "submitted": "0", "accepted": false, "expected_key": "__algebra__:0|1/1:", "submitted_key": "0"}, {"expected": "x-x+1", "submitted": "1", "accepted": false, "expected_key": "__algebra__:1/1:|1/1:", "submitted_key": "1"}, {"expected": "0*x", "submitted": "0", "accepted": false, "expected_key": "__algebra__:0|1/1:", "submitted_key": "0"}]}
-{"metric_cardinality": {"retained_events": 10000, "endpoint_keys": 20000, "error_keys": 20000}}
