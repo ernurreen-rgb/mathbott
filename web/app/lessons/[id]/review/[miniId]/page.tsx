@@ -1,9 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
@@ -16,6 +15,7 @@ import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput"
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import { apiPath, getMiniLessonReview, submitMiniLessonReviewAnswer } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
+import { consumeReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } from "@/lib/question-options";
 import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
 import { isWrittenAnswerComplete, parseWrittenAnswerSlots } from "@/lib/written-answer";
@@ -109,6 +109,7 @@ function AnswerControls({ task, value, onChange, result, checking, onSubmit }: {
 export default function MiniLessonReviewPage() {
   const { data: session, status } = useSession();
   const params = useParams();
+  const router = useRouter();
   const lessonId = Number(params.id);
   const miniLessonId = Number(params.miniId);
   const email = session?.user?.email || null;
@@ -142,6 +143,11 @@ export default function MiniLessonReviewPage() {
   };
 
   const backHref = `/lessons/${review?.lesson_id ?? lessonId}`;
+  // Opened from the lesson: step back. Opened directly: replace, so the review never sits between two lesson visits.
+  const returnToLesson = () => {
+    if (consumeReviewOpenedFromLesson(window.location.pathname)) router.back();
+    else router.replace(backHref);
+  };
   const shell = (children: ReactNode) => <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
     <div className="absolute inset-0 bg-black/5" />
     <DesktopNav />
@@ -163,7 +169,7 @@ export default function MiniLessonReviewPage() {
 
   return shell(<>
     <section className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
-      <Link href={backHref} className="text-gray-700 hover:text-gray-900 inline-flex items-center gap-1.5"><Icon name="arrowLeft" /> Сабаққа оралу</Link>
+      <button type="button" onClick={returnToLesson} className="text-gray-700 hover:text-gray-900 inline-flex items-center gap-1.5"><Icon name="arrowLeft" /> Сабаққа оралу</button>
       <h1 className="mt-4 text-2xl font-extrabold text-gray-900">Қателерді талдау</h1>
       <p className="mt-1 text-sm text-gray-700">Бірінші әрекетте қате кеткен есептерге ұқсас, сандары өзгерген есептерді шығарыңыз. Бұл сабақ прогресіне әсер етпейді.</p>
       {summary && summary.mistakes > 0 && <>
@@ -226,7 +232,7 @@ export default function MiniLessonReviewPage() {
           <p className="text-gray-700">Түзетілген қателер: {review.summary.resolved} / {review.summary.mistakes}</p>
           {review.summary.weak > 0 && <p className="text-amber-800">Әлсіз тұстар: {review.summary.weak} есеп. Сабақ түсіндірмесін қайта қарап, кейін тағы жаттығыңыз.</p>}
         </>}
-      <Link href={backHref} className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg">Сабаққа оралу <Icon name="arrowRight" /></Link>
+      <button type="button" onClick={returnToLesson} className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg">Сабаққа оралу <Icon name="arrowRight" /></button>
     </section>}
   </>);
 }

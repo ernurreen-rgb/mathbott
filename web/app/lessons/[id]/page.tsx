@@ -16,6 +16,7 @@ import { isWrittenAnswerComplete } from "@/lib/written-answer";
 import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
 import { showToast } from "@/lib/toast";
+import { markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
@@ -156,6 +157,10 @@ export default function LessonPage() {
   const sectionHref =
     lesson?.module_id && lesson?.section_id ? `/modules/${lesson.module_id}#section-${lesson.section_id}` : "/modules";
   const reviewHref = (miniLessonId: number) => `/lessons/${lessonId}/review/${miniLessonId}`;
+  const openReview = (miniLessonId: number) => {
+    markReviewOpenedFromLesson(reviewHref(miniLessonId));
+    router.push(reviewHref(miniLessonId));
+  };
 
   const selectedMini: LessonMiniLesson | null = useMemo(() => {
     if (!lesson || !selectedMiniId) return null;
@@ -627,7 +632,7 @@ export default function LessonPage() {
                 <p className="text-sm text-gray-700">Қате кеткен есептерді ұқсас есептермен талдап шығыңыз.</p>
                 <button
                   type="button"
-                  onClick={() => router.push(reviewHref(congratsReviewMiniId))}
+                  onClick={() => openReview(congratsReviewMiniId)}
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg"
                 >
                   Қателерді талдау
@@ -655,8 +660,9 @@ export default function LessonPage() {
         <div className="w-full max-w-4xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="mb-4">
+              {/* The parent section, not history: after a mistake review, history-back returned to the review. */}
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push(sectionHref)}
                 className="text-gray-700 hover:text-gray-900"
               >
                 <Icon name="arrowLeft" /> Артқа
@@ -720,7 +726,7 @@ export default function LessonPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => router.push(reviewHref(selectedMini.id))}
+                      onClick={() => openReview(selectedMini.id)}
                       className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
                     >
                       Талдауды бастау ({selectedMini.review!.pending}) <Icon name="arrowRight" />
@@ -729,7 +735,7 @@ export default function LessonPage() {
                 ) : (
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
                     <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />Қателер талданды: түзетілді {selectedMini.review!.resolved}{selectedMini.review!.weak ? `, әлсіз тұс ${selectedMini.review!.weak}` : ""}.</span>
-                    <button type="button" onClick={() => router.push(reviewHref(selectedMini.id))} className="font-semibold text-purple-700 hover:underline">
+                    <button type="button" onClick={() => openReview(selectedMini.id)} className="font-semibold text-purple-700 hover:underline">
                       Нәтижені көру
                     </button>
                   </div>
