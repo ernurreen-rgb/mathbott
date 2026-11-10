@@ -24,6 +24,11 @@ WORKDIR /app
 # Copy only installed packages from builder
 COPY --from=builder /install /usr/local
 
+# Apply Debian security updates the base image does not carry yet (e.g. zlib1g).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # Replace the base image's vulnerable vendored jaraco.context and wheel copies.
 RUN python -m pip install --no-cache-dir --upgrade "setuptools==80.10.2"
 
