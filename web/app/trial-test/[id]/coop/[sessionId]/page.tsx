@@ -574,9 +574,9 @@ export default function TrialTestCoopPage() {
                   <button
                     type="button"
                     onClick={() => handleReportClick(currentTask.id)}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg"
+                    className="min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
                   >
-                    Шағым
+                    <Icon name="report" /> Шағым
                   </button>
                   {currentTaskIndex < test.tasks.length - 1 ? (
                     <button

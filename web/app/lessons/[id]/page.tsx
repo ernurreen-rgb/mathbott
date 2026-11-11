@@ -864,7 +864,7 @@ export default function LessonPage() {
                     </div>
 
                     {/*
-                      The full row (Алдыңғы, Шағым, Қайта көру, Келесі) needs about 480px, which the
+                      The full row (Алдыңғы, Шағым, Қайта көру, Келесі) needs about 490px, which the
                       card only has from lg up (the desktop nav takes 16rem from md). Below lg the main
                       action takes its own full-width line above the back and report buttons, and the
                       invisible placeholders that keep Шағым centred on one line are dropped.
@@ -889,9 +889,9 @@ export default function LessonPage() {
                       <button
                         type="button"
                         onClick={() => handleReportClick(activeTask.id)}
-                        className="order-3 lg:order-2 ml-auto lg:ml-0 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg"
+                        className="order-3 lg:order-2 ml-auto lg:ml-0 min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
                       >
-                        Шағым
+                        <Icon name="report" /> Шағым
                       </button>
                       {!isActiveTaskAnswered && (activeTask.question_type || "input") !== "tf" ? (
                         <button
