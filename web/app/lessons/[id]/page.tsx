@@ -305,7 +305,10 @@ export default function LessonPage() {
       });
       const data: CheckResult = await res.json();
       if (!res.ok) {
-        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: (data as any)?.detail || "Тексеру қатесі" } }));
+        const detail = (data as any)?.error?.detail || (data as any)?.detail;
+        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: typeof detail === "string" ? detail : "Тексеру қатесі" } }));
+        // The lesson waits for an earlier mistake review: reload to show why.
+        if (res.status === 423) void fetchLesson();
         return;
       }
       setSelectedAnswers((m) => ({ ...m, [task.id]: answer }));
@@ -617,6 +620,50 @@ export default function LessonPage() {
     );
   }
 
+  if (lesson.lock) {
+    const lock = lesson.lock;
+    const lockReviewHref = `/lessons/${lock.lesson_id}/review/${lock.mini_lesson_id}`;
+    const previousName = lock.lesson_title?.trim() || `Сабақ ${lock.lesson_number ?? lock.lesson_id}`;
+    return (
+      <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
+        <div className="absolute inset-0 bg-black/5"></div>
+        <DesktopNav />
+        <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          <div className="w-full max-w-xl glass rounded-3xl shadow-2xl p-6 sm:p-8 border border-white/30 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <Icon name="lock" className="h-8 w-8" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-gray-900">Сабақ әлі жабық</h1>
+            <p className="mt-3 text-gray-700">
+              «{previousName}» сабағында талданбаған {lock.pending} қате бар. Келесі сабаққа өту үшін алдымен оларды ұқсас есептермен талдап шығыңыз.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  // Back from the review lands here again, now open or pointing at the next review.
+                  markReviewOpenedFromLesson(lockReviewHref);
+                  router.push(lockReviewHref);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg inline-flex items-center justify-center gap-1.5"
+              >
+                Қателерді талдау ({lock.pending}) <Icon name="arrowRight" />
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(sectionHref)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 px-5 rounded-lg"
+              >
+                Бөлімге оралу
+              </button>
+            </div>
+          </div>
+        </main>
+        <MobileNav currentPage="modules" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
       <div className="absolute inset-0 bg-black/5"></div>
@@ -629,7 +676,10 @@ export default function LessonPage() {
             <div className="text-sm text-gray-600 mt-1">Сабақ аяқталды</div>
             {congratsReviewMiniId ? (
               <div className="mt-5 space-y-2">
-                <p className="text-sm text-gray-700">Қате кеткен есептерді ұқсас есептермен талдап шығыңыз.</p>
+                <p className="text-sm text-gray-700">
+                  Қате кеткен есептерді ұқсас есептермен талдап шығыңыз.
+                  {lesson.next_lesson?.locked && " Келесі сабақ талдаудан кейін ашылады."}
+                </p>
                 <button
                   type="button"
                   onClick={() => openReview(congratsReviewMiniId)}
@@ -723,6 +773,11 @@ export default function LessonPage() {
                     <div className="text-gray-800">
                       <div className="font-bold">Қателерді талдау</div>
                       <div className="text-sm">Бірінші әрекетте {selectedMini.review!.mistakes} есепте қате кетті. Оларды ұқсас есептермен қайта шығарып көріңіз.</div>
+                      {lesson.next_lesson?.locked && (
+                        <div className="mt-1 text-sm font-semibold text-amber-800">
+                          <Icon name="lock" className="mr-1" />Келесі сабақ қателер талданғаннан кейін ашылады.
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -766,6 +821,14 @@ export default function LessonPage() {
                     >
                       Келесі кіші сабақ <Icon name="arrowRight" />
                     </button>
+                  ) : lesson.progress?.completed && lesson.next_lesson && !lesson.next_lesson.locked ? (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/lessons/${lesson.next_lesson!.id}`)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
+                    >
+                      Келесі сабақ <Icon name="arrowRight" />
+                    </button>
                   ) : (
                     <span className="font-semibold text-green-700">Сабақ аяқталды!</span>
                   )}
@@ -800,18 +863,24 @@ export default function LessonPage() {
                     )}
                     </div>
 
-                    <div className="mt-4 flex justify-between items-center gap-2">
+                    {/*
+                      The full row (Алдыңғы, Шағым, Қайта көру, Келесі) needs about 480px, which the
+                      card only has from lg up (the desktop nav takes 16rem from md). Below lg the main
+                      action takes its own full-width line above the back and report buttons, and the
+                      invisible placeholders that keep Шағым centred on one line are dropped.
+                    */}
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3">
                       {currentTaskIndex > 0 ? (
                         <button
                           type="button"
                           onClick={() => goToPrevTaskOrMini(activeTask.id)}
-                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                          className="order-2 lg:order-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
                         >
                           <Icon name="arrowLeft" /> Алдыңғы
                         </button>
                       ) : (
                         <div
-                          className="invisible py-2 px-3 sm:px-4 font-bold inline-flex items-center gap-1.5 select-none"
+                          className="hidden lg:inline-flex lg:order-1 invisible py-2 px-3 sm:px-4 font-bold items-center gap-1.5 select-none"
                           aria-hidden="true"
                         >
                           <Icon name="arrowLeft" /> Алдыңғы
@@ -820,7 +889,7 @@ export default function LessonPage() {
                       <button
                         type="button"
                         onClick={() => handleReportClick(activeTask.id)}
-                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg"
+                        className="order-3 lg:order-2 ml-auto lg:ml-0 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg"
                       >
                         Шағым
                       </button>
@@ -829,17 +898,17 @@ export default function LessonPage() {
                           type="button"
                           onClick={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
                           disabled={!!checking[activeTask.id] || !isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
-                          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center transition-colors"
+                          className="order-1 lg:order-3 w-full lg:w-auto bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center transition-colors"
                         >
                           Тексеру
                         </button>
                       ) : isActiveTaskAnswered && (!isTaskCompleted || canGoNext) ? (
-                        <div className="flex items-center gap-2">
+                        <div className="order-1 lg:order-3 w-full lg:w-auto flex items-center gap-2">
                           {!isTaskCompleted && (
                             <button
                               type="button"
                               onClick={() => resetTaskAttempt(activeTask.id)}
-                              className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors"
+                              className="flex-1 lg:flex-none bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors"
                             >
                               Қайта көру
                             </button>
@@ -848,7 +917,7 @@ export default function LessonPage() {
                             <button
                               type="button"
                               onClick={() => goToNextTaskOrMini(activeTask.id)}
-                              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                              className="flex-1 lg:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors"
                             >
                               Келесі <Icon name="arrowRight" />
                             </button>
@@ -856,7 +925,7 @@ export default function LessonPage() {
                         </div>
                       ) : (
                         <div
-                          className="invisible py-2 px-4 sm:px-5 font-bold inline-flex items-center gap-1.5 select-none"
+                          className="hidden lg:inline-flex lg:order-3 invisible py-2 px-4 sm:px-5 font-bold items-center gap-1.5 select-none"
                           aria-hidden="true"
                         >
                           Келесі <Icon name="arrowRight" />

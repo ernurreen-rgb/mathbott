@@ -8,6 +8,7 @@ from slowapi import Limiter
 
 from dependencies import get_db
 from database import Database
+from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from utils.cache import cache
 from utils.learning_progress import build_completion_identity
 
@@ -68,6 +69,9 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
             if not task or task.get("deleted_at"):
                 logger.warning(f"Task not found: {task_id}")
                 raise HTTPException(status_code=404, detail="Task not found")
+            if task.get("mini_lesson_id") and not user.get("is_admin"):
+                if await db.module_review.get_mini_lesson_lock(user["id"], int(task["mini_lesson_id"])):
+                    raise HTTPException(status_code=423, detail=LESSON_LOCKED_MESSAGE)
 
             questions = await db.progress.get_task_questions(task_id)
             if not questions:

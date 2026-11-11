@@ -42,7 +42,26 @@ export interface LessonSummary {
   title?: string;
   sort_order: number;
   progress?: LessonProgress;
+  /** Set while the lesson waits for the mistake review of the lesson before it. */
+  lock?: LessonLock | null;
   mini_lessons?: MiniLessonSummary[];
+}
+
+/** The lesson before still has mistakes to review; it names where that review starts. */
+export interface LessonLock {
+  lesson_id: number;
+  lesson_title?: string | null;
+  lesson_number?: number | null;
+  mini_lesson_id: number;
+  pending: number;
+}
+
+export interface NextLessonSummary {
+  id: number;
+  title?: string | null;
+  lesson_number?: number | null;
+  /** Closed until this lesson's mistakes are reviewed. */
+  locked: boolean;
 }
 
 
@@ -182,5 +201,8 @@ export interface LessonDetails {
   title?: string;
   sort_order: number;
   progress?: LessonProgress;
+  /** When set, tasks are withheld until the earlier lesson's mistakes are reviewed. */
+  lock?: LessonLock | null;
+  next_lesson?: NextLessonSummary | null;
   mini_lessons: LessonMiniLesson[];
 }

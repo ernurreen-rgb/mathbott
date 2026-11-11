@@ -20,6 +20,8 @@ STATE_PENDING = "pending"
 STATE_RESOLVED = "resolved"
 STATE_WEAK = "weak"
 
+LESSON_LOCKED_MESSAGE = "Бұл сабақ әлі жабық: алдымен алдыңғы сабақтағы қателерді талдаңыз."
+
 
 class ModuleReviewError(Exception):
     def __init__(self, kind: str, message: str):
@@ -170,6 +172,143 @@ class ModuleReviewRepository(BaseRepository):
             mini_lesson_id: _summarize([item for item in items if item["mini_lesson_id"] == mini_lesson_id])
             for mini_lesson_id in mini_lesson_ids
         }
+
+    async def _module_lessons(self, db: db_driver.Connection, module_id: int) -> List[Dict[str, Any]]:
+        # Same order as the module journey on the web: sections, then lessons by sort order and number.
+        async with db.execute(
+            """
+            SELECT l.id, l.title, l.lesson_number
+            FROM lessons l
+            JOIN sections s ON s.id = l.section_id
+            WHERE s.module_id = ?
+            ORDER BY s.sort_order ASC, s.id ASC, l.sort_order ASC, COALESCE(l.lesson_number, 0) ASC, l.id ASC
+            """,
+            (module_id,),
+        ) as cursor:
+            return [
+                {"id": int(row[0]), "title": row[1], "lesson_number": row[2]}
+                for row in await cursor.fetchall()
+            ]
+
+    async def get_module_lesson_order(self, module_id: int) -> List[Dict[str, Any]]:
+        async with self._connection() as db:
+            return await self._module_lessons(db, module_id)
+
+    async def get_lesson_gate(self, user_id: int, module_id: int) -> Dict[str, Any]:
+        """Lessons of a module that wait for the mistake review of the lesson before them.
+
+        Only the lesson right after one with pending review items waits; lessons further on stay
+        reachable. A lesson the student has already answered in never closes, and only completed
+        mini-lessons count, because that is when their review is offered.
+        Returns the module's lessons in journey order and ``locks`` keyed by the waiting lesson.
+        """
+        async with self._connection() as db:
+            lessons = await self._module_lessons(db, module_id)
+            # The last lesson never gates anything, so only the others need their reviews checked.
+            gating_ids = [lesson["id"] for lesson in lessons[:-1]]
+            if not gating_ids:
+                return {"lessons": lessons, "locks": {}}
+
+            minis: Dict[int, Dict[str, int]] = {}
+            for chunk in _chunks(gating_ids):
+                async with db.execute(
+                    f"SELECT id, lesson_id, mini_index FROM mini_lessons WHERE lesson_id IN ({_placeholders(chunk)})",
+                    chunk,
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        minis[int(row[0])] = {"lesson_id": int(row[1]), "mini_index": int(row[2] or 0)}
+            mini_ids = sorted(minis)
+
+            completed_minis = set()
+            for chunk in _chunks(mini_ids):
+                async with db.execute(
+                    f"""
+                    SELECT t.mini_lesson_id, COUNT(t.id),
+                           SUM(CASE WHEN up.status = 'completed' THEN 1 ELSE 0 END)
+                    FROM tasks t
+                    LEFT JOIN user_progress up ON up.task_id = t.id AND up.user_id = ?
+                    WHERE t.mini_lesson_id IN ({_placeholders(chunk)}) AND t.deleted_at IS NULL
+                    GROUP BY t.mini_lesson_id
+                    """,
+                    [user_id, *chunk],
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        total, done = int(row[1] or 0), int(row[2] or 0)
+                        if total > 0 and done == total:
+                            completed_minis.add(int(row[0]))
+
+            pending: Dict[int, Dict[int, int]] = {}
+            for chunk in _chunks(sorted(completed_minis)):
+                for item in await self._items(db, user_id, chunk):
+                    if item["state"] == STATE_PENDING:
+                        by_mini = pending.setdefault(minis[item["mini_lesson_id"]]["lesson_id"], {})
+                        by_mini[item["mini_lesson_id"]] = by_mini.get(item["mini_lesson_id"], 0) + 1
+            if not pending:
+                return {"lessons": lessons, "locks": {}}
+
+            candidates = [
+                lessons[index + 1]["id"] for index, lesson in enumerate(lessons[:-1]) if lesson["id"] in pending
+            ]
+            started = set()
+            for chunk in _chunks(candidates):
+                async with db.execute(
+                    f"""
+                    SELECT DISTINCT ml.lesson_id
+                    FROM solutions s
+                    JOIN tasks t ON t.id = s.task_id
+                    JOIN mini_lessons ml ON ml.id = t.mini_lesson_id
+                    WHERE s.user_id = ? AND ml.lesson_id IN ({_placeholders(chunk)})
+                    """,
+                    [user_id, *chunk],
+                ) as cursor:
+                    started.update(int(row[0]) for row in await cursor.fetchall())
+
+        locks: Dict[int, Dict[str, Any]] = {}
+        for index, lesson in enumerate(lessons[:-1]):
+            by_mini = pending.get(lesson["id"])
+            waiting = lessons[index + 1]["id"]
+            if not by_mini or waiting in started:
+                continue
+            first_mini = min(by_mini, key=lambda mini_id: (minis[mini_id]["mini_index"], mini_id))
+            locks[waiting] = {
+                "lesson_id": lesson["id"],
+                "lesson_title": lesson["title"],
+                "lesson_number": lesson["lesson_number"],
+                "mini_lesson_id": first_mini,
+                "pending": sum(by_mini.values()),
+            }
+        return {"lessons": lessons, "locks": locks}
+
+    async def get_lesson_lock(self, user_id: int, lesson_id: int) -> Optional[Dict[str, Any]]:
+        """Why a lesson is closed for this student, or None; cheap once the student has answered in it."""
+        async with self._connection() as db:
+            async with db.execute(
+                """
+                SELECT 1 FROM solutions s
+                JOIN tasks t ON t.id = s.task_id
+                JOIN mini_lessons ml ON ml.id = t.mini_lesson_id
+                WHERE s.user_id = ? AND ml.lesson_id = ?
+                LIMIT 1
+                """,
+                (user_id, lesson_id),
+            ) as cursor:
+                if await cursor.fetchone():
+                    return None
+            async with db.execute(
+                "SELECT s.module_id FROM lessons l JOIN sections s ON s.id = l.section_id WHERE l.id = ?",
+                (lesson_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        if not row:
+            return None
+        gate = await self.get_lesson_gate(user_id, int(row[0]))
+        return gate["locks"].get(lesson_id)
+
+    async def get_mini_lesson_lock(self, user_id: int, mini_lesson_id: int) -> Optional[Dict[str, Any]]:
+        async with self._connection() as db:
+            async with db.execute("SELECT lesson_id FROM mini_lessons WHERE id = ?", (mini_lesson_id,)) as cursor:
+                row = await cursor.fetchone()
+        return await self.get_lesson_lock(user_id, int(row[0])) if row else None
 
     async def _lesson_id(self, db: db_driver.Connection, mini_lesson_id: int) -> int:
         async with db.execute("SELECT lesson_id FROM mini_lessons WHERE id = ?", (mini_lesson_id,)) as cursor:

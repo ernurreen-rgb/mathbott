@@ -6,6 +6,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from models.requests import TaskCheckRequest
+from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from utils.public_payload import public_options, strip_solution_fields
 from utils.validation import is_task_answer_correct, normalize_task_answer_for_compare
 from utils.cache import cache
@@ -105,6 +106,11 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             if task.get("deleted_at"):
                 logger.warning(f"Task {task_check_request.task_id} is deleted")
                 raise HTTPException(status_code=404, detail="Task not found")
+
+            # A lesson waiting for the mistake review of the lesson before it takes no answers.
+            if task.get("mini_lesson_id") and not user.get("is_admin"):
+                if await db.module_review.get_mini_lesson_lock(user["id"], int(task["mini_lesson_id"])):
+                    raise HTTPException(status_code=423, detail=LESSON_LOCKED_MESSAGE)
 
             # Check answer directly using already fetched task (no extra DB query)
             correct_answer = (task.get("answer") or "").strip()

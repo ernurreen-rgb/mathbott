@@ -35,6 +35,7 @@ Currently present verification assets in the repository:
    - [`bot/tests/test_module_review.py`](../../bot/tests/test_module_review.py): First-attempt mistakes, twin order and the original-task fallback, answers bound to the served task, unchanged progress, twins hidden from library and quality reports, twin rules, and route auth without leaking answers.
    - [`bot/tests/test_ai_twins.py`](../../bot/tests/test_ai_twins.py): AI drafts with the provider replaced by a fake (drafts hidden until approved, bank payload rules, independent re-solve check, refusals, output parsing) and one request against a local Chat Completions server; no network calls.
    - [`bot/tests/test_mistake_analytics.py`](../../bot/tests/test_mistake_analytics.py): Summary, task, topic and student aggregation, period and module filters, and e-mail visibility by role.
+   - [`bot/tests/test_lesson_gate.py`](../../bot/tests/test_lesson_gate.py): The next lesson waits for the review of completed mini-lessons (across sections, only the next lesson), started lessons stay open, and module, lesson and answer routes enforce it for students but not admins.
    - Run from `bot/` (`httpx` is a test-only dependency, not in `requirements.txt`):
      ```powershell
      python -m pip install pytest "httpx==0.28.1"

@@ -157,11 +157,16 @@ def setup_modules_routes(app, db, limiter):
             raise HTTPException(status_code=404, detail="Module not found")
         
         user_id = None
+        is_admin = False
         if email:
             user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
-        
+                is_admin = bool(user.get("is_admin"))
+
+        # Admins open every lesson so they can check content; students wait for their mistake review.
+        locks = (await db.module_review.get_lesson_gate(user_id, module_id))["locks"] if user_id and not is_admin else {}
+
         # Get sections with lessons (new curriculum)
         sections = await db.curriculum.get_sections_by_module(module_id)
         sections_data = []
@@ -190,6 +195,7 @@ def setup_modules_routes(app, db, limiter):
                     "title": lesson.get("title"),
                     "sort_order": lesson.get("sort_order", 0),
                     "progress": lesson_progress,
+                    "lock": locks.get(lesson["id"]),
                     "mini_lessons": mini_data
                 })
             
@@ -237,14 +243,30 @@ def setup_modules_routes(app, db, limiter):
         module_id = section["module_id"] if section else None
 
         user_id = None
+        is_admin = False
         if email:
             user = await db.users.get_user_by_email(email)
             if user:
                 user_id = user["id"]
+                is_admin = bool(user.get("is_admin"))
 
         # Ensure defaults exist
         await db.curriculum.ensure_default_mini_lessons(lesson_id)
         mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson_id)
+
+        lock = None
+        next_lesson = None
+        if module_id:
+            gate = (
+                await db.module_review.get_lesson_gate(user_id, module_id)
+                if user_id and not is_admin
+                else {"lessons": await db.module_review.get_module_lesson_order(module_id), "locks": {}}
+            )
+            lock = gate["locks"].get(lesson_id)
+            order = [item["id"] for item in gate["lessons"]]
+            if lesson_id in order and order.index(lesson_id) + 1 < len(order):
+                following = gate["lessons"][order.index(lesson_id) + 1]
+                next_lesson = {**following, "locked": following["id"] in gate["locks"]}
 
         lesson_progress = await db.calculate_lesson_completion(user_id, lesson_id) if user_id else None
         review_summaries = (
@@ -253,7 +275,8 @@ def setup_modules_routes(app, db, limiter):
 
         result_mini = []
         for ml in mini_lessons:
-            tasks = await db.tasks.get_tasks_by_mini_lesson(ml["id"])
+            # A closed lesson shows only its outline until the review before it is done.
+            tasks = [] if lock else await db.tasks.get_tasks_by_mini_lesson(ml["id"])
             task_progress = await db.progress.get_user_progress_for_mini_lesson(user_id, ml["id"]) if user_id else {}
 
             tasks_data = []
@@ -309,5 +332,7 @@ def setup_modules_routes(app, db, limiter):
             "title": lesson.get("title"),
             "sort_order": lesson.get("sort_order", 0),
             "progress": lesson_progress,
+            "lock": lock,
+            "next_lesson": next_lesson,
             "mini_lessons": result_mini
         }

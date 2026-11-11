@@ -84,6 +84,11 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 
 `GET /api/lessons/{lesson_id}` also returns `review` (`mistakes`, `resolved`, `weak`, `pending`) per mini-lesson for the signed-in student.
 
+**Lesson gate.** A lesson waits while the lesson right before it (module order, across sections) has pending review items in completed mini-lessons, unless the student has already answered in it; admins are never gated.
+- `GET /api/modules/{module_id}` returns `lock` on each lesson and `GET /api/lessons/{lesson_id}` returns `lock` for the lesson: `null`, or `{lesson_id, lesson_title, lesson_number, mini_lesson_id, pending}` naming the earlier lesson and the first mini-lesson whose review is pending. A closed lesson comes back with empty `tasks`.
+- `GET /api/lessons/{lesson_id}` returns `next_lesson` (`{id, title, lesson_number, locked}` or `null` for the last lesson).
+- `POST /api/task/check` and `POST /api/tasks/{task_id}/questions/check` answer `423` for a task in a closed lesson and record nothing.
+
 ### 2.3.1 Mistake Review ([`bot/routes/module_review.py`](../../bot/routes/module_review.py))
 
 The proxy treats `/api/mini-lessons` as an identity path: it always signs these requests with the session email, and production rejects them without a valid signature.

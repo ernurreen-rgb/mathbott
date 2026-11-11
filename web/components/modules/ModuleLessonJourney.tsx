@@ -7,7 +7,7 @@ import Link from "next/link";
 import type { LessonSummary, Section } from "@/types";
 import styles from "./ModuleLessonJourney.module.css";
 
-export type LessonJourneyStatus = "completed" | "active" | "upcoming";
+export type LessonJourneyStatus = "completed" | "active" | "upcoming" | "locked";
 
 const clamp01 = (value: number | undefined): number =>
   Math.max(0, Math.min(1, Number.isFinite(value) ? Number(value) : 0));
@@ -67,6 +67,7 @@ export const getLessonJourneyStatus = (
   activeLessonId: number | null
 ): LessonJourneyStatus => {
   if (isLessonJourneyCompleted(lesson)) return "completed";
+  if (lesson.lock) return "locked";
   if (lesson.id === activeLessonId) return "active";
   return "upcoming";
 };
@@ -75,6 +76,7 @@ const statusAriaLabel: Record<LessonJourneyStatus, string> = {
   completed: "Аяқталды",
   active: "Қазір оқитын сабақ",
   upcoming: "Алда",
+  locked: "Жабық: алдымен алдыңғы сабақтың қателерін талдаңыз",
 };
 
 const nodeClasses: Record<LessonJourneyStatus, string> = {
@@ -84,18 +86,22 @@ const nodeClasses: Record<LessonJourneyStatus, string> = {
     "bg-gradient-to-br from-fuchsia-600 via-purple-600 to-indigo-600 text-white shadow-[0_18px_42px_rgba(147,51,234,0.38)]",
   upcoming:
     "bg-gradient-to-br from-white to-violet-50 text-violet-500 shadow-[0_12px_30px_rgba(91,33,182,0.14)]",
+  locked:
+    "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400 shadow-[0_10px_24px_rgba(51,65,85,0.12)]",
 };
 
 const connectorClasses: Record<LessonJourneyStatus, string> = {
   completed: "stroke-emerald-300",
   active: "stroke-fuchsia-300",
   upcoming: "stroke-violet-200",
+  locked: "stroke-slate-200",
 };
 
 const connectorTrackClasses: Record<LessonJourneyStatus, string> = {
   completed: "bg-emerald-300",
   active: "bg-fuchsia-300",
   upcoming: "bg-violet-200",
+  locked: "bg-slate-200",
 };
 
 function PlayIcon() {
@@ -113,6 +119,7 @@ function CheckIcon() {
 function LessonNodeIcon({ lesson, status }: { lesson: LessonSummary; status: LessonJourneyStatus }) {
   if (status === "completed") return <CheckIcon />;
   if (status === "active") return <PlayIcon />;
+  if (status === "locked") return <Icon name="lock" className="h-8 w-8 sm:h-9 sm:w-9" />;
   return <span className="text-2xl font-black sm:text-3xl">{lesson.lesson_number ?? lesson.id}</span>;
 }
 
@@ -225,9 +232,9 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                 className={`${styles.lessonList} relative mx-auto w-full max-w-2xl list-none px-2 pb-2 ${
                   lessons.length <= 5 ? styles.shortList : ""
                 } ${
-                  lessons[0]?.id === activeLessonId ? `${styles.activeStart} pt-12` : "pt-5"
+                  lessons[0]?.id === activeLessonId || lessons[0]?.lock ? `${styles.activeStart} pt-12` : "pt-5"
                 } ${
-                  lessons.some((lesson) => lesson.id === activeLessonId) ? styles.activeSection : ""
+                  lessons.some((lesson) => lesson.id === activeLessonId || lesson.lock) ? styles.activeSection : ""
                 }`}
               >
                 {lessons.map((lesson, lessonIndex) => {
@@ -293,6 +300,11 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                           {status === "active" && (
                             <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border-2 border-violet-100 bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-purple-700 shadow-md after:absolute after:-bottom-2 after:left-1/2 after:h-3 after:w-3 after:-translate-x-1/2 after:rotate-45 after:border-b-2 after:border-r-2 after:border-violet-100 after:bg-white sm:-top-11 sm:px-3 sm:text-[10px]">
                               Бастау
+                            </span>
+                          )}
+                          {status === "locked" && (
+                            <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border-2 border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-700 shadow-md after:absolute after:-bottom-2 after:left-1/2 after:h-3 after:w-3 after:-translate-x-1/2 after:rotate-45 after:border-b-2 after:border-r-2 after:border-amber-200 after:bg-amber-50 sm:-top-11 sm:px-3 sm:text-[10px]">
+                              Алдымен қателер
                             </span>
                           )}
                         </span>
