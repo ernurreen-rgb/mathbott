@@ -13,12 +13,14 @@ import local from "../TrialTests.module.css";
 import TrialTestFormDialog from "./TrialTestFormDialog";
 import TrialFolderDialog, { type FolderAction } from "./TrialFolderDialog";
 import TrialFolderBreadcrumbs from "./TrialFolderBreadcrumbs";
+import TrialTestWorksheetDialog from "@/components/admin/TrialTestWorksheetDialog";
 import { normalizeCategory, useTrialTests } from "./TrialTestsProvider";
 
 export default function TrialTestsCatalog({ folderId, category }: { folderId?: number; category?: string }) {
   const { email, tests, folders, loading, error, refreshTests } = useTrialTests();
   const router = useRouter();
   const [dialog, setDialog] = useState<"create" | TrialTest | null>(null);
+  const [pdfTest, setPdfTest] = useState<TrialTest | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -79,11 +81,12 @@ export default function TrialTestsCatalog({ folderId, category }: { folderId?: n
         <div className={styles.listHeading} aria-hidden="true"><span>Тест атауы</span><span>Әрекеттер</span></div>
         <ul>{filtered.map((test) => <li className={styles.curriculumRow} key={test.id}>
           <Link className={styles.itemLink} href={`/admin/trial-tests/${test.id}`}><div className={styles.itemContent}><h3>{test.title}</h3><p>{test.task_count || 0} / {test.expected_tasks_count || 40} тапсырма{test.description ? ` · ${test.description}` : ""}</p></div><span className={styles.itemOpen}>Тапсырмалар<Icon name="arrowRight" size={16} /></span></Link>
-          <div className={styles.rowActions}><button type="button" className={styles.textButton} aria-label={`${test.title} өңдеу`} onClick={() => setDialog(test)}><Icon name="edit" size={15} />Өңдеу</button><button type="button" disabled={deleting !== null} className={styles.dangerButton} aria-label={`${test.title} жою`} onClick={() => void remove(test, false)}><Icon name="trash" size={15} />Жою</button></div>
+          <div className={styles.rowActions}><button type="button" className={styles.textButton} aria-label={`${test.title} PDF`} onClick={() => setPdfTest(test)}><Icon name="download" size={15} />PDF</button><button type="button" className={styles.textButton} aria-label={`${test.title} өңдеу`} onClick={() => setDialog(test)}><Icon name="edit" size={15} />Өңдеу</button><button type="button" disabled={deleting !== null} className={styles.dangerButton} aria-label={`${test.title} жою`} onClick={() => void remove(test, false)}><Icon name="trash" size={15} />Жою</button></div>
         </li>)}</ul>
       </div> : children.length === 0 && <div className={styles.empty}><h3>{search ? "Тест табылмады" : folder ? "Бұл папкада тесттер жоқ" : "Папкалар әлі жоқ"}</h3><p>{search ? "Басқа атаумен іздеп көріңіз." : "Папка немесе тест қосуға болады."}</p></div>}
     </section>}
     {dialog && <TrialTestFormDialog test={dialog === "create" ? undefined : dialog} folderId={folder?.id} onClose={() => setDialog(null)} />}
     {folderAction && <TrialFolderDialog action={folderAction} onClose={() => setFolderAction(null)} />}
+    {pdfTest && email && <TrialTestWorksheetDialog test={pdfTest} email={email} onClose={() => setPdfTest(null)} />}
   </>;
 }

@@ -7,11 +7,9 @@ import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
 import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import UnrecognizedAnswersPanel from "@/components/admin/UnrecognizedAnswersPanel";
-import BankWorksheetDialog from "@/components/admin/BankWorksheetDialog";
 import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import { hasContentAccess, hasReviewAccess, hasSuperAccess } from "@/lib/admin-access";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
-import { useBankWorksheetSelection } from "@/lib/use-bank-worksheet-selection";
 import { getMcqEditorLabels, isMcqQuestionType, serializeMcqAnswerLabels } from "@/lib/question-options";
 import { createAdminBankTask, createAdminBankTwin, deleteAdminBankTask, getAdminBankCatalog, getAdminBankTask, getAdminBankTasks, getAdminBankTopics, permanentlyDeleteAdminBankTask, restoreAdminBankTask, updateAdminBankTask } from "@/lib/api";
 import type { BankCatalogResponse, BankTask, BankTaskUsageItem, BankTaskVersionItem } from "@/types";
@@ -54,8 +52,6 @@ export default function BankWorkspace() {
   const authorized = !accessLoading && !!access?.is_admin && hasContentAccess(access.role);
   const preferences = useBankLibraryPreferences(email);
   const { filters, setFilters } = preferences;
-  const worksheet = useBankWorksheetSelection(email);
-  const [worksheetOpen, setWorksheetOpen] = useState(false);
   const [tab, setTab] = useState<BankLibraryTab>("active");
   const [tasks, setTasks] = useState<BankTask[]>([]);
   const [total, setTotal] = useState(0);
@@ -351,7 +347,7 @@ export default function BankWorkspace() {
     if (!email || !window.confirm("Есепті себетке жылжыту керек пе?")) return;
     const { error: err } = await deleteAdminBankTask(id, email);
     if (err) { setError(err); return; }
-    worksheet.remove(id); if (editingTaskId === id) resetAndHideForm(); await refreshAll();
+    if (editingTaskId === id) resetAndHideForm(); await refreshAll();
   };
   const handleRestoreTask = async (id: number) => {
     if (!email) return;
@@ -363,7 +359,7 @@ export default function BankWorkspace() {
     if (!email || !window.confirm("Есепті біржола жою керек пе? Бұл әрекетті қайтару мүмкін емес.")) return;
     const { error: err } = await permanentlyDeleteAdminBankTask(id, email);
     if (err) { setError(err); return; }
-    worksheet.remove(id); if (editingTaskId === id) resetAndHideForm(); await refreshAll();
+    if (editingTaskId === id) resetAndHideForm(); await refreshAll();
   };
   const { openHistory, openSnapshot, openJsonEdit, saveJsonEdit, handleRollbackVersion, handleDeleteVersion, openUsage } = createVersionActions({
     email, setHistoryTask, setHistoryItems, setHistoryError, setSnapshotView, setJsonEdit, setHistoryLoading, setError, jsonEdit,
@@ -384,7 +380,6 @@ export default function BankWorkspace() {
         catalog={catalog} catalogLoading={catalogLoading} catalogError={catalogError} topicSearch={topicSearch} onTopicSearchChange={setTopicSearch}
         savedViews={preferences.views} onSaveView={preferences.saveView} onRemoveView={preferences.removeView}
         tasks={tasks} total={total} loading={loading || filters.search.trim() !== debouncedSearch}
-        selected={worksheet.selected} onToggle={worksheet.toggle} onTogglePage={() => worksheet.togglePage(tasks)} onClearSelection={worksheet.clear} onPdf={() => setWorksheetOpen(true)}
         onOpen={(task) => void openTask(task)} onCreate={() => openNewTask()} onImport={() => importFileInputRef.current?.click()} onExport={() => void handleExportJson()}
         importing={importing || confirmingImport} exporting={exporting} canReview={hasReviewAccess(access?.role)} canDeletePermanently={hasSuperAccess(access?.role)}
         onRestore={(id) => void handleRestoreTask(id)} onDeletePermanently={(id) => void handlePermanentDeleteTask(id)} answersPanel={<UnrecognizedAnswersPanel email={email!} />} />
@@ -405,7 +400,7 @@ export default function BankWorkspace() {
           <nav className={styles.tabs} aria-label="Есеп режимдері">{[{ mode: "view", label: "Есеп" }, { mode: "edit", label: "Өңдеу" }, { mode: "student", label: "Оқушы көрінісі" }, ...(workspaceTask && !workspaceTask.twin_source_id ? [{ mode: "twins", label: `Егіздер (${workspaceTask.twin_count ?? 0}${workspaceTask.twin_draft_count ? ` + ${workspaceTask.twin_draft_count} жоба` : ""})` }] : [])].map(({ mode, label }) => <button type="button" key={mode} className={styles.tab} aria-pressed={workspaceMode === mode} disabled={busy || !!workspaceError || (mode === "view" && !workspaceTask) || (mode === "edit" && !!workspaceTask?.deleted_at)} onClick={() => switchMode(mode as WorkspaceMode)}>{label}</button>)}{isDirty && <span className={styles.dirty}>Сақталмаған өзгеріс</span>}</nav>
           {workspaceLoading ? <div className={styles.loading}>Есеп жүктелуде...</div> : workspaceError ? <div role="alert" className={styles.alert}>{workspaceError}<br /><button type="button" className={styles.button} onClick={() => editingTaskId && void openTask(editingTaskId, workspaceMode, false)}>Қайта жүктеу</button></div> : <>
             {workspaceTask?.deleted_at && <div className={styles.alert}>Есеп себетте. Өңдеу үшін оны қалпына келтіріңіз.</div>}
-            {workspaceMode === "view" && previewTask && <><BankTaskDetail task={previewTask} imageSrc={imageSrc} /><footer className={styles.taskFooter}><p>Қолданыста: {workspaceTask?.active_usage_count ?? 0} · Таңдау мен сүзгілер тізімге қайтқанда сақталады</p><div className={styles.actions}>{!workspaceTask?.deleted_at && <><button type="button" className={styles.button} onClick={() => worksheet.toggle(workspaceTask!)}>{worksheet.selected.some((task) => task.id === editingTaskId) ? "PDF таңдауынан алу" : "PDF үшін таңдау"}</button><button type="button" className={styles.primary} onClick={() => switchMode("edit")}><Icon name="edit" /> Есепті өңдеу</button></>}</div></footer></>}
+            {workspaceMode === "view" && previewTask && <><BankTaskDetail task={previewTask} imageSrc={imageSrc} /><footer className={styles.taskFooter}><p>Қолданыста: {workspaceTask?.active_usage_count ?? 0}</p><div className={styles.actions}>{!workspaceTask?.deleted_at && <button type="button" className={styles.primary} onClick={() => switchMode("edit")}><Icon name="edit" /> Есепті өңдеу</button>}</div></footer></>}
             {workspaceMode === "edit" && <BankTaskForm tab="active" showForm editingTaskId={editingTaskId} form={form} setForm={setForm}
               handleSubmitForm={async (event) => { event.preventDefault(); await submitBankForm(); }} removeFormTopic={(topic) => setForm((previous) => ({ ...previous, topics: previous.topics.filter((value) => value !== topic) }))}
               formTopicInput={formTopicInput} setFormTopicInput={setFormTopicInput} addFormTopic={addFormTopic} formTopicSuggestions={formTopicSuggestions}
@@ -418,7 +413,6 @@ export default function BankWorkspace() {
           </>}
         </section>}
     </div></main>
-    {worksheetOpen && email && <BankWorksheetDialog key={email} email={email} tasks={worksheet.selected} onMove={worksheet.move} onRemove={worksheet.remove} onClose={() => setWorksheetOpen(false)} />}
     <DuplicateDialog pendingDedup={pendingDedup} setPendingDedup={setPendingDedup} submitBankForm={submitBankForm} saving={saving} />
     <ImportPreviewDialog importPreviewState={importPreviewState} setImportPreviewState={setImportPreviewState} runBankImportConfirm={runBankImportConfirm} confirmingImport={confirmingImport} />
     <HistoryDialog historyTask={historyTask} setHistoryTask={setHistoryTask} setSnapshotView={setSnapshotView} setJsonEdit={setJsonEdit} historyLoading={historyLoading} historyError={historyError} historyItems={historyItems} openSnapshot={openSnapshot} handleRollbackVersion={handleRollbackVersion} rollbackLoading={rollbackLoading} handleDeleteVersion={handleDeleteVersion} deleteVersionLoadingNo={deleteVersionLoadingNo} openJsonEdit={openJsonEdit} />

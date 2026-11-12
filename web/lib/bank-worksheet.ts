@@ -1,4 +1,4 @@
-import type { BankTask } from '@/types';
+import type { BankPlacementTask, BankTask } from '@/types';
 
 export const MAX_WORKSHEET_TASKS = 100;
 export const WORKSHEET_BRAND = 'Ернұр ағайдан есептер';
@@ -17,6 +17,30 @@ export function worksheetTask(task: BankTask): WorksheetTask {
     answer_mode: task.answer_mode, image_filename: task.image_filename,
     options: (task.options || []).map(({ label, text }) => ({ label, text })),
     subquestions: (task.subquestions || []).map(({ text }) => ({ text })),
+  };
+}
+
+export function trialPlacementToWorksheetTask(task: BankPlacementTask): WorksheetTask {
+  const text = task.text || task.bank_task?.text || '';
+  const questionType = task.question_type || task.bank_task?.question_type || 'input';
+  const answerMode = task.answer_mode || task.bank_task?.answer_mode || 'choices';
+  const imageFilename = task.image_filename || task.bank_task?.image_filename || null;
+  const options = (task.options || task.bank_task?.options || []).map(({ label, text }) => ({
+    label,
+    text,
+  }));
+  const subquestions = (task.subquestions || task.bank_task?.subquestions || []).map(({ text }) => ({
+    text,
+  }));
+
+  return {
+    id: task.bank_task_id || task.id,
+    text,
+    question_type: questionType,
+    answer_mode: answerMode,
+    image_filename: imageFilename,
+    options,
+    subquestions,
   };
 }
 

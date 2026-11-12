@@ -15,6 +15,7 @@ import BankPickerDialog from "./BankPickerDialog";
 import InlineTaskDialog from "./InlineTaskDialog";
 import CurrentSlotControls from "./CurrentSlotControls";
 import TrialTestFormDialog from "./TrialTestFormDialog";
+import TrialTestWorksheetDialog from "@/components/admin/TrialTestWorksheetDialog";
 import { getPlacementImageFilename, getPlacementText, getPlacementTextScale } from "./model";
 import { trialFolderPath, useTrialTests } from "./TrialTestsProvider";
 import TrialFolderBreadcrumbs from "./TrialFolderBreadcrumbs";
@@ -26,8 +27,9 @@ function TaskEditor({ test }: { test: TrialTest }) {
   const { tasks, loading, currentSlotIndex, currentPlacement, slotMap } = editor;
   const firstEmpty = Array.from({ length: slotCount }, (_, i) => i + 1).find((slot) => !slotMap.has(slot));
   const addSlot = !currentPlacement ? currentSlotIndex : firstEmpty;
-  const { folders } = useTrialTests();
+  const { folders, email } = useTrialTests();
   const [settings, setSettings] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
   const slotNavigation = useRef<HTMLElement>(null);
   useEffect(() => {
     const nav = slotNavigation.current;
@@ -39,6 +41,7 @@ function TaskEditor({ test }: { test: TrialTest }) {
     <TrialFolderBreadcrumbs folders={folders} folderId={test.folder_id ?? null} testTitle={test.title} />
     <header className={styles.header}><h1 className={styles.title}>{test.title}</h1><div className={styles.actions}>
       <Link href={test.folder_id ? trialFolderPath(test.folder_id) : "/admin/trial-tests"} className={styles.textButton}><Icon name="arrowLeft" />Тесттер</Link>
+      <button type="button" className={styles.secondaryButton} onClick={() => setPdfOpen(true)}><Icon name="download" />PDF жүктеу</button>
       <button type="button" className={styles.textButton} onClick={() => setSettings(true)}><Icon name="edit" />Тестті өңдеу</button>
     </div></header>
     {test.description && <p className={local.description}>{test.description}</p>}
@@ -69,6 +72,7 @@ function TaskEditor({ test }: { test: TrialTest }) {
       </section>
     </div>}
     {settings && <TrialTestFormDialog test={test} onClose={() => setSettings(false)} />}
+    {pdfOpen && email && <TrialTestWorksheetDialog test={test} email={email} initialTasks={tasks} onClose={() => setPdfOpen(false)} />}
     <BankPickerDialog {...editor} selectedTestId={test.id} />
     <InlineTaskDialog {...editor} selectedTestId={test.id} />
   </>;
