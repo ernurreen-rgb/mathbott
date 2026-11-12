@@ -41,7 +41,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
         }
 
     @app.post("/api/task/check")
-    @limiter.limit("10/minute")
+    @limiter.limit("30/minute")
     async def check_task_answer(request: Request, task_check_request: TaskCheckRequest):
         """
         Check task answer - optimized version
@@ -77,7 +77,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
         **Error Codes:**
         - 200: Success
         - 404: User or task not found
-        - 429: Rate limit exceeded (10 requests per minute)
+        - 429: Rate limit exceeded (30 requests per minute)
         - 500: Internal server error
         """
         try:
