@@ -34,7 +34,7 @@ def _placeholders(values: List[Any]) -> str:
 
 
 def _chunks(values: List[Any], size: int = 500) -> List[List[Any]]:
-    # Keeps IN lists well below the SQLite and PostgreSQL parameter limits.
+    # Keeps IN lists well below the PostgreSQL parameter limit.
     return [values[index:index + size] for index in range(0, len(values), size)]
 
 

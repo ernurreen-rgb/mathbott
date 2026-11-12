@@ -1,21 +1,17 @@
 """Mandatory mistake review: the next lesson waits until the lesson before it has been reviewed.
 
 Run from bot/: python -m pytest tests/test_lesson_gate.py
+
+Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
 """
-import gc
-import os
-import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import storage
-from database import Database
+from postgres_test_db import PostgresTestCase
 from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from routes.modules import setup_modules_routes
 from routes.tasks import setup_tasks_routes
@@ -32,13 +28,9 @@ LAYOUT = {
 }
 
 
-class LessonGateTests(unittest.IsolatedAsyncioTestCase):
+class LessonGateTests(PostgresTestCase):
     async def asyncSetUp(self):
-        self.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": ""})
-        self.environment.start()
-        self.directory = tempfile.TemporaryDirectory(prefix="qazmath-gate-tests-")
-        self.db = Database(str(Path(self.directory.name) / "gate.sqlite"), use_pool=False)
-        await self.db.init()
+        await super().asyncSetUp()
         await self.db.users.create_user_by_email(ADMIN, check_admin_email=ADMIN)
         await self.db.users.set_admin_with_role(email=ADMIN, is_admin=True, role="super_admin")
         await self.db.users.create_user_by_email(STUDENT)
@@ -46,7 +38,7 @@ class LessonGateTests(unittest.IsolatedAsyncioTestCase):
         self.student = await self.db.users.get_user_by_email(STUDENT)
 
         self.bank_ids = {}
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.seed() as connection:
             await connection.execute("INSERT INTO modules (id, name) VALUES (1, 'Арифметика')")
             # Journey order follows sort order, not ids: section 2 comes first.
             await connection.execute("INSERT INTO sections (id, module_id, name, sort_order) VALUES (1, 1, 'Көбейту', 1)")
@@ -68,17 +60,13 @@ class LessonGateTests(unittest.IsolatedAsyncioTestCase):
                         text=f"Есеп {task_id}", answer=answer, question_type="input", difficulty="A",
                     )
                     self.bank_ids[task_id] = bank["id"]
-                    async with storage.connect(self.db.db_path) as connection:
+                    async with self.seed() as connection:
                         await connection.execute(
                             "INSERT INTO tasks (id, mini_lesson_id, bank_task_id, sort_order) VALUES (?, ?, ?, ?)",
                             (task_id, mini_id, bank["id"], position),
                         )
                         await connection.commit()
 
-    async def asyncTearDown(self):
-        gc.collect()
-        self.directory.cleanup()
-        self.environment.stop()
 
     async def _answer(self, user, task_id, *answers):
         task = await self.db.tasks.get_task_by_id(task_id)

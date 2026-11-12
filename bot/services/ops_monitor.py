@@ -65,7 +65,7 @@ class OpsMonitor:
         text = value.strip()
         if not text:
             return None
-        # SQLite typically returns "YYYY-MM-DD HH:MM:SS"
+        # Timestamps are stored as UTC text "YYYY-MM-DD HH:MM:SS"
         text = text.replace(" ", "T")
         try:
             return datetime.fromisoformat(text).replace(tzinfo=timezone.utc)

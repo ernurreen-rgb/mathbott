@@ -249,7 +249,7 @@ class TaskRepository(BaseRepository):
                 placement_updates.append("sort_order = ?")
                 placement_params.append(sort_order)
             if placement_updates:
-                placement_updates.append("updated_at = CURRENT_TIMESTAMP")
+                placement_updates.append("updated_at = mathbot_datetime('now')")
                 placement_params.append(task_id)
                 await db.execute(
                     f"UPDATE tasks SET {', '.join(placement_updates)} WHERE id = ?",
@@ -274,7 +274,7 @@ class TaskRepository(BaseRepository):
                 except Exception:
                     parsed_subquestions = None
 
-            bank_repo = BankTaskRepository(self.db_path)
+            bank_repo = BankTaskRepository(self.database_url)
             await bank_repo.update_task(
                 task_id=int(bank_task_id),
                 text=text,
@@ -349,7 +349,7 @@ class TaskRepository(BaseRepository):
     async def soft_delete_task(self, task_id: int) -> None:
         async with self._connection() as db:
             await db.execute(
-                "UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE tasks SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now') WHERE id = ?",
                 (task_id,),
             )
             await db.commit()
@@ -357,7 +357,7 @@ class TaskRepository(BaseRepository):
     async def restore_task(self, task_id: int) -> None:
         async with self._connection() as db:
             await db.execute(
-                "UPDATE tasks SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE tasks SET deleted_at = NULL, updated_at = mathbot_datetime('now') WHERE id = ?",
                 (task_id,),
             )
             await db.commit()
@@ -369,7 +369,7 @@ class TaskRepository(BaseRepository):
                 """
                 SELECT id FROM tasks
                 WHERE deleted_at IS NOT NULL
-                  AND deleted_at < datetime('now', '-' || ? || ' days')
+                  AND deleted_at < mathbot_datetime('now', '-' || ? || ' days')
                 """,
                 (days,),
             ) as cursor:
@@ -448,13 +448,13 @@ class TaskRepository(BaseRepository):
         return user_answer.strip().lower() == correct_answer.lower()
 
     async def reset_task_id_counter(self) -> bool:
-        """Reset tasks AUTOINCREMENT counter only when table is empty."""
+        """Restart the tasks id sequence, only when the table is empty."""
         async with self._connection() as db:
             async with db.execute("SELECT COUNT(*) FROM tasks") as cursor:
                 row = await cursor.fetchone()
                 count = int(row[0]) if row else 0
             if count > 0:
                 return False
-            await db.execute("DELETE FROM sqlite_sequence WHERE name = 'tasks'")
+            await db.execute("ALTER TABLE tasks ALTER COLUMN id RESTART WITH 1")
             await db.commit()
             return True

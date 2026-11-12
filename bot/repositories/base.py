@@ -4,9 +4,7 @@ Base repository with common database connection methods
 import asyncio
 import storage as db_driver
 import logging
-import sqlite3
 from typing import Optional, Dict
-from functools import lru_cache
 from contextlib import asynccontextmanager
 from weakref import WeakKeyDictionary
 
@@ -15,7 +13,7 @@ _process_write_locks: "WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock
 
 
 def _get_process_write_lock() -> asyncio.Lock:
-    """Share one write lock per event loop to avoid in-process SQLite write contention."""
+    """Share one write lock per event loop so waiting writers do not hold pooled connections."""
     loop = asyncio.get_running_loop()
     lock = _process_write_locks.get(loop)
     if lock is None:
@@ -26,29 +24,14 @@ def _get_process_write_lock() -> asyncio.Lock:
 
 class BaseRepository:
     """Base repository with common database operations"""
-    
-    def __init__(self, db_path: str = "mathbot.db", connection_pool=None):
-        self.db_path = db_path
-        self.sqlite_timeout_seconds = 30
-        self.sqlite_busy_timeout_ms = 8000
+
+    def __init__(self, database_url: str, connection_pool=None):
+        self.database_url = database_url
+        self.connect_timeout_seconds = 30
         self.connection_pool = connection_pool  # Optional connection pool
         # Prepared statements cache (simple dict-based cache)
         self._statement_cache: Dict[str, str] = {}
 
-    async def _configure_connection(self, db: db_driver.Connection) -> None:
-        """Configure database connection settings"""
-        await db.execute("PRAGMA foreign_keys = ON")
-        try:
-            await db.execute("PRAGMA journal_mode = WAL")
-            await db.execute("PRAGMA synchronous = NORMAL")
-        except Exception:
-            # Some environments may not allow changing journal mode; ignore.
-            pass
-        try:
-            await db.execute(f"PRAGMA busy_timeout = {int(self.sqlite_busy_timeout_ms)}")
-        except Exception:
-            pass
-    
     async def _get_connection(self):
         """
         Get a database connection, using pool if available
@@ -60,9 +43,7 @@ class BaseRepository:
             return await self.connection_pool.acquire()
         else:
             # Fallback to creating new connection
-            conn = await db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds)
-            await self._configure_connection(conn)
-            return conn
+            return await db_driver.connect(self.database_url, timeout=self.connect_timeout_seconds)
     
     async def _release_connection(self, conn: db_driver.Connection) -> None:
         """
@@ -92,10 +73,10 @@ class BaseRepository:
     async def _write_transaction(self):
         """Reserve the writer before reading state used to authorize a change."""
         # Acquire the lock before a connection so waiting writers cannot exhaust
-        # the pool. BEGIN IMMEDIATE also serializes writers in other processes.
+        # the pool. The advisory lock also serializes writers in other processes.
         async with _get_process_write_lock():
             async with self._connection() as conn:
-                await conn.execute("BEGIN IMMEDIATE")
+                await conn.begin_write()
                 try:
                     yield conn
                     await conn.commit()
@@ -209,7 +190,7 @@ class BaseRepository:
             *args: Arguments to create cache key
         
         Returns:
-            str: Query string (for SQLite, statements are just strings)
+            str: Query string
         """
         cache_key = f"{query_pattern}:{hash(args)}"
         if cache_key not in self._statement_cache:
@@ -221,23 +202,14 @@ class BaseRepository:
         self._statement_cache.clear()
 
     def _escape_like_value(self, value: str) -> str:
-        """Escape user-controlled wildcards for SQLite LIKE queries."""
+        """Escape user-controlled wildcards for LIKE queries."""
         return str(value or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     def _contains_like_pattern(self, value: str) -> str:
-        """Build an escaped contains-pattern for SQLite LIKE ... ESCAPE '\\'."""
+        """Build an escaped contains-pattern for LIKE ... ESCAPE '\\'."""
         return f"%{self._escape_like_value(value)}%"
 
-    async def _run_with_lock_retry(self, operation, *, attempts: int = 5, base_delay: float = 0.15):
-        """Retry SQLite write operations when the database is temporarily locked."""
-        write_lock = _get_process_write_lock()
-        for attempt in range(1, attempts + 1):
-            try:
-                async with write_lock:
-                    return await operation()
-            except sqlite3.OperationalError as e:
-                if "database is locked" not in str(e).lower() or attempt == attempts:
-                    raise
-                await asyncio.sleep(base_delay * attempt)
-
-
+    async def _run_with_write_lock(self, operation):
+        """Run a write operation while holding this process's write lock."""
+        async with _get_process_write_lock():
+            return await operation()

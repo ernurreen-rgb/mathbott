@@ -29,9 +29,12 @@ class OnboardingRepository(BaseRepository):
         async with self._connection() as db:
             # Save onboarding data
             async with db.execute(
-                """INSERT OR REPLACE INTO user_onboarding
+                """INSERT INTO user_onboarding
                    (user_id, how_did_you_hear, math_level, nickname, completed_at)
-                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                   VALUES (?, ?, ?, ?, mathbot_datetime('now'))
+                   ON CONFLICT (user_id) DO UPDATE SET
+                       how_did_you_hear = EXCLUDED.how_did_you_hear, math_level = EXCLUDED.math_level,
+                       nickname = EXCLUDED.nickname, completed_at = EXCLUDED.completed_at""",
                 (user_id, how_did_you_hear, math_level, nickname)
             ):
                 pass

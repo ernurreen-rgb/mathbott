@@ -1,21 +1,17 @@
-"""Module mistake review on twin tasks against a real, isolated SQLite database.
+"""Module mistake review on twin tasks against a real, isolated PostgreSQL database.
 
 Run from bot/: python -m unittest discover -s tests -p test_module_review.py -v
+
+Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
 """
-import gc
-import os
-import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import storage
-from database import Database
+from postgres_test_db import PostgresTestCase
 from repositories.bank_task_repository import BankTwinError
 from repositories.module_review_repository import ModuleReviewError
 from routes.admin.bank_twins import register_bank_twin_routes
@@ -33,13 +29,9 @@ def _contains_key(value, key):
     return False
 
 
-class ModuleReviewTests(unittest.IsolatedAsyncioTestCase):
+class ModuleReviewTests(PostgresTestCase):
     async def asyncSetUp(self):
-        self.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": ""})
-        self.environment.start()
-        self.directory = tempfile.TemporaryDirectory(prefix="qazmath-review-tests-")
-        self.db = Database(str(Path(self.directory.name) / "review.sqlite"), use_pool=False)
-        await self.db.init()
+        await super().asyncSetUp()
         await self.db.users.create_user_by_email(ADMIN, check_admin_email=ADMIN)
         await self.db.users.set_admin_with_role(email=ADMIN, is_admin=True, role="super_admin")
         await self.db.users.create_user_by_email(STUDENT)
@@ -51,7 +43,7 @@ class ModuleReviewTests(unittest.IsolatedAsyncioTestCase):
         self.easy = await bank.create_task(text="Есепте: 1 + 1", answer="2", question_type="input", difficulty="A")
         self.lonely = await bank.create_task(text="Есепте: 9 - 4", answer="5", question_type="input", difficulty="A")
         self.unfinished = await bank.create_task(text="Есепте: 6 * 7", answer="42", question_type="input", difficulty="B")
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.seed() as connection:
             await connection.execute("INSERT INTO modules (id, name) VALUES (1, 'Арифметика')")
             await connection.execute("INSERT INTO sections (id, module_id, name) VALUES (1, 1, 'Амалдар')")
             await connection.execute("INSERT INTO lessons (id, section_id, title) VALUES (1, 1, 'Қосу')")
@@ -69,10 +61,6 @@ class ModuleReviewTests(unittest.IsolatedAsyncioTestCase):
             for answer in answers:
                 await self.db.record_solution(self.student["id"], task_id, answer, answer == task["answer"], task_snapshot=task)
 
-    async def asyncTearDown(self):
-        gc.collect()
-        self.directory.cleanup()
-        self.environment.stop()
 
     async def _twin(self, text, answer, source=None, **overrides):
         source = source or self.source
@@ -137,13 +125,13 @@ class ModuleReviewTests(unittest.IsolatedAsyncioTestCase):
     async def test_review_never_changes_progress_or_counters(self):
         twin = await self._twin("Есепте: 4 + 3", "7")
         before = await self.db.users.get_user_by_email(STUDENT)
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.connect() as connection:
             async with connection.execute("SELECT COUNT(*) FROM solutions") as cursor:
                 solutions_before = (await cursor.fetchone())[0]
         await self.db.module_review.submit_answer(self.student["id"], 1, 11, twin["id"], "7")
         after = await self.db.users.get_user_by_email(STUDENT)
         self.assertEqual((before["total_solved"], before["streak"]), (after["total_solved"], after["streak"]))
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.connect() as connection:
             async with connection.execute("SELECT COUNT(*) FROM solutions") as cursor:
                 self.assertEqual((await cursor.fetchone())[0], solutions_before)
         progress = await self.db.progress.calculate_mini_lesson_completion(self.student["id"], 1)

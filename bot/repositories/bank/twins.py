@@ -151,7 +151,7 @@ class BankTaskTwinsMixin:
             await db.execute(
                 """
                 UPDATE bank_task_twins
-                SET ai_check_status = ?, ai_check_answer = ?, ai_checked_version = ?, ai_checked_at = CURRENT_TIMESTAMP
+                SET ai_check_status = ?, ai_check_answer = ?, ai_checked_version = ?, ai_checked_at = mathbot_datetime('now')
                 WHERE twin_bank_task_id = ?
                 """,
                 (status, answer, version, twin_task_id),
@@ -263,7 +263,7 @@ class BankTaskTwinsMixin:
         cursor = await db.execute(
             f"""
             UPDATE bank_tasks
-            SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
             WHERE deleted_at IS NULL AND id IN (
                 SELECT twin_bank_task_id FROM bank_task_twins WHERE source_bank_task_id IN ({placeholders})
             )

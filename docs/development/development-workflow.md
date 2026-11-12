@@ -30,16 +30,17 @@ All frontend commands are run from [`web/`](../../web/package.json) using Node.j
 
 Currently present verification assets in the repository:
 
-1. **Backend Unit/Integration Tests (`pytest`)**, each against its own temporary SQLite database:
-   - [`bot/tests/test_bank_catalog.py`](../../bot/tests/test_bank_catalog.py): Verifies `/api/admin/bank/catalog` and `/api/admin/bank/tasks` across a 10,000-task temporary SQLite database (pagination, ID/text search, `ANY`/`ALL` topic matching, usage filters, counts, sorting, auth, and clearing stale `options`/`subquestions` on question-type change).
+1. **Backend Unit/Integration Tests (`pytest`)**, against real PostgreSQL. Set `TEST_DATABASE_URL` in the shell to any database on a disposable server (for example `postgresql://postgres:postgres@localhost:5432/postgres`). [`bot/tests/postgres_test_db.py`](../../bot/tests/postgres_test_db.py) creates a database with a random name there for every test (`PostgresTestCase`, with the production connection pool) or test class, runs the migrations, and drops it afterwards; `seed()` moves id sequences past rows inserted with explicit ids. Without the variable the database tests are skipped locally; in CI (`CI` set) a missing server is an error. CI provides a PostgreSQL 17 service.
+   - [`bot/tests/test_bank_catalog.py`](../../bot/tests/test_bank_catalog.py): Verifies `/api/admin/bank/catalog` and `/api/admin/bank/tasks` across a 10,000-task temporary database (pagination, ID/text search, `ANY`/`ALL` topic matching, usage filters, counts, sorting, auth, and clearing stale `options`/`subquestions` on question-type change).
    - [`bot/tests/test_module_review.py`](../../bot/tests/test_module_review.py): First-attempt mistakes, twin order and the original-task fallback, answers bound to the served task, unchanged progress, twins hidden from library and quality reports, twin rules, and route auth without leaking answers.
    - [`bot/tests/test_ai_twins.py`](../../bot/tests/test_ai_twins.py): AI drafts with the provider replaced by a fake (drafts hidden until approved, bank payload rules, independent re-solve check, refusals, output parsing) and one request against a local Chat Completions server; no network calls.
    - [`bot/tests/test_mistake_analytics.py`](../../bot/tests/test_mistake_analytics.py): Summary, task, topic and student aggregation, period and module filters, and e-mail visibility by role.
    - [`bot/tests/test_lesson_gate.py`](../../bot/tests/test_lesson_gate.py): The next lesson waits for the review of completed mini-lessons (across sections, only the next lesson), started lessons stay open, and module, lesson and answer routes enforce it for students but not admins.
-   - [`bot/tests/test_admin_statistics.py`](../../bot/tests/test_admin_statistics.py): The statistics workspace against **PostgreSQL** (its queries are PostgreSQL only): period comparison, zero-filled series, local-day boundaries by time zone, the admin filter, students, tasks, modules, trial tests with per-question accuracy, quizzes, malformed legacy timestamps, pooled connections with a row factory, and route auth with e-mail visibility by role. Set `TEST_DATABASE_URL` to any database on a disposable server (for example `postgresql://postgres:postgres@localhost:5432/postgres`); each run creates its own database there and drops it afterwards. Without the variable only the period and bucket unit tests run and the rest are skipped. CI provides a PostgreSQL 17 service for them.
+   - [`bot/tests/test_admin_statistics.py`](../../bot/tests/test_admin_statistics.py): The statistics workspace: period comparison, zero-filled series, local-day boundaries by time zone, the admin filter, students, tasks, modules, trial tests with per-question accuracy, quizzes, malformed legacy timestamps, pooled connections with a row factory, and route auth with e-mail visibility by role. Its period and bucket unit tests also run without a database.
    - Run from `bot/` (`httpx` is a test-only dependency, not in `requirements.txt`):
      ```powershell
      python -m pip install pytest "httpx==0.28.1"
+     $env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres"
      python -m pytest tests
      ```
 2. **Backend Syntax & Static Error Check**:
@@ -50,7 +51,7 @@ Currently present verification assets in the repository:
      flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
      ```
 3. **Bank Workspace Browser Verification Scripts (`web/tools/`)**:
-   - [`bot/scripts/preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py): Launches an isolated FastAPI server on `127.0.0.1:8100` backed by a disposable seeded SQLite fixture.
+   - [`bot/scripts/preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py): Launches an isolated FastAPI server on `127.0.0.1:8100` backed by a disposable seeded database on the `TEST_DATABASE_URL` server, dropped when the script stops.
    - [`web/tools/preview-bank-browser.js`](../../web/tools/preview-bank-browser.js): Configures a mocked NextAuth browser session against the disposable preview server.
    - [`web/tools/check-bank-workspace.js`](../../web/tools/check-bank-workspace.js): Runs 13 desktop (`1440px`) checks covering catalog counts, search/filter persistence, task editing, version conflicts, deep links, MathLive creation, and multi-page PDF selection/export.
    - [`web/tools/check-bank-mobile.js`](../../web/tools/check-bank-mobile.js): Runs 6 mobile (`390px`) layout and navigation checks.
@@ -80,17 +81,12 @@ Triggered weekly (`0 6 * * 1` — Mondays at 06:00 UTC) or via `workflow_dispatc
 
 ## 4. Database Migrations Workflow
 
-The backend maintains two synchronized migration tracks:
-1. **SQLite (Alembic)**: [`bot/migrations/versions/0001_baseline.py`](../../bot/migrations/versions/0001_baseline.py) through [`0016_ai_twin_checks.py`](../../bot/migrations/versions/0016_ai_twin_checks.py), orchestrated by [`bot/migrations/runner.py`](../../bot/migrations/runner.py).
-2. **PostgreSQL (SQL)**: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql), orchestrated by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums.
+PostgreSQL is the only database. Its schema lives in numbered SQL files: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql), applied in order by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums. The SQLite Alembic track (`bot/migrations/versions/`) was removed on `2026-11-12`.
 
 ### Rules When Modifying the Database Schema
-1. **Always update both tracks** when changing runtime tables:
-   - Create the next numbered Alembic revision in `bot/migrations/versions/` (updating `down_revision`).
-   - Create the next numbered `.sql` migration in `bot/migrations/postgres/`.
+1. **Add the next numbered `.sql` file** in `bot/migrations/postgres/` for every schema change. It runs in one transaction with the other pending migrations at startup or through `python scripts/migrate_to_neon.py`.
 2. **Never edit an already-applied PostgreSQL `.sql` migration file**: [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) verifies the SHA-256 checksum of every applied migration in `mathbot_schema_migrations` and aborts on mismatch.
-3. **Keep SQLite-to-PostgreSQL import mappings in sync**:
-   - Update [`bot/migrations/sqlite_to_postgres.py`](../../bot/migrations/sqlite_to_postgres.py) if new active tables or foreign keys are added.
+3. **Write PostgreSQL SQL.** Repositories keep `?` placeholders (translated to `%s` in [`bot/storage.py`](../../bot/storage.py)). Dates are UTC text `YYYY-MM-DD HH24:MI:SS`: write `mathbot_datetime('now')` instead of `CURRENT_TIMESTAMP`, and use the `mathbot_datetime/date/strftime/julianday` functions from `0002_sql_functions.sql` for date arithmetic on those columns.
 
 ---
 
@@ -100,7 +96,7 @@ All operational scripts are run from `bot/`:
 
 | Script | Command Example | Purpose |
 |---|---|---|
-| [`migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) | `python scripts/migrate_to_neon.py --schema-only`<br>`python scripts/migrate_to_neon.py --source mathbot.db`<br>`python scripts/migrate_to_neon.py --source mathbot.db --apply --archive-legacy` | Applies PostgreSQL migrations (`0001`–`0007`) via `DATABASE_MIGRATION_URL` and optionally imports a consistent online SQLite snapshot into an empty PostgreSQL database with row-count and SHA-256 multiset verification. See [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md). |
+| [`migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) | `python scripts/migrate_to_neon.py` | Applies the PostgreSQL migrations (`0001`–`0009`) and startup seeds via `DATABASE_MIGRATION_URL` (falls back to `DATABASE_URL`). `--schema-only` is still accepted and does the same. See [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md). |
 | [`postgres_backup.py`](../../bot/scripts/postgres_backup.py) | `python scripts/postgres_backup.py backup --output C:\private-backups\snap`<br>`python scripts/postgres_backup.py restore --backup C:\private-backups\snap`<br>`python scripts/postgres_backup.py restore --backup C:\private-backups\snap --apply` | Creates a `REPEATABLE READ, READ ONLY` snapshot-consistent `pg_dump` (`database.dump`) + `manifest.json` (with SHA-256 digests and all 7 migration checksums) and verifies restoration into an isolated `mathbot_restore_*` database. See [`deploy/POSTGRES_BACKUP_RESTORE.md`](../../deploy/POSTGRES_BACKUP_RESTORE.md). |
 | [`upload_images.py`](../../bot/scripts/upload_images.py) | `python scripts/upload_images.py --source ../images`<br>`python scripts/upload_images.py --source ../images --apply` | Uploads local task images from `images/` to the configured S3 bucket (`S3_BUCKET`) without overwriting mismatched content. |
-| [`preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py) | `python scripts/preview_bank_workspace.py` | Starts an isolated seeded SQLite FastAPI fixture server on `127.0.0.1:8100` for testing `/admin/bank`. |
+| [`preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py) | `python scripts/preview_bank_workspace.py` | Starts an isolated seeded FastAPI fixture server on `127.0.0.1:8100` for testing `/admin/bank`, on its own database on the `TEST_DATABASE_URL` server. |

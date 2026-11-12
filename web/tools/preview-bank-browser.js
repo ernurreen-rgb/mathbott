@@ -1,6 +1,6 @@
 // Playwright CLI setup for the isolated backend fixture. The OAuth session is
 // mocked in this browser only; every backend request goes to 127.0.0.1:8100.
-// Start bot/scripts/preview_bank_workspace.py and `npm run start -- -p 3100`,
+// Start bot/scripts/preview_bank_workspace.py (needs TEST_DATABASE_URL) and `npm run start -- -p 3100`,
 // then: playwright-cli run-code --filename tools/preview-bank-browser.js
 async (page) => {
   await page.route(/https:\/\/[^/]*ingest[^/]*sentry\.io\//, (route) => route.fulfill({ status: 200, body: "{}" }));

@@ -81,7 +81,7 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
             params.append(1 if is_public else 0)
 
         if updates:
-            updates.append("updated_at = CURRENT_TIMESTAMP")
+            updates.append("updated_at = mathbot_datetime('now')")
             params.append(quiz_id)
 
         async with self._write_transaction() as db:

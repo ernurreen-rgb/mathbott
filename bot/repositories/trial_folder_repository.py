@@ -91,7 +91,7 @@ class TrialFolderMixin:
                                       (name, parent_id, sort_order))
             folder_id = int(cursor.lastrowid)
             if count:
-                await db.execute("UPDATE trial_tests SET folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE folder_id = ?",
+                await db.execute("UPDATE trial_tests SET folder_id = ?, updated_at = mathbot_datetime('now') WHERE folder_id = ?",
                                  (folder_id, parent_id))
         return {"id": folder_id, "parent_id": parent_id, "name": name, "sort_order": sort_order}
 

@@ -16,7 +16,7 @@ class TrialTestCoopRepository(BaseRepository):
     async def create_session(self, trial_test_id: int, owner_id: int) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """
                 INSERT INTO trial_test_coop_sessions (trial_test_id, owner_id)
                 VALUES (?, ?)
@@ -25,7 +25,7 @@ class TrialTestCoopRepository(BaseRepository):
             )
             await db.commit()
             async with db.execute(
-                "SELECT * FROM trial_test_coop_sessions WHERE id = last_insert_rowid()"
+                "SELECT * FROM trial_test_coop_sessions WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else {}
@@ -53,8 +53,9 @@ class TrialTestCoopRepository(BaseRepository):
             db.row_factory = db_driver.Row
             await db.execute(
                 """
-                INSERT OR IGNORE INTO trial_test_coop_participants (session_id, user_id, color)
+                INSERT INTO trial_test_coop_participants (session_id, user_id, color)
                 VALUES (?, ?, ?)
+                ON CONFLICT DO NOTHING
                 """,
                 (session_id, user_id, color)
             )
@@ -131,7 +132,7 @@ class TrialTestCoopRepository(BaseRepository):
             await db.executemany(
                 """INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
                    VALUES (?, ?, ?, ?) ON CONFLICT(session_id, user_id, task_id)
-                   DO UPDATE SET answer = excluded.answer, updated_at = CURRENT_TIMESTAMP""",
+                   DO UPDATE SET answer = excluded.answer, updated_at = mathbot_datetime('now')""",
                 [(session_id, user_id, task_id, answer) for task_id, answer in answers.items()],
             )
             return dict(participant)
@@ -157,8 +158,9 @@ class TrialTestCoopRepository(BaseRepository):
             db.row_factory = db_driver.Row
             await db.execute(
                 """
-                INSERT OR REPLACE INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
+                INSERT INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
                 VALUES (?, ?, ?)
+                ON CONFLICT (session_id, user_id) DO UPDATE SET trial_test_result_id = EXCLUDED.trial_test_result_id
                 """,
                 (session_id, user_id, trial_test_result_id)
             )
@@ -196,8 +198,9 @@ class TrialTestCoopRepository(BaseRepository):
             db.row_factory = db_driver.Row
             await db.execute(
                 """
-                INSERT OR IGNORE INTO trial_test_coop_invites (session_id, sender_id, receiver_id)
+                INSERT INTO trial_test_coop_invites (session_id, sender_id, receiver_id)
                 VALUES (?, ?, ?)
+                ON CONFLICT DO NOTHING
                 """,
                 (session_id, sender_id, receiver_id)
             )
@@ -230,7 +233,7 @@ class TrialTestCoopRepository(BaseRepository):
             await db.execute(
                 """
                 UPDATE trial_test_coop_invites
-                SET status = ?, responded_at = CURRENT_TIMESTAMP
+                SET status = ?, responded_at = mathbot_datetime('now')
                 WHERE id = ?
                 """,
                 (status, invite_id)

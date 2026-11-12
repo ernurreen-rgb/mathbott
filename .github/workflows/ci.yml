@@ -10,7 +10,7 @@ jobs:
   backend-checks:
     runs-on: ubuntu-latest
     services:
-      # The statistics queries are PostgreSQL only, so their tests need a real server.
+      # The backend runs on PostgreSQL only, so the backend tests need a real server.
       postgres:
         image: postgres:17
         env:

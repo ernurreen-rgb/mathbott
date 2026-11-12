@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     app_version: str = "1.0.0"
     port: int = 8000
-    db_path: str = "mathbot.db"
+    # PostgreSQL is the only supported database (Neon in production).
     database_url: str = ""
     database_migration_url: str = ""
     database_auto_migrate: Optional[bool] = None
@@ -155,6 +155,8 @@ class Settings(BaseSettings):
         "sentry_dsn",
         "alert_telegram_bot_token",
         "alert_telegram_chat_id",
+        "database_url",
+        "database_migration_url",
         mode="before",
     )
     @classmethod
@@ -164,10 +166,6 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
-
-    @property
-    def database_target(self) -> str:
-        return self.database_url.strip() or self.db_path
 
     @property
     def run_background_tasks(self) -> bool:

@@ -1,37 +1,29 @@
-"""Library queries against a real, isolated 10,000-task SQLite database.
+"""Library queries against a real, isolated 10,000-task PostgreSQL database.
 
-Run from bot/: python -m unittest discover -s tests -p test_bank_catalog.py -v
+Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
+Run from bot/: python -m pytest tests/test_bank_catalog.py
 """
-import os
-import gc
-import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import storage
-from database import Database
+from postgres_test_db import PostgresTestCase
 from routes.admin.bank import register_bank_routes
 
 
-class BankCatalogTests(unittest.IsolatedAsyncioTestCase):
+class BankCatalogTests(PostgresTestCase):
     async def asyncSetUp(self):
-        self.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": ""})
-        self.environment.start()
-        self.directory = tempfile.TemporaryDirectory(prefix="qazmath-bank-tests-")
-        self.db = Database(str(Path(self.directory.name) / "bank.sqlite"), use_pool=False)
-        await self.db.init()
-        async with storage.connect(self.db.db_path) as connection:
-            await connection.executemany(
-                "INSERT INTO bank_tasks (id, text, answer, question_type, difficulty, deleted_at) VALUES (?, ?, ?, ?, ?, ?)",
-                [(i, f"Sample equation {i}", "4", "mcq" if i % 2 else "input", "ABC"[i % 3],
-                  "2026-11-01 00:00:00" if i > 9990 else None) for i in range(1, 10001)],
-            )
+        await super().asyncSetUp()
+        async with self.seed() as connection:
+            await connection.execute("""
+                INSERT INTO bank_tasks (id, text, answer, question_type, difficulty, deleted_at)
+                SELECT i, 'Sample equation ' || i, '4', CASE WHEN i % 2 = 1 THEN 'mcq' ELSE 'input' END,
+                       substr('ABC', i % 3 + 1, 1), CASE WHEN i > 9990 THEN '2026-11-01 00:00:00' END
+                FROM generate_series(1, 10000) AS i
+            """)
             await connection.executemany("INSERT INTO bank_topics (id, name, name_norm) VALUES (?, ?, ?)", [
                 (1, "Алгебра", "алгебра"), (2, "Қысқаша көбейту формулалары", "қысқаша көбейту формулалары"),
                 (3, "Only deleted", "only deleted"), (4, "100% exact", "100% exact"),
@@ -44,14 +36,8 @@ class BankCatalogTests(unittest.IsolatedAsyncioTestCase):
             await connection.execute("INSERT INTO trial_tests (id, title) VALUES (1, 'Fixture')")
             await connection.execute("INSERT INTO trial_test_tasks (trial_test_id, bank_task_id) VALUES (1, 1)")
             await connection.execute("INSERT INTO trial_test_tasks (trial_test_id, bank_task_id, sort_order) VALUES (1, 3, 1)")
-            await connection.commit()
         await self.db.users.create_user_by_email("bank-admin@example.test", check_admin_email="bank-admin@example.test")
         await self.db.users.create_user_by_email("student@example.test")
-
-    async def asyncTearDown(self):
-        gc.collect()
-        self.directory.cleanup()
-        self.environment.stop()
 
     async def test_catalog_counts_distinct_tasks_and_excludes_trashed_topics(self):
         catalog = await self.db.bank_tasks.get_catalog()
@@ -94,7 +80,7 @@ class BankCatalogTests(unittest.IsolatedAsyncioTestCase):
         result = await self.db.bank_tasks.list_tasks(question_type="input", difficulty="C", has_topics=False, sort="oldest", limit=50)
         self.assertEqual(result["items"][0]["id"], 8)
         self.assertTrue(all(t["question_type"] == "input" and t["difficulty"] == "C" and not t["topics"] for t in result["items"]))
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.connect() as connection:
             await connection.execute("UPDATE bank_tasks SET updated_at = '2099-01-01' WHERE id = 3")
             await connection.commit()
         self.assertEqual((await self.db.bank_tasks.list_tasks(sort="updated"))["items"][0]["id"], 3)

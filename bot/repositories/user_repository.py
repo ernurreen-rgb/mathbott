@@ -154,7 +154,7 @@ class UserRepository(BaseRepository):
                     WHERE user_id = ?
                       AND status = 'completed'
                       AND completed_at IS NOT NULL
-                      AND datetime(completed_at) >= datetime('now', ?)
+                      AND mathbot_datetime(completed_at) >= mathbot_datetime('now', ?)
 
                     UNION ALL
 
@@ -162,9 +162,9 @@ class UserRepository(BaseRepository):
                     FROM trial_test_results
                     WHERE user_id = ?
                       AND completed_at IS NOT NULL
-                      AND datetime(completed_at) >= datetime('now', ?)
+                      AND mathbot_datetime(completed_at) >= mathbot_datetime('now', ?)
                 ) recent_activity
-                ORDER BY datetime(event_at) DESC
+                ORDER BY mathbot_datetime(event_at) DESC
                 LIMIT 100
                 """,
                 (user_id, window_expr, user_id, window_expr),
@@ -581,7 +581,7 @@ class UserRepository(BaseRepository):
             )
             if recorded:
                 await db.execute(
-                    "UPDATE users SET total_solved = total_solved + 1, last_active = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE users SET total_solved = total_solved + 1, last_active = mathbot_datetime('now') WHERE id = ?",
                     (user_id,),
                 )
             return {"recorded": recorded}
@@ -637,7 +637,7 @@ class UserRepository(BaseRepository):
                         await db.commit()
                         return current_streak, new_streak
 
-            await self._run_with_lock_retry(operation)
+            await self._run_with_write_lock(operation)
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

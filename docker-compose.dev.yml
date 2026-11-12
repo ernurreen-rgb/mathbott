@@ -1,0 +1,22 @@
+# Local PostgreSQL 17 for development and backend tests (the same major version as CI).
+#   docker compose -f docker-compose.dev.yml up -d
+# App (bot/.env.local):  DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/qazmath
+# Tests (shell variable): TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: qazmath
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - qazmath-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  qazmath-postgres:

@@ -1,9 +1,7 @@
 """Admin statistics against a real PostgreSQL database.
 
-The queries are PostgreSQL only, so the database tests need a disposable server: set
-TEST_DATABASE_URL to any database on it (for example postgresql://postgres@127.0.0.1:5432/postgres).
-Each run creates its own database there and drops it afterwards. Without the variable only
-the pure period and bucket tests run.
+The database tests need TEST_DATABASE_URL (see tests/postgres_test_db.py); they share one
+database per class. Without the variable only the pure period and bucket tests run.
 
 Run from bot/: python -m pytest tests/test_admin_statistics.py
 """
@@ -14,8 +12,6 @@ import unittest
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from unittest.mock import patch
-from urllib.parse import urlsplit, urlunsplit
-from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI
@@ -24,10 +20,10 @@ from slowapi.util import get_remote_address
 
 import storage
 from database import Database
+from postgres_test_db import create_database, drop_database, requires_postgres
 from repositories.statistics_repository import bucket_plan, build_window, effective_streak
 from routes.admin.statistics import register_statistics_routes
 
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
 # Noon in Kazakhstan (UTC+5) on Wednesday 2026-11-11.
 NOW = datetime(2026, 11, 11, 7, 0, 0)
 ADMIN = "stats-admin@example.test"
@@ -72,19 +68,15 @@ class PeriodTests(unittest.TestCase):
         self.assertEqual(effective_streak(5, None, today), 0)
 
 
-@unittest.skipUnless(TEST_DATABASE_URL, "TEST_DATABASE_URL is not set; statistics queries need PostgreSQL")
+@requires_postgres
 class StatisticsTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
-        import psycopg
-
-        cls.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": ""})
+        cls.database_url = create_database("qazmath_statistics")
+        cls.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": cls.database_url,
+                                                  "DATABASE_MIGRATION_URL": "", "SENTRY_DSN": ""})
         cls.environment.start()
-        cls.database_name = f"qazmath_statistics_{uuid4().hex[:12]}"
-        with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as server:
-            server.execute(f'CREATE DATABASE "{cls.database_name}"')
-        parts = urlsplit(TEST_DATABASE_URL)
-        cls.db = Database(urlunsplit(parts._replace(path=f"/{cls.database_name}")), use_pool=False)
+        cls.db = Database(cls.database_url, use_pool=False)
         asyncio.run(cls._seed())
         cls.app = FastAPI()
         cls.app.state.db = cls.db
@@ -92,10 +84,7 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        import psycopg
-
-        with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as server:
-            server.execute(f'DROP DATABASE IF EXISTS "{cls.database_name}" WITH (FORCE)')
+        drop_database(cls.database_url)
         cls.environment.stop()
 
     @classmethod
@@ -213,7 +202,7 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     async def _run(cls, sql, *params):
-        async with storage.connect(cls.db.db_path) as connection:
+        async with storage.connect(cls.db.database_url) as connection:
             await connection.execute(sql, params)
             await connection.commit()
 

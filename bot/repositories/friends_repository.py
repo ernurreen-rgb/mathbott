@@ -20,19 +20,18 @@ class FriendsRepository(BaseRepository):
         async def operation():
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
-                await db.execute("UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+                await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
                 async with db.execute("""SELECT id, nickname FROM users
-                    WHERE datetime(last_active) >= datetime('now', '-70 seconds')
+                    WHERE mathbot_datetime(last_active) >= mathbot_datetime('now', '-70 seconds')
                     ORDER BY id""") as cursor:
                     users = [dict(row) for row in await cursor.fetchall()]
                 await db.commit()
                 return users
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def _fetch_one(self, query: str, params: tuple) -> Optional[Dict[str, Any]]:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             conn.row_factory = db_driver.Row
             async with conn.execute(query, params) as cursor:
                 row = await cursor.fetchone()
@@ -43,7 +42,6 @@ class FriendsRepository(BaseRepository):
     async def _fetch_all(self, query: str, params: tuple) -> List[Dict[str, Any]]:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             conn.row_factory = db_driver.Row
             async with conn.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
@@ -69,7 +67,6 @@ class FriendsRepository(BaseRepository):
     async def create_invite(self, inviter_id: int, expires_at: Optional[str]) -> Dict[str, Any]:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             token = None
             for _ in range(5):
                 token = secrets.token_urlsafe(24)
@@ -104,13 +101,12 @@ class FriendsRepository(BaseRepository):
     async def mark_invite_accepted(self, token: str, accepted_by: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 """
                 UPDATE friend_invites
                 SET status = 'accepted',
                     accepted_by = ?,
-                    accepted_at = CURRENT_TIMESTAMP
+                    accepted_at = mathbot_datetime('now')
                 WHERE token = ?
                 """,
                 (accepted_by, token)
@@ -122,7 +118,6 @@ class FriendsRepository(BaseRepository):
     async def expire_invite(self, token: str) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 "UPDATE friend_invites SET status = 'expired' WHERE token = ?",
                 (token,)
@@ -134,7 +129,6 @@ class FriendsRepository(BaseRepository):
     async def revoke_invite(self, token: str, inviter_id: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 """
                 UPDATE friend_invites
@@ -161,13 +155,12 @@ class FriendsRepository(BaseRepository):
     async def create_friendship(self, user_id: int, friend_id: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
-                "INSERT OR IGNORE INTO friendships (user_id, friend_id) VALUES (?, ?)",
+                "INSERT INTO friendships (user_id, friend_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
                 (user_id, friend_id)
             )
             await conn.execute(
-                "INSERT OR IGNORE INTO friendships (user_id, friend_id) VALUES (?, ?)",
+                "INSERT INTO friendships (user_id, friend_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
                 (friend_id, user_id)
             )
             await conn.commit()
@@ -177,7 +170,6 @@ class FriendsRepository(BaseRepository):
     async def delete_friendship(self, user_id: int, friend_id: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 "DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
                 (user_id, friend_id, friend_id, user_id)
@@ -199,11 +191,12 @@ class FriendsRepository(BaseRepository):
     async def create_friend_request(self, sender_id: int, receiver_id: int, status: str = "pending") -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 """
-                INSERT OR REPLACE INTO friend_requests (sender_id, receiver_id, status, responded_at)
-                VALUES (?, ?, ?, CASE WHEN ? != 'pending' THEN CURRENT_TIMESTAMP ELSE NULL END)
+                INSERT INTO friend_requests (sender_id, receiver_id, status, responded_at)
+                VALUES (?, ?, ?, CASE WHEN ? != 'pending' THEN mathbot_datetime('now') ELSE NULL END)
+                ON CONFLICT (sender_id, receiver_id)
+                DO UPDATE SET status = EXCLUDED.status, responded_at = EXCLUDED.responded_at
                 """,
                 (sender_id, receiver_id, status, status)
             )
@@ -214,11 +207,10 @@ class FriendsRepository(BaseRepository):
     async def update_friend_request_status(self, request_id: int, status: str) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 """
                 UPDATE friend_requests
-                SET status = ?, responded_at = CURRENT_TIMESTAMP
+                SET status = ?, responded_at = mathbot_datetime('now')
                 WHERE id = ?
                 """,
                 (status, request_id)
@@ -277,9 +269,8 @@ class FriendsRepository(BaseRepository):
     async def block_user(self, blocker_id: int, blocked_id: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
-                "INSERT OR IGNORE INTO blocks (blocker_id, blocked_id) VALUES (?, ?)",
+                "INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
                 (blocker_id, blocked_id)
             )
             await conn.execute(
@@ -300,7 +291,6 @@ class FriendsRepository(BaseRepository):
     async def unblock_user(self, blocker_id: int, blocked_id: int) -> None:
         conn = await self._get_connection()
         try:
-            await self._configure_connection(conn)
             await conn.execute(
                 "DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?",
                 (blocker_id, blocked_id)

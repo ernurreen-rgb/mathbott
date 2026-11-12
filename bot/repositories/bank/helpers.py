@@ -150,7 +150,7 @@ class BankTaskHelpersMixin:
         for topic in normalized_topics:
             name_norm = self._normalize_topic(topic)
             await db.execute(
-                "INSERT OR IGNORE INTO bank_topics (name, name_norm) VALUES (?, ?)",
+                "INSERT INTO bank_topics (name, name_norm) VALUES (?, ?) ON CONFLICT DO NOTHING",
                 (topic, name_norm),
             )
             async with db.execute(
@@ -162,6 +162,6 @@ class BankTaskHelpersMixin:
                 continue
             topic_id = topic_row[0]
             await db.execute(
-                "INSERT OR IGNORE INTO bank_task_topic_map (bank_task_id, topic_id) VALUES (?, ?)",
+                "INSERT INTO bank_task_topic_map (bank_task_id, topic_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
                 (task_id, topic_id),
             )

@@ -1,29 +1,48 @@
-"""Async database boundary for local SQLite and hosted PostgreSQL/Neon.
+"""Async PostgreSQL boundary (Neon in production, any PostgreSQL 17 locally).
 
-Repositories retain their parameterized SQL and cursor API. PostgreSQL runs
-through psycopg in worker threads (also works with Windows' default event loop).
-SQLite remains available for local development and existing database backups.
+Repositories write PostgreSQL SQL with `?` placeholders and use a small cursor
+API (execute/fetchone/fetchall, rowcount, lastrowid). `postgres_sql()` turns the
+placeholders into psycopg parameters. psycopg runs in worker threads, which also
+works with Windows' default event loop.
 """
 from __future__ import annotations
 
 import asyncio
 import re
-import sqlite3
 from collections.abc import Sequence
 from decimal import Decimal
 from functools import lru_cache
 
-import aiosqlite
-
-Row = sqlite3.Row
-IntegrityError = sqlite3.IntegrityError
-OperationalError = sqlite3.OperationalError
-DatabaseError = sqlite3.DatabaseError
 WRITE_LOCK_ID = 724831921
+POSTGRES_URL_PREFIXES = ("postgres://", "postgresql://")
+
+
+class DatabaseError(Exception):
+    """Base class for database errors raised by this module."""
+
+
+class OperationalError(DatabaseError):
+    """A statement failed for a reason other than a constraint violation."""
+
+
+class IntegrityError(DatabaseError):
+    """A statement violated a unique, foreign key, check or not-null constraint."""
 
 
 def is_postgres(target: str) -> bool:
-    return str(target).startswith(("postgres://", "postgresql://"))
+    return str(target or "").strip().startswith(POSTGRES_URL_PREFIXES)
+
+
+def require_postgres_url(target: str) -> str:
+    """Return the URL, or fail with a message that says how to configure the database."""
+    url = str(target or "").strip()
+    if not url:
+        raise ValueError("DATABASE_URL is not set. QazMath needs PostgreSQL: set DATABASE_URL to a "
+                         "postgresql:// URL (see docs/development/setup.md).")
+    if not is_postgres(url):
+        raise ValueError("DATABASE_URL must be a PostgreSQL connection URL starting with postgresql://; "
+                         "SQLite files are no longer supported.")
+    return url
 
 
 def postgres_options(target: str) -> str:
@@ -38,47 +57,16 @@ def _sql_tokens(sql: str):
 
 @lru_cache(maxsize=2048)
 def postgres_sql(sql: str) -> str:
-    """Translate the small SQLite-specific vocabulary used by repositories.
+    """Turn `?` placeholders into psycopg `%s` parameters.
 
     Values always remain driver parameters. Literal question marks, percent
     signs, comments and SQL strings must never become parameter placeholders.
     """
     sql = sql.strip().rstrip(";")
-    ignore = bool(re.match(r"INSERT\s+OR\s+IGNORE\b", sql, re.I))
-    replace = re.match(r"INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)", sql, re.I)
-    sql = re.sub(r"\bINSERT\s+OR\s+(IGNORE|REPLACE)\b", "INSERT", sql, flags=re.I)
-    # These are the only JSON table/extract expressions in the application.
-    sql = re.sub(r"JOIN\s+json_each\(r\.answers\)\s+AS\s+answer_entry",
-                 "JOIN LATERAL jsonb_each(r.answers::jsonb) AS answer_entry ON TRUE", sql, flags=re.I)
-    sql = re.sub(r"json_extract\(answer_entry\.value,\s*'\$\.answer'\)",
-                 "(answer_entry.value ->> 'answer')", sql, flags=re.I)
-    sql = re.sub(r"json_extract\(answer_entry\.value,\s*'\$\.correct'\)",
-                 "(CASE WHEN answer_entry.value ->> 'correct' IN ('true', '1') THEN 1 "
-                 "WHEN answer_entry.value ->> 'correct' IN ('false', '0') THEN 0 END)", sql, flags=re.I)
     parts = _sql_tokens(sql)
     for i in range(0, len(parts), 2):
-        part = parts[i]
-        part = re.sub(r"\b(datetime|strftime|julianday|date)\s*\(",
-                      lambda match: "mathbot_" + match[1].lower() + "(", part, flags=re.I)
-        part = re.sub(r"\bCURRENT_TIMESTAMP\b", "mathbot_datetime('now')", part, flags=re.I)
-        part = re.sub(r"\bAS\s+REAL\b", "AS DOUBLE PRECISION", part, flags=re.I)
-        parts[i] = part.replace("?", "\x00PARAM\x00")
+        parts[i] = parts[i].replace("?", "\x00PARAM\x00")
     sql = "".join(parts)
-    if ignore:
-        sql += " ON CONFLICT DO NOTHING"
-    if replace:
-        conflicts = {
-            "user_onboarding": ("user_id",),
-            "friend_requests": ("sender_id", "receiver_id"),
-            "trial_test_coop_results": ("session_id", "user_id"),
-        }
-        table = replace[1].lower()
-        if table not in conflicts:
-            raise ValueError(f"No PostgreSQL conflict target declared for {table}")
-        columns = [column.strip() for column in replace[2].split(",")]
-        keys = conflicts[table]
-        updates = ", ".join(f"{column} = EXCLUDED.{column}" for column in columns if column not in keys)
-        sql += f" ON CONFLICT ({', '.join(keys)}) DO UPDATE SET {updates}"
     # psycopg also parses percent signs inside SQL literals when parameters exist.
     if "\x00PARAM\x00" in sql:
         sql = sql.replace("%", "%%").replace("\x00PARAM\x00", "%s")
@@ -92,7 +80,7 @@ def _value(value):
 
 
 class Record(Sequence):
-    """Named and positional access, matching the repository's sqlite Row use."""
+    """A result row with both named and positional access."""
     def __init__(self, names, values):
         self._names = names
         self._values = tuple(_value(value) for value in values)
@@ -105,6 +93,10 @@ class Record(Sequence):
 
     def __len__(self):
         return len(self._values)
+
+
+# Assign to `connection.row_factory` to get Record rows instead of plain tuples.
+Row = Record
 
 
 class PostgresCursor:
@@ -198,34 +190,29 @@ class PostgresConnection:
         from psycopg.pq import TransactionStatus
         return self._conn.info.transaction_status != TransactionStatus.IDLE
 
+    def _begin_write_sync(self):
+        # psycopg opens the transaction itself on the first statement.
+        with self._conn.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (WRITE_LOCK_ID,))
+
+    async def begin_write(self):
+        """Start a transaction that holds the application-wide write lock until it ends.
+
+        Writers in every process take the same advisory lock, so state read inside the
+        transaction cannot change before the transaction commits.
+        """
+        await asyncio.to_thread(self._begin_write_sync)
+
     def _execute_sync(self, sql, parameters):
         import psycopg
-        query = sql.strip().rstrip(";")
-        if re.match(r"PRAGMA\b", query, re.I):
-            # Connection-level SQLite tuning has no PostgreSQL equivalent.
-            if re.match(r"PRAGMA\s+(foreign_keys|journal_mode|synchronous|busy_timeout)\s*=", query, re.I):
-                return PostgresCursor()
-            raise NotImplementedError("SQLite schema introspection is not supported on PostgreSQL")
-        if re.fullmatch(r"BEGIN\s+IMMEDIATE", query, re.I):
-            with self._conn.cursor() as cursor:
-                cursor.execute("BEGIN")
-                cursor.execute("SELECT pg_advisory_xact_lock(%s)", (WRITE_LOCK_ID,))
-            return PostgresCursor()
-        if re.fullmatch(r"DELETE\s+FROM\s+sqlite_sequence\s+WHERE\s+name\s*=\s*'tasks'", query, re.I):
-            query = "ALTER TABLE tasks ALTER COLUMN id RESTART WITH 1"
-        query = re.sub(r"last_insert_rowid\(\)", str(self._lastrowid or 0), query, flags=re.I)
-        if "sqlite_master" in query.lower():
-            query = query.replace("sqlite_master", "information_schema.tables")
-            query = re.sub(r"\bname\b", "table_name", query)
-            query = re.sub(r"\btype\s*=\s*'table'", "table_schema = current_schema()", query)
-        query = postgres_sql(query)
+        query = postgres_sql(sql)
         insert = re.match(r"INSERT\s+INTO\s+(\w+)", query, re.I)
         generated_id = bool(insert and insert[1] in self._id_tables and not re.search(r"\bRETURNING\b", query, re.I))
         if generated_id:
             query += " RETURNING id"
         args = tuple(int(value) if isinstance(value, bool) else value for value in parameters)
-        # SQLite leaves a transaction usable after a constraint error. Savepoints
-        # preserve that contract for the few repositories that catch duplicates.
+        # A failed statement aborts a PostgreSQL transaction. Savepoints keep it usable
+        # for the repositories that catch duplicate-key errors and carry on.
         with self._conn.cursor() as cursor:
             if insert:
                 cursor.execute("SAVEPOINT mathbot_statement")
@@ -273,10 +260,8 @@ class PostgresConnection:
             await asyncio.to_thread(self._conn.close)
 
 
-Connection = aiosqlite.Connection | PostgresConnection
+Connection = PostgresConnection
 
 
-def connect(target, **kwargs):
-    if is_postgres(target):
-        return PostgresConnection(target, **kwargs)
-    return aiosqlite.connect(target, **kwargs)
+def connect(target, **kwargs) -> PostgresConnection:
+    return PostgresConnection(require_postgres_url(target), **kwargs)

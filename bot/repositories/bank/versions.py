@@ -196,7 +196,7 @@ class BankTaskVersionsMixin:
                 await db.execute(
                     """
                     UPDATE bank_tasks
-                    SET current_version = ?, updated_at = CURRENT_TIMESTAMP
+                    SET current_version = ?, updated_at = mathbot_datetime('now')
                     WHERE id = ?
                     """,
                     (next_current, task_id),
@@ -285,7 +285,7 @@ class BankTaskVersionsMixin:
                     difficulty = ?,
                     image_filename = ?,
                     solution_filename = ?,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = mathbot_datetime('now')
                 WHERE id = ?
                 """,
                 (

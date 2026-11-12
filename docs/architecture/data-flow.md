@@ -14,7 +14,7 @@ sequenceDiagram
     participant NextProxy as Next.js Proxy (/api/backend/[...path])
     participant NextAuth as NextAuth JWT
     participant FastAPI as FastAPI Middleware & Route
-    participant DB as SQLite / PostgreSQL
+    participant DB as PostgreSQL
 
     Browser->>NextProxy: HTTP Request (Session Cookie)
     NextProxy->>NextProxy: Strip client X-Proxy-* / Authorization / Cookie headers

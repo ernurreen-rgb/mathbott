@@ -5,11 +5,13 @@ Routes access repositories directly (db.users, db.bank_tasks, ...) or through
 the per-repository providers in dependencies.py. The only methods kept on this
 class are init/shutdown plumbing and operations that span multiple repositories.
 """
-import storage as db_driver
+import asyncio
 import logging
+
+import storage as db_driver
 from typing import Optional, List, Dict, Any
 
-from migrations.runner import run_migrations_async
+from migrations.postgres_runner import run_postgres_migrations
 from migrations.seeds import run_seeds
 from repositories.user_repository import UserRepository
 from repositories.task_repository import TaskRepository
@@ -34,65 +36,48 @@ logger = logging.getLogger(__name__)
 
 
 class Database:
-    def __init__(self, db_path: str = "mathbot.db", use_pool: bool = True, migration_url: str = "", auto_migrate: bool = True):
-        self.db_path = db_path
+    def __init__(self, database_url: str, use_pool: bool = True, migration_url: str = "", auto_migrate: bool = True):
+        self.database_url = db_driver.require_postgres_url(database_url)
         self.migration_url = migration_url
         self.auto_migrate = auto_migrate
-        self.is_postgres = db_driver.is_postgres(db_path)
-        self.sqlite_timeout_seconds = 30
-        self.sqlite_busy_timeout_ms = 8000
+        self.connect_timeout_seconds = 30
         self.use_pool = use_pool
 
         # Initialize connection pool if enabled
         self.connection_pool: Optional[ConnectionPool] = None
         if use_pool:
             self.connection_pool = ConnectionPool(
-                db_path=db_path,
-                min_size=0 if self.is_postgres else 2,
-                max_size=2 if self.is_postgres else 10,
-                timeout=self.sqlite_timeout_seconds,
-                busy_timeout_ms=self.sqlite_busy_timeout_ms
+                database_url=self.database_url,
+                min_size=0,
+                max_size=2,
+                timeout=self.connect_timeout_seconds,
             )
 
         # Initialize repositories with connection pool
-        self.users = UserRepository(db_path, connection_pool=self.connection_pool)
-        self.tasks = TaskRepository(db_path, connection_pool=self.connection_pool)
-        self.curriculum = CurriculumRepository(db_path, connection_pool=self.connection_pool)
-        self.progress = ProgressRepository(db_path, connection_pool=self.connection_pool)
-        self.solutions = SolutionRepository(db_path, connection_pool=self.connection_pool)
-        self.achievements = AchievementRepository(db_path, connection_pool=self.connection_pool)
-        self.trial_tests = TrialTestRepository(db_path, connection_pool=self.connection_pool)
-        self.trial_test_coop = TrialTestCoopRepository(db_path, connection_pool=self.connection_pool)
-        self.bank_tasks = BankTaskRepository(db_path, connection_pool=self.connection_pool)
-        self.reports = ReportRepository(db_path, connection_pool=self.connection_pool)
-        self.trial_test_reports = TrialTestReportRepository(db_path, connection_pool=self.connection_pool)
-        self.statistics = StatisticsRepository(db_path, connection_pool=self.connection_pool)
-        self.friends = FriendsRepository(db_path, connection_pool=self.connection_pool)
-        self.ops = OpsRepository(db_path, connection_pool=self.connection_pool)
-        self.onboarding = OnboardingRepository(db_path, connection_pool=self.connection_pool)
-        self.quizzes = QuizRepository(db_path, connection_pool=self.connection_pool)
-        self.module_review = ModuleReviewRepository(db_path, connection_pool=self.connection_pool)
-
-    async def _configure_connection(self, db: db_driver.Connection) -> None:
-        # Improve concurrency (readers don't block writers as much)
-        await db.execute("PRAGMA foreign_keys = ON")
-        try:
-            await db.execute("PRAGMA journal_mode = WAL")
-            await db.execute("PRAGMA synchronous = NORMAL")
-        except Exception:
-            # Some environments may not allow changing journal mode; ignore.
-            pass
-        try:
-            await db.execute(f"PRAGMA busy_timeout = {int(self.sqlite_busy_timeout_ms)}")
-        except Exception:
-            pass
+        url, pool = self.database_url, self.connection_pool
+        self.users = UserRepository(url, connection_pool=pool)
+        self.tasks = TaskRepository(url, connection_pool=pool)
+        self.curriculum = CurriculumRepository(url, connection_pool=pool)
+        self.progress = ProgressRepository(url, connection_pool=pool)
+        self.solutions = SolutionRepository(url, connection_pool=pool)
+        self.achievements = AchievementRepository(url, connection_pool=pool)
+        self.trial_tests = TrialTestRepository(url, connection_pool=pool)
+        self.trial_test_coop = TrialTestCoopRepository(url, connection_pool=pool)
+        self.bank_tasks = BankTaskRepository(url, connection_pool=pool)
+        self.reports = ReportRepository(url, connection_pool=pool)
+        self.trial_test_reports = TrialTestReportRepository(url, connection_pool=pool)
+        self.statistics = StatisticsRepository(url, connection_pool=pool)
+        self.friends = FriendsRepository(url, connection_pool=pool)
+        self.ops = OpsRepository(url, connection_pool=pool)
+        self.onboarding = OnboardingRepository(url, connection_pool=pool)
+        self.quizzes = QuizRepository(url, connection_pool=pool)
+        self.module_review = ModuleReviewRepository(url, connection_pool=pool)
 
     async def init(self):
-        """Initialize database: apply Alembic migrations, then idempotent seeds"""
+        """Initialize database: apply PostgreSQL migrations, then idempotent seeds"""
         if self.auto_migrate:
-            await run_migrations_async(self.db_path, migration_url=self.migration_url)
-            async with db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
-                await self._configure_connection(db)
+            await asyncio.to_thread(run_postgres_migrations, self.migration_url or self.database_url)
+            async with db_driver.connect(self.database_url, timeout=self.connect_timeout_seconds) as db:
                 await run_seeds(db)
 
         # Initialize connection pool if enabled

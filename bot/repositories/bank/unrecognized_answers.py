@@ -73,7 +73,7 @@ class BankTaskUnrecognizedAnswersMixin:
                 """
                 SELECT
                     r.user_id AS attempt_user_id,
-                    json_extract(answer_entry.value, '$.answer') AS student_answer,
+                    (answer_entry.value ->> 'answer') AS student_answer,
                     r.completed_at AS attempted_at,
                     CASE
                         WHEN r.submit_mode = 'coop' THEN 'trial_test_coop'
@@ -89,12 +89,13 @@ class BankTaskUnrecognizedAnswersMixin:
                     bt.subquestions,
                     bt.current_version
                 FROM trial_test_results r
-                JOIN json_each(r.answers) AS answer_entry
+                JOIN LATERAL jsonb_each(r.answers::jsonb) AS answer_entry ON TRUE
                 JOIN trial_test_tasks ttt ON ttt.id = CAST(answer_entry.key AS INTEGER)
                 JOIN bank_tasks bt ON bt.id = ttt.bank_task_id
-                WHERE json_extract(answer_entry.value, '$.correct') = 0
+                WHERE (CASE WHEN answer_entry.value ->> 'correct' IN ('true', '1') THEN 1
+                            WHEN answer_entry.value ->> 'correct' IN ('false', '0') THEN 0 END) = 0
                   AND bt.deleted_at IS NULL
-                  AND TRIM(COALESCE(json_extract(answer_entry.value, '$.answer'), '')) <> ''
+                  AND TRIM(COALESCE(answer_entry.value ->> 'answer', '')) <> ''
                 ORDER BY r.id DESC
                 LIMIT ?
                 """,

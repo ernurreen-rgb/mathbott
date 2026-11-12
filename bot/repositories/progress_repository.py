@@ -4,8 +4,6 @@ Progress repository for user progress tracking
 import storage as db_driver
 import json
 import logging
-import sqlite3
-import asyncio
 from typing import Optional, Dict, Any, List
 from .base import BaseRepository
 
@@ -17,36 +15,29 @@ class ProgressRepository(BaseRepository):
     
     async def update_task_progress(self, user_id: int, task_id: int, status: str = "completed"):
         """Update or create user progress for a task"""
-        for attempt in range(1, 6):
-            try:
-                async with self._connection() as db:
-                    async with db.execute(
-                        "SELECT id FROM user_progress WHERE user_id = ? AND task_id = ?",
-                        (user_id, task_id)
-                    ) as cursor:
-                        existing = await cursor.fetchone()
+        async with self._connection() as db:
+            async with db.execute(
+                "SELECT id FROM user_progress WHERE user_id = ? AND task_id = ?",
+                (user_id, task_id)
+            ) as cursor:
+                existing = await cursor.fetchone()
                     
-                    if existing:
-                        await db.execute(
-                            """UPDATE user_progress 
-                               SET status = ?, completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                               WHERE user_id = ? AND task_id = ?""",
-                            (status, user_id, task_id)
-                        )
-                    else:
-                        completed_at = "CURRENT_TIMESTAMP" if status == "completed" else "NULL"
-                        await db.execute(
-                            f"""INSERT INTO user_progress (user_id, task_id, status, completed_at)
-                               VALUES (?, ?, ?, {completed_at})""",
-                            (user_id, task_id, status)
-                        )
-                    await db.commit()
-                return
-            except sqlite3.OperationalError as e:
-                if "database is locked" not in str(e).lower() or attempt == 5:
-                    raise
-                await asyncio.sleep(0.15 * attempt)
-    
+            if existing:
+                await db.execute(
+                    """UPDATE user_progress 
+                       SET status = ?, completed_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
+                       WHERE user_id = ? AND task_id = ?""",
+                    (status, user_id, task_id)
+                )
+            else:
+                completed_at = "mathbot_datetime('now')" if status == "completed" else "NULL"
+                await db.execute(
+                    f"""INSERT INTO user_progress (user_id, task_id, status, completed_at)
+                       VALUES (?, ?, ?, {completed_at})""",
+                    (user_id, task_id, status)
+                )
+            await db.commit()
+
     async def get_user_task_progress(self, user_id: int, task_id: int) -> Optional[Dict[str, Any]]:
         """Get user progress for a specific task"""
         async with self._connection() as db:
@@ -421,7 +412,7 @@ class ProgressRepository(BaseRepository):
             if existing:
                 await db.execute(
                     """UPDATE user_task_question_progress 
-                       SET is_correct = ?, completed_at = CURRENT_TIMESTAMP
+                       SET is_correct = ?, completed_at = mathbot_datetime('now')
                        WHERE user_id = ? AND task_id = ? AND question_index = ?""",
                     (1 if is_correct else 0, user_id, task_id, question_index)
                 )

@@ -1,21 +1,17 @@
-"""Mistake analytics for teachers against a real, isolated SQLite database.
+"""Mistake analytics for teachers against a real, isolated PostgreSQL database.
 
 Run from bot/: python -m pytest tests/test_mistake_analytics.py
+
+Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
 """
-import gc
-import os
-import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import storage
-from database import Database
+from postgres_test_db import PostgresTestCase
 from routes.admin.mistake_analytics import register_mistake_analytics_routes
 
 ADMIN = "analytics-admin@example.test"
@@ -24,13 +20,9 @@ FIRST = "analytics-first@example.test"
 SECOND = "analytics-second@example.test"
 
 
-class MistakeAnalyticsTests(unittest.IsolatedAsyncioTestCase):
+class MistakeAnalyticsTests(PostgresTestCase):
     async def asyncSetUp(self):
-        self.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": ""})
-        self.environment.start()
-        self.directory = tempfile.TemporaryDirectory(prefix="qazmath-analytics-tests-")
-        self.db = Database(str(Path(self.directory.name) / "analytics.sqlite"), use_pool=False)
-        await self.db.init()
+        await super().asyncSetUp()
         users = self.db.users
         await users.create_user_by_email(ADMIN, check_admin_email=ADMIN)
         await users.set_admin_with_role(email=ADMIN, is_admin=True, role="super_admin")
@@ -51,7 +43,7 @@ class MistakeAnalyticsTests(unittest.IsolatedAsyncioTestCase):
             text_scale="md", difficulty="A", topics=["Қосу"], options=None, subquestions=None, image_filename=None,
             keep_source_image=False, created_by=admin["id"], actor_email=ADMIN,
         )
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.seed() as connection:
             for module_id, name in ((1, "Арифметика"), (2, "Көбейту")):
                 await connection.execute("INSERT INTO modules (id, name, sort_order) VALUES (?, ?, ?)", (module_id, name, module_id))
                 await connection.execute("INSERT INTO sections (id, module_id, name) VALUES (?, ?, 'Бөлім')", (module_id, module_id))
@@ -67,7 +59,7 @@ class MistakeAnalyticsTests(unittest.IsolatedAsyncioTestCase):
             task = await self.db.tasks.get_task_by_id(task_id)
             for answer in answers:
                 await self.db.record_solution(user["id"], task_id, answer, answer == task["answer"], task_snapshot=task)
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.seed() as connection:
             await connection.execute("UPDATE solutions SET created_at = '2000-01-01 00:00:00' WHERE task_id = 21")
             await connection.commit()
         # first resolves 11 on the twin and fails 12 on the original (no twins there): a weak spot.
@@ -81,9 +73,6 @@ class MistakeAnalyticsTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.aclose()
-        gc.collect()
-        self.directory.cleanup()
-        self.environment.stop()
 
     async def _get(self, email=ADMIN, **params):
         response = await self.client.get("/api/admin/mistake-analytics", params={"email": email, **params})

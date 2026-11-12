@@ -4,7 +4,6 @@ Entry point для запуска приложения
 """
 import logging
 import asyncio
-import storage as db_driver
 import uvicorn
 from contextlib import asynccontextmanager
 
@@ -34,17 +33,6 @@ async def lifespan(app: FastAPI):
     db = app.state.db
     await db.init()
     logger.info("Database initialized")
-
-    try:
-        async with db_driver.connect(db.db_path) as conn:
-            async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='subtasks'") as cursor:
-                result = await cursor.fetchone()
-                if result:
-                    logger.info("Subtasks table verified")
-                else:
-                    logger.warning("Subtasks table not found, will be created on next init")
-    except Exception as e:
-        logger.error(f"Error checking subtasks table: {e}")
 
     ops_monitor = OpsMonitor(db)
     app.state.ops_monitor = ops_monitor
@@ -100,7 +88,7 @@ async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monito
     """Run periodic database maintenance (ANALYZE)"""
     from datetime import datetime as dt
     
-    maintenance = DatabaseMaintenance(db.db_path)
+    maintenance = DatabaseMaintenance(db.database_url)
     
     while True:
         try:

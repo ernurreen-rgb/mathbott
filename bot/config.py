@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from settings import DEFAULT_ADMIN_SECRET, get_settings
+from storage import is_postgres
 
 logger = logging.getLogger(__name__)
 KNOWN_PLACEHOLDER_SECRETS = {
@@ -38,15 +39,17 @@ def validate_configuration():
     settings = get_settings()
     errors = []
     warnings = []
-    if settings.database_url and not settings.database_url.startswith(("postgres://", "postgresql://")):
-        errors.append("DATABASE_URL must be a PostgreSQL connection URL")
+    if not settings.database_url:
+        errors.append("DATABASE_URL is required: QazMath runs on PostgreSQL only (see docs/development/setup.md)")
+    elif not is_postgres(settings.database_url):
+        errors.append("DATABASE_URL must be a PostgreSQL connection URL starting with postgresql://")
+    if settings.database_migration_url and not is_postgres(settings.database_migration_url):
+        errors.append("DATABASE_MIGRATION_URL must be a PostgreSQL connection URL starting with postgresql://")
     if settings.image_storage_backend not in {"local", "s3"}:
         errors.append("IMAGE_STORAGE_BACKEND must be local or s3")
     if settings.image_storage_backend == "s3" and not settings.s3_bucket:
         errors.append("S3_BUCKET is required for S3 image storage")
     if os.environ.get("VERCEL") == "1":
-        if not settings.database_url:
-            errors.append("DATABASE_URL is required on Vercel; a local SQLite file is not persistent")
         if settings.image_storage_backend != "s3":
             errors.append("Vercel requires IMAGE_STORAGE_BACKEND=s3 for durable image uploads")
 

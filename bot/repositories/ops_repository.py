@@ -62,7 +62,7 @@ class OpsRepository(BaseRepository):
                 await db.commit()
                 return int(cursor.lastrowid)
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def get_latest_health_sample(self) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
@@ -90,12 +90,12 @@ class OpsRepository(BaseRepository):
             async with db.execute(
                 f"""
                 WITH samples AS (
-                    SELECT *, CAST(strftime('%s', collected_at) AS BIGINT) / ? AS bucket
+                    SELECT *, CAST(mathbot_strftime('%s', collected_at) AS BIGINT) / ? AS bucket
                     FROM ops_health_samples
-                    WHERE collected_at >= datetime('now', ?)
+                    WHERE collected_at >= mathbot_datetime('now', ?)
                 )
                 SELECT
-                    datetime(bucket * ?, 'unixepoch') AS ts,
+                    mathbot_datetime(bucket * ?, 'unixepoch') AS ts,
                     SUM(requests_5m) AS requests,
                     SUM(errors_5m) AS errors,
                     CASE
@@ -193,7 +193,7 @@ class OpsRepository(BaseRepository):
                             message = ?,
                             metadata_json = ?,
                             occurrences = COALESCE(occurrences, 0) + 1,
-                            last_seen_at = CURRENT_TIMESTAMP
+                            last_seen_at = mathbot_datetime('now')
                         WHERE id = ?
                         """,
                         (
@@ -231,8 +231,8 @@ class OpsRepository(BaseRepository):
                                 status = 'open',
                                 metadata_json = ?,
                                 occurrences = COALESCE(occurrences, 0) + 1,
-                                first_seen_at = CURRENT_TIMESTAMP,
-                                last_seen_at = CURRENT_TIMESTAMP,
+                                first_seen_at = mathbot_datetime('now'),
+                                last_seen_at = mathbot_datetime('now'),
                                 telegram_last_sent_at = NULL,
                                 resolved_at = NULL
                             WHERE id = ?
@@ -281,7 +281,7 @@ class OpsRepository(BaseRepository):
                 item["is_new"] = is_new
                 return item
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def resolve_incident(
         self,
@@ -314,8 +314,8 @@ class OpsRepository(BaseRepository):
                     """
                     UPDATE ops_incidents
                     SET status = 'resolved',
-                        last_seen_at = CURRENT_TIMESTAMP,
-                        resolved_at = CURRENT_TIMESTAMP,
+                        last_seen_at = mathbot_datetime('now'),
+                        resolved_at = mathbot_datetime('now'),
                         metadata_json = ?
                     WHERE id = ?
                     """,
@@ -332,7 +332,7 @@ class OpsRepository(BaseRepository):
                 item["metadata"] = self._parse_json(item.pop("metadata_json", None))
                 return item
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def touch_incident_telegram_sent(self, incident_id: int) -> None:
         async def operation() -> None:
@@ -340,14 +340,14 @@ class OpsRepository(BaseRepository):
                 await db.execute(
                     """
                     UPDATE ops_incidents
-                    SET telegram_last_sent_at = CURRENT_TIMESTAMP
+                    SET telegram_last_sent_at = mathbot_datetime('now')
                     WHERE id = ?
                     """,
                     (incident_id,),
                 )
                 await db.commit()
 
-        await self._run_with_lock_retry(operation)
+        await self._run_with_write_lock(operation)
 
     async def list_incidents(
         self,
@@ -412,14 +412,14 @@ class OpsRepository(BaseRepository):
                 cursor = await db.execute(
                     """
                     DELETE FROM ops_health_samples
-                    WHERE collected_at < datetime('now', '-' || ? || ' days')
+                    WHERE collected_at < mathbot_datetime('now', '-' || ? || ' days')
                     """,
                     (int(retention_days),),
                 )
                 await db.commit()
                 return int(cursor.rowcount or 0)
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def cleanup_old_incidents(self, retention_days: int) -> int:
         async def operation() -> int:
@@ -427,20 +427,19 @@ class OpsRepository(BaseRepository):
                 cursor = await db.execute(
                     """
                     DELETE FROM ops_incidents
-                    WHERE COALESCE(resolved_at, last_seen_at) < datetime('now', '-' || ? || ' days')
+                    WHERE COALESCE(resolved_at, last_seen_at) < mathbot_datetime('now', '-' || ? || ' days')
                     """,
                     (int(retention_days),),
                 )
                 await db.commit()
                 return int(cursor.rowcount or 0)
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def probe_database(self) -> bool:
         """Lightweight DB liveness probe (always opens a fresh connection)."""
         try:
-            async with db_driver.connect(self.db_path, timeout=self.sqlite_timeout_seconds) as db:
-                await self._configure_connection(db)
+            async with db_driver.connect(self.database_url, timeout=self.connect_timeout_seconds) as db:
                 async with db.execute("SELECT 1") as cursor:
                     row = await cursor.fetchone()
                     return bool(row and int(row[0]) == 1)

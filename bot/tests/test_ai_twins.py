@@ -1,13 +1,12 @@
 """AI twin drafts with the provider replaced by a fake; no network calls.
 
 Run from bot/: python -m pytest tests/test_ai_twins.py
+
+Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
 """
-import gc
 import json
 import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -15,8 +14,7 @@ from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import storage
-from database import Database
+from postgres_test_db import PostgresTestCase
 from routes.admin.bank_twins import register_bank_twin_routes
 from services import ai_twins
 from services.ai_twins import AiTwinError, TwinDraft
@@ -26,13 +24,11 @@ STUDENT = "ai-student@example.test"
 AI_ENV = {"AI_TWIN_BASE_URL": "https://provider.test/v1", "AI_TWIN_API_KEY": "test-key", "AI_TWIN_MODEL": "test-model"}
 
 
-class AiTwinTests(unittest.IsolatedAsyncioTestCase):
+class AiTwinTests(PostgresTestCase):
+    environment = AI_ENV
+
     async def asyncSetUp(self):
-        self.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": "", "SENTRY_DSN": "", **AI_ENV})
-        self.environment.start()
-        self.directory = tempfile.TemporaryDirectory(prefix="qazmath-ai-tests-")
-        self.db = Database(str(Path(self.directory.name) / "ai.sqlite"), use_pool=False)
-        await self.db.init()
+        await super().asyncSetUp()
         await self.db.users.create_user_by_email(ADMIN, check_admin_email=ADMIN)
         await self.db.users.set_admin_with_role(email=ADMIN, is_admin=True, role="super_admin")
         await self.db.users.create_user_by_email(STUDENT)
@@ -44,7 +40,7 @@ class AiTwinTests(unittest.IsolatedAsyncioTestCase):
                                               options=[{"label": label, "text": text} for label, text in zip("ABCD", ["54", "56", "64", "48"])])
         self.pictured = await bank.create_task(text="Суреттегі бұрышты табыңыз", answer="30", question_type="input",
                                                 difficulty="B", image_filename="angle.png")
-        async with storage.connect(self.db.db_path) as connection:
+        async with self.seed() as connection:
             await connection.execute("INSERT INTO modules (id, name) VALUES (1, 'Арифметика')")
             await connection.execute("INSERT INTO sections (id, module_id, name) VALUES (1, 1, 'Амалдар')")
             await connection.execute("INSERT INTO lessons (id, section_id, title) VALUES (1, 1, 'Қосу')")
@@ -63,9 +59,6 @@ class AiTwinTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.aclose()
-        gc.collect()
-        self.directory.cleanup()
-        self.environment.stop()
 
     async def _generate(self, source_id, drafts):
         with patch.object(ai_twins, "generate_twin_drafts", AsyncMock(return_value=drafts)):

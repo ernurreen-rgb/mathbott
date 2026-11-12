@@ -30,17 +30,17 @@ class SolutionRepository(BaseRepository):
                 )
                 if recorded:
                     await db.execute(
-                        """UPDATE users SET total_solved = total_solved + 1, last_active = CURRENT_TIMESTAMP
+                        """UPDATE users SET total_solved = total_solved + 1, last_active = mathbot_datetime('now')
                            WHERE id = ?""",
                         (user_id,),
                     )
                 await db.execute(
                     """INSERT INTO user_progress (user_id, task_id, status, completed_at)
-                       VALUES (?, ?, 'completed', CURRENT_TIMESTAMP)
+                       VALUES (?, ?, 'completed', mathbot_datetime('now'))
                        ON CONFLICT(user_id, task_id) DO UPDATE SET
                            status = 'completed',
-                           completed_at = COALESCE(user_progress.completed_at, CURRENT_TIMESTAMP),
-                           updated_at = CURRENT_TIMESTAMP""",
+                           completed_at = COALESCE(user_progress.completed_at, mathbot_datetime('now')),
+                           updated_at = mathbot_datetime('now')""",
                     (user_id, task_id),
                 )
                 async with db.execute(

@@ -1,9 +1,9 @@
 """
 Idempotent data fix-ups that run at every startup, after schema migrations.
 
-These used to live inside migrations.schema.create_schema. They are data-level
-(not DDL) and intentionally stay outside Alembic: they must converge existing
-rows every time the application starts, regardless of schema revision.
+They are data-level (not DDL) and intentionally stay outside the numbered
+PostgreSQL migrations: they must converge existing rows every time the
+application starts, regardless of schema revision.
 """
 from __future__ import annotations
 
@@ -74,12 +74,13 @@ async def bootstrap_bank_task_versions(db) -> None:
 
         await db.execute(
             """
-            INSERT OR IGNORE INTO bank_task_versions
+            INSERT INTO bank_task_versions
             (
                 bank_task_id, version_no, event_type, source, actor_user_id,
                 reason, rollback_from_version, changed_fields_json, snapshot_json
             )
             VALUES (?, 1, 'bootstrap', 'migration', ?, NULL, NULL, ?, ?)
+            ON CONFLICT DO NOTHING
             """,
             (
                 task_id,
@@ -102,6 +103,6 @@ async def bootstrap_bank_task_versions(db) -> None:
 
 
 async def run_seeds(db) -> None:
-    """Run all idempotent data fix-ups on an open aiosqlite connection."""
+    """Run all idempotent data fix-ups on an open database connection."""
     await bootstrap_bank_task_versions(db)
     await db.commit()

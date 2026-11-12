@@ -11,7 +11,42 @@ This guide explains how to configure, run, and debug the QazMath (`CursorMathbot
 | **Node.js** | `24.x` (LTS) | [`.nvmrc`](../../.nvmrc), [`web/package.json`](../../web/package.json), [`web/Dockerfile`](../../web/Dockerfile) | Required for Next.js `15.5.28` and tooling (`engines.node = "24.x"`). |
 | **npm** | Bundled with Node 24 | [`web/package-lock.json`](../../web/package-lock.json) | Use `npm ci` for reproducible installs. |
 | **Python** | `3.11` or `3.12` | [`bot/Dockerfile`](../../bot/Dockerfile) (`3.11`), [`bot/pyproject.toml`](../../bot/pyproject.toml) (`>=3.11,<3.13`) | Supported across Docker, GitHub Actions CI (`3.11`), and Vercel (`3.12`). |
-| **PostgreSQL Client Tools** | `18` (optional) | [`bot/Dockerfile`](../../bot/Dockerfile), [`bot/scripts/postgres_backup.py`](../../bot/scripts/postgres_backup.py) | `pg_dump` and `pg_restore` are only needed if running PostgreSQL backup/restore drills locally. Local development uses SQLite (`bot/mathbot.db`) by default. |
+| **PostgreSQL** | `17` | [`docker-compose.dev.yml`](../../docker-compose.dev.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (`postgres:17`) | Required. PostgreSQL is the only supported database: production runs on Neon, local development and tests on any PostgreSQL 17 server (see section 1.1). |
+| **PostgreSQL Client Tools** | `18` (optional) | [`bot/scripts/postgres_backup.py`](../../bot/scripts/postgres_backup.py) | `pg_dump` and `pg_restore` are only needed if running PostgreSQL backup/restore drills locally. |
+
+### 1.1 Local PostgreSQL
+
+The backend refuses to start without a PostgreSQL `DATABASE_URL`. Pick one way to run a local server:
+
+**A. Docker (recommended when Docker is available).** [`docker-compose.dev.yml`](../../docker-compose.dev.yml) starts PostgreSQL 17 on `127.0.0.1:5432` with a persistent volume and an empty `qazmath` database:
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d
+```
+
+- App: `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/qazmath`
+- Tests: `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres`
+
+**B. Windows without Docker.** Either install PostgreSQL 17 with the installer from <https://www.postgresql.org/download/windows/>, or unpack the PostgreSQL 17 "binaries" zip from <https://www.enterprisedb.com/download-postgresql-binaries> (no installation, no Windows service). For the zip, with `pgsql` unpacked to `C:\pgsql`:
+
+```powershell
+# Once: create a data directory (trust authentication; the server below listens on 127.0.0.1 only)
+C:\pgsql\bin\initdb.exe -D C:\pgdata -U postgres -A trust -E UTF8 --locale=C
+# After each reboot: start the server
+C:\pgsql\bin\pg_ctl.exe -D C:\pgdata -l C:\pgdata\server.log -o "-c listen_addresses=127.0.0.1" start
+# Once: create the development database
+C:\pgsql\bin\createdb.exe -h 127.0.0.1 -U postgres qazmath
+```
+
+- App: `DATABASE_URL=postgresql://postgres@127.0.0.1:5432/qazmath`
+- Tests: `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres`
+
+**C. A Neon development branch.** Point `DATABASE_URL` at a branch created for development, never at the production branch. Keep tests on a local server: they create and drop databases and are slow over the network.
+
+Migrations run automatically on startup (`DATABASE_AUTO_MIGRATE`, default `true` outside Vercel), so an empty database is enough.
+
+> [!NOTE]
+> SQLite is no longer supported. An old `bot/mathbot.db` file is not read by anything and stays out of git (`*.db` in [`.gitignore`](../../.gitignore)). The one-off SQLite-to-PostgreSQL importer was removed; it remains in git history (`bot/migrations/sqlite_to_postgres.py` up to commit `bd3bdef`).
 
 ---
 
@@ -37,9 +72,8 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `LOG_LEVEL` | `INFO` | No | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `APP_VERSION` | `1.0.0` | No | Version string reported by health/telemetry endpoints. |
 | `PORT` | `8000` | No | TCP port for Uvicorn (`bot/main.py`). |
-| `DB_PATH` | `mathbot.db` | SQLite only | Path to the local SQLite database file (used when `DATABASE_URL` is empty). |
-| `DATABASE_URL` | `""` | Yes (on Neon) | Pooled PostgreSQL connection URL (`postgresql://...`). When set, [`bot/storage.py`](../../bot/storage.py) uses `psycopg` against PostgreSQL instead of SQLite. |
-| `DATABASE_MIGRATION_URL` | `""` | Recommended | Direct (unpooled) PostgreSQL URL used by [`bot/scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py). |
+| `DATABASE_URL` | `""` | Yes (everywhere) | PostgreSQL connection URL (`postgresql://...`; the pooled URL on Neon). Required: startup fails with a clear error when it is empty or not a PostgreSQL URL ([`bot/storage.py`](../../bot/storage.py), [`bot/config.py`](../../bot/config.py)). |
+| `DATABASE_MIGRATION_URL` | `""` | Recommended on Neon | Direct (unpooled) PostgreSQL URL for schema migrations at startup and in [`bot/scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py); falls back to `DATABASE_URL`. |
 | `DATABASE_AUTO_MIGRATE` | `None` (`VERCEL != "1"`) | Set `false` on Vercel | Controls whether schema migrations run automatically on process startup. |
 | `BACKGROUND_TASKS_ENABLED` | `None` (`VERCEL != "1"`) | Set `false` on Vercel | Controls whether in-process background `asyncio` loops (maintenance, presence cleanup, ops monitor) run. |
 | `CRON_SECRET` | `""` | Yes (on Vercel) | Bearer token required by `GET /api/maintenance` when triggered by Vercel Cron. |
@@ -113,10 +147,12 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-On startup (`lifespan` in [`bot/app.py`](../../bot/app.py)):
+Set `DATABASE_URL` in `bot/.env.local` first (section 1.1).
+
+On startup (`lifespan` in [`bot/main.py`](../../bot/main.py)):
 1. [`bot/instrument.py`](../../bot/instrument.py) loads `bot/.env.local` and `bot/.env`.
-2. `validate_configuration()` validates runtime settings.
-3. When `migrate_on_startup` is true (default outside Vercel), `run_migrations()` applies SQLite Alembic migrations up to `0016_ai_twin_checks` (or PostgreSQL SQL migrations `0001`–`0009` when `DATABASE_URL` is set) and runs `ensure_initial_data()`.
+2. `validate_configuration()` validates runtime settings, including a PostgreSQL `DATABASE_URL`.
+3. When `migrate_on_startup` is true (default outside Vercel), `Database.init()` applies the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001`–`0009`, checksum-verified by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py)) and runs the idempotent seeds in [`bot/migrations/seeds.py`](../../bot/migrations/seeds.py).
 4. Verify health at `http://localhost:8000/api/health`.
 
 ### 3.2 Start the Frontend (`web/`)
@@ -133,15 +169,28 @@ Open `http://localhost:3000`.
 
 ### 3.3 Isolated Bank Workspace Preview (`preview_bank_workspace.py`)
 
-To inspect or test the `/admin/bank` catalog and full-width task workspace against a disposable seeded SQLite fixture database without touching `bot/mathbot.db`:
+To inspect or test the `/admin/bank` catalog and full-width task workspace against a disposable seeded fixture database without touching your development database. The fixture gets its own database on the `TEST_DATABASE_URL` server, dropped again when you stop the script with Ctrl+C:
 
 ```powershell
 # Terminal 1: Starts isolated fixture backend on http://127.0.0.1:8100
 cd bot
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
 .\venv\Scripts\python.exe scripts/preview_bank_workspace.py
 ```
 
 You can also run the automated Playwright CLI browser verification scripts in [`web/tools/preview-bank-browser.js`](../../web/tools/preview-bank-browser.js), [`web/tools/check-bank-workspace.js`](../../web/tools/check-bank-workspace.js), and [`web/tools/check-bank-mobile.js`](../../web/tools/check-bank-mobile.js).
+
+### 3.4 Backend Tests (`bot/tests/`)
+
+The tests run against a real PostgreSQL server. `TEST_DATABASE_URL` points at any database on a server you can throw away; [`bot/tests/postgres_test_db.py`](../../bot/tests/postgres_test_db.py) creates a database with a random name there for each test (or test class) and drops it afterwards. The variable is read from the shell, never from `bot/.env.local`, so tests cannot reach your development or production database by accident.
+
+```powershell
+cd bot
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
+python -m pytest tests
+```
+
+Without `TEST_DATABASE_URL` the database tests are skipped locally; in CI (`CI` is set) a missing server is an error. CI runs the same command against a `postgres:17` service container.
 
 ---
 

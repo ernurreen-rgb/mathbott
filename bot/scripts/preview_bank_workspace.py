@@ -1,26 +1,27 @@
 """Run an isolated bank fixture at 127.0.0.1:8100; never opens the real database.
 
+Needs TEST_DATABASE_URL pointing at a disposable PostgreSQL server (see tests/postgres_test_db.py):
+the fixture gets its own database there, dropped again when the server stops.
 From bot/: venv/Scripts/python.exe scripts/preview_bank_workspace.py
 The frontend preview must use the same test-only proxy secret configured below.
 """
 import asyncio
-import gc
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 BOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOT_DIR))
+sys.path.insert(0, str(BOT_DIR / "tests"))
 PREVIEW_EMAIL = "bank-preview@example.test"
 PROXY_SECRET = "local-bank-preview-proxy-secret-2026-11-08"
 
 
-async def seed(path: str):
+async def seed(url: str):
     import storage
     from database import Database
-    db = Database(path, use_pool=False)
+    db = Database(url, use_pool=False)
     await db.init()
     user = await db.users.create_user_by_email(PREVIEW_EMAIL, check_admin_email=PREVIEW_EMAIL)
     tasks = []
@@ -40,29 +41,31 @@ async def seed(path: str):
     await db.bank_tasks.create_tasks_bulk_atomic(tasks=tasks, created_by=user["id"], actor_email=PREVIEW_EMAIL)
     for task_id in (1, 2, 3):
         await db.bank_tasks.soft_delete_task(task_id, actor_user_id=user["id"])
-    async with storage.connect(path) as connection:
+    async with storage.connect(url) as connection:
         await connection.execute("INSERT INTO trial_tests (id, title, expected_tasks_count) VALUES (1, 'Банк интерфейсін тексеру', 2)")
         await connection.executemany("INSERT INTO trial_test_tasks (trial_test_id, bank_task_id, sort_order) VALUES (1, ?, ?)", [(125, 0), (124, 1)])
         await connection.commit()
+    from postgres_test_db import sync_id_sequences
+    await asyncio.to_thread(sync_id_sequences, url)
     print(json.dumps({"fixture": "bank-workspace", "active": 122, "trash": 3, "email": PREVIEW_EMAIL}, ensure_ascii=False), flush=True)
 
 
 def main():
-    workspace_tmp = BOT_DIR.parent / "tmp"
-    workspace_tmp.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="bank-workspace-", dir=workspace_tmp) as directory:
-        path = str(Path(directory) / "fixture.sqlite")
-        os.environ.update({"DB_PATH": path, "DATABASE_URL": "", "DATABASE_MIGRATION_URL": "", "ENVIRONMENT": "development",
+    from postgres_test_db import TEST_DATABASE_URL, create_database, drop_database
+    if not TEST_DATABASE_URL:
+        sys.exit("Set TEST_DATABASE_URL to a disposable PostgreSQL server (see docs/development/setup.md)")
+    url = create_database("qazmath_bank_preview")
+    try:
+        os.environ.update({"DATABASE_URL": url, "DATABASE_MIGRATION_URL": "", "ENVIRONMENT": "development",
                            "DATABASE_AUTO_MIGRATE": "false", "BACKGROUND_TASKS_ENABLED": "false", "INTERNAL_PROXY_SHARED_SECRET": PROXY_SECRET,
                            "SENTRY_DSN": "", "ALERTS_ENABLED": "false", "IMAGE_STORAGE_BACKEND": "local", "IMPORT_PREVIEW_TOKEN_SECRET": PROXY_SECRET,
                            "CSRF_ENABLED": "false"})
-        try:
-            asyncio.run(seed(path))
-            import uvicorn
-            from main import app
-            uvicorn.run(app, host="127.0.0.1", port=8100, log_level="warning")
-        finally:
-            gc.collect()
+        asyncio.run(seed(url))
+        import uvicorn
+        from main import app
+        uvicorn.run(app, host="127.0.0.1", port=8100, log_level="warning")
+    finally:
+        drop_database(url)
 
 
 if __name__ == "__main__":

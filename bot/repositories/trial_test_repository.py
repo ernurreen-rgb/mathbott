@@ -112,14 +112,14 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             folder_id, category_val = await self._test_folder(db, folder_id, self._normalize_category(category))
-            await db.execute(
+            inserted = await db.execute(
                 """
                 INSERT INTO trial_tests (title, description, sort_order, expected_tasks_count, created_by, category, folder_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (title, description, sort_order, max(1, int(expected_tasks_count or 40)), created_by, category_val, folder_id),
             )
-            async with db.execute("SELECT * FROM trial_tests WHERE id = last_insert_rowid()") as cursor:
+            async with db.execute("SELECT * FROM trial_tests WHERE id = ?", (inserted.lastrowid,)) as cursor:
                 row = await cursor.fetchone()
                 if not row:
                     return {}
@@ -223,7 +223,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 async with db.execute("SELECT * FROM trial_tests WHERE id = ?", (test_id,)) as cursor:
                     return dict(await cursor.fetchone())
 
-            updates.append("updated_at = CURRENT_TIMESTAMP")
+            updates.append("updated_at = mathbot_datetime('now')")
             params.append(test_id)
             await db.execute(f"UPDATE trial_tests SET {', '.join(updates)} WHERE id = ?", params)
         return await self.get_trial_test_by_id(test_id)
@@ -343,7 +343,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 await db.execute(
                     """
                     UPDATE trial_test_tasks
-                    SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+                    SET sort_order = ?, updated_at = mathbot_datetime('now')
                     WHERE id = ?
                     """,
                     (sort_order, task_id),
@@ -353,7 +353,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
 
         bank_task_id = placement["bank_task_id"]
         if bank_task_id:
-            bank_repo = BankTaskRepository(self.db_path)
+            bank_repo = BankTaskRepository(self.database_url)
             await bank_repo.update_task(
                 task_id=int(bank_task_id),
                 text=text,
@@ -372,7 +372,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             await db.execute(
                 """
                 UPDATE trial_test_tasks
-                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
                 WHERE trial_test_id = ? AND id = ? AND deleted_at IS NULL
                 """,
                 (trial_test_id, task_id),
@@ -386,8 +386,8 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             cursor = await db.execute(
                 """
                 UPDATE trial_test_tasks
-                SET deleted_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
+                SET deleted_at = mathbot_datetime('now'),
+                    updated_at = mathbot_datetime('now')
                 WHERE bank_task_id = ?
                   AND deleted_at IS NULL
                 """,
@@ -438,7 +438,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 await db.execute(
                     """
                     UPDATE trial_test_tasks
-                    SET bank_task_id = ?, created_by = COALESCE(created_by, ?), updated_at = CURRENT_TIMESTAMP
+                    SET bank_task_id = ?, created_by = COALESCE(created_by, ?), updated_at = mathbot_datetime('now')
                     WHERE id = ?
                     """,
                     (bank_task_id, created_by, task_id),
@@ -465,7 +465,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             cursor = await db.execute(
                 """
                 UPDATE trial_test_tasks
-                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
                 WHERE trial_test_id = ? AND sort_order = ? AND deleted_at IS NULL
                 """,
                 (trial_test_id, sort_order),
@@ -486,7 +486,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
                 answers_json = json.dumps(answers)
-                await db.execute(
+                inserted = await db.execute(
                     """
                     INSERT INTO trial_test_results
                     (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
@@ -495,11 +495,11 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                     (user_id, trial_test_id, score, total, percentage, answers_json),
                 )
                 await db.commit()
-                async with db.execute("SELECT * FROM trial_test_results WHERE id = last_insert_rowid()") as cursor:
+                async with db.execute("SELECT * FROM trial_test_results WHERE id = ?", (inserted.lastrowid,)) as cursor:
                     row = await cursor.fetchone()
                     return dict(row) if row else {}
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def submit_trial_test_attempt(
         self,
@@ -517,7 +517,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         coop_session_id: Optional[int] = None,
         attempt_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Persist a trial-test submit in one transaction to minimize SQLite lock windows."""
+        """Persist a trial-test submit in one transaction under the write lock."""
         normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
         normalized_attempt_id = (attempt_id or uuid4().hex) if normalized_submit_mode == "solo" else None
 
@@ -525,7 +525,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
                 try:
-                    await db.execute("BEGIN IMMEDIATE")
+                    await db.begin_write()
 
                     session_status = None
                     if normalized_attempt_id is not None:
@@ -590,7 +590,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                             """
                             UPDATE users SET
                                 total_solved = total_solved + ?,
-                                last_active = CURRENT_TIMESTAMP
+                                last_active = mathbot_datetime('now')
                             WHERE id = ?
                             """,
                             (recorded_count, user_id),
@@ -627,7 +627,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                         await db.executemany(
                             """INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
                                VALUES (?, ?, ?, ?) ON CONFLICT(session_id, user_id, task_id)
-                               DO UPDATE SET answer = excluded.answer, updated_at = CURRENT_TIMESTAMP""",
+                               DO UPDATE SET answer = excluded.answer, updated_at = mathbot_datetime('now')""",
                             [(coop_session_id, user_id, int(task_id), result.get("answer", ""))
                              for task_id, result in answers.items()],
                         )
@@ -665,7 +665,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                     await db.rollback()
                     raise
 
-        return await self._run_with_lock_retry(operation)
+        return await self._run_with_write_lock(operation)
 
     async def get_user_trial_test_results(self, user_id: int, trial_test_id: Optional[int] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
@@ -718,17 +718,17 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 await db.execute(
                     """
                     INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index, updated_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, mathbot_datetime('now'))
                     ON CONFLICT(user_id, trial_test_id) DO UPDATE SET
                       answers = excluded.answers,
                       current_task_index = excluded.current_task_index,
-                      updated_at = CURRENT_TIMESTAMP
+                      updated_at = mathbot_datetime('now')
                     """,
                     (user_id, trial_test_id, answers_json, current_task_index),
                 )
                 await db.commit()
 
-        await self._run_with_lock_retry(operation)
+        await self._run_with_write_lock(operation)
 
     async def delete_trial_test_draft(self, user_id: int, trial_test_id: int) -> None:
         async def operation() -> None:
@@ -739,7 +739,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 )
                 await db.commit()
 
-        await self._run_with_lock_retry(operation)
+        await self._run_with_write_lock(operation)
 
     async def get_user_trial_test_draft_ids(self, user_id: int) -> List[int]:
         async with self._connection() as db:

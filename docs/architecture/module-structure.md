@@ -34,7 +34,7 @@ CursorMathbot/
 | [`bot/config.py`](../../bot/config.py) | Environment file loader, CORS origin helper, and startup configuration validator (`validate_configuration`). |
 | [`bot/dependencies.py`](../../bot/dependencies.py) | FastAPI `Depends` providers for database access (`get_db`), internal proxy identity (`require_internal_identity`), and admin RBAC (`require_admin`, `require_admin_any_admin`, `require_admin_review_manage`, `require_admin_super_critical`). |
 | [`bot/database.py`](../../bot/database.py) | `Database` facade composing all domain repositories and managing the shared `ConnectionPool`. |
-| [`bot/storage.py`](../../bot/storage.py) | Unified async database driver supporting both SQLite (`aiosqlite`) and PostgreSQL (`psycopg` via `PostgresConnection` SQL translation). |
+| [`bot/storage.py`](../../bot/storage.py) | Async PostgreSQL driver (`psycopg` via `PostgresConnection`, `?` placeholders translated to `%s`). |
 | [`bot/vercel.json`](../../bot/vercel.json) | Vercel function configuration (`main.py`, `maxDuration: 60`, `cle1` region) and daily `/api/maintenance` cron schedule. |
 
 ### 2.2 Middleware (`bot/middleware/`)
@@ -128,11 +128,11 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 - **AI Twin Drafts (`bot/services/`):**
   - [`ai_twins.py`](../../bot/services/ai_twins.py) — Provider-neutral client for OpenAI-compatible Chat Completions (`AI_TWIN_*` settings): generates number-only twin drafts and re-solves a task without its answer; validates output with Pydantic.
 - **Migrations & Operational Scripts (`bot/migrations/` & `bot/scripts/`):**
-  - [`migrations/runner.py`](../../bot/migrations/runner.py) & [`migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) — Migration runners for SQLite (Alembic) and PostgreSQL (checksum-verified SQL).
-  - [`migrations/sqlite_to_postgres.py`](../../bot/migrations/sqlite_to_postgres.py) & [`scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) — Transactional SQLite-to-PostgreSQL snapshot importer with row-count and multiset SHA-256 verification.
+  - [`migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) — Checksum-verified runner for the numbered SQL migrations in `migrations/postgres/`; [`migrations/seeds.py`](../../bot/migrations/seeds.py) — idempotent startup seeds.
+  - [`scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) — Applies the migrations and seeds to `DATABASE_MIGRATION_URL` (or `DATABASE_URL`) before an API release.
   - [`scripts/postgres_backup.py`](../../bot/scripts/postgres_backup.py) — Snapshot-consistent `pg_dump` backup and isolated `mathbot_restore_*` verification tool.
   - [`scripts/upload_images.py`](../../bot/scripts/upload_images.py) — Idempotent local-to-S3 image uploader.
-  - [`scripts/preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py) — Isolated disposable SQLite fixture server on `127.0.0.1:8100` for testing the Admin Bank workspace.
+  - [`scripts/preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py) — Isolated fixture server on `127.0.0.1:8100` with its own disposable database on the `TEST_DATABASE_URL` server, for testing the Admin Bank workspace.
 
 ---
 

@@ -95,7 +95,7 @@ class QuizSessionsMixin:
                 settings = json.loads(row.get('settings') or '{}') if isinstance(row.get('settings'), str) else (row.get('settings') or {})
                 if shuffle_questions is not None:
                     settings['shuffle_questions'] = bool(shuffle_questions)
-                await db.execute("UPDATE quiz_sessions SET status = ?, settings = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?", (status, json.dumps(settings, ensure_ascii=False), session_id))
+                await db.execute("UPDATE quiz_sessions SET status = ?, settings = ?, started_at = mathbot_datetime('now') WHERE id = ?", (status, json.dumps(settings, ensure_ascii=False), session_id))
                 if settings.get('shuffle_questions'):
                     async with db.execute("SELECT question_id FROM quiz_session_questions WHERE session_id = ? ORDER BY position", (session_id,)) as cursor:
                         q_ids = [r[0] for r in await cursor.fetchall()]
@@ -107,7 +107,7 @@ class QuizSessionsMixin:
                             random.shuffle(shuffled)
                             await db.execute("UPDATE quiz_participants SET question_order = ? WHERE id = ?", (json.dumps(shuffled), p_row[0]))
             elif status == 'finished' and row['status'] in ('lobby', 'in_progress'):
-                await db.execute("UPDATE quiz_sessions SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?", (status, session_id))
+                await db.execute("UPDATE quiz_sessions SET status = ?, finished_at = mathbot_datetime('now') WHERE id = ?", (status, session_id))
             else:
                 raise QuizError('conflict', 'Invalid session status transition')
         return await self.get_session_by_id(session_id)
@@ -181,7 +181,7 @@ class QuizSessionsMixin:
             if not session or session['status'] == 'finished':
                 raise QuizError('conflict', 'Session is not accepting updates')
             await db.execute(
-                'UPDATE quiz_participants SET avatar_color = ?, last_active_at = CURRENT_TIMESTAMP WHERE session_id = ? AND id = ?',
+                "UPDATE quiz_participants SET avatar_color = ?, last_active_at = mathbot_datetime('now') WHERE session_id = ? AND id = ?",
                 (clean_avatar, session_id, participant['id']),
             )
             updated = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant['id'],))
@@ -432,7 +432,7 @@ class QuizSessionsMixin:
                 (session_id, participant_id, question_id, user_answer, int(is_correct), elapsed, points))
             await db.execute('''UPDATE quiz_participants SET score = score + ?, streak = ?,
                 correct_count = correct_count + ?, total_answered = total_answered + 1,
-                last_active_at = CURRENT_TIMESTAMP WHERE session_id = ? AND id = ?''',
+                last_active_at = mathbot_datetime('now') WHERE session_id = ? AND id = ?''',
                 (points, participant['streak'] + 1 if is_correct else 0, int(is_correct), session_id, participant_id))
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
             return {**answer_result({'is_correct': is_correct, 'points_awarded': points}, participant, question),

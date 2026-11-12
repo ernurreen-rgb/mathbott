@@ -507,7 +507,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
 
-            async with db_driver.connect(db.db_path) as db_conn:
+            async with db_driver.connect(db.database_url) as db_conn:
                 async with db_conn.execute("SELECT COUNT(*) as count FROM tasks") as cursor:
                     row = await cursor.fetchone()
                     task_count = row[0] if row else 0

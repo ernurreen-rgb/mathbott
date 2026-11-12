@@ -53,7 +53,7 @@ class AchievementRepository(BaseRepository):
                         )
                         await db.commit()
 
-                await self._run_with_lock_retry(operation)
+                await self._run_with_write_lock(operation)
                 unlocked.append(achievement)
         
         return unlocked

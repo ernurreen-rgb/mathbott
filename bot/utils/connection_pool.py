@@ -1,5 +1,5 @@
 """
-Connection pool for SQLite database connections
+Connection pool for PostgreSQL connections
 """
 import storage as db_driver
 import asyncio
@@ -9,62 +9,41 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionPool:
-    """Connection pool for aiosqlite connections"""
-    
+    """Small pool of open PostgreSQL connections"""
+
     def __init__(
         self,
-        db_path: str,
-        min_size: int = 2,
-        max_size: int = 10,
+        database_url: str,
+        min_size: int = 0,
+        max_size: int = 2,
         timeout: int = 30,
-        busy_timeout_ms: int = 8000
     ):
         """
         Initialize connection pool
-        
+
         Args:
-            db_path: Path to SQLite database file
+            database_url: PostgreSQL connection URL
             min_size: Minimum number of connections to maintain
             max_size: Maximum number of connections in pool
-            timeout: Connection timeout in seconds
-            busy_timeout_ms: SQLite busy timeout in milliseconds
+            timeout: Connect timeout and wait for a free connection, in seconds
         """
-        self.db_path = db_path
+        self.database_url = database_url
         self.min_size = min_size
         self.max_size = max_size
         self.timeout = timeout
-        self.busy_timeout_ms = busy_timeout_ms
-        
+
         self._pool: asyncio.Queue[db_driver.Connection] = asyncio.Queue(maxsize=max_size)
         self._created = 0
         self._lock = asyncio.Lock()
         self._closed = False
-    
+
     async def _create_connection(self) -> db_driver.Connection:
         """Create a new database connection"""
-        conn = await db_driver.connect(self.db_path, timeout=self.timeout)
-        try:
-            await self._configure_connection(conn)
-        except Exception:
-            await conn.close()
-            raise
+        conn = await db_driver.connect(self.database_url, timeout=self.timeout)
         self._created += 1
         logger.debug(f"Created new connection (total: {self._created})")
         return conn
-    
-    async def _configure_connection(self, conn: db_driver.Connection) -> None:
-        """Configure connection settings"""
-        await conn.execute("PRAGMA foreign_keys = ON")
-        try:
-            await conn.execute("PRAGMA journal_mode = WAL")
-            await conn.execute("PRAGMA synchronous = NORMAL")
-        except Exception:
-            pass
-        try:
-            await conn.execute(f"PRAGMA busy_timeout = {int(self.busy_timeout_ms)}")
-        except Exception:
-            pass
-    
+
     async def acquire(self) -> db_driver.Connection:
         """
         Acquire a connection from the pool

@@ -107,8 +107,7 @@ def setup_export_routes(app, db):
                 use_pool = conn is not None
                 
                 if not use_pool:
-                    conn = await db_driver.connect(db.db_path)
-                    await db._configure_connection(conn)
+                    conn = await db_driver.connect(db.database_url)
                 
                 try:
                     conn.row_factory = db_driver.Row
@@ -159,8 +158,7 @@ def setup_export_routes(app, db):
                 use_pool = conn is not None
                 
                 if not use_pool:
-                    conn = await db_driver.connect(db.db_path)
-                    await db._configure_connection(conn)
+                    conn = await db_driver.connect(db.database_url)
                 
                 try:
                     conn.row_factory = db_driver.Row
@@ -252,8 +250,7 @@ def setup_export_routes(app, db):
         """
         # Get statistics
         import storage as db_driver
-        async with db_driver.connect(db.db_path) as conn:
-            await db._configure_connection(conn)
+        async with db_driver.connect(db.database_url) as conn:
             conn.row_factory = db_driver.Row
             
             # Total users

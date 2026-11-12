@@ -501,7 +501,7 @@ class BankTaskCrudMixin:
                 params.append(next_solution_filename)
 
             if updates:
-                updates.append("updated_at = CURRENT_TIMESTAMP")
+                updates.append("updated_at = mathbot_datetime('now')")
                 params.append(task_id)
                 await db.execute(
                     f"UPDATE bank_tasks SET {', '.join(updates)} WHERE id = ?",
@@ -547,7 +547,7 @@ class BankTaskCrudMixin:
                 return True
 
             await db.execute(
-                "UPDATE bank_tasks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL",
+                "UPDATE bank_tasks SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now') WHERE id = ? AND deleted_at IS NULL",
                 (task_id,),
             )
             updated = await self._fetch_task_row(db, task_id)
@@ -584,7 +584,7 @@ class BankTaskCrudMixin:
                 return True
 
             await db.execute(
-                "UPDATE bank_tasks SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NOT NULL",
+                "UPDATE bank_tasks SET deleted_at = NULL, updated_at = mathbot_datetime('now') WHERE id = ? AND deleted_at IS NOT NULL",
                 (task_id,),
             )
             updated = await self._fetch_task_row(db, task_id)
@@ -624,7 +624,7 @@ class BankTaskCrudMixin:
             module_update_cursor = await db.execute(
                 """
                 UPDATE tasks
-                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
                 WHERE bank_task_id = ? AND deleted_at IS NULL
                 """,
                 (task_id,),
@@ -632,7 +632,7 @@ class BankTaskCrudMixin:
             trial_update_cursor = await db.execute(
                 """
                 UPDATE trial_test_tasks
-                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
                 WHERE bank_task_id = ? AND deleted_at IS NULL
                 """,
                 (task_id,),
@@ -690,7 +690,7 @@ class BankTaskCrudMixin:
                 SELECT id
                 FROM bank_tasks
                 WHERE deleted_at IS NOT NULL
-                  AND deleted_at < datetime('now', '-' || ? || ' days')
+                  AND deleted_at < mathbot_datetime('now', '-' || ? || ' days')
                 """,
                 (days,),
             ) as cursor:

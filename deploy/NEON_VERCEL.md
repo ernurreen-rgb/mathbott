@@ -68,41 +68,21 @@ direct connection URL in `DATABASE_MIGRATION_URL`, and the pooled URL in
 `DATABASE_URL`. Both must address the same Neon database and branch.
 
 ```powershell
-python scripts/migrate_to_neon.py --source mathbot.db
-python scripts/migrate_to_neon.py --source mathbot.db --apply --archive-legacy
+python scripts/migrate_to_neon.py
 ```
 
-The first command is a plan. The second takes an online SQLite backup,
-including committed WAL changes, and imports that snapshot into an empty
-PostgreSQL database. It never updates the source SQLite file.
+This applies the pending PostgreSQL migrations from `bot/migrations/postgres/`
+and the idempotent startup seeds. Migrations are ordered and checksum-verified:
+add a new numbered SQL file for every schema change and never rewrite an
+applied one. `--schema-only`, used in older instructions, is still accepted and
+does the same.
 
-The importer refuses to overwrite existing application rows. All application
-rows, archive records, sequence resets and constraint checks use one database
-transaction. Row counts and order-independent content checksums must match
-before it commits. Foreign-key violations in active application tables stop
-the import.
-
-Older databases can contain retired tables and columns. `--archive-legacy`
-preserves their original schemas and complete rows in
-`mathbot_legacy_archive`; it does not discard them. Entries with `row_number=0`
-contain the original table DDL, and positive row numbers contain JSON records.
-
-Keep an independent backup of the original SQLite database before switching
-traffic. Ignored deployment scratch files under `bot/.vercel/` include the
-initial migration snapshot and its count/checksum report on the machine that
-performed the first deployment; they are not source-controlled backups.
-
-For later schema-only releases:
-
-```powershell
-python scripts/migrate_to_neon.py --schema-only
-```
-
-SQLite keeps its Alembic migrations. PostgreSQL has ordered, checksum-verified
-SQL migrations in `bot/migrations/postgres/`. Add a new PostgreSQL migration
-for schema changes; never rewrite an applied SQL file. The baseline generator
-in `scripts/generate_postgres_schema.py` is a development utility for the
-initial baseline, not a release migration command.
+The data was imported once from the old SQLite database at the first
+deployment. SQLite support and that importer (`bot/migrations/sqlite_to_postgres.py`)
+were removed on 2026-11-12; both remain in git history up to commit `bd3bdef`.
+Ignored deployment scratch files under `bot/.vercel/` include the initial
+migration snapshot and its count/checksum report on the machine that performed
+the first deployment; they are not source-controlled backups.
 
 ## Backups and restore drills
 
@@ -117,13 +97,13 @@ Apply the schema-only migration before deploying this API version:
 
 ```powershell
 # From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.
-python scripts/migrate_to_neon.py --schema-only
+python scripts/migrate_to_neon.py
 ```
 
-This adds `quiz_entry_limits` through PostgreSQL `0006` / SQLite Alembic `0013` (and subsequent schema migrations such as `trial_test_folders` in PostgreSQL `0007` / SQLite Alembic `0014`);
-it does not change existing quiz participants or scores. Conventional
-SQLite startup applies Alembic normally. Hosted runtimes with auto-migration
-disabled must migrate explicitly. Deploy the API after the schema, then the web app.
+This adds `quiz_entry_limits` through PostgreSQL `0006` (and subsequent schema migrations such as `trial_test_folders` in PostgreSQL `0007`);
+it does not change existing quiz participants or scores. Runtimes with
+auto-migration (the default outside Vercel) apply it at startup. Hosted runtimes
+with auto-migration disabled must migrate explicitly. Deploy the API after the schema, then the web app.
 
 The database shares fixed 60-second entry budgets across workers. Defaults are
 1200 lookup/join requests, 30 distinct PINs and 300 newly created participants
@@ -165,15 +145,15 @@ provider/ingress traffic filtering.
 
 ## Mistake review and twin tasks
 
-PostgreSQL `0008_module_review` (SQLite Alembic `0015`) adds `bank_task_twins`,
+PostgreSQL `0008_module_review` adds `bank_task_twins`,
 `module_review_attempts` and the `idx_solutions_user_task_id` index; `0009_ai_twin_checks`
-(SQLite `0016`) adds the AI draft and check columns to `bank_task_twins`. Both only
+adds the AI draft and check columns to `bank_task_twins`. Both only
 add objects, so the API that is already running keeps working with them. As with
 every schema release, apply them before deploying the API that needs them:
 
 ```powershell
 # From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.
-python scripts/migrate_to_neon.py --schema-only
+python scripts/migrate_to_neon.py
 ```
 
 The web proxy treats `/api/mini-lessons` as an identity path and allows functions
@@ -222,8 +202,8 @@ remain available for content rollback.
   a new schema.
 - PostgreSQL uses psycopg through the async storage boundary; placeholders,
   generated IDs, upserts, UTC dates and existing API row shapes are preserved.
-  SQLite `REAL` values become PostgreSQL `DOUBLE PRECISION`, preserving quiz
-  clocks and score timing.
+  Floating-point values are `DOUBLE PRECISION`, preserving quiz clocks and
+  score timing.
 - Critical quiz, role and task-completion transactions use a transaction-scoped database
   advisory lock, which coordinates independent function instances.
 - Learning progress stores unique completions, solved counts and streaks. The
@@ -271,7 +251,7 @@ schema-only migration before the API deployment.
 
 ## Verification and deployment
 
-Legacy automated test suites (`web/e2e/*`, Jest unit suites, and the 51-file backend `pytest` suite) were removed on 2026-11-05 (`b201538`). Targeted backend tests live in `bot/tests/` (bank catalog, mistake review, AI twin drafts with a fake provider, mistake analytics) and run against isolated SQLite databases; `httpx` is installed only for tests. CI checks Python
+Legacy automated test suites (`web/e2e/*`, Jest unit suites, and the 51-file backend `pytest` suite) were removed on 2026-11-05 (`b201538`). Targeted backend tests live in `bot/tests/` (bank catalog, mistake review, AI twin drafts with a fake provider, mistake analytics) and run against disposable PostgreSQL databases on the `TEST_DATABASE_URL` server; `httpx` is installed only for tests. CI checks Python
 syntax and lint, runs `python -m pytest tests`, checks frontend lint/TypeScript/build, and dependency security.
 
 ```powershell
@@ -279,6 +259,7 @@ syntax and lint, runs `python -m pytest tests`, checks frontend lint/TypeScript/
 python -m compileall -q .
 flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 python -m pip install pytest "httpx==0.28.1"   # test-only tools, once
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/postgres"   # disposable server
 python -m pytest tests
 
 # From web/
@@ -299,6 +280,7 @@ vercel deploy --prod --yes
 vercel deploy --prod --yes
 ```
 
-The old SQLite backend and its database are retained for rollback. After the
-new site accepts writes, reconcile those PostgreSQL writes before switching
-traffic back to SQLite; an older snapshot cannot contain newer results.
+There is no SQLite rollback path any more: SQLite support was removed on
+2026-11-12. Roll back by redeploying an earlier API version against the same
+Neon database, and restore data only through the
+[PostgreSQL backup/restore](POSTGRES_BACKUP_RESTORE.md) drill.

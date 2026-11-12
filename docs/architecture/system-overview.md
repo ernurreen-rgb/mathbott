@@ -29,7 +29,7 @@ flowchart LR
     end
 
     subgraph Infra["Persistence & External Services"]
-        DB[("SQLite (local) / Neon PostgreSQL (prod)")]
+        DB[("PostgreSQL (Neon in prod, local server in dev)")]
         Img[("Local images/ or S3 Bucket")]
         OAuth["Google OAuth 2.0"]
         Sentry["Sentry + Telegram Bot API"]
@@ -71,9 +71,9 @@ Documented in [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md) and [`bot/v
 
 ### Mode B: Containerized / Self-Hosted Process (Docker / Local / VPS)
 Configured via [`bot/Dockerfile`](../../bot/Dockerfile), [`web/Dockerfile`](../../web/Dockerfile), and templates in [`deploy/`](../../deploy/):
-- **Database:** Local SQLite (`DB_PATH=mathbot.db` or `/data/mathbot.db`) or external PostgreSQL (`DATABASE_URL`).
+- **Database:** PostgreSQL via `DATABASE_URL` (required; Neon or a self-hosted server).
 - **Startup behavior (`VERCEL != 1`):**
-  - Runs database migrations (`run_migrations`) and bootstrap seeds (`ensure_initial_data`) during the FastAPI lifespan startup hook (`bot/app.py`).
+  - Runs the PostgreSQL migrations and bootstrap seeds (`Database.init()`) during the FastAPI lifespan startup hook (`bot/main.py`).
   - Spawns three background `asyncio` loops (`maintenance_task`, `presence_cleanup_task`, `ops_monitor_task`).
 - **Realtime Transport:** Supports either WebSockets (`NEXT_PUBLIC_REALTIME_TRANSPORT=websocket` with Nginx/Caddy routing `/ws/*` to `backend:8000`) or HTTP polling (`NEXT_PUBLIC_REALTIME_TRANSPORT=polling`).
 
@@ -120,12 +120,13 @@ Admin authorization is enforced in `bot/dependencies.py` and `bot/repositories/u
 
 ## 4. Database & Storage Architecture
 
-- **Dual-Engine Adapter (`bot/storage.py`):**
-  - Repository code is written using async `aiosqlite`-style SQL (`?` positional parameters, `INSERT OR IGNORE`, `last_insert_rowid()`, ` datetime('now', ...)`).
-  - When `DATABASE_URL` points to PostgreSQL, `PostgresConnection` translates SQLite idioms into PostgreSQL syntax (`%s`, `ON CONFLICT DO NOTHING`, `RETURNING id`, `CURRENT_TIMESTAMP`, savepoint-wrapped `INSERT INTO`), backed by `psycopg.AsyncConnection`.
+- **PostgreSQL Adapter (`bot/storage.py`):**
+  - PostgreSQL is the only supported database (SQLite was removed on 2026-11-12); `DATABASE_URL` must be a `postgresql://` URL.
+  - Repository code writes PostgreSQL SQL with `?` positional parameters, which `postgres_sql()` turns into `%s`. `PostgresConnection` runs synchronous `psycopg` connections in worker threads, appends `RETURNING id` for `cursor.lastrowid`, and wraps each `INSERT` in a savepoint so a caught duplicate-key error leaves the transaction usable.
+  - Timestamps are UTC text; SQL uses `mathbot_datetime('now')` and the other `mathbot_*` functions from `0002_sql_functions.sql`.
 - **Connection Pooling (`bot/utils/connection_pool.py` & `bot/database.py`):**
-  - Uses `ConnectionPool` with `max_size=2` for PostgreSQL and `max_size=5` for SQLite.
-  - Write transactions (`BaseRepository._write_transaction()`) serialize concurrent writers using `BEGIN IMMEDIATE` + a process-level `asyncio.Lock` on SQLite, and `SELECT pg_advisory_xact_lock(724831921)` on PostgreSQL.
+  - Uses `ConnectionPool` with `min_size=0` and `max_size=2`.
+  - Write transactions (`BaseRepository._write_transaction()`) serialize concurrent writers with a process-level `asyncio.Lock` and `SELECT pg_advisory_xact_lock(724831921)` (`PostgresConnection.begin_write()`).
 
 ---
 

@@ -123,7 +123,7 @@ class TrialTestReportRepository(BaseRepository):
             if status == "resolved" and resolved_by:
                 async with db.execute(
                     """UPDATE trial_test_reports
-                       SET status = ?, resolved_at = CURRENT_TIMESTAMP, resolved_by = ?
+                       SET status = ?, resolved_at = mathbot_datetime('now'), resolved_by = ?
                        WHERE id = ?""",
                     (status, resolved_by, report_id),
                 ) as cursor:

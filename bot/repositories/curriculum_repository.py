@@ -17,14 +17,14 @@ class CurriculumRepository(BaseRepository):
         """Create a new module"""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """INSERT INTO modules (name, description, icon, sort_order)
                    VALUES (?, ?, ?, ?)""",
                 (name, description, icon, sort_order)
             )
             await db.commit()
             async with db.execute(
-                "SELECT * FROM modules WHERE id = LAST_INSERT_ROWID()"
+                "SELECT * FROM modules WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)
@@ -68,7 +68,7 @@ class CurriculumRepository(BaseRepository):
                 params.append(sort_order)
             
             if updates:
-                updates.append("updated_at = CURRENT_TIMESTAMP")
+                updates.append("updated_at = mathbot_datetime('now')")
                 params.append(module_id)
                 query = f"UPDATE modules SET {', '.join(updates)} WHERE id = ?"
                 await db.execute(query, params)
@@ -77,7 +77,6 @@ class CurriculumRepository(BaseRepository):
     async def delete_module(self, module_id: int):
         """Delete module (cascade will delete sections and tasks)"""
         async with self._connection() as db:
-            await db.execute("PRAGMA foreign_keys = ON")
             await db.execute("DELETE FROM modules WHERE id = ?", (module_id,))
             await db.commit()
 
@@ -86,14 +85,14 @@ class CurriculumRepository(BaseRepository):
         """Create a new section"""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """INSERT INTO sections (module_id, name, sort_order, description)
                    VALUES (?, ?, ?, ?)""",
                 (module_id, name, sort_order, description)
             )
             await db.commit()
             async with db.execute(
-                "SELECT * FROM sections WHERE id = LAST_INSERT_ROWID()"
+                "SELECT * FROM sections WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)
@@ -138,7 +137,7 @@ class CurriculumRepository(BaseRepository):
                 params.append(guide.strip() or None)
             
             if updates:
-                updates.append("updated_at = CURRENT_TIMESTAMP")
+                updates.append("updated_at = mathbot_datetime('now')")
                 params.append(section_id)
                 query = f"UPDATE sections SET {', '.join(updates)} WHERE id = ?"
                 await db.execute(query, params)
@@ -147,7 +146,6 @@ class CurriculumRepository(BaseRepository):
     async def delete_section(self, section_id: int):
         """Delete section"""
         async with self._connection() as db:
-            await db.execute("PRAGMA foreign_keys = ON")
             await db.execute("DELETE FROM sections WHERE id = ?", (section_id,))
             await db.commit()
 
@@ -162,12 +160,12 @@ class CurriculumRepository(BaseRepository):
         """Create a lesson and its four mini-lessons in one transaction."""
         async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """INSERT INTO lessons (section_id, lesson_number, title, sort_order)
                    VALUES (?, ?, ?, ?)""",
                 (section_id, lesson_number, title, sort_order),
             )
-            async with db.execute("SELECT * FROM lessons WHERE id = LAST_INSERT_ROWID()") as cursor:
+            async with db.execute("SELECT * FROM lessons WHERE id = ?", (inserted.lastrowid,)) as cursor:
                 row = await cursor.fetchone()
                 lesson = dict(row) if row else None
 
@@ -238,7 +236,7 @@ class CurriculumRepository(BaseRepository):
                 updates.append("sort_order = ?")
                 params.append(sort_order)
             if updates:
-                updates.append("updated_at = CURRENT_TIMESTAMP")
+                updates.append("updated_at = mathbot_datetime('now')")
                 params.append(lesson_id)
                 await db.execute(f"UPDATE lessons SET {', '.join(updates)} WHERE id = ?", params)
                 await db.commit()
@@ -246,7 +244,6 @@ class CurriculumRepository(BaseRepository):
     async def delete_lesson(self, lesson_id: int) -> None:
         """Delete a lesson and all its mini-lessons and tasks."""
         async with self._connection() as db:
-            await db.execute("PRAGMA foreign_keys = ON")
             async with db.execute("SELECT id FROM mini_lessons WHERE lesson_id = ?", (lesson_id,)) as cursor:
                 mini_ids = [row[0] for row in await cursor.fetchall()]
             if mini_ids:
@@ -292,7 +289,7 @@ class CurriculumRepository(BaseRepository):
                 updates.append("sort_order = ?")
                 params.append(sort_order)
             if updates:
-                updates.append("updated_at = CURRENT_TIMESTAMP")
+                updates.append("updated_at = mathbot_datetime('now')")
                 params.append(mini_lesson_id)
                 await db.execute(f"UPDATE mini_lessons SET {', '.join(updates)} WHERE id = ?", params)
                 await db.commit()
@@ -315,14 +312,14 @@ class CurriculumRepository(BaseRepository):
         """Create a task placement in a mini-lesson."""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """INSERT INTO tasks (mini_lesson_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",
                 (mini_lesson_id, bank_task_id, task_type, sort_order, created_by),
             )
             await db.commit()
             async with db.execute(
-                "SELECT * FROM tasks WHERE id = LAST_INSERT_ROWID()"
+                "SELECT * FROM tasks WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)
@@ -344,14 +341,14 @@ class CurriculumRepository(BaseRepository):
         """Create a task placement in a section (legacy endpoint support)."""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
-            await db.execute(
+            inserted = await db.execute(
                 """INSERT INTO tasks (section_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",
                 (section_id, bank_task_id, task_type, sort_order, created_by),
             )
             await db.commit()
             async with db.execute(
-                "SELECT * FROM tasks WHERE id = LAST_INSERT_ROWID()"
+                "SELECT * FROM tasks WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)

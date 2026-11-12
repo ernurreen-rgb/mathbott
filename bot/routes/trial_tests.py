@@ -21,7 +21,7 @@ _trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
 
 def _get_trial_test_write_lock(user_id: int, test_id: int) -> asyncio.Lock:
-    """Serialize writes per user/test pair to reduce SQLite lock contention."""
+    """Serialize writes per user/test pair within this process."""
     key = (int(user_id), int(test_id))
     lock = _trial_test_write_locks.get(key)
     if lock is None:
