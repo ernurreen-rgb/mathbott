@@ -134,6 +134,9 @@ export default function AdminPage() {
     return cards.filter((card) => isAllowedForPage(card.section, role));
   }, [cards, adminCheck?.role]);
 
+  const rowCount = Math.max(1, Math.ceil(visibleCards.length / 3));
+  const rowCountClass = rowCount <= 3 ? "md:grid-rows-3" : "md:grid-rows-4";
+
   if (status === "loading" || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -143,20 +146,20 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
+    <div className="min-h-screen md:h-screen md:max-h-screen md:overflow-hidden bg-gradient-math animate-gradient pb-20 md:pb-0 relative flex flex-col">
       <div className="absolute inset-0 bg-black/5" />
       <DesktopNav />
       <MobileNav currentPage="admin" />
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-4 sm:py-5 relative z-10">
-        <div className="w-full max-w-6xl">
-          <div className="mb-3 sm:mb-4">
-            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-0.5">
+      <main className="md:ml-64 flex-1 flex flex-col justify-between px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 relative z-10 min-h-0">
+        <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col min-h-0">
+          <div className="mb-3 lg:mb-4 shrink-0">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-1">
               Әкімші панелі
             </h1>
-            <p className="text-xs sm:text-sm text-gray-700">Платформаны басқару</p>
+            <p className="text-xs sm:text-sm lg:text-base text-gray-700">Платформаны басқару</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${rowCountClass} gap-3 sm:gap-3.5 lg:gap-4 flex-1 min-h-0`}>
             {visibleCards.map((card) => (
               <AdminCard
                 key={card.href}
@@ -182,17 +185,17 @@ function AdminCard({
   icon: IconName;
 }) {
   return (
-    <Link href={href} className="group block focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-2xl">
-      <div className="glass rounded-2xl shadow-sm px-4 sm:px-5 py-3.5 sm:py-4 border border-white/40 hover:shadow-glow-pink transition-all duration-200 transform hover:-translate-y-0.5 hover:scale-[1.01] cursor-pointer h-[78px] flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-600 group-hover:scale-105 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 transition-all shadow-sm">
-            <Icon name={icon} size={26} />
+    <Link href={href} className="group block h-full focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-2xl">
+      <div className="glass rounded-2xl shadow-sm px-4 sm:px-5 py-3 sm:py-4 border border-white/40 hover:shadow-glow-pink transition-all duration-200 transform hover:-translate-y-0.5 hover:scale-[1.01] cursor-pointer h-full flex items-center justify-between gap-3.5">
+        <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+          <div className="flex h-11 w-11 sm:h-12 sm:w-12 lg:h-14 lg:w-14 shrink-0 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-600 group-hover:scale-105 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 transition-all shadow-sm">
+            <Icon name={icon} size={28} />
           </div>
-          <h3 className="text-lg sm:text-xl font-bold text-gray-900 group-hover:text-purple-700 transition-colors truncate">
+          <h3 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 group-hover:text-purple-700 transition-colors truncate">
             {title}
           </h3>
         </div>
-        <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-gray-300 group-hover:text-purple-600 group-hover:bg-purple-100/50 transition-all">
+        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-gray-300 group-hover:text-purple-600 group-hover:bg-purple-100/50 transition-all">
           <Icon name="arrowRight" className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
         </div>
       </div>
