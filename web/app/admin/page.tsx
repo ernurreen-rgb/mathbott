@@ -14,7 +14,6 @@ import type { AdminCheckResponse } from "@/types";
 
 type AdminCardConfig = {
   title: string;
-  description: string;
   href: string;
   icon: IconName;
   section: AdminPageKey;
@@ -62,77 +61,66 @@ export default function AdminPage() {
     () => [
       {
         title: "CMS",
-        description: "Модульдер, бөлімдер, сабақтар және тапсырмалар",
         href: "/admin/cms",
         icon: "layers",
         section: "content",
       },
       {
         title: "Статистика",
-        description: "Оқушылар, есептер, модульдер, сынақ тесттері мен квиздер бойынша көрсеткіштер",
         href: "/admin/statistics",
         icon: "chart",
         section: "review",
       },
       {
         title: "Қателер талдауы",
-        description: "Бірінші әрекет қателері, егіздермен талдау және оқушылардың әлсіз тұстары",
         href: "/admin/mistakes",
         icon: "target",
         section: "any",
       },
       {
         title: "Хабарламалар",
-        description: "Пайдаланушылардың хабарламаларын басқару",
         href: "/admin/reports",
         icon: "report",
         section: "review",
       },
       {
         title: "Сынақ тесттері",
-        description: "Сынақ тесттері мен тапсырмаларын басқару",
         href: "/admin/trial-tests",
         icon: "test",
         section: "content",
       },
       {
-        title: "БАНК",
-        description: "Тақырыптар мен күрделілігі бар тапсырмалар қоры",
+        title: "Банк",
         href: "/admin/bank",
         icon: "folder",
         section: "content",
       },
       {
         title: "Банк сапасы",
-        description: "Дубликаттар, қолданылмайтын және тақырыпсыз тапсырмалар",
         href: "/admin/bank/quality",
         icon: "compass",
         section: "review",
       },
       {
-        title: "Bank Audit",
-        description: "Импорт, rollback және жою әрекеттерінің аудит ізі",
+        title: "Банк аудиті",
         href: "/admin/bank/audit",
         icon: "audit",
         section: "review",
       },
       {
         title: "Өндіріс денсаулығы",
-        description: "Қателер, инциденттер және сервис күйі",
         href: "/admin/ops",
         icon: "support",
         section: "review",
       },
       {
         title: "Рөлдерді басқару",
-        description: "Админ рөлдерін тағайындау және өзгерту",
         href: "/admin/roles",
         icon: "shield",
         section: "super",
       },
       {
         title: "Нұсқаулар",
-        description: "Бөлімдерге нұсқаулық қосу",
         href: "/admin/guides",
         icon: "book",
         section: "content",
@@ -168,12 +156,11 @@ export default function AdminPage() {
             <p className="text-gray-700">Платформаны басқару</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {visibleCards.map((card) => (
               <AdminCard
                 key={card.href}
                 title={card.title}
-                description={card.description}
                 href={card.href}
                 icon={card.icon}
               />
@@ -187,21 +174,27 @@ export default function AdminPage() {
 
 function AdminCard({
   title,
-  description,
   href,
   icon,
 }: {
   title: string;
-  description: string;
   href: string;
   icon: IconName;
 }) {
   return (
-    <Link href={href}>
-      <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 hover:shadow-glow-pink transition-all transform hover:scale-105 cursor-pointer">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600"><Icon name={icon} size={28} /></div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">{title}</h3>
-        <p className="text-gray-600">{description}</p>
+    <Link href={href} className="group block focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-3xl">
+      <div className="glass rounded-3xl shadow-xl p-6 border border-white/40 hover:shadow-glow-pink transition-all duration-200 transform hover:-translate-y-1 hover:scale-[1.02] cursor-pointer h-36 flex flex-col justify-between">
+        <div className="flex items-center justify-between">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-600 group-hover:scale-105 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 transition-all shadow-sm">
+            <Icon name={icon} size={26} />
+          </div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-gray-300 group-hover:text-purple-600 group-hover:bg-purple-100/50 transition-all">
+            <Icon name="arrowRight" className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 group-hover:text-purple-700 transition-colors truncate">
+          {title}
+        </h3>
       </div>
     </Link>
   );
