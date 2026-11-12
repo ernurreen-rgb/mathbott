@@ -284,9 +284,9 @@ export default function ModuleDetailPage() {
       <MountainBackdrop />
       <DesktopNav />
 
-      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6 md:ml-64">
+      <header className="sticky top-0 z-40 bg-gradient-to-b from-slate-50 from-70% to-slate-50/0 px-3 pb-4 pt-3 sm:px-6 md:ml-64">
         <div
-          className={`${styles.moduleHeader} overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/90 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl transition-[padding] duration-200 ${
+          className={`${styles.moduleHeader} overflow-hidden rounded-[1.75rem] border border-white/90 bg-white shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl transition-[padding] duration-200 ${
             compactHeader ? "p-2 sm:p-2.5" : "p-4 sm:p-5"
           }`}
         >
