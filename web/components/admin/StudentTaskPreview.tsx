@@ -314,7 +314,7 @@ export default function StudentTaskPreview({
       >
         <div className="overflow-hidden rounded-[1.5rem] border border-white/80 bg-white shadow-lg">
           <div className="h-1.5 bg-gradient-to-r from-purple-600 via-fuchsia-500 to-blue-500" />
-          <div className="space-y-4 p-4 sm:p-6">
+          <div className={viewport === "mobile" ? "space-y-5 p-4" : "space-y-6 p-6"}>
             <TaskStatement task={previewTask} imageSrc={imageSrc} viewport={viewport} />
 
             {renderAnswerFields()}

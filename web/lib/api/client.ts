@@ -75,7 +75,7 @@ export async function fetchWithErrorHandling<T>(
             textError.name === "TypeError") {
           return {
             data: null,
-            error: `Ошибка чтения ответа от сервера. Возможно, соединение было прервано или данные неполные. Попробуйте обновить страницу.`,
+            error: `Серверден жауапты оқу қатесі. Байланыс үзілген немесе деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.`,
           };
         }
         throw textError;
@@ -95,7 +95,7 @@ export async function fetchWithErrorHandling<T>(
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
-            error: `Сервер вернул HTML страницу вместо JSON. Возможно, это ошибка прокси. Проверьте URL: ${url}`,
+            error: `Сервер JSON орнына HTML бетін қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
           };
         }
 
@@ -122,7 +122,7 @@ export async function fetchWithErrorHandling<T>(
           // If errorData is an object, convert to string
           errorMessage = JSON.stringify(errorData);
         } else {
-          errorMessage = `Ошибка сервера: ${response.status} ${response.statusText}`;
+          errorMessage = `Сервер қатесі: ${response.status} ${response.statusText}`;
         }
         
         debugLog("Error response:", { status: response.status, errorData, errorMessage });
@@ -140,12 +140,12 @@ export async function fetchWithErrorHandling<T>(
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
-            error: `Сервер вернул HTML вместо JSON. Возможно, это ошибка прокси. Проверьте URL: ${url}`,
+            error: `Сервер JSON орнына HTML қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
           };
         }
         return {
           data: null,
-          error: `Сервер вернул не JSON ответ (${contentType}). Проверьте, что бэкенд запущен и доступен.`,
+          error: `Сервер JSON емес жауап қайтарды (${contentType}). Бэкенд іске қосылғанын және қолжетімді екенін тексеріңіз.`,
         };
       }
 
@@ -157,7 +157,7 @@ export async function fetchWithErrorHandling<T>(
         debugLog("JSON parse error. Response text:", responseText.substring(0, 500));
         return {
           data: null,
-          error: `Ошибка парсинга JSON ответа: ${jsonError.message}. Ответ начинается с: ${responseText.substring(0, 100)}`,
+          error: `JSON жауабын талдау қатесі: ${jsonError.message}. Жауап басы: ${responseText.substring(0, 100)}`,
         };
       }
       debugLog("Response data:", data);
@@ -167,12 +167,12 @@ export async function fetchWithErrorHandling<T>(
       if (process.env.NODE_ENV === "development") {
         console.error("Fetch error:", error);
       }
-      const errorMessage = error.message || "Ошибка подключения к серверу";
+      const errorMessage = error.message || "Серверге қосылу қатесі";
 
       if (error.name === "AbortError") {
         return {
           data: null,
-          error: `Превышено время ожидания ответа от сервера (${Math.round(timeoutMs / 1000)} секунд)`,
+          error: `Серверден жауап күту уақыты асып кетті (${Math.round(timeoutMs / 1000)} секунд)`,
         };
       }
 
@@ -183,7 +183,7 @@ export async function fetchWithErrorHandling<T>(
       ) {
         return {
           data: null,
-          error: "Ошибка получения данных от сервера. Данные могут быть неполными. Попробуйте обновить страницу.",
+          error: "Серверден деректерді алу қатесі. Деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
         };
       }
 
@@ -195,7 +195,7 @@ export async function fetchWithErrorHandling<T>(
       ) {
         return {
           data: null,
-          error: `Не удалось подключиться к серверу. Проверьте, что бэкенд запущен на порту 8000 и доступен по адресу ${API_URL}`,
+          error: `Серверге қосылу мүмкін болмады. Бэкенд 8000 портында іске қосылғанын және ${API_URL} мекенжайы бойынша қолжетімді екенін тексеріңіз`,
         };
       }
       return { data: null, error: errorMessage };

@@ -137,7 +137,7 @@ export default function MistakeAnalyticsPage() {
                   <td className="py-3 pr-3"><ReviewBar counts={task} /></td>
                   <td className="py-3 whitespace-nowrap">
                     <div className={task.twin_count ? "text-gray-800" : "font-semibold text-amber-700"}>
-                      {task.twin_count ? `${task.twin_count} егіз` : "Егіз жоқ"}{task.twin_draft_count ? ` + ${task.twin_draft_count} черновик` : ""}
+                      {task.twin_count ? `${task.twin_count} егіз` : "Егіз жоқ"}{task.twin_draft_count ? ` + ${task.twin_draft_count} жоба` : ""}
                     </div>
                     <Link href={`/admin/bank?task=${task.bank_task_id}&mode=twins`} className="text-xs text-purple-700 hover:underline">
                       Банктегі егіздер <Icon name="arrowRight" />

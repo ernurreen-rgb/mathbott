@@ -19,9 +19,9 @@ export default function AcceptInvitePanel({ inviteToken, inviteLoading, inviteDe
     <>
       {inviteToken && (
         <div className="glass rounded-3xl shadow-xl p-6 border border-white/30">
-          <h3 className="text-xl font-bold mb-2">Приглашение в друзья</h3>
+          <h3 className="text-xl font-bold mb-2">Достыққа шақыру</h3>
           {inviteLoading && (
-            <p className="text-sm text-gray-600">Загружаю приглашение...</p>
+            <p className="text-sm text-gray-600">Шақыру жүктелуде...</p>
           )}
           {!inviteLoading && inviteDetails && (
             <div className="space-y-3">
@@ -30,12 +30,12 @@ export default function AcceptInvitePanel({ inviteToken, inviteLoading, inviteDe
                   <div className="flex items-start gap-3">
                     <Icon name="alert" className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="text-base font-semibold text-red-900 mb-1">Ссылка истекла</h4>
+                      <h4 className="text-base font-semibold text-red-900 mb-1">Сілтеменің мерзімі өтіп кетті</h4>
                       <p className="text-sm text-red-700 mb-2">
-                        Эта ссылка для добавления в друзья больше не действительна. Срок действия приглашения истек.
+                        Достарға қосуға арналған бұл сілтеме енді жарамсыз. Шақырудың жарамдылық мерзімі аяқталды.
                       </p>
                       <p className="text-sm text-red-600 font-medium">
-                        Попросите пользователя <span className="font-semibold">{inviteDetails.inviter.nickname || "Пайдаланушы"}</span> отправить вам новую ссылку.
+                        <span className="font-semibold">{inviteDetails.inviter.nickname || "Пайдаланушы"}</span> пайдаланушысынан сізге жаңа сілтеме жіберуін сұраңыз.
                       </p>
                     </div>
                   </div>
@@ -43,21 +43,21 @@ export default function AcceptInvitePanel({ inviteToken, inviteLoading, inviteDe
               ) : (
                 <>
                   <div className="text-sm text-gray-700">
-                    <span className="font-semibold">От:</span>{" "}
+                    <span className="font-semibold">Кімнен:</span>{" "}
                     {inviteDetails.inviter.nickname || "Пайдаланушы"}
                   </div>
                   <div className="text-sm text-gray-700">
-                    <span className="font-semibold">Статус:</span>{" "}
+                    <span className="font-semibold">Күйі:</span>{" "}
                     {inviteDetails.status === "active"
-                      ? "Активно"
+                      ? "Белсенді"
                       : inviteDetails.status === "accepted"
-                        ? "Уже использовано"
+                        ? "Қолданылған"
                         : inviteDetails.status === "revoked"
-                          ? "Отозвано"
-                          : "Истекло"}
+                          ? "Қайтарып алынған"
+                          : "Мерзімі өткен"}
                   </div>
                   <div className="text-sm text-gray-700">
-                    <span className="font-semibold">Действует до:</span>{" "}
+                    <span className="font-semibold">Жарамдылық мерзімі:</span>{" "}
                     {formatInviteDate(inviteDetails.expires_at)}
                   </div>
                   {inviteDetails.status === "active" && (
@@ -65,7 +65,7 @@ export default function AcceptInvitePanel({ inviteToken, inviteLoading, inviteDe
                       {inviteDetails.inviter.id === userData?.id && showOwnInviteWarning ? (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <p className="text-sm text-yellow-800">
-                            Это ваше собственное приглашение. Вы не можете принять его сами. Поделитесь этой ссылкой с другом, чтобы добавить его в друзья.
+                            Бұл сіздің өз шақыруыңыз. Оны өзіңіз қабылдай алмайсыз. Досыңызды қосу үшін осы сілтемені онымен бөлісіңіз.
                           </p>
                         </div>
                       ) : inviteDetails.inviter.id !== userData?.id ? (
@@ -74,7 +74,7 @@ export default function AcceptInvitePanel({ inviteToken, inviteLoading, inviteDe
                           disabled={!inviteDetails.can_accept || inviteLoading}
                           className="px-4 py-2 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-semibold rounded-lg hover:shadow-glow transition-all disabled:opacity-50"
                         >
-                          Подтвердить дружбу
+                          Достықты растау
                         </button>
                       ) : null}
                     </>

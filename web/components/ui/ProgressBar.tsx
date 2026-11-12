@@ -72,7 +72,7 @@ export function ModuleProgressBar({ progress }: { progress: number }) {
       color="blue"
       size="md"
       showLabel={true}
-      label="Прогресс модуля"
+      label="Модуль прогресі"
     />
   );
 }
@@ -84,7 +84,7 @@ export function LessonProgressBar({ progress }: { progress: number }) {
       color="green"
       size="sm"
       showLabel={true}
-      label="Прогресс урока"
+      label="Сабақ прогресі"
     />
   );
 }
@@ -97,7 +97,7 @@ export function TaskProgressBar({ completed, total }: { completed: number; total
       color="purple"
       size="md"
       showLabel={true}
-      label={`${completed} из ${total} задач`}
+      label={`${total} есептің ${completed}-і`}
     />
   );
 }

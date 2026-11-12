@@ -36,6 +36,7 @@ Currently present verification assets in the repository:
    - [`bot/tests/test_ai_twins.py`](../../bot/tests/test_ai_twins.py): AI drafts with the provider replaced by a fake (drafts hidden until approved, bank payload rules, independent re-solve check, refusals, output parsing) and one request against a local Chat Completions server; no network calls.
    - [`bot/tests/test_mistake_analytics.py`](../../bot/tests/test_mistake_analytics.py): Summary, task, topic and student aggregation, period and module filters, and e-mail visibility by role.
    - [`bot/tests/test_lesson_gate.py`](../../bot/tests/test_lesson_gate.py): The next lesson waits for the review of completed mini-lessons (across sections, only the next lesson), started lessons stay open, and module, lesson and answer routes enforce it for students but not admins.
+   - [`bot/tests/test_admin_statistics.py`](../../bot/tests/test_admin_statistics.py): The statistics workspace against **PostgreSQL** (its queries are PostgreSQL only): period comparison, zero-filled series, local-day boundaries by time zone, the admin filter, students, tasks, modules, trial tests with per-question accuracy, quizzes, malformed legacy timestamps, pooled connections with a row factory, and route auth with e-mail visibility by role. Set `TEST_DATABASE_URL` to any database on a disposable server (for example `postgresql://postgres:postgres@localhost:5432/postgres`); each run creates its own database there and drops it afterwards. Without the variable only the period and bucket unit tests run and the rest are skipped. CI provides a PostgreSQL 17 service for them.
    - Run from `bot/` (`httpx` is a test-only dependency, not in `requirements.txt`):
      ```powershell
      python -m pip install pytest "httpx==0.28.1"
@@ -60,7 +61,7 @@ Currently present verification assets in the repository:
 
 ### 3.1 Main CI Gate ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml))
 Triggered on `push` and `pull_request` to `main` or `develop`:
-1. **`backend-checks`** (Python `3.11`):
+1. **`backend-checks`** (Python `3.11`, with a `postgres:17` service exposed to the tests as `TEST_DATABASE_URL`):
    - Installs `bot/requirements.txt`, `flake8`, `pip-audit`, `pytest`, and `httpx` (test-only).
    - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests`, and `pip-audit --desc -r requirements.txt`.
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):

@@ -63,7 +63,7 @@ export default function PublicProfilePage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      setError("Ошибка загрузки профиля");
+      setError("Профильді жүктеу қатесі");
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ export default function PublicProfilePage() {
     if (userId && !isNaN(userId)) {
       fetchUserData();
     } else {
-      setError("Неверный ID пользователя");
+      setError("Пайдаланушы ID-і қате");
       setLoading(false);
     }
   }, [userId, fetchUserData]);
@@ -244,7 +244,7 @@ export default function PublicProfilePage() {
                   <div className="mt-2 text-sm text-blue-100">Сіздер доссыздар</div>
                 )}
                 {friendStatus?.is_blocked && (
-                  <div className="mt-2 text-sm text-blue-100">Нельзя добавить в друзья</div>
+                  <div className="mt-2 text-sm text-blue-100">Дос ретінде қосу мүмкін емес</div>
                 )}
                 {friendActionMessage && !friendStatus?.has_pending_outgoing && (
                   <div className="mt-2 text-sm text-blue-100">{friendActionMessage}</div>

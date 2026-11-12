@@ -110,7 +110,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
         isCollapsed ? "w-16" : "w-64"
       }`}
       role="navigation"
-      aria-label="Основная навигация"
+      aria-label="Негізгі навигация"
     >
       {/* Header */}
       {!isCollapsed ? (

@@ -56,7 +56,7 @@ export default function PublicAchievementsPage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      setError("Ошибка загрузки достижений");
+      setError("Жетістіктерді жүктеу қатесі");
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export default function PublicAchievementsPage() {
         void fetchCurrentUserData();
       }
     } else {
-      setError("Неверный ID пользователя");
+      setError("Пайдаланушы ID-і қате");
       setLoading(false);
     }
   }, [userId, sessionEmail, fetchUserData, fetchCurrentUserData]);

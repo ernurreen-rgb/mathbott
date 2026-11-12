@@ -113,8 +113,12 @@ Implemented in [`bot/routes/admin/bank.py`](../../bot/routes/admin/bank.py), [`b
   - Moderation queue for curriculum task reports (`/api/admin/reports`) and trial test task reports (`/api/admin/trial-test-reports`) with inline task fixing.
 - **RBAC Role Management** (`/admin/roles`, [`bot/routes/admin/roles.py`](../../bot/routes/admin/roles.py)):
   - `super_admin` assignment and emergency bootstrap recovery (`POST /api/admin/roles/restore`) across `super_admin`, `content_editor`, and `reviewer` roles.
-- **Platform Statistics & Ops Health Monitor** (`/admin/statistics`, `/admin/ops`, [`bot/routes/admin/statistics.py`](../../bot/routes/admin/statistics.py), [`bot/routes/admin/ops.py`](../../bot/routes/admin/ops.py)):
-  - Platform analytics, CSV/JSON exports (`/api/export/admin/stats`), rolling latency/error metrics (`ops_health_samples`), deduplicated incidents (`ops_incidents`), and optional Telegram alerts (`bot/utils/alerts.py`).
+- **Statistics Workspace** (`/admin/statistics`, [`bot/routes/admin/statistics.py`](../../bot/routes/admin/statistics.py), [`bot/repositories/statistics_repository.py`](../../bot/repositories/statistics_repository.py), [`web/app/admin/statistics/`](../../web/app/admin/statistics/_components/StatisticsWorkspace.tsx)):
+  - One period for the whole page (7, 30 or 90 days, or all time), compared with the period before it, in the viewer's time zone. The tab, period and admin filter live in the URL (`?tab=&period=&admins=0`).
+  - Six tabs, each loaded on demand from its own endpoint: **Шолу** (KPIs with deltas, activity series, weekday-by-hour heatmap, journey of new students, an attention list that opens the matching filter on another tab), **Оқушылар** (segments, searchable and sortable list, CSV export), **Есептер** (accuracy by question type, difficulty and topic; task list with first-attempt accuracy and hard-task flags, CSV export), **Модульдер** (started and completed students per lesson and mini-lesson), **Сынақ тесттері** (score distribution, per-question accuracy, latest attempts) and **Квиздер** (sessions, participants, per-quiz accuracy).
+  - "Әкімшілерсіз" leaves admin accounts out of every figure except quizzes. Every chart has a table view; every KPI has a definition behind its info button.
+- **Ops Health Monitor** (`/admin/ops`, [`bot/routes/admin/ops.py`](../../bot/routes/admin/ops.py)):
+  - CSV/JSON exports (`/api/export/admin/stats`), rolling latency/error metrics (`ops_health_samples`), deduplicated incidents (`ops_incidents`), and optional Telegram alerts (`bot/utils/alerts.py`).
 - **Mistake Analytics** (`/admin/mistakes`): first-attempt mistakes by task, topic and student, with review outcomes and twin coverage (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)).
 
 ---

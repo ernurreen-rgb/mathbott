@@ -15,7 +15,7 @@ type Props = {
 
 const SOURCE_LABELS: Record<BankAnswerSource, string> = {
   lesson: "Сабақ",
-  trial_test: "Пробный тест",
+  trial_test: "Сынақ тесті",
   trial_test_coop: "Бірлескен тест",
   module_review: "Қателерді талдау",
 };
@@ -106,7 +106,7 @@ export default function UnrecognizedAnswersPanel({ email }: Props) {
           <div>
             <h2 className="text-xl font-bold text-gray-900">Танылмаған жазбаша жауаптар</h2>
             <p className="mt-1 max-w-3xl text-sm text-gray-600">
-              Сабақтар мен пробный тесттердегі жиі қате деп белгіленген жауаптар. Қабылданған жауап
+              Сабақтар мен сынақ тесттеріндегі жиі қате деп белгіленген жауаптар. Қабылданған жауап
               тапсырманың балама дұрыс жауаптарына қосылады және болашақ тексерулерде есепке алынады.
             </p>
           </div>

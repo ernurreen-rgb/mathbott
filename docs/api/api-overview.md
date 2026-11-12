@@ -43,7 +43,7 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | Role | Granted Capabilities | Scope |
 |---|---|---|
 | `content_editor` | `content_manage` | Curriculum CMS (`/api/admin/modules`, `/sections`, `/lessons`, `/mini-lessons`, `/tasks`), Task Bank CRUD/import/export (`/api/admin/bank/*`), and Trial Tests & Folders (`/api/admin/trial-tests/*`). |
-| `reviewer` | `review_manage` | Student report moderation (`/api/admin/reports`, `/api/admin/trial-test-reports`), Bank quality/audit views, and platform statistics (`/api/admin/statistics`, `/api/export/admin/stats`). |
+| `reviewer` | `review_manage` | Student report moderation (`/api/admin/reports`, `/api/admin/trial-test-reports`), Bank quality/audit views, and platform statistics (`/api/admin/statistics/*`, `/api/export/admin/stats`). |
 | `super_admin` | `content_manage`, `review_manage`, `super_critical` | All admin endpoints, including role assignments (`/api/admin/roles`), permanent deletes (`/permanent`, `/trash/empty`), ID counter resets, and `/api/admin/ops/*`. |
 
 ---
@@ -329,8 +329,15 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `PUT` | `/api/admin/reports/tasks/{task_id}` | `reports.update` | Quick-edits a curriculum task directly from a problem report. |
 | `DELETE` | `/api/admin/reports/{report_id}` | `reports.update` | Deletes a curriculum task report. |
 | `DELETE` | `/api/admin/trial-test-reports/{report_id}` | `reports.update` | Deletes a trial test task report. |
-| `GET` | `/api/admin/statistics` | `stats.view` | Returns DAU/WAU/MAU, retention cohorts, hardest tasks, and activity analytics. |
+| `GET` | `/api/admin/statistics/overview` | `review_manage` | Period KPIs with the previous period (active students, registrations, answers, accuracy, trial tests), a zero-filled activity series (daily, weekly past 92 days, monthly past 735), weekday-by-hour answer heatmap, the journey of students registered in the period, attention counters (pending reports, hard tasks, churned and silent students), today's figures and platform totals. |
+| `GET` | `/api/admin/statistics/students` | `review_manage` | Summary (active, new, returning, churned, never active), registration and activity series, active-day distribution, achievements, and up to 2,000 students with their figures for the period. E-mail addresses only for `super_admin`. |
+| `GET` | `/api/admin/statistics/tasks` | `review_manage` | Answers to module tasks in the period: accuracy and first-attempt accuracy, breakdowns by question type, difficulty and topic, and up to 1,000 tasks with students, reports and the "hard" flag (at least 5 answers, under 40% correct). |
+| `GET` | `/api/admin/statistics/modules` | `review_manage` | Per module, lesson and mini-lesson: students who started and completed (current state) plus answers and accuracy in the period. |
+| `GET` | `/api/admin/statistics/trial-tests` | `review_manage` | Attempts, students, average/median/best score with the previous period, score distribution, per-test figures with accuracy per question, and the latest 20 attempts. |
+| `GET` | `/api/admin/statistics/quizzes` | `review_manage` | Live quiz sessions, participants, guests, answers and accuracy with the previous period, per-quiz figures and the latest 20 sessions. Never filtered by admin accounts. |
 | `GET` | `/api/admin/mistake-analytics` | Any admin | First-attempt mistakes in module lessons (`period=7d\|30d\|all`, optional `module_id`): summary, top 50 tasks with review outcomes and twin counts, topics, and up to 100 students by weak spots. E-mail addresses only for `super_admin` ([`mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py)). |
 | `GET` | `/api/admin/ops/health/summary` | `ops.view` | Returns live operational health status, latency `p95`, error rate, DB status, and online count. |
 | `GET` | `/api/admin/ops/health/timeseries` | `ops.view` | Returns historical time-series samples from `ops_health_samples` (`range=1h\|24h\|7d`). |
 | `GET` | `/api/admin/ops/incidents` | `ops.view` | Lists open and resolved operational incidents from `ops_incidents`. |
+
+All six statistics endpoints ([`statistics.py`](../../bot/routes/admin/statistics.py)) take `period=7d|30d|90d|all` (default `30d`) and `tz_offset` (the viewer's minutes east of UTC, default `300`), so days and "today" follow the admin's clock; every endpoint except quizzes also takes `exclude_admins=true`. Shares are returned as `0..1` fractions. The queries are PostgreSQL only.

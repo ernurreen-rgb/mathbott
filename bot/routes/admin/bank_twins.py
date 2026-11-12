@@ -62,7 +62,7 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=400, detail="Егіздің өз егізі болмайды. Бастапқы есепке егіз қосыңыз.")
         if source.get("image_filename"):
             # Numbers drawn in the picture would no longer match the changed text.
-            raise HTTPException(status_code=400, detail="Суреті бар есепке ИИ егіз жасамайды: сандар суретте болуы мүмкін. Егізді қолмен жасаңыз.")
+            raise HTTPException(status_code=400, detail="Суреті бар есепке ЖИ егіз жасамайды: сандар суретте болуы мүмкін. Егізді қолмен жасаңыз.")
         try:
             drafts = await ai_twins.generate_twin_drafts(source)
         except AiTwinError as exc:

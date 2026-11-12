@@ -92,26 +92,18 @@ export const getTaskTextScaleFontSizePx = (
 export const getTaskTextScaleStyle = (
   scale?: TaskTextScale | null,
   forcedViewport?: TaskFontViewport
-): CSSProperties | undefined => {
-  const pair = parseTaskFontSizePair(scale);
+): CSSProperties => {
+  const sizes = getTaskFontSizes(scale);
   if (forcedViewport) {
-    const sizes = getTaskFontSizes(scale);
     return {
       fontSize: `${forcedViewport === "mobile" ? sizes.mobile : sizes.desktop}px`,
     };
   }
-  if (pair !== null) {
-    return {
-      "--task-font-mobile": `${pair.mobile}px`,
-      "--task-font-desktop": `${pair.desktop}px`,
-    } as CSSProperties;
-  }
-  return undefined;
+  return {
+    "--task-font-mobile": `${sizes.mobile}px`,
+    "--task-font-desktop": `${sizes.desktop}px`,
+  } as CSSProperties;
 };
 
-export const getTaskTextScaleClass = (scale: TaskTextScale): string => {
-  if (parseTaskFontSizePair(scale) !== null) return "task-scale-responsive";
-  if (scale === "sm") return "text-base";
-  if (scale === "lg") return "text-xl md:text-2xl";
-  return "text-lg";
-};
+export const getTaskTextScaleClass = (_scale?: TaskTextScale | null): string =>
+  "task-scale-responsive";

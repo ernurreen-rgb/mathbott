@@ -89,13 +89,13 @@ def _parse_json_object(content: str) -> Any:
     try:
         return json.loads(cleaned)
     except ValueError as exc:
-        raise AiTwinError("invalid_output", "ИИ жауабы JSON емес.") from exc
+        raise AiTwinError("invalid_output", "ЖИ жауабы JSON емес.") from exc
 
 
 async def _chat(system: str, user: str) -> str:
     settings = get_settings()
     if not settings.ai_twins_enabled:
-        raise AiTwinError("not_configured", "ИИ бапталмаған: AI_TWIN_BASE_URL, AI_TWIN_API_KEY және AI_TWIN_MODEL қажет.")
+        raise AiTwinError("not_configured", "ЖИ бапталмаған: AI_TWIN_BASE_URL, AI_TWIN_API_KEY және AI_TWIN_MODEL қажет.")
     url = f"{settings.ai_twin_base_url.rstrip('/')}/chat/completions"
     body = {
         "model": settings.ai_twin_model,
@@ -110,17 +110,17 @@ async def _chat(system: str, user: str) -> str:
                 text = await response.text()
                 if response.status >= 400:
                     logger.warning("ai_twin_provider_error status=%s body=%s", response.status, text[:300])
-                    raise AiTwinError("provider", f"ИИ провайдері қате қайтарды (HTTP {response.status}).")
+                    raise AiTwinError("provider", f"ЖИ провайдері қате қайтарды (HTTP {response.status}).")
     except AiTwinError:
         raise
     except TimeoutError as exc:
-        raise AiTwinError("timeout", "ИИ уақытында жауап бермеді. Қайталап көріңіз.") from exc
+        raise AiTwinError("timeout", "ЖИ уақытында жауап бермеді. Қайталап көріңіз.") from exc
     except aiohttp.ClientError as exc:
-        raise AiTwinError("provider", "ИИ провайдеріне қосылу мүмкін болмады.") from exc
+        raise AiTwinError("provider", "ЖИ провайдеріне қосылу мүмкін болмады.") from exc
     try:
         return json.loads(text)["choices"][0]["message"]["content"] or ""
     except (ValueError, KeyError, IndexError, TypeError) as exc:
-        raise AiTwinError("invalid_output", "ИИ провайдерінің жауап пішімі түсініксіз.") from exc
+        raise AiTwinError("invalid_output", "ЖИ провайдерінің жауап пішімі түсініксіз.") from exc
 
 
 def _task_for_prompt(task: Dict[str, Any], *, with_answer: bool) -> Dict[str, Any]:
@@ -150,7 +150,7 @@ async def generate_twin_drafts(source: Dict[str, Any], count: int = TWIN_DRAFTS_
     try:
         batch = _DraftBatch.model_validate(_parse_json_object(content))
     except ValidationError as exc:
-        raise AiTwinError("invalid_output", "ИИ жауабының құрылымы дұрыс емес.") from exc
+        raise AiTwinError("invalid_output", "ЖИ жауабының құрылымы дұрыс емес.") from exc
     return batch.twins[:count]
 
 
@@ -162,4 +162,4 @@ async def solve_task(task: Dict[str, Any]) -> str:
     try:
         return _Solved.model_validate(_parse_json_object(content)).answer
     except ValidationError as exc:
-        raise AiTwinError("invalid_output", "ИИ шешімінің құрылымы дұрыс емес.") from exc
+        raise AiTwinError("invalid_output", "ЖИ шешімінің құрылымы дұрыс емес.") from exc

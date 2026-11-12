@@ -60,14 +60,14 @@ export default function InviteDialog({ showInviteModal, inviteLink, setShowInvit
                 className="flex-1 flex flex-col items-center justify-center py-4 px-6 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
               >
                 <Icon name="share" className="w-6 h-6 text-gray-700 mb-2" />
-                <span className="text-sm font-semibold text-gray-700">Поделиться</span>
+                <span className="text-sm font-semibold text-gray-700">Бөлісу</span>
               </button>
               <button
                 onClick={handleCopyInvite}
                 className="flex-1 flex flex-col items-center justify-center py-4 px-6 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
               >
                 <Icon name="copy" className="w-6 h-6 text-gray-700 mb-2" />
-                <span className="text-sm font-semibold text-gray-700">Скопировать</span>
+                <span className="text-sm font-semibold text-gray-700">Көшіру</span>
               </button>
             </div>
 

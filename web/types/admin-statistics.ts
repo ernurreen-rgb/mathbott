@@ -1,136 +1,335 @@
+/** Admin statistics workspace: one response shape per tab, all scoped by the same period. */
 
-export interface AdminAvgUserStats {
-  avg_solved: number;
-  avg_streak: number;
+export type StatisticsPeriodKey = "7d" | "30d" | "90d" | "all";
+export type StatisticsTab = "overview" | "students" | "tasks" | "modules" | "trial-tests" | "quizzes";
+export type StatisticsGranularity = "day" | "week" | "month";
+
+export interface StatisticsPeriod {
+  key: StatisticsPeriodKey;
+  /** Length in local days; null for all time. */
+  days: number | null;
+  start: string | null;
+  end: string;
+  previous_start: string | null;
+  previous_end: string | null;
+  tz_offset_minutes: number;
 }
 
+/** A figure with the same figure for the period before; previous is null for all time. */
+export interface StatisticsKpi<T = number> {
+  value: T;
+  previous: T | null;
+}
 
-export interface AdminTaskStatItem {
-  task_id: number;
-  text: string;
+export interface StatisticsThresholds {
+  hard_task_min_attempts: number;
+  hard_task_max_accuracy: number;
+}
+
+export interface StatisticsSeries<Point> {
+  granularity: StatisticsGranularity;
+  points: Point[];
+}
+
+export interface StatisticsBucket {
+  start: string;
+  end: string;
+}
+
+export interface ActivityPoint extends StatisticsBucket {
   attempts: number;
   correct: number;
-  total?: number;
-  success_rate: number;
+  active_users: number;
+  new_users: number;
+  trial_attempts: number;
+  trial_average: number | null;
 }
 
-
-export interface AdminQuestionTypeStatItem {
-  question_type: string;
-  total: number;
-  correct: number;
-  success_rate: number;
-}
-
-
-export interface AdminActivityByDayItem {
-  day_name: string;
-  count: number;
-}
-
-
-export interface AdminActivityByHourItem {
+export interface HeatmapCell {
+  /** 0 is Monday. */
+  weekday: number;
   hour: number;
   count: number;
 }
 
+export type JourneyStepKey = "registered" | "answered" | "completed_mini_lesson" | "returned" | "trial_test";
 
-export interface AdminActivityTrendItem {
-  date: string;
-  count: number;
-  unique_users: number;
+export interface StatisticsOverview {
+  period: StatisticsPeriod;
+  kpis: {
+    active_users: StatisticsKpi;
+    new_users: StatisticsKpi;
+    attempts: StatisticsKpi;
+    accuracy: StatisticsKpi<number | null>;
+    trial_attempts: StatisticsKpi;
+    trial_average: StatisticsKpi<number | null>;
+  };
+  series: StatisticsSeries<ActivityPoint>;
+  heatmap: HeatmapCell[];
+  journey: Array<{ key: JourneyStepKey; count: number }>;
+  attention: {
+    pending_reports: number;
+    hard_tasks: number;
+    churned_students: number;
+    silent_new_students: number;
+  };
+  today: { online_now: number; active_users: number; attempts: number; new_users: number };
+  totals: {
+    users: number;
+    modules: number;
+    lessons: number;
+    module_tasks: number;
+    bank_tasks: number;
+    trial_tests: number;
+    quizzes: number;
+  };
+  thresholds: StatisticsThresholds;
 }
 
-
-export interface AdminAchievementDistributionItem {
-  achievement_id: string;
-  count: number;
-}
-
-
-export interface AdminTrialTestStatItem {
-  id: number;
-  title: string;
-  completions: number;
-  avg_percentage: number;
-  unique_users: number;
-}
-
-
-export interface AdminTrialTestResultDistributionItem {
-  range: string;
-  count: number;
-}
-
-
-export interface AdminReportStatusDistributionItem {
-  status: string;
-  count: number;
-}
-
-
-export interface AdminProblematicTaskItem {
-  task_id: number;
-  text: string;
-  report_count: number;
-}
-
-
-export interface AdminRegistrationsOverTimeItem {
-  date: string;
-  count: number;
-}
-
-
-export interface AdminSolutionsOverTimeItem {
-  date: string;
-  count: number;
+export interface StatisticsStudent {
+  user_id: number;
+  nickname: string | null;
+  /** Present for super admins only. */
+  email?: string | null;
+  registered_at: string | null;
+  last_seen_at: string | null;
+  attempts: number;
   correct: number;
+  accuracy: number | null;
+  active_days: number;
+  trial_attempts: number;
+  trial_average: number | null;
+  total_solved: number;
+  streak: number;
+  is_admin: boolean;
+  is_active: boolean;
+  is_new: boolean;
+  is_churned: boolean;
+  never_active: boolean;
 }
 
+export interface StatisticsStudents {
+  period: StatisticsPeriod;
+  summary: {
+    total: number;
+    active: number;
+    new: number;
+    returning: number | null;
+    churned: number | null;
+    never_active: number;
+    average_active_days: number | null;
+    median_attempts: number | null;
+  };
+  series: StatisticsSeries<ActivityPoint>;
+  activity_distribution: Array<{ key: string; count: number }>;
+  achievements: Array<{ id: string; name: string; count: number }>;
+  students: StatisticsStudent[];
+  truncated: boolean;
+  emails_visible: boolean;
+}
 
-export interface AdminModuleProgressItem {
+export interface StatisticsBreakdown {
+  key: string;
+  attempts: number;
+  correct: number;
+  tasks: number;
+  accuracy: number | null;
+}
+
+export interface StatisticsTask {
+  task_id: number;
+  bank_task_id: number | null;
+  deleted: boolean;
+  text_preview: string;
+  question_type: string;
+  difficulty: string | null;
+  topics: string[];
+  location: {
+    mini_index: number | null;
+    lesson_id: number | null;
+    lesson_title: string | null;
+    lesson_number: number | null;
+    section_name: string | null;
+    module_id: number | null;
+    module_name: string | null;
+  };
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+  students: number;
+  solved_students: number;
+  first_attempts: number;
+  first_correct: number;
+  first_accuracy: number | null;
+  reports: number;
+  pending_reports: number;
+  is_hard: boolean;
+}
+
+export interface StatisticsTasks {
+  period: StatisticsPeriod;
+  summary: {
+    attempts: number;
+    accuracy: number | null;
+    first_attempts: number;
+    first_accuracy: number | null;
+    students: number;
+    tasks_attempted: number;
+    tasks_total: number;
+    hard_tasks: number;
+    pending_reports: number;
+  };
+  by_type: StatisticsBreakdown[];
+  by_difficulty: StatisticsBreakdown[];
+  /** An empty key collects tasks without a topic. */
+  by_topic: StatisticsBreakdown[];
+  tasks: StatisticsTask[];
+  truncated: boolean;
+  thresholds: StatisticsThresholds;
+}
+
+interface ModuleActivity {
+  /** Students who have ever answered here. */
+  started: number;
+  completed: number;
+  tasks: number;
+  /** Answers within the selected period. */
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+  active_students: number;
+}
+
+export interface StatisticsLesson extends ModuleActivity {
+  id: number;
+  title: string | null;
+  lesson_number: number | null;
+  section_name: string | null;
+  minis: Array<{ id: number; mini_index: number; tasks: number; started: number; completed: number }>;
+}
+
+export interface StatisticsModule extends ModuleActivity {
   id: number;
   name: string;
-  users_with_progress: number;
-  tasks_completed: number;
+  lessons_count: number;
+  average_progress: number | null;
+  lessons: StatisticsLesson[];
 }
 
+export interface StatisticsModules {
+  period: StatisticsPeriod;
+  summary: {
+    modules: number;
+    lessons: number;
+    tasks: number;
+    students_started: number;
+    students_completed_lesson: number;
+    attempts: number;
+    accuracy: number | null;
+  };
+  modules: StatisticsModule[];
+}
 
-export interface AdminStatistics {
-  total_users: number;
-  total_tasks: number;
-  deleted_tasks: number;
-  total_solutions: number;
-  correct_solutions: number;
-  incorrect_solutions: number;
-  total_trial_tests: number;
-  total_trial_test_results: number;
-  total_reports: number;
-  pending_reports: number;
-  resolved_reports: number;
-  overall_success_rate: number;
-  users_registered_today: number;
-  users_registered_week: number;
-  users_registered_month: number;
-  active_users_today: number;
-  active_users_week: number;
-  active_users_month: number;
-  avg_user_stats: AdminAvgUserStats;
-  popular_tasks: AdminTaskStatItem[];
-  difficult_tasks: AdminTaskStatItem[];
-  easy_tasks: AdminTaskStatItem[];
-  question_type_stats: AdminQuestionTypeStatItem[];
-  activity_by_day: AdminActivityByDayItem[];
-  activity_by_hour: AdminActivityByHourItem[];
-  activity_trends: AdminActivityTrendItem[];
-  achievement_distribution: AdminAchievementDistributionItem[];
-  trial_test_stats: AdminTrialTestStatItem[];
-  trial_test_results_distribution: AdminTrialTestResultDistributionItem[];
-  report_status_distribution: AdminReportStatusDistributionItem[];
-  problematic_tasks: AdminProblematicTaskItem[];
-  avg_report_resolution_time: number;
-  registrations_over_time: AdminRegistrationsOverTimeItem[];
-  solutions_over_time: AdminSolutionsOverTimeItem[];
-  module_progress: AdminModuleProgressItem[];
+export interface TrialQuestionStat {
+  task_id: number;
+  number: number;
+  deleted: boolean;
+  text_preview: string;
+  /** Attempts in the period that included the question; a blank answer counts as wrong. */
+  answers: number;
+  correct: number;
+  skipped: number;
+  accuracy: number | null;
+}
+
+export interface StatisticsTrialTest {
+  id: number;
+  title: string;
+  folder: string | null;
+  questions_count: number;
+  attempts: number;
+  students: number;
+  average: number | null;
+  median: number | null;
+  best: number | null;
+  solo: number;
+  coop: number;
+  last_completed_at: string | null;
+  questions: TrialQuestionStat[];
+}
+
+export interface StatisticsTrialTests {
+  period: StatisticsPeriod;
+  summary: {
+    attempts: StatisticsKpi;
+    students: StatisticsKpi;
+    average: StatisticsKpi<number | null>;
+    median: number | null;
+    best: number | null;
+    solo: number;
+    coop: number;
+    tests_total: number;
+    tests_taken: number;
+  };
+  series: StatisticsSeries<StatisticsBucket & { attempts: number; average: number | null }>;
+  distribution: Array<{ from: number; to: number; count: number }>;
+  tests: StatisticsTrialTest[];
+  recent: Array<{
+    result_id: number;
+    user_id: number;
+    nickname: string | null;
+    trial_test_id: number;
+    title: string | null;
+    score: number;
+    total: number;
+    percentage: number;
+    submit_mode: "solo" | "coop";
+    completed_at: string | null;
+  }>;
+}
+
+export interface StatisticsQuizzes {
+  period: StatisticsPeriod;
+  summary: {
+    sessions: StatisticsKpi;
+    participants: StatisticsKpi;
+    answers: StatisticsKpi;
+    accuracy: StatisticsKpi<number | null>;
+    finished_sessions: number;
+    guests: number;
+    hosts: number;
+    quizzes_total: number;
+    quizzes_played: number;
+  };
+  series: StatisticsSeries<StatisticsBucket & { sessions: number; participants: number }>;
+  quizzes: Array<{
+    quiz_id: number;
+    title: string;
+    sessions: number;
+    participants: number;
+    answers: number;
+    accuracy: number | null;
+    last_session_at: string | null;
+  }>;
+  recent: Array<{
+    session_id: number;
+    quiz_id: number;
+    title: string;
+    host_nickname: string | null;
+    status: string;
+    created_at: string | null;
+    participants: number;
+    guests: number;
+    answers: number;
+    accuracy: number | null;
+  }>;
+}
+
+export interface StatisticsByTab {
+  overview: StatisticsOverview;
+  students: StatisticsStudents;
+  tasks: StatisticsTasks;
+  modules: StatisticsModules;
+  "trial-tests": StatisticsTrialTests;
+  quizzes: StatisticsQuizzes;
 }

@@ -482,9 +482,9 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
 
             logger.info(f"User {email} emptied trash: {deleted_count} tasks deleted. ID counter reset: {id_reset}")
 
-            message = f"Корзина очищена. Удалено задач: {deleted_count}"
+            message = f"Себет тазартылды. Жойылған есептер: {deleted_count}"
             if id_reset:
-                message += ". Счетчик ID сброшен - новые задачи начнутся с #1"
+                message += ". ID есептегіші нөлденді - жаңа есептер #1 басталады"
 
             return {
                 "success": True,
@@ -518,12 +518,12 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 logger.info(f"User {email} reset task ID counter")
                 return {
                     "success": True,
-                    "message": "Счетчик ID задач сброшен. Новые задачи начнутся с #1"
+                    "message": "Есептердің ID есептегіші нөлденді. Жаңа есептер #1 басталады"
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"Не удалось сбросить счетчик. В базе данных еще есть задачи ({task_count} шт.). Удалите все задачи (включая корзину) перед сбросом счетчика."
+                    "message": f"Есептегішті нөлдеу мүмкін болмады. Дерекқорда әлі де есептер бар ({task_count} дана). Есептегішті нөлдеу алдында барлық есептерді (себетті қоса) жойыңыз."
                 }
         except HTTPException:
             raise

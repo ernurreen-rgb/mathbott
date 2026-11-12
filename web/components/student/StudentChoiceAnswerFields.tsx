@@ -36,7 +36,7 @@ export default function StudentChoiceAnswerFields({
   value,
   onChange,
   disabled = false,
-  layout = "grid",
+  layout = "stack",
   isAnswered = false,
   isCorrect = false,
   correctAnswer,
@@ -44,8 +44,8 @@ export default function StudentChoiceAnswerFields({
 }: StudentChoiceAnswerFieldsProps) {
   const options = task.options || [];
   const optionLayoutClass = layout === "stack"
-    ? "grid grid-cols-1 gap-2"
-    : "grid grid-cols-1 gap-2 sm:grid-cols-2";
+    ? "grid grid-cols-1 gap-2.5"
+    : "grid grid-cols-1 gap-2.5 sm:grid-cols-2";
 
   if (task.question_type === "select") {
     const effectiveSelectValue = value || selectedAnswer || "";
@@ -59,7 +59,7 @@ export default function StudentChoiceAnswerFields({
           const subqCorrect = task.subquestions?.[index]?.correct || correctArr[index];
           return (
             <div key={`${task.id}-select-${index}`} className="space-y-2">
-              <div className="font-semibold text-gray-800">
+              <div className="text-base font-semibold text-gray-800">
                 {String.fromCharCode(65 + index)}){" "}
                 <MathRender inline latex={task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`} />
               </div>
@@ -96,7 +96,7 @@ export default function StudentChoiceAnswerFields({
                         next[index] = option.label;
                         onChange(JSON.stringify(next));
                       }}
-                      className={`rounded-lg border p-3 text-left transition-colors flex items-center justify-between ${
+                      className={`min-h-[52px] rounded-xl border px-4 py-3 text-base text-left transition-colors flex items-center justify-between ${
                         disabled || isAnswered ? "cursor-default" : ""
                       } ${buttonStyle}`}
                     >
@@ -181,7 +181,7 @@ export default function StudentChoiceAnswerFields({
                 if (isAnswered) return;
                 onChange(toggleMcqAnswerLabel(value, label, requiredCount));
               }}
-              className={`rounded-lg border p-3 text-left transition-colors flex items-center justify-between ${
+              className={`min-h-[52px] rounded-xl border px-4 py-3 text-base text-left transition-colors flex items-center justify-between ${
                 disabled || isAnswered ? "cursor-default" : ""
               } ${buttonStyle}`}
             >

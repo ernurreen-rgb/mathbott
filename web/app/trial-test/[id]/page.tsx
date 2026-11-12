@@ -6,17 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import MathRender from "@/components/ui/MathRender";
+import TaskStatement from "@/components/student/TaskStatement";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 import { inviteFriendToCoopTest, getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { showToast } from "@/lib/toast";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
@@ -861,31 +859,7 @@ export default function TrialTestPage() {
               aria-label={`Тапсырма ${currentTaskIndex + 1}`}
             >
               <div className={styles.taskBody}>
-                <div
-                  className={styles.statement}
-                  data-text-scale={normalizeTaskTextScale(currentTask.text_scale)}
-                  style={getTaskTextScaleStyle(currentTask.text_scale)}
-                >
-                  {currentTask.text ? (
-                    <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
-                  ) : (
-                    "Мәтіні жоқ есеп"
-                  )}
-                </div>
-
-                {currentTask.image_filename && (
-                  <div>
-                    <Image
-                      src={apiPath(`images/${currentTask.image_filename}`)}
-                      alt="Task"
-                      width={1280}
-                      height={720}
-                      unoptimized
-                      className={styles.taskImage}
-                    />
-                  </div>
-                )}
-
+                <TaskStatement task={currentTask} />
                 <div key={`task-controls-${currentTask.id}`} className={styles.answers}>{renderTaskControls(currentTask)}</div>
               </div>
 

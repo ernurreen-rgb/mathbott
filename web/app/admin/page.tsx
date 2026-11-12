@@ -69,7 +69,7 @@ export default function AdminPage() {
       },
       {
         title: "Статистика",
-        description: "Платформаның жалпы статистикасы",
+        description: "Оқушылар, есептер, модульдер, сынақ тесттері мен квиздер бойынша көрсеткіштер",
         href: "/admin/statistics",
         icon: "chart",
         section: "review",

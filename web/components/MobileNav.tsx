@@ -102,7 +102,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     <nav 
       className="fixed bottom-0 left-0 right-0 glass border-t border-white/30 pb-[env(safe-area-inset-bottom)] shadow-2xl md:hidden z-50"
       role="navigation"
-      aria-label="Мобильная навигация"
+      aria-label="Мобильді навигация"
     >
       <div className={`grid ${gridCols} h-16`}>
         {navItems.map((item) => {

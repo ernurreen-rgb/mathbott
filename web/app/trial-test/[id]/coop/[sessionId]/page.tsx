@@ -5,10 +5,9 @@ import Icon from "@/components/ui/Icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import Image from "next/image";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import MathRender from "@/components/ui/MathRender";
+import TaskStatement from "@/components/student/TaskStatement";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
@@ -24,7 +23,6 @@ import { useCoopAnswerSync } from "@/lib/use-coop-answer-sync";
 import { resolveWebSocketBase } from "@/lib/websocket-url";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
 import { LessonTask, QuestionType, TrialTestCoopSession, TrialTestDetails } from "@/types";
 
@@ -530,36 +528,9 @@ export default function TrialTestCoopPage() {
               key={`task-${currentTask.id}-${currentTaskIndex}`}
               className="glass rounded-3xl shadow-2xl p-6 border border-white/30"
             >
-              <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
-                <div>
-                <div className="mb-4">
-                  <div
-                    className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(currentTask.text_scale))}`}
-                    style={getTaskTextScaleStyle(currentTask.text_scale)}
-                  >
-                    {currentTask.text ? (
-                      <MathRender key={`task-text-${currentTask.id}`} inline latex={currentTask.text} />
-                    ) : (
-                      "Мәтіні жоқ есеп"
-                    )}
-                  </div>
-                </div>
-
-                {currentTask.image_filename && (
-                  <div className="mb-4">
-                    <Image
-                      src={apiPath(`images/${currentTask.image_filename}`)}
-                      alt="Task"
-                      width={1280}
-                      height={720}
-                      unoptimized
-                      className="max-h-64 w-auto max-w-full rounded-lg border border-gray-200"
-                    />
-                  </div>
-                )}
-
+              <div className="bg-white/70 rounded-2xl p-4 border border-white/40 space-y-4">
+                <TaskStatement task={currentTask} />
                 <div key={`task-controls-${currentTask.id}`}>{renderTaskControls(currentTask)}</div>
-                </div>
               </div>
 
               <div className="flex justify-between mt-6">

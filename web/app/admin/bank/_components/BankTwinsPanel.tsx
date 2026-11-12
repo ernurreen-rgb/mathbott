@@ -20,20 +20,20 @@ type Props = {
 };
 
 function CheckLine({ twin, checking, canCheck, onCheck }: { twin: BankTask; checking: boolean; canCheck: boolean; onCheck: () => void }) {
-  if (checking) return <p className={styles.checkNeutral} role="status">ИИ есепті жауабын көрмей қайта шешіп жатыр...</p>;
+  if (checking) return <p className={styles.checkNeutral} role="status">ЖИ есепті жауабын көрмей қайта шешіп жатыр...</p>;
   const check = twin.ai_check;
-  const recheck = canCheck && <button type="button" className={styles.quiet} onClick={onCheck}>{check ? "Қайта тексеру" : "ИИ-мен тексеру"}</button>;
+  const recheck = canCheck && <button type="button" className={styles.quiet} onClick={onCheck}>{check ? "Қайта тексеру" : "ЖИ-мен тексеру"}</button>;
   if (!check) return twin.twin_origin === "ai" || canCheck ? <p className={styles.checkNeutral}>Жауап әлі тексерілмеген. {recheck}</p> : null;
   const stale = check.checked_version != null && check.checked_version !== twin.current_version;
   const staleNote = stale ? ` (v${check.checked_version} нұсқасы тексерілген, кейін өңделді)` : "";
-  if (check.status === "error") return <p className={styles.checkMismatch}>ИИ тексеруі сәтсіз аяқталды. {recheck}</p>;
+  if (check.status === "error") return <p className={styles.checkMismatch}>ЖИ тексеруі сәтсіз аяқталды. {recheck}</p>;
   if (check.status === "match") {
     return <p className={stale ? styles.checkNeutral : styles.checkMatch}>
-      <Icon name="checkCircle" /> ИИ қайта шешті, жауап сәйкес: <MathRender inline latex={check.answer || ""} />{staleNote} {stale && recheck}
+      <Icon name="checkCircle" /> ЖИ қайта шешті, жауап сәйкес: <MathRender inline latex={check.answer || ""} />{staleNote} {stale && recheck}
     </p>;
   }
   return <p className={styles.checkMismatch}>
-    <Icon name="closeCircle" /> ИИ қайта шешкенде басқа жауап шықты: <MathRender inline latex={check.answer || ""} />{staleNote}. Есепті мұқият тексеріңіз. {recheck}
+    <Icon name="closeCircle" /> ЖИ қайта шешкенде басқа жауап шықты: <MathRender inline latex={check.answer || ""} />{staleNote}. Есепті мұқият тексеріңіз. {recheck}
   </p>;
 }
 
@@ -78,16 +78,16 @@ export default function BankTwinsPanel({ source, email, busy, onCreate, onOpen, 
     setGenerating(true); setError(null); setNotice(null);
     const { data, error: err } = await generateAdminAiTwinDrafts(source.id, email);
     setGenerating(false);
-    if (!data || err) { setError(err || "ИИ черновиктерін жасау мүмкін болмады."); return; }
-    const skipped = data.skipped.length ? ` ${data.skipped.length} черновик банк ережелеріне сай келмей, алынып тасталды.` : "";
-    setNotice(`ИИ ${data.items.length} черновик жасады.${skipped} Әрқайсысын тексеріп, мақұлдаңыз — оған дейін оқушыларға берілмейді.`);
+    if (!data || err) { setError(err || "ЖИ жобаларын жасау мүмкін болмады."); return; }
+    const skipped = data.skipped.length ? ` ${data.skipped.length} жоба банк ережелеріне сай келмей, алынып тасталды.` : "";
+    setNotice(`ЖИ ${data.items.length} жоба жасады.${skipped} Әрқайсысын тексеріп, мақұлдаңыз — оған дейін оқушыларға берілмейді.`);
     await load();
     onChanged();
     await Promise.all(data.items.map((twin) => runCheck(twin.id)));
   };
 
   const approve = async (twin: BankTask) => {
-    if (twin.ai_check?.status === "mismatch" && !window.confirm("ИИ қайта шешкенде басқа жауап шықты. Бәрібір мақұлдау керек пе?")) return;
+    if (twin.ai_check?.status === "mismatch" && !window.confirm("ЖИ қайта шешкенде басқа жауап шықты. Бәрібір мақұлдау керек пе?")) return;
     setApproving(twin.id); setError(null);
     const { error: err } = await approveAdminBankTwin(twin.id, email);
     setApproving(null);
@@ -96,20 +96,20 @@ export default function BankTwinsPanel({ source, email, busy, onCreate, onOpen, 
     onChanged();
   };
 
-  const aiBlocked = !ai?.enabled ? "ИИ бапталмаған: серверде AI_TWIN_BASE_URL, AI_TWIN_API_KEY және AI_TWIN_MODEL орнатылуы керек."
-    : source.image_filename ? "Суреті бар есепке ИИ егіз жасамайды: сандар суретте болуы мүмкін." : null;
+  const aiBlocked = !ai?.enabled ? "ЖИ бапталмаған: серверде AI_TWIN_BASE_URL, AI_TWIN_API_KEY және AI_TWIN_MODEL орнатылуы керек."
+    : source.image_filename ? "Суреті бар есепке ЖИ егіз жасамайды: сандар суретте болуы мүмкін." : null;
 
   return <section aria-label="Егіз есептер">
     <div className={styles.twinIntro}>
-      <p>Егіз — осы есептің тек сандары өзгерген нұсқасы. Оқушы есепті бірінші әрекетте қате шығарса, мини-сабақтан кейінгі қателерді талдауда оған егіз беріледі. ИИ черновиктері мұғалім мақұлдағаннан кейін ғана беріледі.</p>
+      <p>Егіз — осы есептің тек сандары өзгерген нұсқасы. Оқушы есепті бірінші әрекетте қате шығарса, мини-сабақтан кейінгі қателерді талдауда оған егіз беріледі. ЖИ жобалары мұғалім мақұлдағаннан кейін ғана беріледі.</p>
       {!source.deleted_at && <div className={styles.actions}>
         <button type="button" className={styles.button} disabled={busy || generating || !!aiBlocked} title={aiBlocked || undefined} onClick={() => void generate()}>
-          <Icon name="sparkles" /> {generating ? "ИИ жасап жатыр... (1 минутқа дейін)" : `ИИ-черновиктер (${ai?.drafts_per_request ?? 3})`}
+          <Icon name="sparkles" /> {generating ? "ЖИ жасап жатыр... (1 минутқа дейін)" : `ЖИ-жобалар (${ai?.drafts_per_request ?? 3})`}
         </button>
         <button type="button" className={styles.primary} disabled={busy || generating} onClick={onCreate}><Icon name="plus" /> Егіз жасау</button>
       </div>}
     </div>
-    {ai && !ai.enabled && <p className={styles.checkNeutral}>ИИ-черновиктер өшірулі: әкімші серверде ИИ провайдерін баптауы керек.</p>}
+    {ai && !ai.enabled && <p className={styles.checkNeutral}>ЖИ-жобалар өшірулі: әкімші серверде ЖИ провайдерін баптауы керек.</p>}
     {notice && <div role="status" className={styles.notice}><span>{notice}</span><button type="button" aria-label="Хабарламаны жабу" onClick={() => setNotice(null)}><Icon name="close" /></button></div>}
     {error && <div role="alert" className={styles.alert}>{error}</div>}
     {loading ? <div className={styles.loading}>Егіздер жүктелуде...</div>
@@ -119,8 +119,8 @@ export default function BankTwinsPanel({ source, email, busy, onCreate, onOpen, 
         return <li key={twin.id} className={`${styles.twinItem} ${draft ? styles.twinDraft : ""}`}>
           <div className={styles.twinItemHeader}>
             <span>{index + 1}-егіз · Банк №{twin.id} · v{twin.current_version ?? 1}
-              {draft && <span className={styles.draftBadge}>Черновик · ИИ</span>}
-              {!draft && twin.twin_origin === "ai" && <span className={styles.twinBadge}>ИИ · мақұлданған</span>}
+              {draft && <span className={styles.draftBadge}>Жоба · ЖИ</span>}
+              {!draft && twin.twin_origin === "ai" && <span className={styles.twinBadge}>ЖИ · мақұлданған</span>}
             </span>
             <div className={styles.actions}>
               {draft && <button type="button" className={styles.primary} disabled={busy || approving === twin.id} onClick={() => void approve(twin)}><Icon name="checkCircle" /> {approving === twin.id ? "Сақталуда..." : "Мақұлдау"}</button>}

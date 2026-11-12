@@ -55,7 +55,7 @@ def setup_friends_routes(app, db, limiter: Limiter):
                 valid_active_invites.append(invite)
         
         if len(valid_active_invites) >= 10:
-            raise HTTPException(status_code=400, detail="У вас уже создано 10 приглашений. Вы не сможете создать новое приглашение до завтра.")
+            raise HTTPException(status_code=400, detail="Сізде 10 шақыру жасалған. Ертеңге дейін жаңа шақыру жасай алмайсыз.")
 
         expires_at = (datetime.utcnow() + timedelta(days=invite_request.expires_in_days)).strftime("%Y-%m-%d %H:%M:%S")
         invite = await db.friends.create_invite(user["id"], expires_at)
@@ -134,8 +134,8 @@ def setup_friends_routes(app, db, limiter: Limiter):
                 inviter = await db.users.get_user_by_id(invite["inviter_id"])
                 if inviter and inviter.get("nickname"):
                     inviter_name = inviter.get("nickname")
-                raise HTTPException(status_code=400, detail=f"Ссылка истекла. Попросите пользователя {inviter_name} отправить вам новую ссылку.")
-            raise HTTPException(status_code=400, detail="Приглашение не активно")
+                raise HTTPException(status_code=400, detail=f"Сілтеменің мерзімі өтіп кетті. {inviter_name} пайдаланушысынан сізге жаңа сілтеме жіберуін сұраңыз.")
+            raise HTTPException(status_code=400, detail="Шақыру белсенді емес")
 
         expires_at_dt = _parse_timestamp(invite.get("expires_at"))
         if expires_at_dt and datetime.utcnow() > expires_at_dt:
@@ -144,7 +144,7 @@ def setup_friends_routes(app, db, limiter: Limiter):
             inviter = await db.users.get_user_by_id(invite["inviter_id"])
             if inviter and inviter.get("nickname"):
                 inviter_name = inviter.get("nickname")
-            raise HTTPException(status_code=400, detail=f"Ссылка истекла. Попросите пользователя {inviter_name} отправить вам новую ссылку.")
+            raise HTTPException(status_code=400, detail=f"Сілтеменің мерзімі өтіп кетті. {inviter_name} пайдаланушысынан сізге жаңа сілтеме жіберуін сұраңыз.")
 
         inviter = await db.users.get_user_by_id(invite["inviter_id"])
         if not inviter:
@@ -155,7 +155,7 @@ def setup_friends_routes(app, db, limiter: Limiter):
             user = await db.users.create_user_by_email(accept_request.email)
 
         if user["id"] == inviter["id"]:
-            raise HTTPException(status_code=400, detail="Вы не можете принять свое собственное приглашение")
+            raise HTTPException(status_code=400, detail="Сіз өз шақыруыңызды қабылдай алмайсыз")
 
         if await db.friends.is_blocked_between(user["id"], inviter["id"]):
             raise HTTPException(status_code=403, detail="Friendship not allowed")

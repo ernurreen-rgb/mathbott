@@ -44,7 +44,7 @@ function ProfilePageContent() {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
   const sessionEmail = session?.user?.email || "";
 
-  const normalizeErrorMessage = (value: unknown, fallback: string = "Произошла ошибка"): string => {
+  const normalizeErrorMessage = (value: unknown, fallback: string = "Қате орын алды"): string => {
     if (typeof value === "string" && value.trim()) return value;
     if (value instanceof Error && value.message) return value.message;
     if (value && typeof value === "object") {
@@ -147,7 +147,7 @@ function ProfilePageContent() {
     if (!value) return "—";
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toLocaleDateString("ru-RU");
+    return parsed.toLocaleDateString("kk-KZ");
   };
 
   const fetchFriendsData = useCallback(async () => {
@@ -209,7 +209,7 @@ function ProfilePageContent() {
       if (cancelled) return;
       if (error) {
         setInviteDetails(null);
-        setInviteActionMessage(typeof error === "string" ? error : "Не удалось загрузить приглашение");
+        setInviteActionMessage(typeof error === "string" ? error : "Шақыруды жүктеу мүмкін болмады");
       } else {
         setInviteDetails(data || null);
       }
@@ -229,7 +229,7 @@ function ProfilePageContent() {
       const { data, error } = await createFriendInvite(sessionEmail);
       if (error || !data) {
         // Ensure error is a string
-        const errorMessage = typeof error === 'string' ? error : (error || "Не удалось создать приглашение");
+        const errorMessage = typeof error === 'string' ? error : (error || "Шақыруды жасау мүмкін болмады");
         setInviteActionMessage(errorMessage);
         // Auto-hide error message after 5 seconds
         setTimeout(() => setInviteActionMessage(null), 5000);
@@ -243,7 +243,7 @@ function ProfilePageContent() {
       await fetchFriendsData();
     } catch (err: any) {
       // Handle unexpected errors
-      const errorMessage = normalizeErrorMessage(err, "Произошла непредвиденная ошибка");
+      const errorMessage = normalizeErrorMessage(err, "Күтпеген қате орын алды");
       setInviteActionMessage(errorMessage);
       setTimeout(() => setInviteActionMessage(null), 5000);
     } finally {
@@ -255,10 +255,10 @@ function ProfilePageContent() {
     if (!inviteLink) return;
     try {
       await navigator.clipboard.writeText(inviteLink);
-      setInviteActionMessage("Ссылка скопирована");
+      setInviteActionMessage("Сілтеме көшірілді");
       setTimeout(() => setInviteActionMessage(null), 2000);
     } catch (err) {
-      setInviteActionMessage("Не удалось скопировать ссылку");
+      setInviteActionMessage("Сілтемені көшіру мүмкін болмады");
     }
   };
 
@@ -267,8 +267,8 @@ function ProfilePageContent() {
     try {
       if (navigator.share) {
         await navigator.share({
-          title: "Приглашение в друзья",
-          text: "Присоединяйся ко мне!",
+          title: "Достыққа шақыру",
+          text: "Маған қосыл!",
           url: inviteLink,
         });
       } else {
@@ -294,9 +294,9 @@ function ProfilePageContent() {
         return;
       }
       if (data?.already_friends) {
-        setInviteActionMessage("Вы уже друзья");
+        setInviteActionMessage("Сіздер қазірдің өзінде доссыздар");
       } else {
-        setInviteActionMessage("Дружба подтверждена");
+        setInviteActionMessage("Достық расталды");
       }
       await fetchFriendsData();
       router.replace("/profile");
@@ -313,7 +313,7 @@ function ProfilePageContent() {
       setInviteActionMessage(error);
       return;
     }
-    setInviteActionMessage("Инвайт отозван");
+    setInviteActionMessage("Шақыру қайтарып алынды");
     setInvites(prevInvites => prevInvites.filter(inv => inv.token !== token));
     setInviteLink(null);
   };
@@ -555,11 +555,11 @@ function ProfilePageContent() {
                   </div>
                 </div>
                 {inviteActionMessage && typeof inviteActionMessage === 'string' && (
-                  <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${inviteActionMessage.includes("скопирована")
+                  <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${inviteActionMessage.includes("көшірілді")
                       ? "bg-green-50 border border-green-200 text-green-700"
                       : "bg-red-50 border border-red-200 text-red-700"
                     }`}>
-                    {inviteActionMessage.includes("скопирована") ? (
+                    {inviteActionMessage.includes("көшірілді") ? (
                       <Icon name="check" className="w-5 h-5 flex-shrink-0" />
                     ) : (
                       <Icon name="close" className="w-5 h-5 flex-shrink-0" />
