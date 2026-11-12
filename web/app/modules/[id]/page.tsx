@@ -199,6 +199,19 @@ export default function ModuleDetailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeGuide, guideSection]);
 
+  const [compactHeader, setCompactHeader] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      // Hysteresis keeps the header from flickering around the threshold.
+      setCompactHeader((current) =>
+        current ? window.scrollY > 8 : window.scrollY > 48,
+      );
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const moduleSummary = useMemo(() => {
     const lessons = sortedSections.flatMap((section) =>
       sortJourneyLessons(section.lessons),
@@ -271,15 +284,19 @@ export default function ModuleDetailPage() {
       <MountainBackdrop />
       <DesktopNav />
 
-      <header className="relative z-40 px-3 pt-3 sm:px-6 md:ml-64">
+      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6 md:ml-64">
         <div
-          className={`${styles.moduleHeader} overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/90 p-4 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl sm:p-5`}
+          className={`${styles.moduleHeader} overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/90 shadow-[0_18px_55px_rgba(88,28,135,0.16)] backdrop-blur-xl transition-[padding] duration-200 ${
+            compactHeader ? "p-2 sm:p-2.5" : "p-4 sm:p-5"
+          }`}
         >
           <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/modules"
               aria-label="Модульдерге қайту"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-xl font-black text-purple-700 transition hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
+              className={`flex shrink-0 items-center justify-center rounded-2xl bg-purple-50 font-black text-purple-700 transition-all duration-200 hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 ${
+                compactHeader ? "h-8 w-8 text-base" : "h-11 w-11 text-xl"
+              }`}
             >
               <Icon name="arrowLeft" />
             </Link>
@@ -288,9 +305,15 @@ export default function ModuleDetailPage() {
             <div className="min-w-0 flex-1">
               <div
                 aria-hidden="true"
-                className="flex h-[3.75rem] flex-col justify-center"
+                className={`flex flex-col justify-center transition-all duration-200 ${
+                  compactHeader ? "h-8" : "h-[3.75rem]"
+                }`}
               >
-                <div className="truncate text-xl font-black text-slate-900 sm:text-2xl">
+                <div
+                  className={`truncate font-black text-slate-900 transition-all duration-200 ${
+                    compactHeader ? "text-base" : "text-xl sm:text-2xl"
+                  }`}
+                >
                   {module.name}
                 </div>
               </div>
@@ -299,7 +322,9 @@ export default function ModuleDetailPage() {
 
             <div
               aria-hidden="true"
-              className="hidden shrink-0 text-right sm:block"
+              className={`hidden shrink-0 text-right ${
+                compactHeader ? "" : "sm:block"
+              }`}
             >
               <div
                 className="text-[10px] font-bold uppercase tracking-wide text-purple-500"
@@ -320,7 +345,9 @@ export default function ModuleDetailPage() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={moduleSummary.progress}
-            className="mt-4 h-2 overflow-hidden rounded-full bg-purple-100"
+            className={`overflow-hidden rounded-full bg-purple-100 transition-all duration-200 ${
+              compactHeader ? "mt-1.5 h-1" : "mt-4 h-2"
+            }`}
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-purple-600 to-blue-500 transition-[width] duration-700"
