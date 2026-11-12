@@ -475,6 +475,13 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(reviewer_view["emails_visible"])
         self.assertTrue(all("email" not in student for student in reviewer_view["students"]))
 
+        trial_admin = (await get("trial-tests", period="all")).json()
+        self.assertTrue(trial_admin["emails_visible"])
+        self.assertTrue(all(item.get("email") for item in trial_admin["recent"]))
+        trial_reviewer = (await get("trial-tests", email=REVIEWER, period="all")).json()
+        self.assertFalse(trial_reviewer["emails_visible"])
+        self.assertTrue(all("email" not in item for item in trial_reviewer["recent"]))
+
         self.assertEqual((await get("overview", email=STUDENTS["bek"])).status_code, 403)
         self.assertEqual((await get("overview", email=None)).status_code, 401)
         self.assertEqual((await get("overview", period="1y")).status_code, 422)

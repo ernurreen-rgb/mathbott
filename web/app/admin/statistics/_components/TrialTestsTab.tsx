@@ -154,6 +154,7 @@ export default function TrialTestsTab({ data }: { data: StatisticsTrialTests }) 
               <div className={styles.listMain}>
                 <Link href={`/profile/${result.user_id}`} style={{ color: "var(--ink)", fontWeight: 500 }}>{result.nickname || `Оқушы #${result.user_id}`}</Link>
                 {result.submit_mode === "coop" && <span className={styles.badges}><span className={styles.badge} data-tone="accent">жұппен</span></span>}
+                {result.email && <small>{result.email}</small>}
                 <small>{result.title || `Тест #${result.trial_test_id}`}</small>
               </div>
               <div className={styles.listSide}>

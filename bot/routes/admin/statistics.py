@@ -71,7 +71,10 @@ def register_statistics_routes(app: FastAPI, db: Database, limiter: Limiter):
         window: StatsWindow = Depends(statistics_window),
         exclude_admins: bool = Query(False),
     ):
-        return await db.statistics.get_trial_tests(window, exclude_admins=exclude_admins)
+        # Other roles see nicknames only; email is personal data.
+        return await db.statistics.get_trial_tests(
+            window, exclude_admins=exclude_admins, include_email=bool(admin_user.get("is_super_admin")),
+        )
 
     @app.get("/api/admin/statistics/quizzes")
     async def get_statistics_quizzes(

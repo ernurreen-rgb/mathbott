@@ -274,10 +274,12 @@ export interface StatisticsTrialTests {
   series: StatisticsSeries<StatisticsBucket & { attempts: number; average: number | null }>;
   distribution: Array<{ from: number; to: number; count: number }>;
   tests: StatisticsTrialTest[];
+  emails_visible: boolean;
   recent: Array<{
     result_id: number;
     user_id: number;
     nickname: string | null;
+    email?: string | null;
     trial_test_id: number;
     title: string | null;
     score: number;

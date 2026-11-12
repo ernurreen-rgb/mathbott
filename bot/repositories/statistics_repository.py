@@ -793,12 +793,13 @@ class StatisticsRepository(BaseRepository):
             "modules": module_list,
         }
 
-    async def get_trial_tests(self, window: StatsWindow, *, exclude_admins: bool = False) -> Dict[str, Any]:
+    async def get_trial_tests(self, window: StatsWindow, *, exclude_admins: bool = False,
+                              include_email: bool = False) -> Dict[str, Any]:
         admins = _without_admins("r.user_id", exclude_admins)
         async with self._connection() as db:
             result_rows = await self._rows(db, f"""
                 SELECT r.id, r.user_id, u.nickname, r.trial_test_id, r.score, r.total, r.percentage,
-                       r.submit_mode, r.completed_at, {window.local_day("r.completed_at")}
+                       r.submit_mode, r.completed_at, {window.local_day("r.completed_at")}, u.email
                 FROM trial_test_results r
                 LEFT JOIN users u ON u.id = r.user_id
                 WHERE r.completed_at >= ? AND r.completed_at < ?{admins}
@@ -835,7 +836,7 @@ class StatisticsRepository(BaseRepository):
                 "id": int(row[0]), "user_id": int(row[1]), "nickname": row[2], "trial_test_id": int(row[3]),
                 "score": _int(row[4]), "total": _int(row[5]), "percentage": float(row[6] or 0),
                 "submit_mode": "coop" if row[7] == "coop" else "solo",
-                "completed_at": _iso(row[8]), "day": row[9],
+                "completed_at": _iso(row[8]), "day": row[9], "email": row[10],
             }
             for row in result_rows
         ]
@@ -907,9 +908,11 @@ class StatisticsRepository(BaseRepository):
             "series": {"granularity": granularity, "points": points},
             "distribution": distribution,
             "tests": tests,
+            "emails_visible": include_email,
             "recent": [
                 {
                     "result_id": item["id"], "user_id": item["user_id"], "nickname": item["nickname"],
+                    **({"email": item["email"]} if include_email else {}),
                     "trial_test_id": item["trial_test_id"], "title": titles.get(item["trial_test_id"]),
                     "score": item["score"], "total": item["total"], "percentage": round(item["percentage"] / 100, 4),
                     "submit_mode": item["submit_mode"], "completed_at": item["completed_at"],
