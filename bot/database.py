@@ -129,10 +129,6 @@ class Database:
         """Calculate module completion"""
         return await self.progress.calculate_module_completion(user_id, module_id, self.curriculum)
 
-    async def get_admin_statistics(self) -> Dict[str, Any]:
-        """Get comprehensive admin statistics"""
-        return await self.statistics.get_admin_statistics(self.tasks)
-
     async def create_task_in_mini_lesson(
         self,
         mini_lesson_id: int,
