@@ -306,7 +306,13 @@ export default function LessonPage() {
       const data: CheckResult = await res.json();
       if (!res.ok) {
         const detail = (data as any)?.error?.detail || (data as any)?.detail;
-        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: typeof detail === "string" ? detail : "Тексеру қатесі" } }));
+        const text =
+          res.status === 429
+            ? "Тым жиі тексердіңіз. Бірнеше секундтан соң қайталаңыз."
+            : typeof detail === "string"
+              ? detail
+              : "Тексеру қатесі";
+        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text } }));
         // The lesson waits for an earlier mistake review: reload to show why.
         if (res.status === 423) void fetchLesson();
         return;
