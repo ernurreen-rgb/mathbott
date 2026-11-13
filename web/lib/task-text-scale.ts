@@ -10,7 +10,6 @@ export const MIN_TASK_FONT_SIZE = 8;
 export const MAX_TASK_FONT_SIZE = 72;
 export const DEFAULT_MOBILE_TASK_FONT_SIZE = 16;
 export const DEFAULT_DESKTOP_TASK_FONT_SIZE = 20;
-export const DEFAULT_TASK_FONT_SIZE = DEFAULT_DESKTOP_TASK_FONT_SIZE;
 
 export type TaskFontViewport = "mobile" | "desktop";
 

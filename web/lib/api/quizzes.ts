@@ -88,50 +88,6 @@ export async function deleteQuiz(
   });
 }
 
-export async function addQuizQuestion(
-  quizId: number,
-  payload: any,
-  email?: string
-): Promise<FetchResult<QuizQuestion>> {
-  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
-  return fetchWithErrorHandling<QuizQuestion>(`${apiPath(`quizzes/${quizId}/questions`)}${qs}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateQuizQuestion(
-  quizId: number,
-  questionId: number,
-  payload: any,
-  email?: string
-): Promise<FetchResult<QuizQuestion>> {
-  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
-  return fetchWithErrorHandling<QuizQuestion>(
-    `${apiPath(`quizzes/${quizId}/questions/${questionId}`)}${qs}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  );
-}
-
-export async function deleteQuizQuestion(
-  quizId: number,
-  questionId: number,
-  email?: string
-): Promise<FetchResult<{ success: boolean }>> {
-  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
-  return fetchWithErrorHandling<{ success: boolean }>(
-    `${apiPath(`quizzes/${quizId}/questions/${questionId}`)}${qs}`,
-    {
-      method: "DELETE",
-    }
-  );
-}
-
 // --- Game Sessions ---
 
 export async function createQuizSession(
@@ -217,17 +173,6 @@ export async function finishQuizSession(
     {
       method: "POST",
     }
-  );
-}
-
-export async function getSessionQuestions(
-  sessionId: number,
-  isHost: boolean = false,
-  auth?: QuizAuth
-): Promise<FetchResult<QuizQuestion[]>> {
-  return fetchWithErrorHandling<QuizQuestion[]>(
-    `${apiPath(`quiz-sessions/${sessionId}/questions`)}?is_host=${isHost}${auth?.email ? `&email=${encodeURIComponent(auth.email)}` : ""}`,
-    { headers: authHeaders(auth) }
   );
 }
 

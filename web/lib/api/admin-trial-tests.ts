@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { TrialTest, TrialTestCategory, TrialTestFolder, BankPlacementTask } from "@/types";
+import { TrialTest, TrialTestFolder, BankPlacementTask } from "@/types";
 
 export const getAdminTrialTestFolders = (email: string) => fetchWithErrorHandling<TrialTestFolder[]>(
   `${apiPath('admin/trial-tests/folders')}?email=${encodeURIComponent(email)}`, { cache: "no-store" });
@@ -13,7 +13,6 @@ export function saveTrialTestFolder(email: string, payload: { name?: string; par
 export const deleteTrialTestFolder = (id: number, email: string) => fetchWithErrorHandling<{ success: boolean }>(
   `${apiPath(`admin/trial-tests/folders/${id}`)}?email=${encodeURIComponent(email)}`, { method: "DELETE" });
 
-
 // Trial Tests Admin API
 export async function getAdminTrialTests(email: string, category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
   const base = `${apiPath('admin/trial-tests')}?email=${encodeURIComponent(email)}`;
@@ -21,14 +20,6 @@ export async function getAdminTrialTests(email: string, category?: string): Prom
   const url = normalizedCategory ? `${base}&category=${encodeURIComponent(normalizedCategory)}` : base;
   return fetchWithErrorHandling<TrialTest[]>(url, { cache: "no-store" });
 }
-
-
-export async function getAdminTrialTestCategories(email: string): Promise<{ data: TrialTestCategory[] | null; error: string | null }> {
-  return fetchWithErrorHandling<TrialTestCategory[]>(
-    `${apiPath('admin/trial-tests/categories')}?email=${encodeURIComponent(email)}`
-  );
-}
-
 
 export async function getAdminTrialTestTasks(
   testId: number,
@@ -41,7 +32,6 @@ export async function getAdminTrialTestTasks(
   if (error) return { data: null, error };
   return { data: data?.tasks || [], error: null };
 }
-
 
 export async function createTrialTest(
   title: string,
@@ -65,7 +55,6 @@ export async function createTrialTest(
     body: formData,
   });
 }
-
 
 export async function updateTrialTest(
   testId: number,
@@ -95,7 +84,6 @@ export async function updateTrialTest(
   });
 }
 
-
 export async function upsertTrialTestSlot(
   testId: number,
   slotIndex: number,
@@ -111,7 +99,6 @@ export async function upsertTrialTestSlot(
   );
 }
 
-
 export async function clearTrialTestSlot(
   testId: number,
   slotIndex: number,
@@ -125,7 +112,6 @@ export async function clearTrialTestSlot(
   );
 }
 
-
 export async function deleteTrialTest(testId: number, email: string): Promise<{ data: { success: boolean } | null; error: string | null }> {
   return fetchWithErrorHandling<{ success: boolean }>(
     `${apiPath(`admin/trial-tests/${testId}`)}?email=${encodeURIComponent(email)}`,
@@ -135,83 +121,3 @@ export async function deleteTrialTest(testId: number, email: string): Promise<{ 
   );
 }
 
-
-export async function addTaskToTrialTest(
-  testId: number,
-  taskId: number,
-  sortOrder: number,
-  email: string
-): Promise<{ data: any | null; error: string | null }> {
-  const formData = new FormData();
-  formData.append("task_id", taskId.toString());
-  formData.append("sort_order", sortOrder.toString());
-  formData.append("email", email);
-  return fetchWithErrorHandling(apiPath(`admin/trial-tests/${testId}/tasks`), {
-    method: "POST",
-    body: formData,
-  });
-}
-
-
-export async function removeTaskFromTrialTest(
-  testId: number,
-  taskId: number,
-  email: string
-): Promise<{ data: { success: boolean } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ success: boolean }>(
-    `${apiPath(`admin/trial-tests/${testId}/tasks/${taskId}`)}?email=${encodeURIComponent(email)}`,
-    {
-      method: "DELETE",
-    }
-  );
-}
-
-
-export async function createTaskForTrialTest(
-  testId: number,
-  formData: FormData,
-  email: string
-): Promise<{ data: any | null; error: string | null }> {
-  formData.append("email", email);
-  return fetchWithErrorHandling(
-    apiPath(`admin/trial-tests/${testId}/tasks/create`),
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-}
-
-
-export async function updateTrialTestTask(
-  testId: number,
-  taskId: number,
-  formData: FormData,
-  email: string
-): Promise<{ data: any | null; error: string | null }> {
-  formData.append("email", email);
-  return fetchWithErrorHandling(
-    apiPath(`admin/trial-tests/${testId}/tasks/${taskId}`),
-    {
-      method: "PUT",
-      body: formData,
-    }
-  );
-}
-
-
-export async function updateTrialTestTaskPost(
-  testId: number,
-  taskId: number,
-  formData: FormData,
-  email: string
-): Promise<{ data: any | null; error: string | null }> {
-  formData.append("email", email);
-  return fetchWithErrorHandling(
-    apiPath(`admin/trial-tests/${testId}/tasks/${taskId}/update`),
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-}

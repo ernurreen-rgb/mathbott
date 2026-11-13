@@ -90,27 +90,7 @@ export const parseBankTopicsRaw = (raw: string): string[] => {
   return topics;
 };
 
-export const stringifyTopics = (topics?: string[] | null): string => {
-  if (!Array.isArray(topics)) return "";
-  return topics.filter((topic) => typeof topic === "string" && topic.trim()).join(", ");
-};
 
-export const formatQuestionTypeLabel = (questionType?: string | null): string => {
-  switch (questionType) {
-    case "input":
-      return "Енгізу";
-    case "tf":
-      return "Ш/Ж";
-    case "mcq":
-      return "MCQ (4)";
-    case "mcq6":
-      return "MCQ (6)";
-    case "select":
-      return "Сәйкестендіру";
-    default:
-      return questionType || "Енгізу";
-  }
-};
 
 export const TASK_TEXT_SCALE_OPTIONS: Array<{ value: TaskTextScale; label: string }> = [
   { value: "sm", label: "14" },
@@ -126,30 +106,6 @@ export type CreateTaskFormState = {
   accepted_answers: string[];
   sort_order: number;
   bankTaskId: string;
-  bank_difficulty: "A" | "B" | "C";
-  bank_topics_raw: string;
-  imageFile: File | null;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  optionE: string;
-  optionF: string;
-  correctOptions: McqOptionLabel[];
-  correctTf: "true" | "false";
-  subQuestion1: string;
-  subQuestion2: string;
-  correctSub1: "A" | "B" | "C" | "D";
-  correctSub2: "A" | "B" | "C" | "D";
-};
-export type EditTaskFormState = {
-  text: string;
-  question_type: "tf" | "mcq" | "mcq6" | "input" | "select";
-  text_scale: TaskTextScale;
-  answer: string;
-  accepted_answers: string[];
-  sort_order: number;
-  bank_task_id: number | null;
   bank_difficulty: "A" | "B" | "C";
   bank_topics_raw: string;
   imageFile: File | null;

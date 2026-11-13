@@ -13,7 +13,3 @@ export const getTaskAnswerMode = (task: {
   return task.answer_mode === "written" ? "written" : "choices";
 };
 
-export const normalizeAnswerModeForQuestionType = (
-  answerMode: AnswerMode | string | null | undefined,
-  questionType: QuestionType
-): AnswerMode => getTaskAnswerMode({ answer_mode: answerMode, question_type: questionType });

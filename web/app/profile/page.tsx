@@ -15,9 +15,9 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 
 import DesktopNav from "@/components/DesktopNav";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
-import { acceptFriendInvite, acceptFriendRequest, cancelFriendRequest, createFriendInvite, declineFriendRequest, getFriendInviteDetails, getUserData, listFriendInvites, listFriendRequests, listFriends, removeFriend, revokeFriendInvite, updateNickname } from "@/lib/api";
+import { acceptFriendInvite, acceptFriendRequest, cancelFriendRequest, createFriendInvite, declineFriendRequest, getFriendInviteDetails, getUserData, listFriendRequests, listFriends, removeFriend, updateNickname } from "@/lib/api";
 import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
-import { FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, UserData } from "@/types";
+import { FriendInviteDetails, FriendRequestItem, FriendUser, UserData } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,6 @@ function ProfilePageContent() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showOwnInviteWarning, setShowOwnInviteWarning] = useState(true);
-  const [invites, setInvites] = useState<FriendInvite[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
   const sessionEmail = session?.user?.email || "";
@@ -155,18 +154,14 @@ function ProfilePageContent() {
     setFriendsLoading(true);
     setFriendsMessage(null);
     try {
-      const [friendsRes, invitesRes, incomingRes, outgoingRes] = await Promise.all([
+      const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
         listFriends(sessionEmail),
-        listFriendInvites(sessionEmail),
         listFriendRequests(sessionEmail, "incoming"),
         listFriendRequests(sessionEmail, "outgoing"),
       ]);
 
       if (!friendsRes.error && friendsRes.data) {
         setFriends(friendsRes.data.items || []);
-      }
-      if (!invitesRes.error && invitesRes.data) {
-        setInvites(invitesRes.data.items || []);
       }
       if (!incomingRes.error && incomingRes.data) {
         setIncomingRequests(incomingRes.data.items || []);
@@ -304,18 +299,6 @@ function ProfilePageContent() {
     } finally {
       setInviteLoading(false);
     }
-  };
-
-  const handleRevokeInvite = async (token: string) => {
-    if (!session?.user?.email) return;
-    const { error } = await revokeFriendInvite(token, sessionEmail);
-    if (error) {
-      setInviteActionMessage(error);
-      return;
-    }
-    setInviteActionMessage("Шақыру қайтарып алынды");
-    setInvites(prevInvites => prevInvites.filter(inv => inv.token !== token));
-    setInviteLink(null);
   };
 
   const handleRemoveFriend = async (friendId: number) => {
@@ -456,7 +439,7 @@ function ProfilePageContent() {
     setSaving(true);
     setMessage(null);
 
-    const { data, error } = await updateNickname(sessionEmail, nickname.trim());
+    const { error } = await updateNickname(sessionEmail, nickname.trim());
     if (error) {
       setMessage({ type: "error", text: error });
     } else {

@@ -637,7 +637,6 @@ export default function QuizDetailPage({ params }: PageProps) {
                 {sessions.map((s) => {
                   const isFinished = s.status === "finished";
                   const isInProgress = s.status === "in_progress";
-                  const isLobby = s.status === "lobby";
 
                   return (
                     <div

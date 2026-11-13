@@ -20,7 +20,6 @@ type Context = {
   setEditingSection: Dispatch<SetStateAction<number | null>>;
   setEditSectionForm: Dispatch<SetStateAction<{ name: string; description: string; sort_order: number; }>>;
   editingSection: number | null;
-  setLoading: Dispatch<SetStateAction<boolean>>;
   editSectionForm: { name: string; description: string; sort_order: number; };
 };
 
@@ -41,7 +40,6 @@ export function createSectionActions({
   setEditingSection,
   setEditSectionForm,
   editingSection,
-  setLoading,
   editSectionForm,
 }: Context) {
   const createSection = async (e: React.FormEvent) => {
@@ -112,7 +110,6 @@ export function createSectionActions({
     e.preventDefault();
     if (!session?.user?.email || !editingSection) return;
 
-    setLoading(true);
     setError(null);
 
     const formData = new FormData();
@@ -139,8 +136,6 @@ export function createSectionActions({
     } catch (err: any) {
       console.error("Error updating section:", err);
       setError(err.message || "Бөлімді жаңарту мүмкін болмады. Толығырақ консольде.");
-    } finally {
-      setLoading(false);
     }
   };
   return { createSection, deleteSection, startEditSection, cancelEditSection, updateSection };

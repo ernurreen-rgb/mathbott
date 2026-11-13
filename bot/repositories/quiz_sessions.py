@@ -3,7 +3,7 @@ import json
 import random
 import secrets
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 import storage as db_driver
 from settings import get_settings
 
@@ -277,11 +277,6 @@ class QuizSessionsMixin:
     async def get_session_questions(self, session_id):
         async with self._connection() as db:
             return await self._snapshot_questions(db, session_id)
-
-    async def get_participant_answer(self, session_id, participant_id, question_id):
-        async with self._connection() as db:
-            return await self._row(db, 'SELECT * FROM quiz_answers WHERE session_id = ? AND participant_id = ? AND question_id = ?',
-                                   (session_id, participant_id, question_id))
 
     async def _progress(self, db, session_id, participant, now):
         session = await self._row(db, '''SELECT s.id, s.status, s.pin_code,

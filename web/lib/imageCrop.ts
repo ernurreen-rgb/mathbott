@@ -10,11 +10,6 @@ export interface CropArea {
   height: number;
 }
 
-export interface CropData {
-  x: number;
-  y: number;
-  zoom: number;
-}
 
 /**
  * Creates a cropped image File from the source image and crop parameters.
@@ -105,30 +100,3 @@ function createImage(imageSrc: string | File): Promise<HTMLImageElement> {
   });
 }
 
-/**
- * Converts react-easy-crop crop data and container size to pixel crop area.
- * @param crop - Crop data from react-easy-crop (x, y, zoom)
- * @param imageSize - The displayed image size {width, height}
- * @param containerSize - The container size {width, height}
- * @returns Crop area in pixels
- */
-export function getCroppedAreaPixels(
-  crop: CropData,
-  imageSize: { width: number; height: number },
-  containerSize: { width: number; height: number }
-): CropArea {
-  const scale = imageSize.width / containerSize.width;
-  const scaledCrop = {
-    x: crop.x * scale,
-    y: crop.y * scale,
-    width: (containerSize.width / crop.zoom) * scale,
-    height: (containerSize.height / crop.zoom) * scale,
-  };
-
-  return {
-    x: Math.max(0, scaledCrop.x),
-    y: Math.max(0, scaledCrop.y),
-    width: Math.min(imageSize.width, scaledCrop.width),
-    height: Math.min(imageSize.height, scaledCrop.height),
-  };
-}

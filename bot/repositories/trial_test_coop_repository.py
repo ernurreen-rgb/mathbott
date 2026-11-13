@@ -153,28 +153,6 @@ class TrialTestCoopRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
-    async def create_result_link(self, session_id: int, user_id: int, trial_test_result_id: int) -> Dict[str, Any]:
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            await db.execute(
-                """
-                INSERT INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
-                VALUES (?, ?, ?)
-                ON CONFLICT (session_id, user_id) DO UPDATE SET trial_test_result_id = EXCLUDED.trial_test_result_id
-                """,
-                (session_id, user_id, trial_test_result_id)
-            )
-            await db.commit()
-            async with db.execute(
-                """
-                SELECT * FROM trial_test_coop_results
-                WHERE session_id = ? AND user_id = ?
-                """,
-                (session_id, user_id)
-            ) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else {}
-
     async def get_results_for_session(self, session_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
@@ -214,19 +192,6 @@ class TrialTestCoopRepository(BaseRepository):
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else {}
-
-    async def get_invite(self, session_id: int, receiver_id: int) -> Optional[Dict[str, Any]]:
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute(
-                """
-                SELECT * FROM trial_test_coop_invites
-                WHERE session_id = ? AND receiver_id = ? AND status = 'pending'
-                """,
-                (session_id, receiver_id)
-            ) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
 
     async def update_invite_status(self, invite_id: int, status: str) -> None:
         async with self._connection() as db:

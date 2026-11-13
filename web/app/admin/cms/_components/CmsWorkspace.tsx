@@ -68,9 +68,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
     pageKind === "modules" ? modulesKey : pageKind === "sections" ? sectionsKey : pageKind === "lessons" ? lessonsKey : minisKey
   ));
   const [taskAnswerMode, setTaskAnswerMode] = useState<AnswerMode>("choices");
-  const [editTaskAnswerMode, setEditTaskAnswerMode] = useState<AnswerMode>("choices");
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form states
@@ -106,40 +104,12 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const [editingLesson, setEditingLesson] = useState<number | null>(null);
   const [editLessonForm, setEditLessonForm] = useState({ lesson_number: 1, title: "", sort_order: 0 });
 
-  // Task edit states (mini-lesson tasks)
-  const [editingMiniTask, setEditingMiniTask] = useState<number | null>(null);
-  const [editTaskForm, setEditTaskForm] = useState({
-    text: "",
-    question_type: "mcq" as "tf" | "mcq" | "mcq6" | "input" | "select",
-    text_scale: "md" as TaskTextScale,
-    answer: "",
-    accepted_answers: [] as string[],
-    sort_order: 0,
-    bank_task_id: null as number | null,
-    bank_difficulty: "B" as "A" | "B" | "C",
-    bank_topics_raw: "",
-    imageFile: null as File | null,
-    optionA: "",
-    optionB: "",
-    optionC: "",
-    optionD: "",
-    optionE: "",
-    optionF: "",
-    correctOptions: ["A"] as McqOptionLabel[],
-    correctTf: "true" as "true" | "false",
-    subQuestion1: "",
-    subQuestion2: "",
-    correctSub1: "A" as "A" | "B" | "C" | "D",
-    correctSub2: "A" as "A" | "B" | "C" | "D",
-  });
-
   // Edit states
   const [editingModule, setEditingModule] = useState<number | null>(null);
   const [editingSection, setEditingSection] = useState<number | null>(null);
   const [editModuleForm, setEditModuleForm] = useState({ name: "", description: "", icon: "", sort_order: 0 });
   const [editSectionForm, setEditSectionForm] = useState({ name: "", description: "", sort_order: 0 });
   const createUsesBank = parseBankTaskId(taskForm.bankTaskId) !== null;
-  const editHasLinkedBankTask = parseBankTaskId(editTaskForm.bank_task_id) !== null;
   const selectionRef = useRef({ module: selectedModule, section: selectedSection, lesson: selectedLesson, mini: selectedMiniLesson });
   selectionRef.current = { module: selectedModule, section: selectedSection, lesson: selectedLesson, mini: selectedMiniLesson };
   const requestVersions = useRef({ modules: 0, sections: 0, lessons: 0, minis: 0, tasks: 0 });
@@ -188,7 +158,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const fetchModules = useCallback(async () => {
     if (!sessionEmail) return;
     const version = ++requestVersions.current.modules;
-    setLoading(true);
     setError(null);
     try {
       const response = await fetch(`${apiPath('admin/modules')}?email=${encodeURIComponent(sessionEmail)}`);
@@ -206,7 +175,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
       setError(err.message || "Модульдерді жүктеу мүмкін болмады. Толығырақ консольде.");
     } finally {
       if (version === requestVersions.current.modules) {
-        setLoading(false);
         if (pageKind === "modules") setNavigationLoading(false);
       }
     }
@@ -317,16 +285,8 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
     setTaskForm((prev) => ({ ...prev, imageFile: file }));
   };
 
-  const handlePasteImageEdit = (e: React.ClipboardEvent) => {
-    const file = extractClipboardImageFile(e.clipboardData?.items || null);
-    if (!file) return;
-    e.preventDefault();
-    setEditTaskForm((prev) => ({ ...prev, imageFile: file }));
-  };
-
   const { createModule, deleteModule, startEditModule, cancelEditModule, updateModule } = createModuleActions({
     session,
-    setLoading,
     setError,
     moduleForm,
     fetchModules,
@@ -363,7 +323,6 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
     setEditingSection,
     setEditSectionForm,
     editingSection,
-    setLoading,
     editSectionForm,
   });
 
@@ -386,7 +345,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
     fetchMiniLessons,
   });
 
-  const { createMiniLessonTask, deleteMiniLessonTask, startEditMiniLessonTask, cancelEditMiniLessonTask, updateMiniLessonTask } = createTaskActions({
+  const { createMiniLessonTask, deleteMiniLessonTask } = createTaskActions({
     session,
     selectedMiniLesson,
     taskForm,
@@ -395,15 +354,9 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
     fetchMiniTasks,
     setTaskForm,
     setTaskAnswerMode,
-    setEditingMiniTask,
-    setEditTaskForm,
-    setEditTaskAnswerMode,
-    editingMiniTask,
-    editTaskForm,
-    editTaskAnswerMode,
   });
 
-  const { fetchTrashTasks, toggleTrash, restoreTaskFromTrash, emptyTrash } = createTrashActions({
+  const { toggleTrash, restoreTaskFromTrash, emptyTrash } = createTrashActions({
     session,
     setTrashLoading,
     setTrashTasks,

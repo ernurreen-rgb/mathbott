@@ -5,7 +5,6 @@ import { Lesson, MiniLesson, MiniLessonTask, Module, Section } from "./model";
 
 type Context = {
   session: Session | null;
-  setLoading: Dispatch<SetStateAction<boolean>>;
   setError: Dispatch<SetStateAction<string | null>>;
   moduleForm: { name: string; description: string; icon: string; sort_order: number; };
   fetchModules: () => Promise<void>;
@@ -27,7 +26,6 @@ type Context = {
 
 export function createModuleActions({
   session,
-  setLoading,
   setError,
   moduleForm,
   fetchModules,
@@ -50,7 +48,6 @@ export function createModuleActions({
     e.preventDefault();
     if (!session?.user?.email) return;
 
-    setLoading(true);
     setError(null);
 
     const formData = new FormData();
@@ -71,15 +68,12 @@ export function createModuleActions({
         throw new Error(errorData.detail || `HTTP ${response.status}: Модуль құру мүмкін болмады`);
       }
 
-      const data = await response.json();
       await fetchModules();
       setModuleForm({ name: "", description: "", icon: "", sort_order: 0 });
       setError(null);
     } catch (err: any) {
       console.error("Error creating module:", err);
       setError(err.message || "Модуль құру мүмкін болмады. Толығырақ консольде.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -127,7 +121,6 @@ export function createModuleActions({
     e.preventDefault();
     if (!session?.user?.email || !editingModule) return;
 
-    setLoading(true);
     setError(null);
 
     const formData = new FormData();
@@ -155,8 +148,6 @@ export function createModuleActions({
     } catch (err: any) {
       console.error("Error updating module:", err);
       setError(err.message || "Модульді жаңарту мүмкін болмады. Толығырақ консольде.");
-    } finally {
-      setLoading(false);
     }
   };
   return { createModule, deleteModule, startEditModule, cancelEditModule, updateModule };

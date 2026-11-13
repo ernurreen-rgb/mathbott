@@ -5,19 +5,6 @@ export interface FriendUser {
   total_solved: number;
 }
 
-
-export interface FriendInvite {
-  id?: number;
-  token: string;
-  inviter_id: number;
-  status: "active" | "accepted" | "expired" | "revoked";
-  expires_at?: string | null;
-  accepted_by?: number | null;
-  accepted_at?: string | null;
-  created_at?: string;
-}
-
-
 export interface FriendInviteDetails {
   token: string;
   status: "active" | "accepted" | "expired" | "revoked";
@@ -30,7 +17,6 @@ export interface FriendInviteDetails {
   is_friend: boolean;
 }
 
-
 export interface FriendRequestItem {
   id: number;
   status: string;
@@ -41,15 +27,6 @@ export interface FriendRequestItem {
   receiver_id?: number;
   receiver_nickname?: string | null;
 }
-
-
-export interface BlockedUser {
-  id: number;
-  nickname: string | null;
-  total_solved: number;
-  blocked_at?: string | null;
-}
-
 
 export interface FriendStatus {
   is_self: boolean;

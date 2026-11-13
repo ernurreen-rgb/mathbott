@@ -6,7 +6,6 @@ import asyncio
 import mimetypes
 import os
 import re
-import shutil
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -199,40 +198,3 @@ def delete_image_file(filename: str) -> None:
             logger.info("Image file deleted: %s", file_path.name)
         except Exception as e:
             logger.warning("Failed to delete image file %s: %s", filename, e)
-
-
-def copy_image_file(filename: str) -> Optional[str]:
-    """Create a physical copy of an existing image and return new filename."""
-    if uses_object_storage():
-        safe_filename = normalize_stored_image_filename(filename)
-        if not safe_filename:
-            return None
-        new_filename = f"{uuid.uuid4().hex}{Path(safe_filename).suffix.lower()}"
-        try:
-            bucket = get_settings().s3_bucket
-            get_s3_client().copy_object(Bucket=bucket, Key=new_filename,
-                                       CopySource={"Bucket": bucket, "Key": safe_filename})
-            return new_filename
-        except Exception:
-            logger.warning("Image copy in object storage failed")
-            return None
-    src_path = _resolve_image_path(filename)
-    if src_path is None:
-        logger.warning("Refusing to copy unsafe image filename: %s", filename)
-        return None
-
-    if not src_path.exists() or not src_path.is_file():
-        logger.warning("Source image for copy not found: %s", filename)
-        return None
-
-    ext = src_path.suffix.lower() or ".png"
-    new_filename = f"{uuid.uuid4().hex}{ext}"
-    dst_path = _IMAGES_DIR / new_filename
-
-    try:
-        shutil.copy2(src_path, dst_path)
-        logger.info("Image file copied: %s -> %s", filename, new_filename)
-        return new_filename
-    except Exception as e:
-        logger.warning("Failed to copy image file %s: %s", filename, e)
-        return None

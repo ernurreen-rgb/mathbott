@@ -4,7 +4,6 @@ Repository for friends, invites, and blocks
 import storage as db_driver
 import logging
 import secrets
-from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 from .base import BaseRepository
@@ -223,15 +222,6 @@ class FriendsRepository(BaseRepository):
         return await self._fetch_one(
             "SELECT * FROM friend_requests WHERE id = ?",
             (request_id,)
-        )
-
-    async def get_pending_request(self, sender_id: int, receiver_id: int) -> Optional[Dict[str, Any]]:
-        return await self._fetch_one(
-            """
-            SELECT * FROM friend_requests
-            WHERE sender_id = ? AND receiver_id = ? AND status = 'pending'
-            """,
-            (sender_id, receiver_id)
         )
 
     async def get_pending_request_between(self, user_id: int, other_id: int) -> Optional[Dict[str, Any]]:

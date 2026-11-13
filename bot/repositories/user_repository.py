@@ -126,14 +126,6 @@ class UserRepository(BaseRepository):
             )
             await db.commit()
 
-    async def get_all_users(self) -> List[Dict[str, Any]]:
-        """Get all users"""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute("SELECT * FROM users ORDER BY id") as cursor:
-                rows = await cursor.fetchall()
-                return [dict(row) for row in rows]
-
     async def get_recent_activity_timestamps(
         self,
         user_id: int,
@@ -553,16 +545,6 @@ class UserRepository(BaseRepository):
                 await db.rollback()
                 raise
 
-    async def get_solved_task_ids(self, user_id: int) -> List[int]:
-        """Get list of task IDs that user has solved correctly"""
-        async with self._connection() as db:
-            async with db.execute(
-                "SELECT DISTINCT task_id FROM solutions WHERE user_id = ? AND is_correct = 1",
-                (user_id,)
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
-
     async def record_task_completion_once(
         self,
         *,
@@ -642,4 +624,3 @@ class UserRepository(BaseRepository):
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Error updating streak for user {user_id}: {e}", exc_info=True)
-

@@ -397,8 +397,6 @@ export default function LessonPage() {
         return;
       }
 
-      const data = await res.json();
-
       showToast.success("Шағым сәтті жіберілді! Әкімші тексерісін күтіңіз.");
       setReportDialog({ taskId: 0, show: false });
       setReportMessage("");

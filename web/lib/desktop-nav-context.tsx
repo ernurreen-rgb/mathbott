@@ -25,11 +25,9 @@ export function useDesktopNav(): DesktopNavContextType {
 
 export function DesktopNavProvider({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsedState] = useState<boolean>(false);
-  const [mounted, setMounted] = useState<boolean>(false);
 
   // Initialize from localStorage and sync body class on mount
   useEffect(() => {
-    setMounted(true);
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       const shouldCollapse = saved === "true";

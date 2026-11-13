@@ -1,6 +1,5 @@
 import type { LessonTask } from "./curriculum";
 
-
 // Trial Test Types
 export interface TrialTest {
   id: number;
@@ -14,13 +13,6 @@ export interface TrialTest {
   task_count?: number;
 }
 
-
-export interface TrialTestCategory {
-  category: string;
-  test_count: number;
-  min_sort_order?: number;
-}
-
 export interface TrialTestFolder {
   id: number;
   parent_id: number | null;
@@ -31,11 +23,9 @@ export interface TrialTestFolder {
   child_count: number;
 }
 
-
 export interface TrialTestDetails extends TrialTest {
   tasks: LessonTask[];
 }
-
 
 export interface TrialTestResult {
   id: number;
@@ -49,13 +39,11 @@ export interface TrialTestResult {
   completed_at: string;
 }
 
-
 export interface TrialTestSubmitRequest {
   email: string;
   answers: Record<number, string>; // {task_id: answer}
   attempt_id?: string;
 }
-
 
 export interface TrialTestSubmitResponse {
   result_id?: number;
@@ -66,9 +54,7 @@ export interface TrialTestSubmitResponse {
   results: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
 }
 
-
 export type TrialTestCoopColor = "red" | "blue";
-
 
 export interface TrialTestCoopParticipant {
   user_id: number;
@@ -76,7 +62,6 @@ export interface TrialTestCoopParticipant {
   color: TrialTestCoopColor;
   is_finished: boolean;
 }
-
 
 export interface TrialTestCoopSession {
   id: number;
@@ -93,7 +78,6 @@ export interface TrialTestCoopSession {
   };
 }
 
-
 export interface TrialTestCoopCreateResponse {
   session_id: number;
   trial_test_id: number;
@@ -101,14 +85,12 @@ export interface TrialTestCoopCreateResponse {
   color: TrialTestCoopColor;
 }
 
-
 export interface TrialTestCoopFinishResponse {
   score: number;
   total: number;
   percentage: number;
   session_status: string;
 }
-
 
 export interface TrialTestCoopResultItem {
   user_id: number;
@@ -120,7 +102,6 @@ export interface TrialTestCoopResultItem {
   completed_at: string;
   color?: TrialTestCoopColor;
 }
-
 
 export interface TrialTestCoopResultsResponse {
   session_id: number;

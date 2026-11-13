@@ -1,6 +1,5 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { FriendInvite, FriendInviteDetails, FriendRequestItem, FriendUser, BlockedUser, FriendStatus } from "@/types";
-
+import { FriendInviteDetails, FriendRequestItem, FriendUser, FriendStatus } from "@/types";
 
 export async function createFriendInvite(
   email: string,
@@ -16,18 +15,6 @@ export async function createFriendInvite(
   );
 }
 
-
-export async function listFriendInvites(
-  email: string,
-  status?: string
-): Promise<{ data: { items: FriendInvite[] } | null; error: string | null }> {
-  const url = status
-    ? `${apiPath('friends/invites')}?email=${encodeURIComponent(email)}&status=${encodeURIComponent(status)}`
-    : `${apiPath('friends/invites')}?email=${encodeURIComponent(email)}`;
-  return fetchWithErrorHandling<{ items: FriendInvite[] }>(url);
-}
-
-
 export async function getFriendInviteDetails(
   token: string,
   email?: string
@@ -37,7 +24,6 @@ export async function getFriendInviteDetails(
     : apiPath(`friends/invites/${token}`);
   return fetchWithErrorHandling<FriendInviteDetails>(url);
 }
-
 
 export async function acceptFriendInvite(
   token: string,
@@ -53,20 +39,6 @@ export async function acceptFriendInvite(
   );
 }
 
-
-export async function revokeFriendInvite(
-  token: string,
-  email: string
-): Promise<{ data: { success: boolean } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ success: boolean }>(
-    `${apiPath(`friends/invites/${token}/revoke`)}?email=${encodeURIComponent(email)}`,
-    {
-      method: "POST",
-    }
-  );
-}
-
-
 export async function listFriends(
   email: string
 ): Promise<{ data: { items: FriendUser[] } | null; error: string | null }> {
@@ -74,7 +46,6 @@ export async function listFriends(
     `${apiPath('friends')}?email=${encodeURIComponent(email)}`
   );
 }
-
 
 export async function removeFriend(
   email: string,
@@ -88,7 +59,6 @@ export async function removeFriend(
   );
 }
 
-
 export async function listFriendRequests(
   email: string,
   direction: "incoming" | "outgoing" = "incoming"
@@ -97,7 +67,6 @@ export async function listFriendRequests(
     `${apiPath('friends/requests')}?email=${encodeURIComponent(email)}&direction=${direction}`
   );
 }
-
 
 export async function declineFriendRequest(
   email: string,
@@ -111,7 +80,6 @@ export async function declineFriendRequest(
   );
 }
 
-
 export async function acceptFriendRequest(
   email: string,
   requestId: number
@@ -124,7 +92,6 @@ export async function acceptFriendRequest(
   );
 }
 
-
 export async function cancelFriendRequest(
   email: string,
   requestId: number
@@ -136,35 +103,6 @@ export async function cancelFriendRequest(
     }
   );
 }
-
-
-export async function blockUser(
-  email: string,
-  blockedUserId: number
-): Promise<{ data: { success: boolean } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ success: boolean }>(
-    apiPath('friends/blocks'),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, blocked_user_id: blockedUserId }),
-    }
-  );
-}
-
-
-export async function unblockUser(
-  email: string,
-  blockedUserId: number
-): Promise<{ data: { success: boolean } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ success: boolean }>(
-    `${apiPath(`friends/blocks/${blockedUserId}`)}?email=${encodeURIComponent(email)}`,
-    {
-      method: "DELETE",
-    }
-  );
-}
-
 
 export async function sendFriendRequest(
   email: string,
@@ -180,7 +118,6 @@ export async function sendFriendRequest(
   );
 }
 
-
 export async function getFriendStatus(
   email: string,
   otherId: number
@@ -189,16 +126,6 @@ export async function getFriendStatus(
     `${apiPath('friends/status')}?email=${encodeURIComponent(email)}&other_id=${otherId}`
   );
 }
-
-
-export async function listBlockedUsers(
-  email: string
-): Promise<{ data: { items: BlockedUser[] } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ items: BlockedUser[] }>(
-    `${apiPath('friends/blocks')}?email=${encodeURIComponent(email)}`
-  );
-}
-
 
 export async function heartbeatPresence(email: string) {
   return fetchWithErrorHandling<{ type: string; users: { id: number; nickname?: string | null }[] }>(

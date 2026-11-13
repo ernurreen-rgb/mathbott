@@ -638,7 +638,6 @@ export default function TrialTestPage() {
   const currentTask = test.tasks[currentTaskIndex];
   const answeredTasksCount = getAnsweredTrialTaskCount(test.tasks, answers);
   const answerProgress = getTrialTaskAnswerProgress(test.tasks, answers);
-  const allTasksAnswered = answeredTasksCount === test.tasks.length;
 
   return (
     <div className={styles.page}>

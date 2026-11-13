@@ -4,7 +4,7 @@ Progress repository for user progress tracking
 import storage as db_driver
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -37,45 +37,6 @@ class ProgressRepository(BaseRepository):
                     (user_id, task_id, status)
                 )
             await db.commit()
-
-    async def get_user_task_progress(self, user_id: int, task_id: int) -> Optional[Dict[str, Any]]:
-        """Get user progress for a specific task"""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute(
-                "SELECT * FROM user_progress WHERE user_id = ? AND task_id = ?",
-                (user_id, task_id)
-            ) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
-
-    async def get_user_progress_for_section(self, user_id: int, section_id: int) -> Dict[int, str]:
-        """Get progress for all tasks in a section (returns dict: task_id -> status)"""
-        async with self._connection() as db:
-            async with db.execute(
-                """SELECT task_id, status FROM user_progress 
-                   WHERE user_id = ? AND task_id IN (
-                       SELECT id FROM tasks WHERE section_id = ? AND deleted_at IS NULL
-                   )""",
-                (user_id, section_id)
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return {row[0]: row[1] for row in rows}
-
-    async def get_user_progress_for_module(self, user_id: int, module_id: int) -> Dict[int, str]:
-        """Get progress for all tasks in a module (returns dict: task_id -> status)"""
-        async with self._connection() as db:
-            async with db.execute(
-                """SELECT task_id, status FROM user_progress 
-                   WHERE user_id = ? AND task_id IN (
-                       SELECT t.id FROM tasks t
-                       JOIN sections s ON t.section_id = s.id
-                       WHERE s.module_id = ? AND t.deleted_at IS NULL
-                   )""",
-                (user_id, module_id)
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return {row[0]: row[1] for row in rows}
 
     async def get_user_progress_for_mini_lesson(self, user_id: int, mini_lesson_id: int) -> Dict[int, str]:
         """Get progress for all tasks in a mini-lesson (task_id -> status)."""
@@ -434,7 +395,6 @@ class ProgressRepository(BaseRepository):
             ) as cursor:
                 rows = await cursor.fetchall()
                 return {row[0]: bool(row[1]) for row in rows}
-
 
     async def check_if_task_all_questions_completed(self, user_id: int, task_id: int) -> bool:
         """Check if all questions in a task are completed correctly"""

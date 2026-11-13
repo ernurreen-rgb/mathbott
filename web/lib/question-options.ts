@@ -2,8 +2,6 @@ export const MCQ_OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"] as con
 
 export type McqOptionLabel = (typeof MCQ_OPTION_LABELS)[number];
 
-export const MIN_MCQ_OPTIONS = 4;
-export const MAX_MCQ_OPTIONS = 6;
 export const MAX_MCQ_CORRECT_OPTIONS = 3;
 export const MCQ_EDITOR_OPTION_COUNTS = [4, 6] as const;
 
@@ -24,21 +22,6 @@ export function getMcqEditorQuestionType<T extends string>(questionType: T, opti
 
 export const isMcqQuestionType = (questionType?: string | null): boolean =>
   questionType === "mcq" || questionType === "mcq6";
-
-export function getMcqLabelsForOptionCount(count: number): McqOptionLabel[] {
-  const safeCount = count <= MIN_MCQ_OPTIONS ? MIN_MCQ_OPTIONS : MAX_MCQ_OPTIONS;
-  return MCQ_OPTION_LABELS.slice(0, safeCount);
-}
-
-export function getMcqOptionCountFromOptions(
-  options?: Array<{ label?: string | null; text?: string | null }> | null,
-  questionType?: string | null
-): number {
-  if (Array.isArray(options) && options.length > 0) {
-    return options.length <= MIN_MCQ_OPTIONS ? MIN_MCQ_OPTIONS : MAX_MCQ_OPTIONS;
-  }
-  return questionType === "mcq6" ? 6 : MIN_MCQ_OPTIONS;
-}
 
 const isMcqOptionLabel = (value: string): value is McqOptionLabel =>
   (MCQ_OPTION_LABELS as readonly string[]).includes(value);
@@ -88,10 +71,6 @@ export function serializeMcqAnswerLabels(labels: Array<string | null | undefined
   return JSON.stringify(clean);
 }
 
-export function formatMcqAnswerLabels(answer?: string | string[] | null): string {
-  return parseMcqAnswerLabels(answer).join(", ");
-}
-
 export function getMcqCorrectCount(answer?: string | string[] | null, fallback = 1): number {
   const count = parseMcqAnswerLabels(answer).length;
   return Math.min(Math.max(count || fallback, 1), MAX_MCQ_CORRECT_OPTIONS);
@@ -107,10 +86,6 @@ export function getTaskMcqCorrectCount(task: { correct_count?: number | null; an
 
 export function isMcqAnswerComplete(answer: string | undefined, requiredCount = 1): boolean {
   return parseMcqAnswerLabels(answer).length >= Math.min(Math.max(requiredCount, 1), MAX_MCQ_CORRECT_OPTIONS);
-}
-
-export function isMcqLabelSelected(answer: string | undefined, label: string): boolean {
-  return parseMcqAnswerLabels(answer).includes(label.trim().toUpperCase() as McqOptionLabel);
 }
 
 export function toggleMcqAnswerLabel(answer: string | undefined, label: McqOptionLabel, maxCount = 1): string {

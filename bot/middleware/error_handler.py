@@ -11,16 +11,6 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 
-class APIError(Exception):
-    """Custom API error with status code and detail."""
-
-    def __init__(self, status_code: int, detail: str, error_code: str = None):
-        self.status_code = status_code
-        self.detail = detail
-        self.error_code = error_code
-        super().__init__(self.detail)
-
-
 def _environment(request: Request) -> str:
     try:
         return str(getattr(request.app.state, "environment", "development")).lower()
@@ -156,4 +146,3 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         error_code="INTERNAL_SERVER_ERROR",
         request=request,
     )
-

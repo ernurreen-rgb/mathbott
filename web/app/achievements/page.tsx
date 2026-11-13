@@ -5,7 +5,6 @@ import Icon, { ContentIcon } from "@/components/ui/Icon";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
 import { UserData } from "@/types";

@@ -31,7 +31,6 @@ export default function SectionGuidesPage() {
   const [selectedModule, setSelectedModule] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<number | null>(null);
   const [guideText, setGuideText] = useState<string>("");
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -47,7 +46,6 @@ export default function SectionGuidesPage() {
 
   const fetchModules = useCallback(async () => {
     if (!sessionEmail) return;
-    setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${apiPath("admin/modules")}?email=${encodeURIComponent(sessionEmail)}`);
@@ -58,14 +56,11 @@ export default function SectionGuidesPage() {
       setModules(data);
     } catch (e: any) {
       setError(e?.message || "Модульдерді жүктеу қатесі");
-    } finally {
-      setLoading(false);
     }
   }, [sessionEmail]);
 
   const fetchSections = useCallback(async (moduleId: number) => {
     if (!sessionEmail) return;
-    setLoading(true);
     setError(null);
     try {
       const res = await fetch(
@@ -80,8 +75,6 @@ export default function SectionGuidesPage() {
       setGuideText("");
     } catch (e: any) {
       setError(e?.message || "Бөлімдерді жүктеу қатесі");
-    } finally {
-      setLoading(false);
     }
   }, [sessionEmail]);
 

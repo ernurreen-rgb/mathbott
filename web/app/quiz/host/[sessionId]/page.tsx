@@ -3,7 +3,6 @@ import Icon from "@/components/ui/Icon";
 
 
 import { useEffect, useState, useCallback, use } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import QRCode from "react-qr-code";
@@ -26,7 +25,6 @@ interface PageProps {
 export default function HostQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const sessionId = parseInt(resolvedParams.sessionId, 10);
-  const router = useRouter();
   const { data: session, status: authStatus } = useSession();
 
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);

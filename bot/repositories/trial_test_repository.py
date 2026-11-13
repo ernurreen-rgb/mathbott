@@ -380,22 +380,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             await db.commit()
             return True
 
-    async def remove_tasks_by_bank_task_id(self, bank_task_id: int) -> int:
-        """Soft-delete all active placements linked to a bank task."""
-        async with self._connection() as db:
-            cursor = await db.execute(
-                """
-                UPDATE trial_test_tasks
-                SET deleted_at = mathbot_datetime('now'),
-                    updated_at = mathbot_datetime('now')
-                WHERE bank_task_id = ?
-                  AND deleted_at IS NULL
-                """,
-                (bank_task_id,),
-            )
-            await db.commit()
-            return int(cursor.rowcount or 0)
-
     async def get_trial_test_tasks(self, trial_test_id: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
@@ -472,34 +456,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             )
             await db.commit()
             return int(cursor.rowcount or 0)
-
-    async def save_trial_test_result(
-        self,
-        user_id: int,
-        trial_test_id: int,
-        score: int,
-        total: int,
-        percentage: float,
-        answers: Dict[int, Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        async def operation() -> Dict[str, Any]:
-            async with self._connection() as db:
-                db.row_factory = db_driver.Row
-                answers_json = json.dumps(answers)
-                inserted = await db.execute(
-                    """
-                    INSERT INTO trial_test_results
-                    (user_id, trial_test_id, score, total, percentage, answers, submit_mode)
-                    VALUES (?, ?, ?, ?, ?, ?, 'solo')
-                    """,
-                    (user_id, trial_test_id, score, total, percentage, answers_json),
-                )
-                await db.commit()
-                async with db.execute("SELECT * FROM trial_test_results WHERE id = ?", (inserted.lastrowid,)) as cursor:
-                    row = await cursor.fetchone()
-                    return dict(row) if row else {}
-
-        return await self._run_with_write_lock(operation)
 
     async def submit_trial_test_attempt(
         self,
@@ -725,17 +681,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                       updated_at = mathbot_datetime('now')
                     """,
                     (user_id, trial_test_id, answers_json, current_task_index),
-                )
-                await db.commit()
-
-        await self._run_with_write_lock(operation)
-
-    async def delete_trial_test_draft(self, user_id: int, trial_test_id: int) -> None:
-        async def operation() -> None:
-            async with self._connection() as db:
-                await db.execute(
-                    "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
-                    (user_id, trial_test_id),
                 )
                 await db.commit()
 

@@ -181,13 +181,6 @@ def get_mcq_answer_count(raw_answer: Any) -> int:
     return min(len(labels), MAX_MCQ_CORRECT_OPTIONS)
 
 
-def _normalize_mcq_answer_for_compare(raw_answer: Any) -> str:
-    labels = parse_mcq_answer_labels(raw_answer)
-    if len(labels) <= 1:
-        return labels[0] if labels else ""
-    return json.dumps(sorted(labels), ensure_ascii=False)
-
-
 def _parse_task_options(task: dict) -> List[dict]:
     raw_options = task.get("options")
     if isinstance(raw_options, str):

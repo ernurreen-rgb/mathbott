@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { getPresenceWsToken, heartbeatPresence } from "@/lib/api";
@@ -58,9 +58,6 @@ function presenceDisplayName(user: PresenceUser): string {
   return user.nickname || `Ойыншы #${user.id}`;
 }
 
-export function usePresence(): PresenceContextValue {
-  return useContext(PresenceContext);
-}
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();

@@ -10,16 +10,6 @@ export type WorksheetTask = Pick<BankTask, 'id' | 'text' | 'question_type' | 'an
   subquestions: { text: string }[];
 };
 
-export function worksheetTask(task: BankTask): WorksheetTask {
-  if (task.deleted_at) throw new Error(`Банк №${task.id} есебі себетте. Оны жинақтан алып тастаңыз.`);
-  return {
-    id: task.id, text: task.text || '', question_type: task.question_type,
-    answer_mode: task.answer_mode, image_filename: task.image_filename,
-    options: (task.options || []).map(({ label, text }) => ({ label, text })),
-    subquestions: (task.subquestions || []).map(({ text }) => ({ text })),
-  };
-}
-
 export function trialPlacementToWorksheetTask(task: BankPlacementTask): WorksheetTask {
   const text = task.text || task.bank_task?.text || '';
   const questionType = task.question_type || task.bank_task?.question_type || 'input';

@@ -7,7 +7,6 @@ import logging
 from typing import Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Request
-from slowapi import Limiter
 
 from database import Database
 from settings import get_settings
@@ -42,10 +41,6 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
 
 async def get_db(request: Request) -> Database:
     return request.app.state.db
-
-
-async def get_limiter(request: Request) -> Limiter:
-    return request.app.state.limiter
 
 
 def _get_runtime_environment() -> str:
@@ -181,19 +176,6 @@ async def require_admin_any_admin(
     db: Database = Depends(get_db),
 ) -> dict:
     return await require_admin(email=email, request=request, db=db, capability=None)
-
-
-async def require_admin_content_manage(
-    email: Optional[str] = None,
-    request: Request = None,
-    db: Database = Depends(get_db),
-) -> dict:
-    return await require_admin(
-        email=email,
-        request=request,
-        db=db,
-        capability=CAPABILITY_CONTENT_MANAGE,
-    )
 
 
 async def require_admin_review_manage(

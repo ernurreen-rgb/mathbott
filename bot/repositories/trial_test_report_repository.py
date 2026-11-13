@@ -3,7 +3,6 @@ Trial test report repository
 """
 import storage as db_driver
 import logging
-import json
 from typing import Optional, List, Dict, Any
 from .base import BaseRepository
 
@@ -155,21 +154,3 @@ class TrialTestReportRepository(BaseRepository):
             ) as cursor:
                 row = await cursor.fetchone()
                 return row[0] > 0 if row else False
-
-    async def can_user_report_trial_test_task(self, user_id: int, trial_test_id: int, task_id: int) -> bool:
-        """Allow report if user has a result for this test and the task is present in answers."""
-        async with self._connection() as db:
-            async with db.execute(
-                """SELECT answers FROM trial_test_results
-                   WHERE user_id = ? AND trial_test_id = ?
-                   ORDER BY completed_at DESC LIMIT 1""",
-                (user_id, trial_test_id),
-            ) as cursor:
-                row = await cursor.fetchone()
-                if not row or not row[0]:
-                    return False
-                try:
-                    answers = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-                except Exception:
-                    return False
-                return str(task_id) in {str(k) for k in answers.keys()}

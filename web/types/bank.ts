@@ -218,12 +218,6 @@ export interface BankAuditListResponse {
 }
 
 
-export interface TrialTestAddFromBankResponse {
-  added_count: number;
-  skipped_existing_ids: number[];
-  created_task_ids: number[];
-  skipped_missing_ids?: number[];
-}
 
 
 export interface BankTaskVersionItem {

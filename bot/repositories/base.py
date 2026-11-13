@@ -197,10 +197,6 @@ class BaseRepository:
             self._statement_cache[cache_key] = query_pattern
         return self._statement_cache[cache_key]
     
-    def clear_statement_cache(self) -> None:
-        """Clear prepared statements cache"""
-        self._statement_cache.clear()
-
     def _escape_like_value(self, value: str) -> str:
         """Escape user-controlled wildcards for LIKE queries."""
         return str(value or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

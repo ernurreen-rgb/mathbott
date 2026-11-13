@@ -3,7 +3,7 @@ import Icon from "@/components/ui/Icon";
 
 
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import MobileNav from "@/components/MobileNav";
@@ -14,8 +14,7 @@ import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
 export default function PublicProfilePage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { data: session } = useSession();
   const params = useParams();
   const userId = params?.id ? parseInt(params.id as string, 10) : null;
   const [userData, setUserData] = useState<UserData | null>(null);

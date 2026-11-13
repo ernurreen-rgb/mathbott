@@ -1,9 +1,8 @@
 import { apiPath, fetchWithErrorHandling } from "./client";
-import { TrialTest, TrialTestCategory, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse } from "@/types";
+import { TrialTest, TrialTestDetails, TrialTestResult, TrialTestSubmitRequest, TrialTestSubmitResponse } from "@/types";
 import type { TrialTestFolder } from "@/types";
 
 export const getTrialTestFolders = () => fetchWithErrorHandling<TrialTestFolder[]>(apiPath('trial-tests/folders'), { cache: "no-store" });
-
 
 // Trial Tests API
 export async function getTrialTests(category?: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
@@ -14,18 +13,11 @@ export async function getTrialTests(category?: string): Promise<{ data: TrialTes
   return fetchWithErrorHandling<TrialTest[]>(url);
 }
 
-
-export async function getTrialTestCategories(): Promise<{ data: TrialTestCategory[] | null; error: string | null }> {
-  return fetchWithErrorHandling<TrialTestCategory[]>(apiPath('trial-tests/categories'));
-}
-
-
 export async function getTrialTestsAttempted(email: string): Promise<{ data: TrialTest[] | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTest[]>(
     `${apiPath('trial-tests')}?email=${encodeURIComponent(email)}&attempted_only=true`
   );
 }
-
 
 export async function getTrialTestDetails(testId: number, email?: string): Promise<{ data: TrialTestDetails | null; error: string | null }> {
   const url = email
@@ -33,7 +25,6 @@ export async function getTrialTestDetails(testId: number, email?: string): Promi
     : apiPath(`trial-tests/${testId}`);
   return fetchWithErrorHandling<TrialTestDetails>(url);
 }
-
 
 export async function submitTrialTest(testId: number, request: TrialTestSubmitRequest): Promise<{ data: TrialTestSubmitResponse | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTestSubmitResponse>(
@@ -46,7 +37,6 @@ export async function submitTrialTest(testId: number, request: TrialTestSubmitRe
   );
 }
 
-
 export async function getTrialTestResults(testId: number, email: string): Promise<{ data: TrialTestResult[] | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTestResult[]>(
     `${apiPath(`trial-tests/${testId}/results`)}?email=${encodeURIComponent(email)}`,
@@ -54,9 +44,7 @@ export async function getTrialTestResults(testId: number, email: string): Promis
   );
 }
 
-
 export type TrialTestDraft = { answers: Record<number, string>; current_task_index: number };
-
 
 export async function getTrialTestDraft(testId: number, email: string): Promise<{ data: TrialTestDraft | null; error: string | null }> {
   return fetchWithErrorHandling<TrialTestDraft>(
@@ -73,18 +61,3 @@ export async function getTrialTestDraftIds(email: string): Promise<{ data: { tes
   );
 }
 
-
-export async function saveTrialTestDraft(
-  testId: number,
-  email: string,
-  payload: { answers: Record<number, string>; current_task_index: number }
-): Promise<{ data: { ok: boolean } | null; error: string | null }> {
-  return fetchWithErrorHandling<{ ok: boolean }>(
-    apiPath(`trial-tests/${testId}/draft`),
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, ...payload }),
-    }
-  );
-}

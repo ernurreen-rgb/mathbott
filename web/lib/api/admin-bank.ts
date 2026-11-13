@@ -1,6 +1,6 @@
 import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
 import type { AiTwinCheck, AiTwinDraftsResponse, AiTwinStatus, BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
-import { BankDifficulty, BankTask, BankTaskListResponse, TrialTestAddFromBankResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
+import { BankDifficulty, BankTask, BankTaskListResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
 // Bank tasks admin API
@@ -646,23 +646,6 @@ export async function getAdminBankTaskUsage(
 }
 
 
-export async function addTasksFromBankToTrialTest(
-  testId: number,
-  bankTaskIds: number[],
-  email: string
-): Promise<{ data: TrialTestAddFromBankResponse | null; error: string | null }> {
-  return fetchWithErrorHandling<TrialTestAddFromBankResponse>(
-    apiPath(`admin/trial-tests/${testId}/tasks/from-bank`),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        bank_task_ids: bankTaskIds,
-      }),
-    }
-  );
-}
 
 
 export async function exportAdminBankTasksJson(): Promise<FileDownloadResult> {

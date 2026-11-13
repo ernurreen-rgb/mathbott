@@ -135,25 +135,6 @@ class TaskRepository(BaseRepository):
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-    async def get_random_task(self, exclude_ids: Optional[List[int]] = None) -> Optional[Dict[str, Any]]:
-        """Get random active placement task with bank content."""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            if exclude_ids:
-                placeholders = ",".join("?" * len(exclude_ids))
-                query = (
-                    f"{self._TASK_SELECT} "
-                    f"WHERE t.deleted_at IS NULL AND t.id NOT IN ({placeholders}) "
-                    "ORDER BY RANDOM() LIMIT 1"
-                )
-                params: List[Any] = list(exclude_ids)
-            else:
-                query = f"{self._TASK_SELECT} WHERE t.deleted_at IS NULL ORDER BY RANDOM() LIMIT 1"
-                params = []
-            async with db.execute(query, params) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
-
     async def create_task(
         self,
         text: str,
@@ -288,16 +269,6 @@ class TaskRepository(BaseRepository):
                 solution_filename=solution_filename,
                 source="task_repository_update",
             )
-
-    async def get_all_tasks(self) -> List[Dict[str, Any]]:
-        """Get all placements with joined bank content."""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            async with db.execute(
-                f"{self._TASK_SELECT} ORDER BY t.id DESC"
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [dict(row) for row in rows]
 
     async def get_tasks_by_creator(
         self,

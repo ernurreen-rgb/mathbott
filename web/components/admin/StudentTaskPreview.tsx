@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
-import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import TaskStatement from "@/components/student/TaskStatement";
 import { checkAdminTaskAnswerPreview } from "@/lib/api";

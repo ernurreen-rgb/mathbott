@@ -1,7 +1,6 @@
 import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEditor";
 import {
   isMcqQuestionType,
-  MCQ_OPTION_LABELS,
   getMcqEditorLabels,
   McqOptionLabel,
   serializeMcqAnswerLabels
