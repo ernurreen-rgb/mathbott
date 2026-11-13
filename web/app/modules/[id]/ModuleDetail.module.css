@@ -1,3 +1,17 @@
+.page {
+  /* Sticky module header once it has shrunk on scroll: pt-3 (12px), the compact
+     card (60px on phones, 64px from sm) and the pb-4 fade below it (16px).
+     ModuleLessonJourney uses it to size phone sections and to place sections
+     scrolled into view (for example when returning from a lesson). */
+  --journey-top-space: 88px;
+}
+
+@media (min-width: 640px) {
+  .page {
+    --journey-top-space: 92px;
+  }
+}
+
 .moduleHeader {
   margin-inline: auto;
   max-width: 56rem;

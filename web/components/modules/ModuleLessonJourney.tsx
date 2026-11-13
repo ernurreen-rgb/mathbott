@@ -192,7 +192,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
           <section
             key={section.id}
             id={`section-${section.id}`}
-            className={`scroll-mt-3 overflow-hidden rounded-[1.5rem] border border-white/90 bg-white/70 shadow-[0_20px_60px_rgba(88,28,135,0.1)] backdrop-blur-sm sm:rounded-[2rem] ${lessons.length === 5 ? styles.viewportSection : ""}`}
+            className={`${styles.section} overflow-hidden rounded-[1.5rem] border border-white/90 bg-white/70 shadow-[0_20px_60px_rgba(88,28,135,0.1)] backdrop-blur-sm sm:rounded-[2rem] ${lessons.length > 0 ? styles.viewportSection : ""}`}
           >
             <header className="flex items-start justify-between gap-3 border-b border-purple-100/80 bg-gradient-to-r from-rose-50/90 via-white/80 to-violet-50/90 px-4 py-3.5 sm:gap-4 sm:px-7 sm:py-[18px]">
               <div className="min-w-0">

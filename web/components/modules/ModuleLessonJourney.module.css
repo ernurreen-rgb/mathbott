@@ -3,6 +3,12 @@
   --journey-nav-space: calc(65px + env(safe-area-inset-bottom, 0px));
 }
 
+/* --journey-top-space is set by a page with a sticky header above the journey,
+   so a section scrolled into view lands below that header instead of under it. */
+.section {
+  scroll-margin-top: var(--journey-top-space, 12px);
+}
+
 @media (min-width: 768px) {
   .journey {
     --journey-nav-space: 0px;
@@ -20,7 +26,7 @@
     --journey-node-size: clamp(64px, 10svh, 88px);
     display: flex;
     flex-direction: column;
-    min-height: calc(100svh - var(--journey-nav-space) - 24px);
+    min-height: calc(100svh - var(--journey-top-space, 0px) - var(--journey-nav-space) - 24px);
   }
 
   .viewportSection > header {

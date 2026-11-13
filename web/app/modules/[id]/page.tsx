@@ -280,7 +280,7 @@ export default function ModuleDetailPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-slate-50 pb-24 md:pb-12">
+    <div className={`${styles.page} relative min-h-screen overflow-x-clip bg-slate-50 pb-24 md:pb-12`}>
       <MountainBackdrop />
       <DesktopNav />
 
