@@ -124,7 +124,7 @@ Inspected from [`web/.env.example`](../../web/.env.example), [`web/app/api/auth/
 | `GOOGLE_CLIENT_SECRET` | `<google-oauth-secret>` | Yes (for OAuth sign-in) | Google OAuth 2.0 Client Secret. |
 | `INTERNAL_PROXY_SHARED_SECRET` | `<matches backend>` | Yes (in prod) | Shared HMAC-SHA256 secret used to sign `X-Proxy-Request-Signature-V2` headers sent to FastAPI. |
 | `TRUSTED_CLIENT_IP_HEADER` | `""` (`x-real-ip` on VPS) | Self-hosted only | Header name trusted for deriving quiz entry network budgets when running behind a self-hosted reverse proxy (`Nginx`/`Caddy`). Vercel uses `x-vercel-forwarded-for` automatically. |
-| `NEXT_PUBLIC_REALTIME_TRANSPORT` | `websocket` (local) / `polling` (Vercel) | No | Selects `websocket` or HTTP `polling` for live quizzes, co-op tests, and presence ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)). |
+| `NEXT_PUBLIC_REALTIME_TRANSPORT` | `websocket` (local) / `polling` (Vercel) | No | Selects `websocket` or HTTP `polling` for live quizzes and presence ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)). |
 | `NEXT_PUBLIC_WS_API_URL` | `""` | Optional | Optional explicit WebSocket base URL when `NEXT_PUBLIC_REALTIME_TRANSPORT=websocket`. |
 | `CSP_CONNECT_SRC` | `""` | Optional | Additional origins appended to Content-Security-Policy `connect-src` in [`web/next.config.js`](../../web/next.config.js). |
 | `NEXT_PUBLIC_MODULES_UI_ENABLED` | `true` | Optional | Feature flag in [`web/app/modules/page.tsx`](../../web/app/modules/page.tsx). Enabled by default (`!== "false"`); set to `"false"` to hide the `/modules` map behind a maintenance banner. |

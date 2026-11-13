@@ -225,8 +225,6 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         answers.get(str(task_id), answers.get(int(task_id), ""))
                     ).strip()
 
-                    correct_answer = _answer_to_string(task.get("answer", "")).strip()
-
                     is_correct = is_task_answer_correct(task, user_answer)
 
                     if is_correct:
@@ -268,7 +266,6 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     completions=completions,
                     should_update_streak=had_any_correct,
                     delete_draft=True,
-                    submit_mode="solo",
                     attempt_id=attempt_id,
                 )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")

@@ -39,7 +39,7 @@ sequenceDiagram
 
 ## 2. Task Bank, Placements & Versioning Flow
 
-`bank_tasks` is the single source of truth for task content across Curriculum Modules, Solo/Co-op Trial Tests, and bank-linked Quiz questions.
+`bank_tasks` is the single source of truth for task content across Curriculum Modules, Trial Tests, and bank-linked Quiz questions.
 
 ```mermaid
 flowchart TD
@@ -66,13 +66,13 @@ flowchart TD
    - Rolling back a task (`POST /api/admin/bank/tasks/{id}/rollback`) restores `text`, `answer`, `question_type`, `answer_mode`, `accepted_answers`, `text_scale`, `options`, `subquestions`, `difficulty`, `image_filename`, `solution_filename`, and `topics` from the target snapshot and records a new `rollback` version event.
 2. **Placements (`tasks` & `trial_test_tasks`):**
    - Module lessons (`tasks`) and trial tests (`trial_test_tasks`) store placement metadata (`sort_order`, `mini_lesson_id` or `trial_test_id`, `bank_task_id`) and `LEFT JOIN bank_tasks` on read so edits in the task bank propagate to placements.
-   - When a student submits a Solo or Co-op Trial Test, `public_payload.task_review_snapshot` freezes a sanitized copy of each task into `trial_test_results.answers` so historical review screens remain readable even if the trial test slots are later rearranged.
+   - When a student submits a Trial Test, `public_payload.task_review_snapshot` freezes a sanitized copy of each task into `trial_test_results.answers` so historical review screens remain readable even if the trial test slots are later rearranged.
 
 ---
 
 ## 3. Mathematical Answer Validation & Grading Pipeline
 
-When a student checks a module task (`POST /api/task/check`), submits a trial test (`POST /api/trial-tests/{id}/submit`), finishes a co-op test, or answers a live quiz question, grading is performed by [`bot/utils/validation.py`](../../bot/utils/validation.py):
+When a student checks a module task (`POST /api/task/check`), submits a trial test (`POST /api/trial-tests/{id}/submit`), or answers a live quiz question, grading is performed by [`bot/utils/validation.py`](../../bot/utils/validation.py):
 
 ```mermaid
 flowchart LR
@@ -111,17 +111,12 @@ flowchart LR
 
 ---
 
-## 5. Solo & Cooperative Trial Tests Flow
+## 5. Trial Tests Flow
 
 ### 5.1 Solo Trial Tests
 - **Catalog & Folders:** Tests are organized in a hierarchical folder tree (`trial_test_folders`). Students see only folders with `test_count > 0` (`GET /api/trial-tests/folders`).
 - **Draft Persistence:** While solving, changes are debounced (800 ms) to `PUT /api/trial-tests/{id}/draft`. On SPA navigation (`unmount`) or browser tab close (`pagehide`), `flushDraft` sends a final `keepalive: true` request so the latest answer is not lost.
 - **Submission:** `POST /api/trial-tests/{id}/submit` grades all tasks inside a per-`(user_id, test_id)` lock, stores a full `task_snapshot` in `trial_test_results`, clears the user's draft, records first-time task completions (`user_task_completions`), updates the daily streak, and evaluates achievements.
-
-### 5.2 Cooperative (2-Player) Trial Tests
-- **Session & Invites:** A host starts a session (`POST /api/trial-tests/{id}/coop/session`) and invites a friend (`POST /api/trial-tests/{id}/coop/invite`). Accepting an invite adds the friend to `trial_test_coop_participants` (max 2 participants: `red` and `blue` slots) and transitions the session to `active`.
-- **Shared Answer Sync:** Both players' answers are stored in `trial_test_coop_answers` and synchronized via `PUT /api/trial-tests/coop/session/{id}/answers` (with `keepalive: true` on `pagehide`) and either `/ws/trial-tests/coop/{id}` broadcasts or 2.5-second polling.
-- **Completion & Results Gate:** Each participant finishes independently via `POST /api/trial-tests/{id}/coop/finish`. Full review results (`GET /api/trial-tests/coop/session/{id}/results`) return `409` until the requesting participant has `is_finished = 1`.
 
 ---
 

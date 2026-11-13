@@ -799,7 +799,7 @@ class StatisticsRepository(BaseRepository):
         async with self._connection() as db:
             result_rows = await self._rows(db, f"""
                 SELECT r.id, r.user_id, u.nickname, r.trial_test_id, r.score, r.total, r.percentage,
-                       r.submit_mode, r.completed_at, {window.local_day("r.completed_at")}, u.email
+                       r.completed_at, {window.local_day("r.completed_at")}, u.email
                 FROM trial_test_results r
                 LEFT JOIN users u ON u.id = r.user_id
                 WHERE r.completed_at >= ? AND r.completed_at < ?{admins}
@@ -835,8 +835,7 @@ class StatisticsRepository(BaseRepository):
             {
                 "id": int(row[0]), "user_id": int(row[1]), "nickname": row[2], "trial_test_id": int(row[3]),
                 "score": _int(row[4]), "total": _int(row[5]), "percentage": float(row[6] or 0),
-                "submit_mode": "coop" if row[7] == "coop" else "solo",
-                "completed_at": _iso(row[8]), "day": row[9], "email": row[10],
+                "completed_at": _iso(row[7]), "day": row[8], "email": row[9],
             }
             for row in result_rows
         ]
@@ -871,8 +870,6 @@ class StatisticsRepository(BaseRepository):
                 "id": test_id, "title": row[1], "folder": row[2],
                 "questions_count": sum(1 for item in questions if not item["deleted"]),
                 **averages(attempts),
-                "solo": sum(1 for item in attempts if item["submit_mode"] == "solo"),
-                "coop": sum(1 for item in attempts if item["submit_mode"] == "coop"),
                 "last_completed_at": max((item["completed_at"] for item in attempts if item["completed_at"]), default=None),
                 "questions": questions if attempts else [],
             })
@@ -900,8 +897,6 @@ class StatisticsRepository(BaseRepository):
                 "average": self._kpi(window, now["average"], before["average"]),
                 "median": now["median"],
                 "best": now["best"],
-                "solo": sum(1 for item in current if item["submit_mode"] == "solo"),
-                "coop": sum(1 for item in current if item["submit_mode"] == "coop"),
                 "tests_total": len(test_rows),
                 "tests_taken": sum(1 for item in tests if item["attempts"]),
             },
@@ -915,7 +910,7 @@ class StatisticsRepository(BaseRepository):
                     **({"email": item["email"]} if include_email else {}),
                     "trial_test_id": item["trial_test_id"], "title": titles.get(item["trial_test_id"]),
                     "score": item["score"], "total": item["total"], "percentage": round(item["percentage"] / 100, 4),
-                    "submit_mode": item["submit_mode"], "completed_at": item["completed_at"],
+                    "completed_at": item["completed_at"],
                 }
                 for item in sorted(current, key=lambda item: -item["id"])[:RECENT_LIMIT]
             ],

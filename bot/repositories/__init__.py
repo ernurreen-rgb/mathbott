@@ -9,7 +9,6 @@ from .progress_repository import ProgressRepository
 from .solution_repository import SolutionRepository
 from .achievement_repository import AchievementRepository
 from .trial_test_repository import TrialTestRepository
-from .trial_test_coop_repository import TrialTestCoopRepository
 from .bank_task_repository import BankTaskRepository
 from .report_repository import ReportRepository
 from .trial_test_report_repository import TrialTestReportRepository
@@ -27,7 +26,6 @@ __all__ = [
     "SolutionRepository",
     "AchievementRepository",
     "TrialTestRepository",
-    "TrialTestCoopRepository",
     "BankTaskRepository",
     "ReportRepository",
     "TrialTestReportRepository",

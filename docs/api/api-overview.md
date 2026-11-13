@@ -35,7 +35,6 @@ Verified by [`bot/middleware/trusted_proxy_identity.py`](../../bot/middleware/tr
 When `NEXT_PUBLIC_REALTIME_TRANSPORT=websocket`, clients obtain a short-lived HMAC token ([`bot/utils/quiz_ws_auth.py`](../../bot/utils/quiz_ws_auth.py)) over the authenticated HTTP proxy before opening a WebSocket:
 1. `GET /api/presence/ws-token` -> `WS /ws/presence?token=<ticket>`
 2. `GET /api/quiz-sessions/{session_id}/ws-token` -> `WS /ws/quiz/{session_id}?token=<ticket>`
-3. `GET /api/trial-tests/coop/session/{session_id}/ws-token` -> `WS /ws/trial-tests/coop/{session_id}?token=<ticket>`
 
 ### 1.3 Admin Role-Based Access Control (RBAC)
 Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin*)` in [`bot/dependencies.py`](../../bot/dependencies.py) and [`bot/repositories/user_repository.py`](../../bot/repositories/user_repository.py):
@@ -112,23 +111,7 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `PUT` | `/api/trial-tests/{test_id}/draft` | Authenticated | Upserts the user's in-progress answer draft (`answers`, `current_index`). |
 | `GET` | `/api/trial-tests/{test_id}/results` | Authenticated | Lists historical attempt results for `test_id` for the current user. |
 
-### 2.5 Trial Tests — Real-Time 2-Player Co-op ([`bot/routes/trial_tests_coop.py`](../../bot/routes/trial_tests_coop.py))
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/trial-tests/{test_id}/coop/session` | Authenticated | Creates a new 2-player co-op session (`trial_test_coop_sessions`) with the creator as `red` host. |
-| `GET` | `/api/trial-tests/coop/session/{session_id}` | Authenticated | Returns session state, participants (`red`/`blue`), tasks, and shared answers. |
-| `PUT` | `/api/trial-tests/coop/session/{session_id}/answers` | Authenticated | Updates an answer for a task in the co-op session and broadcasts over WebSocket. |
-| `POST` | `/api/trial-tests/{test_id}/coop/finish` | Authenticated | Marks the current participant as finished; when both players finish, grades and stores `trial_test_results` and `trial_test_coop_results`. |
-| `GET` | `/api/trial-tests/coop/session/{session_id}/results` | Authenticated | Returns finalized co-op test results and per-player breakdowns. |
-| `POST` | `/api/trial-tests/{test_id}/coop/invite` | Authenticated | Sends a co-op session invite to a friend (`trial_test_coop_invites`). |
-| `GET` | `/api/trial-tests/coop/invites` | Authenticated | Lists pending incoming co-op invitations for the current user. |
-| `POST` | `/api/trial-tests/coop/invites/{invite_id}/accept` | Authenticated | Accepts an invite, adds the user as the `blue` participant, and notifies the room via WebSocket. |
-| `POST` | `/api/trial-tests/coop/invites/{invite_id}/decline` | Authenticated | Declines a pending co-op invitation. |
-| `GET` | `/api/trial-tests/coop/session/{session_id}/ws-token` | Authenticated | Issues a short-lived HMAC ticket for `/ws/trial-tests/coop/{session_id}`. |
-| `WS` | `/ws/trial-tests/coop/{session_id}` | WS Ticket | Bidirectional WebSocket channel for real-time co-op answer synchronization and lifecycle events. |
-
-### 2.6 Live Classroom Quizzes ([`bot/routes/quizzes.py`](../../bot/routes/quizzes.py), [`bot/routes/quiz_game.py`](../../bot/routes/quiz_game.py))
+### 2.5 Live Classroom Quizzes ([`bot/routes/quizzes.py`](../../bot/routes/quizzes.py), [`bot/routes/quiz_game.py`](../../bot/routes/quiz_game.py))
 
 #### Quiz Templates (`bot/routes/quizzes.py`)
 | Method | Path | Auth | Description |
@@ -171,7 +154,7 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `GET` | `/api/quiz-sessions/{session_id}/ws-token` | Optional Auth | Issues a short-lived HMAC ticket for `/ws/quiz/{session_id}`. |
 | `WS` | `/ws/quiz/{session_id}` | WS Ticket | Real-time WebSocket channel for lobby updates, question transitions, and leaderboard broadcasts. |
 
-### 2.7 Friends, Blocks & Presence ([`bot/routes/friends.py`](../../bot/routes/friends.py), [`bot/routes/presence.py`](../../bot/routes/presence.py))
+### 2.6 Friends, Blocks & Presence ([`bot/routes/friends.py`](../../bot/routes/friends.py), [`bot/routes/presence.py`](../../bot/routes/presence.py))
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -195,7 +178,7 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `GET` | `/api/presence/ws-token` | Authenticated | Issues a short-lived HMAC ticket for `/ws/presence`. |
 | `WS` | `/ws/presence` | WS Ticket | Maintains live online presence via periodic WebSocket heartbeats. |
 
-### 2.8 Student Problem Reports ([`bot/routes/reports.py`](../../bot/routes/reports.py))
+### 2.7 Student Problem Reports ([`bot/routes/reports.py`](../../bot/routes/reports.py))
 
 | Method | Path | Auth | Description |
 |---|---|---|---|

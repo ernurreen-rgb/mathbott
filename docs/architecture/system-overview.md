@@ -22,7 +22,7 @@ flowchart LR
 
     subgraph API["FastAPI Backend (bot/)"]
         MW["Middleware Stack (RequestContext, Metrics, Cache, ProxyIdentity, CSRF)"]
-        Routes["Route Handlers (Public, Student, Quiz, Co-op, Admin)"]
+        Routes["Route Handlers (Public, Student, Quiz, Admin)"]
         Services["OpsMonitor + Maintenance Service + Math Grading Engine"]
         Repos["Repositories (BaseRepository + Domain Mixins)"]
         Storage["Async Storage Adapter (storage.py) + ConnectionPool"]
@@ -87,7 +87,7 @@ Configured via [`bot/Dockerfile`](../../bot/Dockerfile), [`web/Dockerfile`](../.
    - Strips any incoming client-supplied `X-Proxy-*`, `Authorization`, and `Cookie` headers (`STRIP_REQUEST_HEADERS`).
    - Classifies the target backend path into one of four route policies:
      - `admin`: Requires an authenticated NextAuth session (`/api/admin/*`, `/api/export/admin/*`).
-     - `authenticated`: Requires an authenticated NextAuth session (trial test submissions/drafts, co-op sessions, friend requests, reports, user profile updates, quiz hosting/management).
+     - `authenticated`: Requires an authenticated NextAuth session (trial test submissions/drafts, friend requests, reports, user profile updates, quiz hosting/management).
      - `guest_capable`: Allows either an authenticated session or a guest (`X-Quiz-Participant-Token` or public PIN lookup/join on `/api/quiz-sessions/*`, `/api/tasks/{id}/questions/check`).
      - `public`: Allows unauthenticated read access (`/api/health`, `/api/images/*`, `/api/modules/*`, `/api/lessons/*`, `/api/trial-tests`, `/api/quizzes`, `/api/user/public/*`, `/api/friends/invites/{token}`).
    - Canonicalizes actor identity: for non-admin authenticated routes, rewrites `email`, `user_email`, `sender_email`, or `blocker_email` in query parameters, JSON payloads, or `FormData` to the session user's email.
@@ -136,10 +136,9 @@ Admin authorization is enforced in `bot/dependencies.py` and `bot/repositories/u
 The frontend ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)) selects its transport via `NEXT_PUBLIC_REALTIME_TRANSPORT`:
 - **`polling` (Vercel Production):**
   - Live Quiz players poll `GET /api/quiz-sessions/{id}/progress` every 4 seconds while the tab is visible; hosts poll session/leaderboard/stats endpoints.
-  - Co-op Trial Test participants poll `GET /api/trial-tests/coop/session/{id}` every 2.5 seconds and sync answers via `PUT /api/trial-tests/coop/session/{id}/answers`.
   - User online presence sends `POST /api/presence/heartbeat` every 25 seconds (70-second DB TTL in `users.last_seen_at`).
 - **`websocket` (Local / Self-Hosted VPS):**
-  - Clients obtain a short-lived HMAC token from `.../ws-token` and connect to `/ws/quiz/{session_id}`, `/ws/trial-tests/coop/{session_id}`, or `/ws/presence`, with automatic HTTP polling fallback on disconnect.
+  - Clients obtain a short-lived HMAC token from `.../ws-token` and connect to `/ws/quiz/{session_id}` or `/ws/presence`, with automatic HTTP polling fallback on disconnect.
 
 ### 5.2 Observability & Maintenance
 - **Request Metrics (`bot/middleware/metrics_middleware.py` & `bot/utils/metrics.py`):** Collects rolling 1-minute, 5-minute, and 60-minute request counts, error rates (`4xx`/`5xx`), and `p50`/`p95`/`p99` latencies keyed by normalized route templates (`GET /api/users/{email}`), bounded to 512 endpoint keys and 2,048 error keys.

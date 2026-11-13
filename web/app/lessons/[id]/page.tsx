@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { getLessonDetails } from "@/lib/api";
+import { getLessonDetails, reportLessonTask } from "@/lib/api";
 import { API_URL } from "@/lib/constants";
 import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
@@ -15,13 +15,13 @@ import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
 import { isWrittenAnswerComplete } from "@/lib/written-answer";
 import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
-import { showToast } from "@/lib/toast";
 import { markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
+import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 
 type CheckResult = { correct: boolean; correct_answer?: string | null };
 
@@ -51,11 +51,9 @@ export default function LessonPage() {
   const [showCongrats, setShowCongrats] = useState(false);
   // Mini-lesson whose mistake review the congratulations dialog offers instead of redirecting.
   const [congratsReviewMiniId, setCongratsReviewMiniId] = useState<number | null>(null);
-  const [reportDialog, setReportDialog] = useState<{ taskId: number; show: boolean }>({ taskId: 0, show: false });
-  const [reportMessage, setReportMessage] = useState("");
-  const [submittingReport, setSubmittingReport] = useState(false);
 
   const email = session?.user?.email || null;
+  const report = useTaskReport(email ? (taskId, message) => reportLessonTask(email, taskId, message) : null);
 
   const prevLessonCompletedRef = useRef<boolean | null>(null);
   const congratsShownRef = useRef(false);
@@ -352,58 +350,6 @@ export default function LessonPage() {
       setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: e?.message || "Желі қатесі" } }));
     } finally {
       setChecking((m) => ({ ...m, [task.id]: false }));
-    }
-  };
-
-  const handleReportClick = (taskId: number) => {
-    setReportDialog({ taskId, show: true });
-    setReportMessage("");
-  };
-
-  const submitReport = async () => {
-    if (!email || !reportMessage.trim()) return;
-
-    setSubmittingReport(true);
-    try {
-      const res = await fetch(`${API_URL}/api/reports?email=${encodeURIComponent(email)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task_id: reportDialog.taskId,
-          message: reportMessage.trim(),
-        }),
-      });
-
-      if (!res.ok) {
-        let errorDetail = "Шағымды жіберу мүмкін болмады";
-        try {
-          const data = await res.json();
-          console.error("Report submission error:", data);
-          // Handle different error response formats from error handler
-          if (data.error?.detail) {
-            errorDetail = data.error.detail;
-          } else if (data.detail) {
-            errorDetail = data.detail;
-          } else if (data.message) {
-            errorDetail = data.message;
-          } else if (typeof data === 'string') {
-            errorDetail = data;
-          }
-        } catch (e) {
-          console.error("Failed to parse error response:", e);
-          errorDetail = `HTTP ${res.status}: ${res.statusText}`;
-        }
-        showToast.error(`Қате: ${errorDetail}`);
-        return;
-      }
-
-      showToast.success("Шағым сәтті жіберілді! Әкімші тексерісін күтіңіз.");
-      setReportDialog({ taskId: 0, show: false });
-      setReportMessage("");
-    } catch (e: any) {
-      showToast.error(`Қате: ${e?.message || "Желі қатесі"}`);
-    } finally {
-      setSubmittingReport(false);
     }
   };
 
@@ -892,7 +838,7 @@ export default function LessonPage() {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleReportClick(activeTask.id)}
+                        onClick={() => report.open(activeTask.id)}
                         className="order-3 lg:order-2 ml-auto lg:ml-0 min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
                       >
                         <Icon name="report" /> Шағым
@@ -948,44 +894,7 @@ export default function LessonPage() {
         </div>
       </main>
       <MobileNav currentPage="modules" />
-
-      {/* Report Dialog */}
-      {reportDialog.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Шағым жіберу</h3>
-            <p className="text-gray-600 mb-4">
-              Бұл тапсырмамен мәселе бар ма? Әкімшіге хабарлаңыз.
-            </p>
-            <textarea
-              value={reportMessage}
-              onChange={(e) => setReportMessage(e.target.value)}
-              placeholder="Мәселені сипаттаңыз"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 min-h-[100px] resize-none"
-              maxLength={500}
-            />
-            <div className="text-sm text-gray-500 mb-4">
-              {reportMessage.length}/500 таңба
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setReportDialog({ taskId: 0, show: false })}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                disabled={submittingReport}
-              >
-                Бас тарту
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={!reportMessage.trim() || submittingReport}
-                className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
-              >
-                {submittingReport ? "Жіберіледі..." : "Жіберу"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TaskReportDialog {...report.dialog} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ export * from "./api/user";
 export * from "./api/friends";
 export * from "./api/modules";
 export * from "./api/trial-tests";
-export * from "./api/coop";
+export * from "./api/reports";
 export * from "./api/admin-roles";
 export * from "./api/admin-reports";
 export * from "./api/admin-statistics";

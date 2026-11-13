@@ -28,7 +28,7 @@ def build_completion_identity(task: Dict[str, Any], *, surface: str) -> Dict[str
         completion_key = f"bank:{bank_task_id}"
     elif surface == "module":
         completion_key = f"module-task:{task_id}"
-    elif surface in {"trial_test", "trial_test_coop"}:
+    elif surface == "trial_test":
         completion_key = f"trial-task:{task_id}"
     else:
         raise ValueError(f"Unsupported surface '{surface}'")

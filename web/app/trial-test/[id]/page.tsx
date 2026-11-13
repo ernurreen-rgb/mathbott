@@ -5,26 +5,20 @@ import Icon from "@/components/ui/Icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import dynamic from "next/dynamic";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import TaskStatement from "@/components/student/TaskStatement";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
-import { inviteFriendToCoopTest, getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, listFriends, createTrialTestCoopSession, apiPath } from "@/lib/api";
+import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
+import { getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, reportTrialTestTask, apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { showToast } from "@/lib/toast";
 import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
-import { TrialTestDetails, LessonTask, QuestionType, FriendUser } from "@/types";
+import { TrialTestDetails, LessonTask, QuestionType } from "@/types";
 import styles from "./TrialTestWorkspace.module.css";
 
-const QRCode = dynamic(() => import("react-qr-code"), {
-  ssr: false,
-});
-
-const COOP_TEST_UI_ENABLED = false;
 
 export default function TrialTestPage() {
   const { data: session } = useSession();
@@ -38,17 +32,6 @@ export default function TrialTestPage() {
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [creatingCoop, setCreatingCoop] = useState(false);
-  const [showFriendsModal, setShowFriendsModal] = useState(false);
-  const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [coopSessionId, setCoopSessionId] = useState<number | null>(null);
-  const [showInviteLinkModal, setShowInviteLinkModal] = useState(false);
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [reportDialog, setReportDialog] = useState<{ taskId: number; show: boolean }>({ taskId: 0, show: false });
-  const [reportMessage, setReportMessage] = useState("");
-  const [submittingReport, setSubmittingReport] = useState(false);
   const [taskNavigatorOpen, setTaskNavigatorOpen] = useState(false);
   const taskNavigatorRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +54,7 @@ export default function TrialTestPage() {
   }, [taskNavigatorOpen]);
 
   const email = session?.user?.email || null;
+  const report = useTaskReport(email && testId ? (taskId, message) => reportTrialTestTask(email, testId, taskId, message) : null);
   const activeEmailRef = useRef(email);
   activeEmailRef.current = email;
 
@@ -254,40 +238,6 @@ export default function TrialTestPage() {
       if (isCurrentLoad() && !submittedRef.current) setLoading(false);
     }
   }, [buildDraftSnapshot, email, testId]);
-
-  const handleReportClick = (taskId: number) => {
-    setReportDialog({ taskId, show: true });
-    setReportMessage("");
-  };
-
-  const submitReport = async () => {
-    if (!email || reportMessage.trim().length < 5) return;
-    setSubmittingReport(true);
-    try {
-      const res = await fetch(`${apiPath("trial-test-reports")}?email=${encodeURIComponent(email)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          trial_test_id: testId,
-          task_id: reportDialog.taskId,
-          message: reportMessage.trim(),
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const detail = data?.detail || data?.error?.detail || "Шағым жіберу қатесі";
-        showToast.error(detail);
-        return;
-      }
-      showToast.success("Шағым сәтті жіберілді!");
-      setReportDialog({ taskId: 0, show: false });
-      setReportMessage("");
-    } catch (e: any) {
-      showToast.error(e?.message || "Желі қатесі");
-    } finally {
-      setSubmittingReport(false);
-    }
-  };
 
   useEffect(() => {
     if (email && testId) {
@@ -503,112 +453,6 @@ export default function TrialTestPage() {
     }
   };
 
-  const handleStartCoop = async () => {
-    if (!email || !testId || creatingCoop) return;
-    setLoadingFriends(true);
-    setError(null);
-    try {
-      // Сначала создаем сессию
-      setCreatingCoop(true);
-      const { data: sessionData, error: sessionErr } = await createTrialTestCoopSession(testId, email);
-      if (sessionErr) {
-        setError(sessionErr);
-        setCreatingCoop(false);
-        setLoadingFriends(false);
-        return;
-      }
-      
-      if (!sessionData) {
-      setError("Сессияны құру мүмкін болмады");
-        setCreatingCoop(false);
-        setLoadingFriends(false);
-        return;
-      }
-      
-      setCoopSessionId(sessionData.session_id);
-      
-      // Проверяем, есть ли друзья
-      const { data: friendsData, error: friendsErr } = await listFriends(email);
-      if (friendsErr) {
-        setError(friendsErr);
-      } else if (friendsData && friendsData.items && friendsData.items.length > 0) {
-        setFriends(friendsData.items);
-        setShowFriendsModal(true);
-      } else {
-        // Если нет друзей, сразу показываем модальное окно со ссылкой
-        const link = `${window.location.origin}/trial-test/${testId}/coop/${sessionData.session_id}`;
-        setInviteLink(link);
-        setShowInviteLinkModal(true);
-      }
-      setCreatingCoop(false);
-    } catch (e: any) {
-      setError(e?.message || "Достарды жүктеу қатесі");
-      setCreatingCoop(false);
-    } finally {
-      setLoadingFriends(false);
-    }
-  };
-
-  const handleInviteFriend = async (friend: FriendUser) => {
-    if (!email || !testId || creatingCoop || !coopSessionId) return;
-    setCreatingCoop(true);
-    setError(null);
-    try {
-      const { data, error: err } = await inviteFriendToCoopTest(testId, email, friend.id);
-      if (err) {
-        setError(err);
-      } else if (data) {
-        setShowFriendsModal(false);
-        alert(`Шақыру жіберілді ${friend.nickname || `пайдаланушыға #${friend.id}`}!`);
-        // Можно сразу перейти в сессию
-        router.push(`/trial-test/${testId}/coop/${data.session_id}`);
-      }
-    } catch (e: any) {
-      setError(e?.message || "Шақыруды жіберу қатесі");
-    } finally {
-      setCreatingCoop(false);
-    }
-  };
-
-  const handleCreateInviteLink = () => {
-    if (!coopSessionId) return;
-    const link = `${window.location.origin}/trial-test/${testId}/coop/${coopSessionId}`;
-    setInviteLink(link);
-    setShowInviteLinkModal(true);
-  };
-
-  const handleCopyLink = async () => {
-    if (!inviteLink) return;
-    try {
-      await navigator.clipboard.writeText(inviteLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error("Failed to copy link:", e);
-    }
-  };
-
-  const handleShareLink = async () => {
-    if (!inviteLink) return;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Бірлескен тестке шақыру",
-          text: `Бірлескен тестке қосылыңыз: ${test?.title || "Тест"}`,
-          url: inviteLink,
-        });
-      } else {
-        // Fallback: copy to clipboard
-        await handleCopyLink();
-      }
-    } catch (e: any) {
-      // User cancelled or error
-      if (e.name !== "AbortError") {
-        console.error("Failed to share link:", e);
-      }
-    }
-  };
-
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -709,15 +553,6 @@ export default function TrialTestPage() {
                   </nav>
                 )}
               </div>
-              {COOP_TEST_UI_ENABLED && (
-                <button
-                  onClick={handleStartCoop}
-                  disabled={creatingCoop || loadingFriends}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
-                >
-                  {creatingCoop || loadingFriends ? "Жасалуда..." : "Бірлескен тест"}
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleFinishTest}
@@ -739,116 +574,6 @@ export default function TrialTestPage() {
               <div style={{ width: `${answerProgress}%` }} />
             </div>
           </header>
-
-            {/* Friends Modal */}
-            {showFriendsModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-md md:max-w-2xl lg:max-w-3xl w-full p-6 md:p-8 relative">
-                  <button aria-label="Терезені жабу"
-                    onClick={() => setShowFriendsModal(false)}
-                    className="absolute top-1 right-2 md:top-2 md:right-3 text-gray-500 hover:text-gray-700 text-2xl md:text-3xl"
-                  >
-                    <Icon name="close" />
-                  </button>
-                  
-                  {/* Шақыру сілтемесін жасау батырмасы */}
-                  <div className="mb-4 md:mb-6 pb-4 md:pb-6 border-b border-gray-200">
-                    <button
-                      onClick={handleCreateInviteLink}
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 md:py-4 px-4 md:px-6 rounded-lg flex items-center justify-center gap-2 text-base md:text-lg"
-                    >
-                      <Icon name="share" className="w-5 h-5 md:w-6 md:h-6" />
-                      Шақыру сілтемесін жасау
-                    </button>
-                  </div>
-
-                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4 md:mb-6">Достарды таңдау</h2>
-
-                  <div className="space-y-2 md:space-y-3 max-h-96 md:max-h-[500px] overflow-y-auto">
-                    {friends.map((friend) => (
-                      <div
-                        key={friend.id}
-                        className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900 min-w-0 max-w-full break-words text-base md:text-lg">
-                            {friend.nickname || `Пайдаланушы #${friend.id}`}
-                          </div>
-                          <div className="text-sm md:text-base text-gray-500">
-                            {friend.total_solved} есеп
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleInviteFriend(friend)}
-                          disabled={creatingCoop}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-2 md:py-3 px-4 md:px-6 rounded-lg text-sm md:text-base ml-4"
-                        >
-                          {creatingCoop ? "..." : "Шақыру"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Invite Link Modal */}
-            {showInviteLinkModal && inviteLink && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-md md:max-w-lg w-full p-6 md:p-8 relative">
-                  <button aria-label="Терезені жабу"
-                    onClick={() => {
-                      setShowInviteLinkModal(false);
-                      setInviteLink(null);
-                    }}
-                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
-                  >
-                    <Icon name="close" />
-                  </button>
-                  
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Сілтемемен бөлісу</h2>
-                  
-                  <div className="flex justify-center mb-4">
-                    <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                      <QRCode value={inviteLink} size={200} />
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleShareLink}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2"
-                    >
-                      <Icon name="share" className="w-5 h-5" />
-                      Бөлісу
-                    </button>
-                    <button
-                      onClick={handleCopyLink}
-                      className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2"
-                    >
-                      {copied ? (
-                        <>
-                          <Icon name="check" className="w-5 h-5" />
-                          Көшірілді
-                        </>
-                      ) : (
-                        <>
-                          <Icon name="copy" className="w-5 h-5" />
-                          Көшіру
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  
-                  {copied && (
-                    <div className="mt-3 text-center text-green-600 font-semibold">
-                      Сілтеме көшірілді!
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
 
           {/* Current task */}
           {currentTask && (
@@ -873,7 +598,7 @@ export default function TrialTestPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleReportClick(currentTask.id)}
+                  onClick={() => report.open(currentTask.id)}
                   className={styles.reportButton}
                 >
                   <Icon name="report" /> Шағым
@@ -892,43 +617,7 @@ export default function TrialTestPage() {
         </div>
       </main>
       <MobileNav currentPage="trial-test" />
-
-      {reportDialog.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Шағым жіберу</h3>
-            <p className="text-gray-600 mb-4">
-              Бұл тапсырмамен мәселе бар ма? Әкімшіге хабарлаңыз.
-            </p>
-            <textarea
-              value={reportMessage}
-              onChange={(e) => setReportMessage(e.target.value)}
-              placeholder="Мәселені сипаттаңыз"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 min-h-[100px] resize-none"
-              maxLength={500}
-            />
-            <div className="text-sm text-gray-500 mb-4">
-              {reportMessage.length}/500 таңба (мин. 5)
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setReportDialog({ taskId: 0, show: false })}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                disabled={submittingReport}
-              >
-                Бас тарту
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={reportMessage.trim().length < 5 || submittingReport}
-                className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
-              >
-                {submittingReport ? "Жіберіледі..." : "Жіберу"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TaskReportDialog {...report.dialog} />
     </div>
   );
 }

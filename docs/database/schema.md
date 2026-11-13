@@ -53,7 +53,6 @@ erDiagram
     trial_tests ||--o{ trial_test_tasks : "slots"
     trial_tests ||--o{ trial_test_drafts : "autosaves"
     trial_tests ||--o{ trial_test_results : "scores"
-    trial_tests ||--o{ trial_test_coop_sessions : "hosts"
 
     quizzes ||--o{ quiz_questions : "contains"
     quizzes ||--o{ quiz_sessions : "runs"
@@ -100,7 +99,7 @@ erDiagram
 | `mini_lessons` | `id` (Identity) | `lesson_id INTEGER FK -> lessons.id ON DELETE CASCADE`, `mini_index INTEGER` (`1`–`4`), `title TEXT`, `sort_order INTEGER` | Each lesson contains 4 mini-lessons (`UNIQUE(lesson_id, mini_index)`). |
 | `tasks` | `id` (Identity) | `section_id FK -> sections.id`, `mini_lesson_id FK -> mini_lessons.id ON DELETE CASCADE`, `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE`, `text TEXT`, `answer TEXT`, `question_type TEXT`, `options TEXT`, `subquestions TEXT`, `image_filename TEXT`, `solution_filename TEXT`, `difficulty INTEGER`, `sort_order INTEGER`, `deleted_at TEXT` | Curriculum task placements. When `bank_task_id` is set, content is synchronized with the parent `bank_tasks` record. |
 
-### 3.4 Trial Tests (Folders, Templates, Solo & Co-op)
+### 3.4 Trial Tests (Folders & Templates)
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
@@ -108,12 +107,12 @@ erDiagram
 | `trial_tests` | `id` (Identity) | `title TEXT`, `description TEXT`, `category TEXT DEFAULT 'ҰБТ'`, `folder_id INTEGER FK -> trial_test_folders.id ON DELETE RESTRICT`, `sort_order INTEGER`, `expected_tasks_count INTEGER DEFAULT 40`, `is_published INTEGER DEFAULT 0`, `created_by FK -> users.id ON DELETE SET NULL` | Trial test exam templates (`category` added in PG `0004`; `folder_id` added in PG `0007`). |
 | `trial_test_tasks` | `id` (Identity) | `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE CASCADE`, `text TEXT`, `answer TEXT`, `question_type TEXT`, `options TEXT`, `subquestions TEXT`, `difficulty INTEGER`, `expected_tier TEXT`, `sort_order INTEGER` (`0`–`39`), `deleted_at TEXT` | Ordered task slots within a trial test. |
 | `trial_test_drafts` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `answers TEXT` (JSON), `current_index INTEGER`, `updated_at TEXT` | Server-saved in-progress solo exam drafts (`UNIQUE(user_id, trial_test_id)`). |
-| `trial_test_results` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `score INTEGER`, `total INTEGER`, `percentage REAL`, `answers TEXT` (JSON), `completed_at TEXT` | Completed solo and co-op trial test attempt scores and answer breakdowns. |
-| `trial_test_coop_sessions` | `id` (Identity) | `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `owner_id INTEGER FK -> users.id ON DELETE CASCADE`, `mode TEXT DEFAULT 'coop'`, `status TEXT DEFAULT 'active'` | Active or finished 2-player co-op trial test sessions. |
-| `trial_test_coop_participants` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `color TEXT` (`red` or `blue`), `is_finished INTEGER DEFAULT 0` | Participants in a co-op session (`UNIQUE(session_id, user_id)`). |
-| `trial_test_coop_answers` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER`, `answer TEXT` | Live synchronized task answers per participant (`UNIQUE(session_id, user_id, task_id)`). |
-| `trial_test_coop_invites` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `sender_id FK -> users.id`, `receiver_id FK -> users.id`, `status TEXT DEFAULT 'pending'` | Friend invitations to join a co-op session. |
-| `trial_test_coop_results` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `user_id FK -> users.id`, `trial_test_result_id FK -> trial_test_results.id` | Links a co-op session to each participant's generated `trial_test_results` row (`UNIQUE(session_id, user_id)`). |
+| `trial_test_results` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `score INTEGER`, `total INTEGER`, `percentage REAL`, `answers TEXT` (JSON), `completed_at TEXT` | Completed trial test attempt scores and answer breakdowns (`submit_mode` is `solo`; older rows may be `coop`). |
+| `trial_test_coop_sessions` | `id` (Identity) | `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `owner_id INTEGER FK -> users.id ON DELETE CASCADE`, `mode TEXT DEFAULT 'coop'`, `status TEXT DEFAULT 'active'` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
+| `trial_test_coop_participants` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `color TEXT` (`red` or `blue`), `is_finished INTEGER DEFAULT 0` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
+| `trial_test_coop_answers` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER`, `answer TEXT` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
+| `trial_test_coop_invites` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `sender_id FK -> users.id`, `receiver_id FK -> users.id`, `status TEXT DEFAULT 'pending'` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
+| `trial_test_coop_results` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `user_id FK -> users.id`, `trial_test_result_id FK -> trial_test_results.id` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
 
 ### 3.5 Live Classroom Quizzes (`/quiz`)
 

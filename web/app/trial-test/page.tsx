@@ -8,9 +8,6 @@ import {
   getTrialTests,
   getTrialTestFolders,
   getTrialTestDraftIds,
-  getCoopTestInvites,
-  acceptCoopTestInvite,
-  declineCoopTestInvite,
 } from "@/lib/api";
 import { TrialTest, TrialTestFolder } from "@/types";
 import { folderAncestors, sortFolders } from "@/lib/trial-folders";
@@ -37,7 +34,6 @@ function TrialTestListPageContent() {
   const [draftTestIds, setDraftTestIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [coopInvites, setCoopInvites] = useState<any[]>([]);
 
   const navigateFolder = useCallback((id: number | null, replace = false) => {
     const params = new URLSearchParams(searchParams?.toString() || "");
@@ -94,59 +90,10 @@ function TrialTestListPageContent() {
     }
   }, [session?.user?.email]);
 
-  const fetchCoopInvites = useCallback(async () => {
-    if (!session?.user?.email) return;
-    try {
-      const { data, error: err } = await getCoopTestInvites(session.user.email);
-      if (err) {
-        console.error("Error fetching coop invites:", err);
-      } else if (data) {
-        setCoopInvites(data.items || []);
-      }
-    } catch (err) {
-      console.error("Error fetching coop invites:", err);
-    }
-  }, [session?.user?.email]);
-
-  const handleAcceptCoopInvite = async (inviteId: number) => {
-    if (!session?.user?.email) return;
-    try {
-      const { data, error: err } = await acceptCoopTestInvite(inviteId, session.user.email);
-      if (err) {
-        setError(err);
-      } else if (data) {
-        router.push(`/trial-test/${data.trial_test_id}/coop/${data.session_id}`);
-      }
-    } catch (err: any) {
-      setError(err?.message || "Шақыруды қабылдау қатесі");
-    }
-  };
-
-  const handleDeclineCoopInvite = async (inviteId: number) => {
-    if (!session?.user?.email) return;
-    try {
-      const { error: err } = await declineCoopTestInvite(inviteId, session.user.email);
-      if (err) {
-        if (err.includes("Invite not found")) {
-          setCoopInvites((prev) => prev.filter((invite) => invite.id !== inviteId));
-          setError(null);
-          void fetchCoopInvites();
-          return;
-        }
-        setError(err);
-      } else {
-        await fetchCoopInvites();
-      }
-    } catch (err: any) {
-      setError(err?.message || "Шақырудан бас тарту қатесі");
-    }
-  };
-
   useEffect(() => {
     fetchTests();
-    fetchCoopInvites();
     fetchDraftIds();
-  }, [fetchTests, fetchCoopInvites, fetchDraftIds]);
+  }, [fetchTests, fetchDraftIds]);
 
   const folders = useMemo(() => folderTree.filter((f) => f.parent_id === selectedFolder).sort(sortFolders), [folderTree, selectedFolder]);
   const currentFolder = folderTree.find((f) => f.id === selectedFolder);
@@ -193,47 +140,6 @@ function TrialTestListPageContent() {
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm">
                 {error}
-              </div>
-            )}
-
-            {/* Coop Invites Section */}
-            {coopInvites.length > 0 && (
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Бірлескен тестке шақырулар</h2>
-                <div className="space-y-3">
-                  {coopInvites.map((invite) => (
-                    <div
-                      key={invite.id}
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-2 border-blue-300 rounded-xl p-4 bg-gradient-to-r from-blue-50 to-purple-50 shadow-lg"
-                    >
-                      <div className="flex-1">
-                        <div className="text-lg font-semibold text-gray-900 mb-1">
-                          {invite.sender_nickname || "Пайдаланушы"} сізді тестті бірге тапсыруға шақырады
-                        </div>
-                        <div className="text-sm text-gray-700 mb-1">
-                          <span className="font-semibold">Тест:</span> {invite.test_title || "Атаусыз"}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(invite.created_at).toLocaleString("kk-KZ")}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleAcceptCoopInvite(invite.id)}
-                          className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold rounded-lg hover:shadow-lg transition-all hover:scale-105"
-                        >
-                          Қабылдау
-                        </button>
-                        <button
-                          onClick={() => handleDeclineCoopInvite(invite.id)}
-                          className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 text-gray-700 transition-all"
-                        >
-                          Бас тарту
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 

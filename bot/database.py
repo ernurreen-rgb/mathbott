@@ -20,7 +20,6 @@ from repositories.progress_repository import ProgressRepository
 from repositories.solution_repository import SolutionRepository
 from repositories.achievement_repository import AchievementRepository
 from repositories.trial_test_repository import TrialTestRepository
-from repositories.trial_test_coop_repository import TrialTestCoopRepository
 from repositories.bank_task_repository import BankTaskRepository
 from repositories.report_repository import ReportRepository
 from repositories.trial_test_report_repository import TrialTestReportRepository
@@ -62,7 +61,6 @@ class Database:
         self.solutions = SolutionRepository(url, connection_pool=pool)
         self.achievements = AchievementRepository(url, connection_pool=pool)
         self.trial_tests = TrialTestRepository(url, connection_pool=pool)
-        self.trial_test_coop = TrialTestCoopRepository(url, connection_pool=pool)
         self.bank_tasks = BankTaskRepository(url, connection_pool=pool)
         self.reports = ReportRepository(url, connection_pool=pool)
         self.trial_test_reports = TrialTestReportRepository(url, connection_pool=pool)

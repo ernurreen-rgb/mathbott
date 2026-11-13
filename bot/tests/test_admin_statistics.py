@@ -382,22 +382,24 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["summary"], {
             "attempts": {"value": 2, "previous": 1}, "students": {"value": 2, "previous": 1},
             "average": {"value": 0.75, "previous": 0.0}, "median": 0.75, "best": 1.0,
-            "solo": 1, "coop": 1, "tests_total": 2, "tests_taken": 1,
+            "tests_total": 2, "tests_taken": 1,
         })
         self.assertEqual([bucket["count"] for bucket in data["distribution"]], [0, 0, 0, 0, 0, 1, 0, 0, 0, 1])
         taken, untouched = data["tests"]
         self.assertEqual({key: taken[key] for key in (
-            "title", "folder", "questions_count", "attempts", "students", "average", "best", "solo", "coop", "last_completed_at",
+            "title", "folder", "questions_count", "attempts", "students", "average", "best", "last_completed_at",
         )}, {
             "title": "Нұсқа 1", "folder": "ҰБТ 2026", "questions_count": 2, "attempts": 2, "students": 2,
-            "average": 0.75, "best": 1.0, "solo": 1, "coop": 1, "last_completed_at": "2026-11-10T06:30:00Z",
+            "average": 0.75, "best": 1.0, "last_completed_at": "2026-11-10T06:30:00Z",
         })
         # aru's attempt belongs to the previous period, so it is not in the question counts.
         self.assertEqual([(q["number"], q["answers"], q["correct"], q["skipped"], q["accuracy"]) for q in taken["questions"]],
                          [(1, 2, 2, 0, 1.0), (2, 2, 1, 1, 0.5)])
         self.assertEqual((untouched["attempts"], untouched["average"], untouched["questions"]), (0, None, []))
-        self.assertEqual([(item["nickname"], item["percentage"], item["submit_mode"]) for item in data["recent"]],
-                         [("dana", 1.0, "coop"), ("bek", 0.5, "solo")])
+        # dana's attempt is an old co-op one: co-op mode is gone, but its results still count.
+        self.assertEqual([(item["nickname"], item["percentage"]) for item in data["recent"]],
+                         [("dana", 1.0), ("bek", 0.5)])
+        self.assertNotIn("submit_mode", data["recent"][0])
         points = {point["start"]: point for point in data["series"]["points"]}
         self.assertEqual((points["2026-11-09"]["attempts"], points["2026-11-09"]["average"]), (1, 0.5))
         everything = await self.stats.get_trial_tests(self.window("all"))

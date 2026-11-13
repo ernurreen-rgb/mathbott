@@ -37,7 +37,7 @@ Implemented in [`bot/utils/validation.py`](../../bot/utils/validation.py), [`bot
 
 ---
 
-## 3. Trial Tests (Nested Folders, Solo Mode & Real-Time Co-op)
+## 3. Trial Tests (Nested Folders & Solo Mode)
 
 ### 3.1 Nested Trial Test Folders & 40-Slot Templates
 - **Folder Tree**: Trial tests are organized into arbitrary-depth nested folders (`trial_test_folders` table, `GET /api/trial-tests/folders`, [`bot/repositories/trial_folder_repository.py`](../../bot/repositories/trial_folder_repository.py)). Leaf folders hold tests; non-empty folders cannot be deleted (`409 Conflict`).
@@ -47,12 +47,6 @@ Implemented in [`bot/utils/validation.py`](../../bot/utils/validation.py), [`bot
 - Implemented in [`bot/routes/trial_tests.py`](../../bot/routes/trial_tests.py) and [`web/app/trial-test/`](../../web/app/trial-test/):
   - **Resilient Draft Autosave**: `GET / PUT /api/trial-tests/{test_id}/draft` persists in-progress answers and `current_index` in `trial_test_drafts`, flushing with `keepalive: true` on tab close or SPA navigation.
   - **Idempotent Submission & Snapshot Review**: `POST /api/trial-tests/{test_id}/submit` grades all answers, saves a frozen task review snapshot in `trial_test_results`, clears the draft, updates daily streaks, and unlocks achievements.
-
-### 3.3 Real-Time 2-Player Co-op Trial Tests
-- Implemented in [`bot/routes/trial_tests_coop.py`](../../bot/routes/trial_tests_coop.py), [`bot/repositories/trial_test_coop_repository.py`](../../bot/repositories/trial_test_coop_repository.py), and [`web/app/trial-test/[id]/coop/[sessionId]/page.tsx`](../../web/app/trial-test/[id]/coop/[sessionId]/page.tsx):
-  - **Session & Friend Invitations**: Host creates a session (`POST /api/trial-tests/{test_id}/coop/session` -> `red` slot) and invites a friend (`POST /api/trial-tests/{test_id}/coop/invite`). Friends accept (`POST /api/trial-tests/coop/invites/{invite_id}/accept` -> `blue` slot) or decline.
-  - **Dual-Transport Sync**: Synchronizes shared answers (`PUT /api/trial-tests/coop/session/{session_id}/answers`) via WebSocket (`/ws/trial-tests/coop/{session_id}`) or 2.5-second HTTP polling (`GET /api/trial-tests/coop/session/{session_id}`).
-  - **Independent Finish & Results Gate**: Each player finishes via `POST /api/trial-tests/{test_id}/coop/finish`, recording individual `trial_test_results` linked in `trial_test_coop_results`.
 
 ---
 

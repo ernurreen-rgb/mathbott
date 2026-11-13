@@ -75,10 +75,7 @@ class BankTaskUnrecognizedAnswersMixin:
                     r.user_id AS attempt_user_id,
                     (answer_entry.value ->> 'answer') AS student_answer,
                     r.completed_at AS attempted_at,
-                    CASE
-                        WHEN r.submit_mode = 'coop' THEN 'trial_test_coop'
-                        ELSE 'trial_test'
-                    END AS source,
+                    'trial_test' AS source,
                     bt.id AS bank_task_id,
                     bt.text AS task_text,
                     bt.answer AS correct_answer,

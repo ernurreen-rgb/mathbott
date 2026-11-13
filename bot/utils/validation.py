@@ -441,7 +441,12 @@ def _parse_exact_numeric_expression(value: str) -> Optional[Fraction]:
         return None
 
 
-def _map_written_slots_to_option_labels(task: dict, raw_answer: Any) -> Optional[List[str]]:
+def _map_written_slots_to_option_labels(
+    task: dict,
+    raw_answer: Any,
+    *,
+    ordered: bool = False,
+) -> Optional[List[str]]:
     slots = _parse_written_answer_slots(raw_answer)
     if not slots:
         return None
@@ -460,19 +465,33 @@ def _map_written_slots_to_option_labels(task: dict, raw_answer: Any) -> Optional
         label for label in parse_mcq_answer_labels(task.get("answer")) if label in MCQ_ANSWER_LABELS
     ]
     mapped: List[str] = []
-    for slot in slots:
+    used_labels: set[str] = set()
+    for slot_index, slot in enumerate(slots):
         normalized_slot = _normalize_written_math_answer(slot)
-        # Prefer the known correct labels when duplicate option texts exist.
-        candidates = [
-            label for label in correct_labels if option_values.get(label) == normalized_slot
+        preferred: List[str] = []
+        if ordered and slot_index < len(correct_labels):
+            expected_label = correct_labels[slot_index]
+            if expected_label not in used_labels and option_values.get(expected_label) == normalized_slot:
+                preferred.append(expected_label)
+        # Assign each written slot to a distinct option label so equivalent option values don't collapse.
+        candidates = preferred + [
+            label
+            for label in correct_labels
+            if label not in used_labels
+            and label not in preferred
+            and option_values.get(label) == normalized_slot
         ]
         if not candidates:
             candidates = [
-                label for label, option_value in option_values.items() if option_value == normalized_slot
+                label
+                for label, option_value in option_values.items()
+                if label not in used_labels and option_value == normalized_slot
             ]
         if not candidates:
             return None
-        mapped.append(candidates[0])
+        chosen = candidates[0]
+        used_labels.add(chosen)
+        mapped.append(chosen)
     return mapped
 
 
@@ -491,7 +510,7 @@ def _normalize_choice_or_written_answer_for_compare(task: dict, raw_answer: Any,
 
         # A written answer can itself be a letter (for example, the value "A").
         # Before treating it as a legacy option label, try matching option text.
-        mapped_labels = _map_written_slots_to_option_labels(task, raw_answer)
+        mapped_labels = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
         if mapped_labels is not None:
             normalized_mapped = mapped_labels if ordered else sorted(mapped_labels)
             if normalized_mapped == normalized_correct:
@@ -503,7 +522,7 @@ def _normalize_choice_or_written_answer_for_compare(task: dict, raw_answer: Any,
             return normalized_labels[0] if normalized_labels else ""
         return json.dumps(normalized_labels, ensure_ascii=False)
 
-    mapped = _map_written_slots_to_option_labels(task, raw_answer)
+    mapped = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
     if mapped is not None:
         normalized_mapped = mapped if ordered else sorted(mapped)
         if len(normalized_mapped) <= 1:

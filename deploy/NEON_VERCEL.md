@@ -209,7 +209,7 @@ remain available for content rollback.
 - Learning progress stores unique completions, solved counts and streaks. The
   `0003_remove_learning_points` PostgreSQL migration preserves that history and
   quiz scores while retiring learning-point balances and their achievement.
-- Quiz and cooperative test state already have HTTP polling. Hosted web builds
+- Quiz state already has HTTP polling. Hosted web builds
   use polling, and user presence uses a shared database heartbeat with a
   70-second expiry instead of instance-local WebSocket membership.
 - `/api/maintenance` requires `Authorization: Bearer <CRON_SECRET>`. Vercel's

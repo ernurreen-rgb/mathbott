@@ -90,7 +90,7 @@ export interface BankTaskListResponse {
 }
 
 
-export type BankAnswerSource = "lesson" | "trial_test" | "trial_test_coop" | "module_review";
+export type BankAnswerSource = "lesson" | "trial_test" | "module_review";
 
 
 export interface BankUnrecognizedAnswerItem {

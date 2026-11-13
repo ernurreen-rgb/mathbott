@@ -252,8 +252,6 @@ export interface StatisticsTrialTest {
   average: number | null;
   median: number | null;
   best: number | null;
-  solo: number;
-  coop: number;
   last_completed_at: string | null;
   questions: TrialQuestionStat[];
 }
@@ -266,8 +264,6 @@ export interface StatisticsTrialTests {
     average: StatisticsKpi<number | null>;
     median: number | null;
     best: number | null;
-    solo: number;
-    coop: number;
     tests_total: number;
     tests_taken: number;
   };
@@ -285,7 +281,6 @@ export interface StatisticsTrialTests {
     score: number;
     total: number;
     percentage: number;
-    submit_mode: "solo" | "coop";
     completed_at: string | null;
   }>;
 }

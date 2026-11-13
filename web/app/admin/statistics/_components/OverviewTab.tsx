@@ -67,7 +67,7 @@ export default function OverviewTab({ data, onNavigate }: Props) {
         hint="Дұрыс жауаптардың барлық жауаптағы үлесі."
         delta={describeDelta(kpis.accuracy, "share")} comparedWith={comparedWith} meter={kpis.accuracy.value} />
       <StatTile label="Тапсырылған тесттер" value={formatNumber(kpis.trial_attempts.value)}
-        hint="Осы кезеңде аяқталған сынақ тест әрекеттері: жеке де, жұппен де."
+        hint="Осы кезеңде аяқталған сынақ тест әрекеттері."
         delta={describeDelta(kpis.trial_attempts, "count")} comparedWith={comparedWith} spark={points.map((point) => point.trial_attempts)} />
       <StatTile label="Тесттердің орташа нәтижесі" value={formatPercent(kpis.trial_average.value)}
         hint="Осы кезеңде тапсырылған сынақ тесттердегі дұрыс жауап үлесінің орташа мәні."

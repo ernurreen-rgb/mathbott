@@ -11,7 +11,6 @@ from routes import tasks
 from routes import users
 from routes import admin
 from routes import trial_tests
-from routes import trial_tests_coop
 from routes import questions
 from routes import reports
 from routes import onboarding
@@ -42,7 +41,6 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     tasks.setup_tasks_routes(app, db, limiter)
     users.setup_users_routes(app, db, limiter)
     trial_tests.setup_trial_tests_routes(app, db, limiter)
-    trial_tests_coop.setup_trial_tests_coop_routes(app, db, limiter)
     questions.setup_questions_routes(app, db, limiter)
     reports.setup_reports_routes(app, db, limiter)
     onboarding.setup_onboarding_routes(app, db, limiter)

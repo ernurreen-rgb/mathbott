@@ -15,10 +15,6 @@ from .trial_folder_repository import TrialFolderMixin
 logger = logging.getLogger(__name__)
 
 
-class TrialTestAlreadySubmitted(Exception):
-    """Raised when a cooperative participant can no longer submit."""
-
-
 class TrialTestRepository(TrialFolderMixin, BaseRepository):
     """Repository for trial test operations."""
 
@@ -469,13 +465,10 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         completions: List[Dict[str, Any]],
         should_update_streak: bool,
         delete_draft: bool = True,
-        submit_mode: str = "solo",
-        coop_session_id: Optional[int] = None,
         attempt_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Persist a trial-test submit in one transaction under the write lock."""
-        normalized_submit_mode = "coop" if submit_mode == "coop" else "solo"
-        normalized_attempt_id = (attempt_id or uuid4().hex) if normalized_submit_mode == "solo" else None
+        normalized_attempt_id = attempt_id or uuid4().hex
 
         async def operation() -> Dict[str, Any]:
             async with self._connection() as db:
@@ -483,54 +476,27 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 try:
                     await db.begin_write()
 
-                    session_status = None
-                    if normalized_attempt_id is not None:
-                        async with db.execute(
-                            """SELECT * FROM trial_test_results
-                               WHERE user_id = ? AND trial_test_id = ?
-                                 AND submit_mode = 'solo' AND attempt_id = ?""",
-                            (user_id, trial_test_id, normalized_attempt_id),
-                        ) as saved_cursor:
-                            saved = await saved_cursor.fetchone()
-                        if saved:
-                            await db.rollback()
-                            return {"result": dict(saved), "recorded_any": False,
-                                    "streak_milestone": None, "reused": True,
-                                    "session_status": None}
-                    if coop_session_id is not None:
-                        async with db.execute(
-                            """SELECT p.is_finished, s.status FROM trial_test_coop_participants p
-                               JOIN trial_test_coop_sessions s ON s.id = p.session_id
-                               WHERE p.session_id = ? AND p.user_id = ? AND s.trial_test_id = ?""",
-                            (coop_session_id, user_id, trial_test_id),
-                        ) as participant_cursor:
-                            participant = await participant_cursor.fetchone()
-                        if not participant:
-                            raise ValueError("Not a participant of this trial test")
-                        async with db.execute(
-                            """SELECT r.* FROM trial_test_coop_results c
-                               JOIN trial_test_results r ON r.id = c.trial_test_result_id
-                               WHERE c.session_id = ? AND c.user_id = ?""",
-                            (coop_session_id, user_id),
-                        ) as saved_cursor:
-                            saved = await saved_cursor.fetchone()
-                        if saved:
-                            await db.rollback()
-                            return {"result": dict(saved), "recorded_any": False,
-                                    "streak_milestone": None, "reused": True,
-                                    "session_status": participant["status"]}
-                        if participant["is_finished"] or participant["status"] != "active":
-                            raise TrialTestAlreadySubmitted()
+                    async with db.execute(
+                        """SELECT * FROM trial_test_results
+                           WHERE user_id = ? AND trial_test_id = ?
+                             AND submit_mode = 'solo' AND attempt_id = ?""",
+                        (user_id, trial_test_id, normalized_attempt_id),
+                    ) as saved_cursor:
+                        saved = await saved_cursor.fetchone()
+                    if saved:
+                        await db.rollback()
+                        return {"result": dict(saved), "recorded_any": False,
+                                "streak_milestone": None, "reused": True}
 
                     answers_json = json.dumps(answers)
                     cursor = await db.execute(
                         """
                         INSERT INTO trial_test_results
                         (user_id, trial_test_id, score, total, percentage, answers, submit_mode, attempt_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, 'solo', ?)
                         """,
                         (user_id, trial_test_id, score, total, percentage, answers_json,
-                         normalized_submit_mode, normalized_attempt_id),
+                         normalized_attempt_id),
                     )
                     result_id = int(cursor.lastrowid)
 
@@ -579,30 +545,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                             (user_id, trial_test_id),
                         )
 
-                    if coop_session_id is not None:
-                        await db.executemany(
-                            """INSERT INTO trial_test_coop_answers (session_id, user_id, task_id, answer)
-                               VALUES (?, ?, ?, ?) ON CONFLICT(session_id, user_id, task_id)
-                               DO UPDATE SET answer = excluded.answer, updated_at = mathbot_datetime('now')""",
-                            [(coop_session_id, user_id, int(task_id), result.get("answer", ""))
-                             for task_id, result in answers.items()],
-                        )
-                        await db.execute(
-                            """INSERT INTO trial_test_coop_results (session_id, user_id, trial_test_result_id)
-                               VALUES (?, ?, ?)""", (coop_session_id, user_id, result_id),
-                        )
-                        await db.execute(
-                            "UPDATE trial_test_coop_participants SET is_finished = 1 WHERE session_id = ? AND user_id = ?",
-                            (coop_session_id, user_id),
-                        )
-                        await db.execute(
-                            """UPDATE trial_test_coop_sessions SET status = 'completed' WHERE id = ?
-                               AND NOT EXISTS (SELECT 1 FROM trial_test_coop_participants
-                                               WHERE session_id = ? AND is_finished = 0)""",
-                            (coop_session_id, coop_session_id),
-                        )
-                        async with db.execute("SELECT status FROM trial_test_coop_sessions WHERE id = ?", (coop_session_id,)) as status_cursor:
-                            session_status = (await status_cursor.fetchone())[0]
                     async with db.execute(
                         "SELECT * FROM trial_test_results WHERE id = ?",
                         (result_id,),
@@ -615,7 +557,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                         "result": dict(result_row) if result_row else {"id": result_id},
                         "recorded_any": recorded_any,
                         "streak_milestone": streak_milestone,
-                        "session_status": session_status,
                     }
                 except Exception:
                     await db.rollback()

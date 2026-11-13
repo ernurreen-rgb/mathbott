@@ -88,9 +88,8 @@ export default function TrialTestsTab({ data }: { data: StatisticsTrialTests }) 
         hint="Ортадағы нәтиже: тапсырулардың жартысы осыдан жоғары, жартысы төмен. Орташадан айырмашылығы үлкен болса, бірнеше өте жоғары не өте төмен нәтиже бар."
         meter={summary.median} />
       <StatTile label="Ең жоғары нәтиже" value={formatPercent(summary.best)} hint="Осы кезеңдегі ең жақсы тапсыру." meter={summary.best} />
-      <StatTile label="Жеке / жұппен" value={<>{formatNumber(summary.solo)} <small>/</small> {formatNumber(summary.coop)}</>}
-        hint="Жеке тапсырылған және досымен бірге (жұппен) тапсырылған тесттер саны."
-        note={<span>{formatNumber(summary.tests_taken)} / {formatNumber(summary.tests_total)} тест тапсырылды</span>} />
+      <StatTile label="Қамтылған тесттер" value={<>{formatNumber(summary.tests_taken)} <small>/</small> {formatNumber(summary.tests_total)}</>}
+        hint="Осы кезеңде кемінде бір рет тапсырылған тесттер саны және барлық тесттер саны." />
     </div>
 
     <div className={`${styles.row} ${styles.rowHalf}`}>
@@ -125,7 +124,6 @@ export default function TrialTestsTab({ data }: { data: StatisticsTrialTests }) 
                         </button>
                         <div className={styles.cellSub} style={{ marginLeft: 19 }}>
                           {test.folder ? `${test.folder} · ` : ""}{formatNumber(test.questions_count)} сұрақ
-                          {test.coop > 0 && ` · ${formatNumber(test.coop)} рет жұппен`}
                         </div>
                       </td>
                       <td className={styles.num}>{formatNumber(test.attempts)}</td>
@@ -153,7 +151,6 @@ export default function TrialTestsTab({ data }: { data: StatisticsTrialTests }) 
             <div key={result.result_id} className={styles.listItem}>
               <div className={styles.listMain}>
                 <Link href={`/profile/${result.user_id}`} style={{ color: "var(--ink)", fontWeight: 500 }}>{result.nickname || `Оқушы #${result.user_id}`}</Link>
-                {result.submit_mode === "coop" && <span className={styles.badges}><span className={styles.badge} data-tone="accent">жұппен</span></span>}
                 {result.email && <small>{result.email}</small>}
                 <small>{result.title || `Тест #${result.trial_test_id}`}</small>
               </div>

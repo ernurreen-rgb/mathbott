@@ -1,6 +1,6 @@
 # QazMath (`CursorMathbot`)
 
-QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, solo and cooperative trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons with a mistake review on number-only twin tasks (optionally drafted by an AI provider) and teacher-facing mistake analytics, computer-algebra answer equivalence checking, social friend/invite workflows, and a role-based administrative workspace.
+QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons with a mistake review on number-only twin tasks (optionally drafted by an AI provider) and teacher-facing mistake analytics, computer-algebra answer equivalence checking, social friend/invite workflows, and a role-based administrative workspace.
 
 ---
 
@@ -11,7 +11,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 ### Architecture
 - **[System Overview](docs/architecture/system-overview.md)** — High-level topology, trust boundaries, runtime modes (local/VPS vs. Vercel + Neon serverless), dual realtime transport (WebSockets vs. HTTP polling), and observability.
 - **[Module Structure](docs/architecture/module-structure.md)** — Directory layout and module-by-module responsibilities across `bot/`, `web/`, `deploy/`, and `.github/workflows/`.
-- **[Data Flow](docs/architecture/data-flow.md)** — Request signing (`HMAC-SHA256` V2), RBAC resolution, task bank & placement lifecycle, mathematical answer grading pipeline, live quiz state machine, and solo/co-op trial test synchronization.
+- **[Data Flow](docs/architecture/data-flow.md)** — Request signing (`HMAC-SHA256` V2), RBAC resolution, task bank & placement lifecycle, mathematical answer grading pipeline, live quiz state machine, and the trial test draft and submit flow.
 
 ### Development & Operations
 - **[Local Setup Guide](docs/development/setup.md)** — Prerequisites, environment variables (`bot/.env.example`, `web/.env.example`), local installation, bank preview fixture, and Docker builds.
