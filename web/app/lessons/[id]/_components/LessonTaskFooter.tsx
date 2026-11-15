@@ -18,13 +18,11 @@ type Props = {
   errorText?: string | null;
   hasPrev: boolean;
   canGoNext: boolean;
-  canRetry: boolean;
   /** True/false tasks submit on tap, so they have no check button. */
   showCheck: boolean;
   checkDisabled: boolean;
   checking: boolean;
   onCheck: () => void;
-  onRetry: () => void;
   onNext: () => void;
   onPrev: () => void;
   onReport: () => void;
@@ -54,12 +52,10 @@ export default function LessonTaskFooter({
   errorText,
   hasPrev,
   canGoNext,
-  canRetry,
   showCheck,
   checkDisabled,
   checking,
   onCheck,
-  onRetry,
   onNext,
   onPrev,
   onReport,
@@ -174,15 +170,6 @@ export default function LessonTaskFooter({
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <Icon name="arrowLeft" />
-          </button>
-        )}
-        {wrong && canRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="h-12 flex-1 rounded-xl border-2 border-red-300 bg-white font-bold text-red-700 hover:bg-red-100 transition-colors"
-          >
-            Қайта көру
           </button>
         )}
         {canGoNext && (

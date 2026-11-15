@@ -205,10 +205,8 @@ export default function LessonPage() {
   const isActiveTaskAnswered = activeTask
     ? activeTask.status === "completed" || selectedAnswers[activeTask.id] !== undefined
     : false;
-  const hasSubsequentTask =
-    (currentTaskIndex >= 0 && currentTaskIndex < orderedMiniTasks.length - 1) ||
-    nextMiniId !== null;
-  const canGoNext = isTaskCompleted || (isActiveTaskAnswered && hasSubsequentTask);
+  // After any answer the student moves on; unsolved tasks come back once the others are done.
+  const canGoNext = isTaskCompleted || isActiveTaskAnswered;
   const activeFeedback = activeTask ? feedback[activeTask.id] : undefined;
   const summaryPrimary = (() => {
     const pending = selectedMini?.review?.pending ?? 0;
@@ -300,6 +298,11 @@ export default function LessonPage() {
     if (firstIncomplete) {
       resetTaskAttempt(firstIncomplete.id);
       setActiveTaskId(firstIncomplete.id);
+      return;
+    }
+    // The current task is the only one left unsolved: ask it again.
+    if (orderedMiniTasks[idx].status !== "completed") {
+      resetTaskAttempt(currentTaskId);
       return;
     }
     // Every task is solved: stop on the summary, which offers the mistake review or the next step.
@@ -821,12 +824,10 @@ export default function LessonPage() {
                   errorText={activeFeedback?.error ? activeFeedback.text : null}
                   hasPrev={currentTaskIndex > 0}
                   canGoNext={canGoNext}
-                  canRetry={!isTaskCompleted}
                   showCheck={(activeTask.question_type || "input") !== "tf"}
                   checkDisabled={!isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
                   checking={!!checking[activeTask.id]}
                   onCheck={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
-                  onRetry={() => resetTaskAttempt(activeTask.id)}
                   onNext={() => goToNextTaskOrMini(activeTask.id)}
                   onPrev={() => goToPrevTaskOrMini(activeTask.id)}
                   onReport={() => report.open(activeTask.id)}
