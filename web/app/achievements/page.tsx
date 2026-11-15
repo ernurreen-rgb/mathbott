@@ -3,6 +3,7 @@ import Icon, { ContentIcon } from "@/components/ui/Icon";
 
 
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import MobileNav from "@/components/MobileNav";
@@ -79,6 +80,13 @@ export default function AchievementsPage() {
       <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="w-full max-w-5xl">
         <div className="mb-6">
+          <Link
+            href="/profile"
+            className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-purple-50 hover:text-purple-700 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+          >
+            <Icon name="arrowLeft" />
+            <span>Артқа</span>
+          </Link>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">Барлық жетістіктер</h1>
           <p className="text-gray-700 font-semibold text-lg">
             Ашық: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
