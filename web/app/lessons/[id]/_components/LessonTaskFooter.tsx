@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Icon from "@/components/ui/Icon";
 import MathRender from "@/components/ui/MathRender";
 
@@ -22,10 +23,15 @@ type Props = {
   showCheck: boolean;
   checkDisabled: boolean;
   checking: boolean;
+  /** Main button after a check; "Келесі" unless the page has a better word for the next step. */
+  nextLabel?: string;
+  /** One short line under the verdict, e.g. "Бұл қате түзетілді." */
+  detail?: ReactNode;
   onCheck: () => void;
   onNext: () => void;
-  onPrev: () => void;
-  onReport: () => void;
+  onPrev?: () => void;
+  /** Without it there is no "Шағым" button (mistake review twins cannot be reported). */
+  onReport?: () => void;
 };
 
 const formatStoredAnswer = (value: string): string => {
@@ -55,6 +61,8 @@ export default function LessonTaskFooter({
   showCheck,
   checkDisabled,
   checking,
+  nextLabel = "Келесі",
+  detail,
   onCheck,
   onNext,
   onPrev,
@@ -74,7 +82,7 @@ export default function LessonTaskFooter({
           Below lg the check button takes its own full-width line above the back and report buttons.
         */}
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 md:gap-y-3">
-          {hasPrev ? (
+          {hasPrev && onPrev ? (
             <button
               type="button"
               onClick={onPrev}
@@ -87,13 +95,15 @@ export default function LessonTaskFooter({
               <Icon name="arrowLeft" /> Алдыңғы
             </div>
           )}
-          <button
-            type="button"
-            onClick={onReport}
-            className="order-3 lg:order-2 ml-auto lg:ml-0 min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
-          >
-            <Icon name="report" /> Шағым
-          </button>
+          {onReport && (
+            <button
+              type="button"
+              onClick={onReport}
+              className="order-3 lg:order-2 ml-auto lg:ml-0 min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
+            >
+              <Icon name="report" /> Шағым
+            </button>
+          )}
           {showCheck ? (
             <button
               type="button"
@@ -148,20 +158,23 @@ export default function LessonTaskFooter({
                 : <span className="font-semibold"><MathRender inline latex={shownText!} /></span>}
             </div>
           )}
+          {detail && <div className={`text-sm ${wrong ? "text-red-800" : "text-green-800"}`}>{detail}</div>}
         </div>
-        <button
-          type="button"
-          onClick={onReport}
-          aria-label="Шағым"
-          title="Шағым"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-amber-700 hover:bg-white/70 transition-colors"
-        >
-          <Icon name="report" />
-        </button>
+        {onReport && (
+          <button
+            type="button"
+            onClick={onReport}
+            aria-label="Шағым"
+            title="Шағым"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-amber-700 hover:bg-white/70 transition-colors"
+          >
+            <Icon name="report" />
+          </button>
+        )}
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        {hasPrev && (
+        {hasPrev && onPrev && (
           <button
             type="button"
             onClick={onPrev}
@@ -180,7 +193,7 @@ export default function LessonTaskFooter({
               wrong ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
             }`}
           >
-            Келесі <Icon name="arrowRight" />
+            {nextLabel} <Icon name="arrowRight" />
           </button>
         )}
       </div>
