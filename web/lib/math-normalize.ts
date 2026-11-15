@@ -45,13 +45,18 @@ const normalizeMathLiveTextEscapes = (value: string): string =>
     .replace(LATEX_COMMAND_GROUP_SPACE_RE, "$1$2")
     .replace(LATEX_OPTIONAL_TO_REQUIRED_GROUP_SPACE_RE, "$1$2");
 
+const LIST_DOTS_RE = /([,;:]\s*)\\dots(?![A-Za-z])/g;
+const GENERIC_DOTS_RE = /\\dots(?![A-Za-z])/g;
+
 export const normalizeLatexForMathDisplay = (value: string): string => {
   if (!value) return "";
 
   return normalizeMathLiveTextEscapes(value)
     .replace(GLUED_RELATION_FUNCTION_RE, "\\$1\\$2")
     .replace(SPACED_ENVIRONMENT_COMMAND_RE, "\\$1{$2}")
-    .replace(REDUNDANT_CASES_WRAPPER_RE, "\\begin{$1}$2\\end{$1}");
+    .replace(REDUNDANT_CASES_WRAPPER_RE, "\\begin{$1}$2\\end{$1}")
+    .replace(LIST_DOTS_RE, "$1\\ldots")
+    .replace(GENERIC_DOTS_RE, "\\cdots");
 };
 
 export const normalizeMathFieldValueForStorage = (value: string): string => {

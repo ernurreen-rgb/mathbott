@@ -16,7 +16,6 @@ const HAS_LATEX_COMMAND_RE = /\\[a-zA-Z]+/;
 const HAS_STRONG_MATH_RE = /[{}^_=<>]/;
 const HAS_DIGIT_RE = /\d/;
 const IS_SINGLE_LATIN_RE = /^[A-Za-z]$/;
-const TOKEN_SPLIT_RE = /(\s+)/;
 const BREAKABLE_MATH_OPERATOR_RE = /[=<>]/;
 const LATEX_ENVIRONMENT_RE = /\\begin\{[A-Za-z*]+\}/;
 const LEFT_DELIMITER_AT_END_RE = /(\\left(?:\\[A-Za-z]+|\\[{}.]|[()[\]|.])\s*)$/;
@@ -219,16 +218,68 @@ const consumeLatexCommand = (value: string, start: number): number => {
   return consumeLatexScripts(value, cursor);
 };
 
+const findMatchedBraceEnd = (value: string, openIndex: number): number => {
+  let depth = 0;
+
+  for (let index = openIndex; index < value.length; index += 1) {
+    const char = value[index];
+    const previous = index > 0 ? value[index - 1] : "";
+
+    if (previous !== "\\") {
+      if (char === "{") {
+        depth += 1;
+      } else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) return index + 1;
+      }
+    }
+  }
+
+  return -1;
+};
+
+const findNextTopLevelBackslash = (value: string, start: number): number => {
+  let braceDepth = 0;
+
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    const previous = index > 0 ? value[index - 1] : "";
+
+    if (previous !== "\\") {
+      if (char === "{") {
+        braceDepth += 1;
+        continue;
+      }
+      if (char === "}" && braceDepth > 0) {
+        braceDepth -= 1;
+        continue;
+      }
+    }
+
+    if (braceDepth === 0 && char === "\\") {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
 const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
   if (!HAS_LATEX_COMMAND_RE.test(value)) {
     return [isMathToken(value) ? { type: "math", value } : { type: "text", value }];
   }
 
+  // Keep braced math tokens without Cyrillic whole so spaces inside exponents/subscripts never tear groups apart.
+  if (!HAS_CYRILLIC_RE.test(value)) {
+    return [{ type: "math", value }];
+  }
+
   const parts: MixedContentPart[] = [];
   let cursor = 0;
+  let foundTopLevel = false;
 
   while (cursor < value.length) {
-    const commandStart = value.indexOf("\\", cursor);
+    const commandStart = findNextTopLevelBackslash(value, cursor);
     if (commandStart === -1) {
       const text = value.slice(cursor);
       if (text) {
@@ -237,6 +288,7 @@ const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
       break;
     }
 
+    foundTopLevel = true;
     if (commandStart > cursor) {
       const text = value.slice(cursor, commandStart);
       parts.push(isMathToken(text) ? { type: "math", value: text } : { type: "text", value: text });
@@ -249,6 +301,10 @@ const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
 
     parts.push({ type: "math", value: value.slice(commandStart, mathEnd) });
     cursor = mathEnd;
+  }
+
+  if (!foundTopLevel) {
+    return [{ type: "text", value }];
   }
 
   return parts;
@@ -264,6 +320,14 @@ const consumeRawMathRun = (value: string, start: number): number => {
     if (value[cursor] === "\\") {
       cursor = consumeLatexCommand(value, cursor);
       continue;
+    }
+
+    if (value[cursor] === "{") {
+      const matchedEnd = findMatchedBraceEnd(value, cursor);
+      if (matchedEnd !== -1) {
+        cursor = matchedEnd;
+        continue;
+      }
     }
 
     if (!RAW_MATH_CHAR_RE.test(value[cursor])) break;
@@ -586,15 +650,48 @@ const splitLatexEnvironmentBlocks = (value: string): Array<{ type: "text" | "mat
   return parts;
 };
 
-const splitMixedContent = (value: string): MixedContentPart[] => {
-  const parts = value.split(TOKEN_SPLIT_RE).filter((part) => part.length > 0);
-  return parts.flatMap((part) => {
-    if (/^\s+$/.test(part)) {
-      return [{ type: "space" as const, value: part }];
+const splitTokensOutsideBraces = (value: string): Array<{ isSpace: boolean; value: string }> => {
+  const tokens: Array<{ isSpace: boolean; value: string }> = [];
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    if (/\s/.test(value[cursor])) {
+      let end = cursor + 1;
+      while (end < value.length && /\s/.test(value[end])) {
+        end += 1;
+      }
+      tokens.push({ isSpace: true, value: value.slice(cursor, end) });
+      cursor = end;
+      continue;
     }
-    return mergeAdjacentMathParts(splitEmbeddedMath(part));
-  });
+
+    let end = cursor;
+    while (end < value.length && !/\s/.test(value[end])) {
+      if (value[end] === "\\" && end + 1 < value.length) {
+        end += 2;
+        continue;
+      }
+      if (value[end] === "{") {
+        const matchedEnd = findMatchedBraceEnd(value, end);
+        if (matchedEnd !== -1) {
+          end = matchedEnd;
+          continue;
+        }
+      }
+      end += 1;
+    }
+
+    tokens.push({ isSpace: false, value: value.slice(cursor, end) });
+    cursor = end;
+  }
+
+  return tokens;
 };
+
+const splitMixedContent = (value: string): MixedContentPart[] =>
+  splitTokensOutsideBraces(value).flatMap((token) =>
+    token.isSpace ? [{ type: "space" as const, value: token.value }] : mergeAdjacentMathParts(splitEmbeddedMath(token.value))
+  );
 
 const needsImplicitBoundarySpace = (left: MixedContentPart, right: MixedContentPart): boolean => {
   if (left.type === "space" || right.type === "space") return false;
