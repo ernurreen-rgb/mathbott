@@ -67,6 +67,11 @@ math-field.student-math-answer-input[read-only] {
   color: #6b7280;
 }
 
+/* Students get no MathLive menu (functions, LaTeX tools); see MathFieldInput. */
+math-field[data-math-keyboard-preset="student"]::part(menu-toggle) {
+  display: none;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

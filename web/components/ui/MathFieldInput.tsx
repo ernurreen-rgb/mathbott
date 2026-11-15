@@ -28,6 +28,7 @@ type MathFieldElement = HTMLElement & {
   insert?: (value: string, options?: { format?: "latex" | "ascii-math"; mode?: "math" | "text" | "latex" }) => boolean;
   executeCommand?: (selector: string | [string, ...unknown[]], ...args: unknown[]) => boolean;
   keybindings?: unknown[];
+  menuItems?: readonly unknown[];
   focus: () => void;
 };
 
@@ -320,6 +321,19 @@ const getMathValue = (el: MathFieldElement): string => {
 
 const normalizeMathFieldOutput = (raw: string): string => normalizeMathFieldValueForStorage(raw);
 
+// Students get no MathLive menu: it offers functions and LaTeX tools that the
+// student keyboard leaves out on purpose. An empty menu also stops the
+// right-click and long-press menu; globals.css hides the toggle button itself,
+// because MathLive resets the button's inline display on every render.
+const removeStudentMenu = (el: MathFieldElement, preset: MathVirtualKeyboardPreset) => {
+  if (preset !== "student") return;
+  try {
+    if (el.menuItems?.length) el.menuItems = [];
+  } catch {
+    // Not mounted yet: the next tap or focus tries again.
+  }
+};
+
 const setMathValue = (el: MathFieldElement, nextValue: string) => {
   if (typeof el.setValue === "function") {
     el.setValue(nextValue, { silenceNotifications: true });
@@ -555,6 +569,7 @@ export default function MathFieldInput({
     };
 
     const handleFieldPointerDown = () => {
+      removeStudentMenu(el, virtualKeyboardPreset);
       configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPreset);
       showVirtualKeyboard();
     };
@@ -566,6 +581,7 @@ export default function MathFieldInput({
       if (!getMathValue(el)) {
         el.mode = defaultMode;
       }
+      removeStudentMenu(el, virtualKeyboardPreset);
       configureVirtualKeyboard(getVirtualKeyboard(), virtualKeyboardPreset);
       showVirtualKeyboard();
       addPointerDownListener();
