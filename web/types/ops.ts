@@ -48,7 +48,6 @@ export interface OpsIncident {
   last_seen_at: string;
   occurrences: number;
   metadata: Record<string, any>;
-  telegram_last_sent_at?: string | null;
   resolved_at?: string | null;
 }
 

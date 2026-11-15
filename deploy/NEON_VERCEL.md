@@ -46,7 +46,6 @@ Backend production settings:
 | `ADMIN_EMAIL` | Optional bootstrap `super_admin` email |
 | `IMPORT_PREVIEW_TOKEN_SECRET` | Optional dedicated HMAC secret for bank JSON import preview tokens (falls back to `INTERNAL_PROXY_SHARED_SECRET`) |
 | `SENTRY_DSN` | Optional Sentry DSN for backend error/trace reporting |
-| `ALERTS_ENABLED`, `ALERT_TELEGRAM_ENABLED`, `ALERT_TELEGRAM_BOT_TOKEN`, `ALERT_TELEGRAM_CHAT_ID` | Optional Telegram operational alert settings |
 | `AI_TWIN_BASE_URL`, `AI_TWIN_API_KEY`, `AI_TWIN_MODEL` | Optional; enable AI twin drafts in the bank (see [AI twin drafts](#ai-twin-drafts)) |
 
 Web production settings:
@@ -142,6 +141,17 @@ rejected. Other guest capability endpoints retain their existing access rules.
 Quota rows expire after an hour of inactivity and are removed opportunistically
 and by maintenance. These application admission budgets do not configure
 provider/ingress traffic filtering.
+
+## Removed features and dropped tables
+
+`0010_remove_unused_tables` drops the tables of features that were removed:
+co-op trial tests (`trial_test_coop_*`), friends (`friendships`,
+`friend_requests`, `friend_invites`, `blocks`), the registration survey
+(`user_onboarding`) and the never-used `user_progress_summary`. Their data is
+deleted for good, so take a Neon branch or a
+[backup](POSTGRES_BACKUP_RESTORE.md) first. Deploy the API that no longer has
+these routes before or together with the migration; the API applies it on
+startup when `DATABASE_AUTO_MIGRATE` is on.
 
 ## Mistake review and twin tasks
 

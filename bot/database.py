@@ -24,9 +24,7 @@ from repositories.bank_task_repository import BankTaskRepository
 from repositories.report_repository import ReportRepository
 from repositories.trial_test_report_repository import TrialTestReportRepository
 from repositories.statistics_repository import StatisticsRepository
-from repositories.friends_repository import FriendsRepository
 from repositories.ops_repository import OpsRepository
-from repositories.onboarding_repository import OnboardingRepository
 from repositories.quiz_repository import QuizRepository
 from repositories.module_review_repository import ModuleReviewRepository
 from utils.connection_pool import ConnectionPool
@@ -65,9 +63,7 @@ class Database:
         self.reports = ReportRepository(url, connection_pool=pool)
         self.trial_test_reports = TrialTestReportRepository(url, connection_pool=pool)
         self.statistics = StatisticsRepository(url, connection_pool=pool)
-        self.friends = FriendsRepository(url, connection_pool=pool)
         self.ops = OpsRepository(url, connection_pool=pool)
-        self.onboarding = OnboardingRepository(url, connection_pool=pool)
         self.quizzes = QuizRepository(url, connection_pool=pool)
         self.module_review = ModuleReviewRepository(url, connection_pool=pool)
 

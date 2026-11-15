@@ -99,10 +99,6 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `SENTRY_DSN` | `""` | Optional | Sentry DSN for backend error/performance monitoring (`bot/utils/sentry.py`). |
 | `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE` | `None` | Optional | Optional Sentry environment and release tags. |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.1` | No | Sentry trace sample rate (`0.0`–`1.0`). |
-| `ALERTS_ENABLED` | `false` | Optional | Enables operational incident alerts (`bot/utils/alerts.py`). |
-| `ALERT_TELEGRAM_ENABLED` | `false` | Optional | Enables Telegram delivery for operational alerts. |
-| `ALERT_TELEGRAM_BOT_TOKEN` | `""` | When Telegram alerts on | Telegram Bot API token for ops alerts. |
-| `ALERT_TELEGRAM_CHAT_ID` | `""` | When Telegram alerts on | Target Telegram chat ID for ops alerts. |
 | `AI_TWIN_BASE_URL` | `""` | Optional | Base URL of an OpenAI-compatible Chat Completions API (e.g. `https://api.openai.com/v1`) for AI twin drafts. |
 | `AI_TWIN_API_KEY` | `""` | With AI drafts | API key of that provider; stays on the server. |
 | `AI_TWIN_MODEL` | `""` | With AI drafts | Model id with JSON mode. AI drafts stay off until all three `AI_TWIN_*` values are set. |
@@ -127,7 +123,6 @@ Inspected from [`web/.env.example`](../../web/.env.example), [`web/app/api/auth/
 | `NEXT_PUBLIC_REALTIME_TRANSPORT` | `websocket` (local) / `polling` (Vercel) | No | Selects `websocket` or HTTP `polling` for live quizzes and presence ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)). |
 | `NEXT_PUBLIC_WS_API_URL` | `""` | Optional | Optional explicit WebSocket base URL when `NEXT_PUBLIC_REALTIME_TRANSPORT=websocket`. |
 | `CSP_CONNECT_SRC` | `""` | Optional | Additional origins appended to Content-Security-Policy `connect-src` in [`web/next.config.js`](../../web/next.config.js). |
-| `NEXT_PUBLIC_MODULES_UI_ENABLED` | `true` | Optional | Feature flag in [`web/app/modules/page.tsx`](../../web/app/modules/page.tsx). Enabled by default (`!== "false"`); set to `"false"` to hide the `/modules` map behind a maintenance banner. |
 | `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN` | `""` | Optional | Sentry DSN for client, edge, and server error reporting. |
 
 ---

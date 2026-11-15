@@ -78,12 +78,6 @@ class Settings(BaseSettings):
     sentry_release: Optional[str] = None
     sentry_traces_sample_rate: float = 0.1
 
-    # Alerts
-    alerts_enabled: bool = False
-    alert_telegram_enabled: bool = False
-    alert_telegram_bot_token: str = ""
-    alert_telegram_chat_id: str = ""
-
     # Ops monitor retention
     ops_health_sample_retention_days: int = 30
     ops_incident_retention_days: int = 365
@@ -98,8 +92,6 @@ class Settings(BaseSettings):
         "cors_allow_all",
         "csrf_enabled",
         "allow_legacy_admin_bootstrap",
-        "alerts_enabled",
-        "alert_telegram_enabled",
         mode="before",
     )
     @classmethod
@@ -153,8 +145,6 @@ class Settings(BaseSettings):
         "ai_twin_api_key",
         "ai_twin_model",
         "sentry_dsn",
-        "alert_telegram_bot_token",
-        "alert_telegram_chat_id",
         "database_url",
         "database_migration_url",
         mode="before",

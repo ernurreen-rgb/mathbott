@@ -71,23 +71,3 @@ class TrialTestReportRequest(BaseModel):
         if len(v) > 2000:
             raise ValueError('Message must be at most 2000 characters')
         return v
-
-
-class FriendInviteCreateRequest(BaseModel):
-    email: EmailStr = Field(..., description="Valid email address required")
-    expires_in_days: int = Field(1, ge=1, le=30, description="Invite validity in days (1-30)")
-
-
-class FriendInviteAcceptRequest(BaseModel):
-    email: EmailStr = Field(..., description="Valid email address required")
-
-
-class FriendBlockRequest(BaseModel):
-    email: EmailStr = Field(..., description="Valid email address required")
-    blocked_user_id: int = Field(..., gt=0, description="User ID to block")
-
-
-class FriendRequestCreateRequest(BaseModel):
-    email: EmailStr = Field(..., description="Valid email address required")
-    receiver_id: int = Field(..., gt=0, description="Receiver user ID")
-

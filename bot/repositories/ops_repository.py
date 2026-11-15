@@ -233,7 +233,6 @@ class OpsRepository(BaseRepository):
                                 occurrences = COALESCE(occurrences, 0) + 1,
                                 first_seen_at = mathbot_datetime('now'),
                                 last_seen_at = mathbot_datetime('now'),
-                                telegram_last_sent_at = NULL,
                                 resolved_at = NULL
                             WHERE id = ?
                             """,
@@ -334,21 +333,6 @@ class OpsRepository(BaseRepository):
 
         return await self._run_with_write_lock(operation)
 
-    async def touch_incident_telegram_sent(self, incident_id: int) -> None:
-        async def operation() -> None:
-            async with self._connection() as db:
-                await db.execute(
-                    """
-                    UPDATE ops_incidents
-                    SET telegram_last_sent_at = mathbot_datetime('now')
-                    WHERE id = ?
-                    """,
-                    (incident_id,),
-                )
-                await db.commit()
-
-        await self._run_with_write_lock(operation)
-
     async def list_incidents(
         self,
         *,
@@ -382,7 +366,7 @@ class OpsRepository(BaseRepository):
                 SELECT
                     id, kind, severity, title, message, status,
                     first_seen_at, last_seen_at, occurrences, metadata_json,
-                    telegram_last_sent_at, resolved_at
+                    resolved_at
                 FROM ops_incidents
                 {where_clause}
                 ORDER BY last_seen_at DESC, id DESC

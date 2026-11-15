@@ -76,13 +76,9 @@ def validate_configuration():
     if settings.port < 1 or settings.port > 65535:
         errors.append(f"PORT must be between 1 and 65535, got {settings.port}")
 
-    # Observability/alerts checks (warnings only to keep backward compatibility)
+    # Observability checks (warnings only to keep backward compatibility)
     if settings.is_production and not settings.sentry_dsn:
         warnings.append("SENTRY_DSN is not set. Production errors will not be reported to Sentry.")
-
-    if settings.alerts_enabled and settings.alert_telegram_enabled:
-        if not settings.alert_telegram_bot_token or not settings.alert_telegram_chat_id:
-            warnings.append("Telegram alerts enabled but ALERT_TELEGRAM_BOT_TOKEN or ALERT_TELEGRAM_CHAT_ID is missing.")
 
     if settings.is_production and settings.allow_legacy_admin_bootstrap:
         warnings.append("ALLOW_LEGACY_ADMIN_BOOTSTRAP is ignored in production. Legacy admin bootstrap routes stay disabled.")

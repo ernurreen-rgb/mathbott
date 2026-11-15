@@ -8,7 +8,7 @@ This document maps the directory layout of the repository and the responsibiliti
 
 ```text
 CursorMathbot/
-├── .github/workflows/       # GitHub Actions CI, Docker Hub publish, and weekly security audit
+├── .github/workflows/       # GitHub Actions CI and weekly security audit
 ├── bot/                     # FastAPI backend application, database migrations, and CLI scripts
 ├── deploy/                  # Deployment runbooks (Vercel+Neon, PG backup) and Nginx/Caddy configs
 ├── docs/                    # Architecture, setup, API, database, feature, and release documentation
@@ -58,7 +58,6 @@ Middlewares are registered in [`bot/app.py`](../../bot/app.py). In Starlette/Fas
 | :--- | :--- |
 | [`core.py`](../../bot/routes/core.py) | `GET /`, `GET /api/health` (DB ping + pool/cache stats), and `GET /api/images/{filename}` (local file or S3 stream). |
 | [`users.py`](../../bot/routes/users.py) | `GET /api/user/web/{email}` (auto-creates user on first login, returns profile/streak/achievements/stats), `GET /api/user/public/{identifier}`, `POST /api/user/web/nickname`. |
-| [`onboarding.py`](../../bot/routes/onboarding.py) | `GET /api/user/onboarding/status` and `POST /api/user/onboarding`. |
 | [`modules.py`](../../bot/routes/modules.py) | `GET /api/modules/map`, `GET /api/modules/{module_id}`, `GET /api/lessons/{lesson_id}`. |
 | [`tasks.py`](../../bot/routes/tasks.py) | `GET /api/tasks/{task_id}` and `POST /api/task/check` (grades module/mini-lesson tasks, updates streaks, progress, and achievements). |
 | [`module_review.py`](../../bot/routes/module_review.py) | Mistake review after a mini-lesson: `GET /api/mini-lessons/{id}/review` and `POST /api/mini-lessons/{id}/review/answers`. |
@@ -66,7 +65,6 @@ Middlewares are registered in [`bot/app.py`](../../bot/app.py). In Starlette/Fas
 | [`trial_tests.py`](../../bot/routes/trial_tests.py) | Solo trial test catalog, nested folder tree (`GET /api/trial-tests/folders`), test details, draft save/load (`/draft`), submission (`/submit`), and history (`/results`). |
 | [`quizzes.py`](../../bot/routes/quizzes.py) | Quiz catalog (`GET /api/quizzes`), quiz CRUD, question CRUD (inline or linked from `bank_tasks`), and quiz forking (`POST /api/quizzes/{quiz_id}/fork`). |
 | [`quiz_game.py`](../../bot/routes/quiz_game.py) | Live quiz sessions: creation, PIN lookup, DB-quota-protected join, avatar selection, host controls (`start`, `next`, `current-question`, `finish`), student `progress`/`answers`/`complete`/`review`, and `/ws/quiz/{session_id}` WebSocket. |
-| [`friends.py`](../../bot/routes/friends.py) | Friendships, invite links (`/api/friends/invites`), friend requests, relationship status lookup, and user blocks. |
 | [`presence.py`](../../bot/routes/presence.py) | Shared DB heartbeat (`POST /api/presence/heartbeat`) and WebSocket presence (`GET /api/presence/ws-token`, `/ws/presence`). |
 | [`reports.py`](../../bot/routes/reports.py) | Student task issue reporting for module tasks (`/api/reports`) and trial test tasks (`/api/trial-test-reports`). |
 | [`export.py`](../../bot/routes/export.py) | Personal user data export (`GET /api/export/user/{email}`) and admin statistics export (`GET /api/export/admin/stats`) in JSON/CSV. |
@@ -109,8 +107,6 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 | `ReportRepository` | [`report_repository.py`](../../bot/repositories/report_repository.py) | `reports` |
 | `TrialTestReportRepository` | [`trial_test_report_repository.py`](../../bot/repositories/trial_test_report_repository.py) | `trial_test_reports` |
 | `StatisticsRepository` | [`statistics_repository.py`](../../bot/repositories/statistics_repository.py) | Read-only, period-scoped analytics over users, solutions, progress, trial tests, quizzes and reports. PostgreSQL only: SQL filters and counts, Python builds ratios, zero-filled series and period comparisons |
-| `OnboardingRepository` | [`onboarding_repository.py`](../../bot/repositories/onboarding_repository.py) | `user_onboarding` |
-| `FriendsRepository` | [`friends_repository.py`](../../bot/repositories/friends_repository.py) | `friendships`, `friend_requests`, `friend_invites`, `blocks` |
 | `OpsRepository` | [`ops_repository.py`](../../bot/repositories/ops_repository.py) | `ops_health_samples`, `ops_incidents` |
 
 ### 2.5 Utilities, Services, Migrations & CLI Scripts (`bot/utils/`, `bot/services/`, `bot/migrations/`, `bot/scripts/`)
@@ -140,13 +136,13 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
 
 | Route Path | Source File | Access | Purpose |
 | :--- | :--- | :--- | :--- |
-| `/` | [`app/page.tsx`](../../web/app/page.tsx) | Public / Student | Landing / dashboard redirect and onboarding entry. |
-| `/modules`, `/modules/[id]`, `/lessons/[id]` | [`app/modules/page.tsx`](../../web/app/modules/page.tsx), [`app/modules/[id]/page.tsx`](../../web/app/modules/[id]/page.tsx), [`app/lessons/[id]/page.tsx`](../../web/app/lessons/[id]/page.tsx) | Student | Curriculum map (gated by `NEXT_PUBLIC_MODULES_UI_ENABLED`), module detail, and interactive mini-lesson player. |
+| `/` | [`app/page.tsx`](../../web/app/page.tsx) | Public / Student | Landing / dashboard redirect. |
+| `/modules`, `/modules/[id]`, `/lessons/[id]` | [`app/modules/page.tsx`](../../web/app/modules/page.tsx), [`app/modules/[id]/page.tsx`](../../web/app/modules/[id]/page.tsx), [`app/lessons/[id]/page.tsx`](../../web/app/lessons/[id]/page.tsx) | Student | Curriculum map, module detail, and interactive mini-lesson player. |
 | `/lessons/[id]/review/[miniId]` | [`app/lessons/[id]/review/[miniId]/page.tsx`](../../web/app/lessons/[id]/review/[miniId]/page.tsx) | Authenticated Student | Mistake review on twin tasks after a mini-lesson; does not change lesson progress. |
 | `/trial-test`, `/trial-test/history`, `/trial-test/[id]`, `/trial-test/[id]/results` | [`app/trial-test/page.tsx`](../../web/app/trial-test/page.tsx), [`app/trial-test/[id]/page.tsx`](../../web/app/trial-test/[id]/page.tsx), [`app/trial-test/[id]/results/page.tsx`](../../web/app/trial-test/[id]/results/page.tsx) | Student | Nested folder browser, solo timed trial test player with draft autosave, and post-submission review. |
 | `/quizzes`, `/quizzes/create`, `/quizzes/[id]`, `/quizzes/[id]/edit` | [`app/quizzes/page.tsx`](../../web/app/quizzes/page.tsx), [`app/quizzes/_components/QuizEditor.tsx`](../../web/app/quizzes/_components/QuizEditor.tsx) | Public / Host | Quiz catalog, creation/editing workspace, and session launcher. |
 | `/join`, `/quiz/play/[sessionId]`, `/quiz/host/[sessionId]`, `/quiz/review/[sessionId]`, `/quiz/history` | [`app/join/page.tsx`](../../web/app/join/page.tsx), [`app/quiz/play/[sessionId]/page.tsx`](../../web/app/quiz/play/[sessionId]/page.tsx), [`app/quiz/host/[sessionId]/page.tsx`](../../web/app/quiz/host/[sessionId]/page.tsx) | Guest / Student / Host | PIN entry & 2-step mobile avatar selector, live player, teacher scoreboard/controls, and session review. |
-| `/profile`, `/profile/[id]`, `/profile/export`, `/achievements` | [`app/profile/page.tsx`](../../web/app/profile/page.tsx), [`app/achievements/page.tsx`](../../web/app/achievements/page.tsx) | Student / Public | User profile, weekly activity, friends/invites management, data export, and achievements catalog. |
+| `/profile`, `/profile/[id]`, `/profile/export`, `/achievements` | [`app/profile/page.tsx`](../../web/app/profile/page.tsx), [`app/achievements/page.tsx`](../../web/app/achievements/page.tsx) | Student / Public | User profile, weekly activity, a link to achievements, data export, and the achievements catalog. |
 | `/admin` | [`app/admin/page.tsx`](../../web/app/admin/page.tsx) | Any Admin | Admin hub routing users to capabilities permitted by their role. |
 | `/admin/bank`, `/admin/bank/quality`, `/admin/bank/audit` | [`app/admin/bank/page.tsx`](../../web/app/admin/bank/page.tsx), [`app/admin/bank/_components/BankWorkspace.tsx`](../../web/app/admin/bank/_components/BankWorkspace.tsx) | Admin | Library catalog, full-width task detail/editor/preview, PDF worksheet export, quality reports, and audit log. |
 | `/admin/cms/**` | [`app/admin/cms/_components/CmsWorkspace.tsx`](../../web/app/admin/cms/_components/CmsWorkspace.tsx) | `content_manage` | Hierarchical curriculum editor (`Modules -> Sections -> Lessons -> Mini-lessons -> Tasks`). |
@@ -166,5 +162,5 @@ All repositories inherit from [`BaseRepository`](../../bot/repositories/base.py)
   - [`lib/bank-worksheet.ts`](../../web/lib/bank-worksheet.ts), [`lib/use-bank-worksheet-selection.ts`](../../web/lib/use-bank-worksheet-selection.ts), [`lib/export-bank-worksheet.ts`](../../web/lib/export-bank-worksheet.ts), [`lib/worksheet-fonts.ts`](../../web/lib/worksheet-fonts.ts), [`components/admin/BankWorksheetDialog.tsx`](../../web/components/admin/BankWorksheetDialog.tsx), and [`components/admin/BankWorksheetDocument.tsx`](../../web/components/admin/BankWorksheetDocument.tsx).
 - **API Client & Hooks:**
   - [`lib/api/client.ts`](../../web/lib/api/client.ts) — Core `fetchWithErrorHandling` wrapper with 30s timeout and 1.5s GET deduplication cache.
-  - [`lib/api/`](../../web/lib/api/) — Domain-specific typed API clients (`admin-bank.ts`, `admin-trial-tests.ts`, `quizzes.ts`, `trial-tests.ts`, `friends.ts`, `modules.ts`, `user.ts`, etc.).
+  - [`lib/api/`](../../web/lib/api/) — Domain-specific typed API clients (`admin-bank.ts`, `admin-trial-tests.ts`, `quizzes.ts`, `trial-tests.ts`, `reports.ts`, `modules.ts`, `user.ts`, etc.).
   - [`lib/use-quiz-connection.ts`](../../web/lib/use-quiz-connection.ts), [`lib/use-quiz-player.ts`](../../web/lib/use-quiz-player.ts), [`lib/use-quiz-draft.ts`](../../web/lib/use-quiz-draft.ts) — Realtime state synchronization and resilient draft/answer persistence hooks.

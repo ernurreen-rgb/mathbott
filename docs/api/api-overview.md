@@ -58,15 +58,13 @@ Admin endpoints (`/api/admin/*`) enforce capabilities via `Depends(require_admin
 | `GET` | `/api/images/{filename}` | Public | Serves task/CMS images from local `bot/images/` or returns a `307 Temporary Redirect` to `R2_PUBLIC_BASE_URL/{filename}` when `STORAGE_BACKEND=r2`. |
 | `GET` | `/api/maintenance` | Public | Returns maintenance banner status (`enabled`, `message`). |
 
-### 2.2 Users & Onboarding ([`bot/routes/users.py`](../../bot/routes/users.py), [`bot/routes/onboarding.py`](../../bot/routes/onboarding.py), [`bot/routes/export.py`](../../bot/routes/export.py))
+### 2.2 Users ([`bot/routes/users.py`](../../bot/routes/users.py), [`bot/routes/export.py`](../../bot/routes/export.py))
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/user/web/{email}` | Authenticated (Self) | Fetches or lazily creates the user profile, returning streak, achievements, solved counts, and admin role/permissions. |
-| `GET` | `/api/user/public/{identifier}` | Authenticated | Fetches public profile card by user ID or nickname (`friend_status`, streak, achievements). |
+| `GET` | `/api/user/public/{identifier}` | Authenticated | Fetches public profile card by user ID or nickname (streak, achievements). |
 | `POST` | `/api/user/web/nickname` | Authenticated | Sets or updates the user's unique nickname. |
-| `GET` | `/api/user/onboarding/status` | Authenticated | Checks whether the user has completed the initial onboarding flow. |
-| `POST` | `/api/user/onboarding` | Authenticated | Submits onboarding responses (`user_onboarding`). |
 | `GET` | `/api/export/user/{email}` | Authenticated (Self) | Exports personal user data, progress, and results as JSON (`rate_limit: 5/min`). |
 
 ### 2.3 Curriculum: Modules, Lessons, Tasks & Sub-Questions ([`bot/routes/modules.py`](../../bot/routes/modules.py), [`bot/routes/tasks.py`](../../bot/routes/tasks.py), [`bot/routes/questions.py`](../../bot/routes/questions.py))
@@ -154,26 +152,10 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `GET` | `/api/quiz-sessions/{session_id}/ws-token` | Optional Auth | Issues a short-lived HMAC ticket for `/ws/quiz/{session_id}`. |
 | `WS` | `/ws/quiz/{session_id}` | WS Ticket | Real-time WebSocket channel for lobby updates, question transitions, and leaderboard broadcasts. |
 
-### 2.6 Friends, Blocks & Presence ([`bot/routes/friends.py`](../../bot/routes/friends.py), [`bot/routes/presence.py`](../../bot/routes/presence.py))
+### 2.6 Presence ([`bot/routes/presence.py`](../../bot/routes/presence.py))
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/friends/invites` | Authenticated | Creates a shareable friend invite link token (`friend_invites`). |
-| `GET` | `/api/friends/invites` | Authenticated | Lists active friend invite links created by the user. |
-| `GET` | `/api/friends/invites/{token}` | Optional Auth | Previews inviter metadata for a friend invite token. |
-| `POST` | `/api/friends/invites/{token}/accept` | Authenticated | Accepts a friend invite token and creates a bidirectional friendship (`friendships`). |
-| `POST` | `/api/friends/invites/{token}/revoke` | Authenticated | Revokes a friend invite token created by the user. |
-| `GET` | `/api/friends` | Authenticated | Lists the user's friends with online status and streaks. |
-| `DELETE` | `/api/friends/{friend_id}` | Authenticated | Removes a friend. |
-| `GET` | `/api/friends/requests` | Authenticated | Lists incoming and outgoing friend requests (`friend_requests`). |
-| `POST` | `/api/friends/requests` | Authenticated | Sends a direct friend request to `target_user_id`. |
-| `GET` | `/api/friends/status` | Authenticated | Returns friendship/request/block status between the user and `target_user_id`. |
-| `POST` | `/api/friends/requests/{request_id}/accept` | Authenticated | Accepts an incoming friend request. |
-| `POST` | `/api/friends/requests/{request_id}/decline` | Authenticated | Declines an incoming friend request. |
-| `DELETE` | `/api/friends/requests/{request_id}` | Authenticated | Cancels an outgoing friend request. |
-| `POST` | `/api/friends/blocks` | Authenticated | Blocks a user (`blocks`) and removes any existing friendship/requests. |
-| `DELETE` | `/api/friends/blocks/{blocked_id}` | Authenticated | Unblocks a user. |
-| `GET` | `/api/friends/blocks` | Authenticated | Lists users blocked by the current user. |
 | `POST` | `/api/presence/heartbeat` | Authenticated | Updates in-memory online presence timestamp for the user. |
 | `GET` | `/api/presence/ws-token` | Authenticated | Issues a short-lived HMAC ticket for `/ws/presence`. |
 | `WS` | `/ws/presence` | WS Ticket | Maintains live online presence via periodic WebSocket heartbeats. |

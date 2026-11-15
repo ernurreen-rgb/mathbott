@@ -13,9 +13,7 @@ from .bank_task_repository import BankTaskRepository
 from .report_repository import ReportRepository
 from .trial_test_report_repository import TrialTestReportRepository
 from .statistics_repository import StatisticsRepository
-from .friends_repository import FriendsRepository
 from .ops_repository import OpsRepository
-from .onboarding_repository import OnboardingRepository
 
 __all__ = [
     "BaseRepository",
@@ -30,7 +28,5 @@ __all__ = [
     "ReportRepository",
     "TrialTestReportRepository",
     "StatisticsRepository",
-    "FriendsRepository",
     "OpsRepository",
-    "OnboardingRepository",
 ]

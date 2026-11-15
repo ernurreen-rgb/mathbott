@@ -13,7 +13,6 @@ import { getModulesMap } from "@/lib/api";
 import type { Module } from "@/types";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
-const MODULES_UI_ENABLED = process.env.NEXT_PUBLIC_MODULES_UI_ENABLED !== "false";
 
 const MODULE_GRID_CLASSES = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6";
 
@@ -27,14 +26,6 @@ function ModuleCardSkeleton() {
     </div>
   );
 }
-
-// Only for the blurred "Жасалуда" overlay when NEXT_PUBLIC_MODULES_UI_ENABLED=false:
-// these ids do not exist, so the cards are never links.
-const PREVIEW_MODULES: Module[] = [
-  { id: 1, name: "Арифметика", icon: "book", sort_order: 1, progress: { completed: false, progress: 0, completed_sections: 0, total_sections: 2 } },
-  { id: 2, name: "Бөлшектер", icon: "book", sort_order: 2, progress: { completed: false, progress: 0, completed_sections: 0, total_sections: 0 } },
-  { id: 3, name: "Дәреже", icon: "book", sort_order: 3, progress: { completed: false, progress: 0, completed_sections: 0, total_sections: 0 } },
-];
 
 export default function ModulesPage() {
   const { data: session, status } = useSession();
@@ -106,7 +97,6 @@ export default function ModulesPage() {
     );
   }
 
-  const displayModules = !MODULES_UI_ENABLED && modules.length === 0 ? PREVIEW_MODULES : modules;
   const retry = () => {
     if (session.user?.email) void fetchModules(session.user.email);
   };
@@ -124,79 +114,52 @@ export default function ModulesPage() {
               </h1>
             </div>
 
-            <div className="relative min-h-[360px]">
-              <div
-                className={MODULES_UI_ENABLED ? "" : "pointer-events-none select-none blur-sm opacity-60"}
-                aria-hidden={!MODULES_UI_ENABLED}
-              >
-                {MODULES_UI_ENABLED && loading ? (
-                  <div className={MODULE_GRID_CLASSES} role="status" aria-label="Модульдер жүктелуде">
-                    {[0, 1, 2].map((index) => (
-                      <ModuleCardSkeleton key={index} />
-                    ))}
-                  </div>
-                ) : MODULES_UI_ENABLED && error ? (
-                  <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-red-700 sm:flex-row sm:items-center sm:justify-between">
-                    <span>{error}</span>
-                    <button
-                      type="button"
-                      onClick={retry}
-                      className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-700"
-                    >
-                      Қайта жүктеу
-                    </button>
-                  </div>
-                ) : displayModules.length === 0 ? (
-                  <div className="rounded-2xl border border-white/60 bg-white/60 px-6 py-16 text-center font-semibold text-slate-500">
-                    Модульдер әлі қосылмаған.
-                  </div>
-                ) : (
-                  <div className={MODULE_GRID_CLASSES}>
-                    {displayModules.map((module) => {
-                      const content = (
-                        <div
-                          key={module.id}
-                          className="glass rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all"
-                        >
-                          <ContentIcon value={module.icon} fallback="book" size={32} className="mb-4 text-indigo-600" />
-                          <h3 className="text-xl font-bold text-gray-800 mb-2">{module.name}</h3>
-                          {module.description && (
-                            <p className="text-gray-600 text-sm mb-4 line-clamp-2">{module.description}</p>
-                          )}
-                          <div className="mt-4">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className={`h-2 rounded-full transition-all ${getProgressColor(module.progress)}`}
-                                style={{ width: `${(module.progress?.progress || 0) * 100}%` }}
-                              />
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {`${module.progress?.completed_sections || 0} / ${module.progress?.total_sections || 0} бөлім`}
-                            </div>
+            <div className="min-h-[360px]">
+              {loading ? (
+                <div className={MODULE_GRID_CLASSES} role="status" aria-label="Модульдер жүктелуде">
+                  {[0, 1, 2].map((index) => (
+                    <ModuleCardSkeleton key={index} />
+                  ))}
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{error}</span>
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-700"
+                  >
+                    Қайта жүктеу
+                  </button>
+                </div>
+              ) : modules.length === 0 ? (
+                <div className="rounded-2xl border border-white/60 bg-white/60 px-6 py-16 text-center font-semibold text-slate-500">
+                  Модульдер әлі қосылмаған.
+                </div>
+              ) : (
+                <div className={MODULE_GRID_CLASSES}>
+                  {modules.map((module) => (
+                    <Link key={module.id} href={`/modules/${module.id}`}>
+                      <div className="glass rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all">
+                        <ContentIcon value={module.icon} fallback="book" size={32} className="mb-4 text-indigo-600" />
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">{module.name}</h3>
+                        {module.description && (
+                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">{module.description}</p>
+                        )}
+                        <div className="mt-4">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${getProgressColor(module.progress)}`}
+                              style={{ width: `${(module.progress?.progress || 0) * 100}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {`${module.progress?.completed_sections || 0} / ${module.progress?.total_sections || 0} бөлім`}
                           </div>
                         </div>
-                      );
-
-                      if (MODULES_UI_ENABLED) {
-                        return (
-                          <Link key={module.id} href={`/modules/${module.id}`}>
-                            {content}
-                          </Link>
-                        );
-                      }
-                      return content;
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {!MODULES_UI_ENABLED && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/25 backdrop-blur-[2px]">
-                  <div className="px-8 py-4 rounded-3xl bg-white/95 shadow-2xl border border-purple-200/60 backdrop-blur-md">
-                    <span className="text-3xl sm:text-4xl font-black text-gray-900 drop-shadow-sm">
-                      Жасалуда
-                    </span>
-                  </div>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>

@@ -17,8 +17,6 @@ This document inventories all features that are **currently implemented and acti
   - Submitting a correct answer via `POST /api/task/check` ([`bot/routes/tasks.py`](../../bot/routes/tasks.py)) records completion in `user_progress` and `user_task_completions` ([`bot/repositories/progress_repository.py`](../../bot/repositories/progress_repository.py)) and updates module/section/lesson completion percentages (`GET /api/modules/map`, `GET /api/modules/{module_id}`, `GET /api/lessons/{lesson_id}`).
 - **Mistake Review after a Mini-Lesson**:
   - Tasks answered wrong on the first attempt are re-practised on number-only twin tasks once the mini-lesson task is solved (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)).
-- **Note on `/modules` UI Availability**:
-  - The `/modules` map entry page (`web/app/modules/page.tsx`) is enabled by default; setting `NEXT_PUBLIC_MODULES_UI_ENABLED=false` at build time shows a blurred preview instead (see [Planned & Flagged Features](planned-features.md)).
 
 ---
 
@@ -70,10 +68,8 @@ Implemented in [`bot/routes/quizzes.py`](../../bot/routes/quizzes.py), [`bot/rou
 
 ---
 
-## 6. Social Graph, Friend Invites & Shared Presence
+## 6. Online Presence
 
-- **Friends & Shareable Links** ([`bot/routes/friends.py`](../../bot/routes/friends.py), [`bot/repositories/friends_repository.py`](../../bot/repositories/friends_repository.py), [`web/app/profile/page.tsx`](../../web/app/profile/page.tsx)):
-  - Shareable friend invite tokens (`/api/friends/invites`), direct friend requests (`/api/friends/requests`), friend list management (`/api/friends`), and user blocking (`/api/friends/blocks`).
 - **Online Presence** ([`bot/routes/presence.py`](../../bot/routes/presence.py)):
   - Supports shared DB heartbeat (`POST /api/presence/heartbeat` with 70-second TTL) on serverless deployments and `/ws/presence` WebSockets on stateful deployments.
 
@@ -112,7 +108,7 @@ Implemented in [`bot/routes/admin/bank.py`](../../bot/routes/admin/bank.py), [`b
   - Six tabs, each loaded on demand from its own endpoint: **Шолу** (KPIs with deltas, activity series, weekday-by-hour heatmap, journey of new students, an attention list that opens the matching filter on another tab), **Оқушылар** (segments, searchable and sortable list, CSV export), **Есептер** (accuracy by question type, difficulty and topic; task list with first-attempt accuracy and hard-task flags, CSV export), **Модульдер** (started and completed students per lesson and mini-lesson), **Сынақ тесттері** (score distribution, per-question accuracy, latest attempts) and **Квиздер** (sessions, participants, per-quiz accuracy).
   - "Әкімшілерсіз" leaves admin accounts out of every figure except quizzes. Every chart has a table view; every KPI has a definition behind its info button.
 - **Ops Health Monitor** (`/admin/ops`, [`bot/routes/admin/ops.py`](../../bot/routes/admin/ops.py)):
-  - CSV/JSON exports (`/api/export/admin/stats`), rolling latency/error metrics (`ops_health_samples`), deduplicated incidents (`ops_incidents`), and optional Telegram alerts (`bot/utils/alerts.py`).
+  - CSV/JSON exports (`/api/export/admin/stats`), rolling latency/error metrics (`ops_health_samples`), deduplicated incidents (`ops_incidents`).
 - **Mistake Analytics** (`/admin/mistakes`): first-attempt mistakes by task, topic and student, with review outcomes and twin coverage (see [section 9](#9-mistake-review-twin-tasks-ai-drafts--mistake-analytics)).
 
 ---

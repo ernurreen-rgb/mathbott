@@ -1,6 +1,6 @@
 # QazMath (`CursorMathbot`)
 
-QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons with a mistake review on number-only twin tasks (optionally drafted by an AI provider) and teacher-facing mistake analytics, computer-algebra answer equivalence checking, social friend/invite workflows, and a role-based administrative workspace.
+QazMath is a full-stack mathematics learning, practice, and assessment platform built with a **Next.js 15 (React 18, TypeScript)** web frontend and a **FastAPI (Python 3.11+)** backend. It provides a centralized LaTeX/MathLive task bank, trial tests organized in nested folders, live classroom quizzes (teacher-paced and self-paced), curriculum modules and lessons with a mistake review on number-only twin tasks (optionally drafted by an AI provider) and teacher-facing mistake analytics, computer-algebra answer equivalence checking, and a role-based administrative workspace.
 
 ---
 
@@ -21,7 +21,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 
 ### Reference
 - **[API Overview](docs/api/api-overview.md)** — Complete catalog of FastAPI HTTP/WebSocket endpoints and Next.js API routes, proxy authentication contract, rate limits, and RBAC requirements.
-- **[Database Schema](docs/database/schema.md)** — Complete reference of all 37 application tables, foreign-key relationships, the PostgreSQL access layer (`bot/storage.py`), and migration history (`0001`–`0009`).
+- **[Database Schema](docs/database/schema.md)** — Complete reference of all 26 application tables, foreign-key relationships, the PostgreSQL access layer (`bot/storage.py`), and migration history (`0001`–`0009`).
 - **[Implemented Features](docs/features/implemented-features.md)** — Verified inventory of active production and administrative features in the current codebase.
 - **[Planned, Flagged & Retired Features](docs/features/planned-features.md)** — Feature-flagged UI, logging stubs, deferred roadmap items, and retired legacy tables/features.
 
@@ -38,7 +38,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 | **Backend API** | FastAPI, Uvicorn, Pydantic v2, SlowAPI | Python `3.11`–`3.12` (`pyproject.toml`), FastAPI `0.136.3` |
 | **Database** | PostgreSQL 17 (Neon serverless in prod, local server or Docker in development) | `psycopg[binary]` `>=3.2,<4`, checksum-verified SQL migrations |
 | **Object Storage** | Local filesystem (`images/`) or S3-compatible bucket | `boto3` `>=1.35,<2`, `aiofiles` `25.1.0` |
-| **Observability** | Sentry, in-memory `MetricsCollector`, DB `OpsMonitor` + Telegram alerts | `@sentry/nextjs` `^10.78.0`, `sentry-sdk[fastapi]` `>=2.15.0` |
+| **Observability** | Sentry, in-memory `MetricsCollector`, DB `OpsMonitor` incidents | `@sentry/nextjs` `^10.78.0`, `sentry-sdk[fastapi]` `>=2.15.0` |
 
 ---
 
@@ -62,7 +62,7 @@ Copy-Item .env.example .env.local
 python main.py
 ```
 
-The backend listens on `http://localhost:8000`, applies the PostgreSQL migrations (`bot/migrations/postgres/0001`–`0009`) and initial seeds on startup, and refuses to start without a PostgreSQL `DATABASE_URL`.
+The backend listens on `http://localhost:8000`, applies the PostgreSQL migrations (`bot/migrations/postgres/0001`–`0010`) and initial seeds on startup, and refuses to start without a PostgreSQL `DATABASE_URL`.
 
 ### 2. Frontend (`web/`)
 

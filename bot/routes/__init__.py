@@ -13,9 +13,7 @@ from routes import admin
 from routes import trial_tests
 from routes import questions
 from routes import reports
-from routes import onboarding
 from routes import export
-from routes import friends
 from routes import presence
 from routes import quizzes
 from routes import quiz_game
@@ -43,9 +41,7 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     trial_tests.setup_trial_tests_routes(app, db, limiter)
     questions.setup_questions_routes(app, db, limiter)
     reports.setup_reports_routes(app, db, limiter)
-    onboarding.setup_onboarding_routes(app, db, limiter)
     export.setup_export_routes(app, db)
-    friends.setup_friends_routes(app, db, limiter)
     presence.setup_presence_routes(app, db, limiter)
     quizzes.setup_quizzes_routes(app, db, limiter)
     quiz_game.setup_quiz_game_routes(app, db, limiter)

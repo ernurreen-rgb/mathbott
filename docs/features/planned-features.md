@@ -6,11 +6,7 @@ This document distinguishes between features that are **feature-flagged**, **pla
 
 ## 1. Feature-Flagged Functionality
 
-### 1.1 Interactive Student Modules Map (`/modules`)
-- **Location**: [`web/app/modules/page.tsx`](../../web/app/modules/page.tsx) (line 15), [`web/Dockerfile`](../../web/Dockerfile) (line 20).
-- **Current State**:
-  - Both the backend curriculum APIs (`/api/modules/map`, `/api/modules/{module_id}`, `/api/lessons/{lesson_id}`, `/api/task/check`) and the frontend map UI in `web/app/modules/page.tsx` are implemented and enabled by default (`process.env.NEXT_PUBLIC_MODULES_UI_ENABLED !== "false"` in `web/app/modules/page.tsx` and `ARG NEXT_PUBLIC_MODULES_UI_ENABLED=true` in `web/Dockerfile`).
-  - If `NEXT_PUBLIC_MODULES_UI_ENABLED` is explicitly set to `"false"`, `/modules` renders a blurred preview covered by a banner (*"Бөлім уақытша жабық / Модульдер беті қазір дайындалып жатыр"*).
+None. The `/modules` flag (`NEXT_PUBLIC_MODULES_UI_ENABLED`) and its blurred "Жасалуда" preview were removed on 2026-11-15; the map is always on.
 
 ---
 
@@ -38,9 +34,11 @@ The following features existed in earlier schema revisions and were intentionall
 | **Competitive Ratings, Leagues & Bots** | Former SQLite Alembic `0005_remove_competitive_features` (removed with SQLite support; in git history) | Retired tables/columns were archived into `mathbot_legacy_archive` by the one-time SQLite import. No runtime routes or UI remain. |
 | **Interactive Factor Grid Task Type (`factor_grid`)** | Former SQLite Alembic `0006_remove_factor_grid_tasks` (in git history) | Converted to standard `input` tasks (`a,b,c,d`). Runtime normalization fallback remains in [`bot/repositories/task_repository.py`](../../bot/repositories/task_repository.py) and [`bot/repositories/trial_test_repository.py`](../../bot/repositories/trial_test_repository.py). |
 | **Learning Points (`total_points`, `points_awarded`)** | PG [`0003_remove_learning_points.sql`](../../bot/migrations/postgres/0003_remove_learning_points.sql) | Renamed `user_task_rewards` -> `user_task_completions` and dropped `points_awarded`, `difficulty`, and `users.total_points`. |
-| **Admin Onboarding Survey Breakdown** | Commit `e60e98f` | Removed from `/api/admin/statistics` and `/admin/statistics` UI, while `user_onboarding` remains active for student onboarding (`/api/user/onboarding`). |
-| **Co-op (2-player) Trial Tests** | Removed 2026-11-14 | Routes, `/ws/trial-tests/coop`, the repository, pages and invites are gone. The `trial_test_coop_*` tables stay with their data until a drop migration; old co-op attempts remain in `trial_test_results` (`submit_mode = 'coop'`) and still count in statistics. |
-| **Unused Summary Table (`user_progress_summary`)** | [`0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) | Present in the database schema for migration parity, but no repository reads or writes to `user_progress_summary` (progress is computed directly from `user_progress`). |
+| **Onboarding Survey** | Commit `e60e98f` (admin breakdown), removed 2026-11-15, PG `0010` | The survey screen was gone already; `/api/user/onboarding` and its repository were removed and `user_onboarding` is dropped by `0010_remove_unused_tables`. The `users.onboarding_completed` column is unused. |
+| **Co-op (2-player) Trial Tests** | Removed 2026-11-14, PG `0010` | Routes, `/ws/trial-tests/coop`, the repository, pages and invites are gone and `0010_remove_unused_tables` drops the `trial_test_coop_*` tables. Old co-op attempts remain in `trial_test_results` (`submit_mode = 'coop'`) and still count in statistics. |
+| **Unused Summary Table (`user_progress_summary`)** | PG `0010` | Never read or written by the application; dropped by `0010_remove_unused_tables`. |
+| **Friends (friendships, requests, invite links, blocks)** | Removed 2026-11-15, PG `0010` | `/api/friends*`, the repository, the profile friends section and the "add friend" button are gone; `0010_remove_unused_tables` drops `friendships`, `friend_requests`, `friend_invites` and `blocks`. Online presence moved to `UserRepository.heartbeat_presence` and still feeds the admin statistics. |
+| **Telegram Ops Alerts** | Removed 2026-11-15 | `bot/utils/alerts.py` and the `ALERT*` settings are gone; `OpsMonitor` still records incidents for `/admin/ops`. The `ops_incidents.telegram_last_sent_at` column is unused. |
 
 ---
 

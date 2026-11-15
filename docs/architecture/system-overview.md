@@ -32,7 +32,7 @@ flowchart LR
         DB[("PostgreSQL (Neon in prod, local server in dev)")]
         Img[("Local images/ or S3 Bucket")]
         OAuth["Google OAuth 2.0"]
-        Sentry["Sentry + Telegram Bot API"]
+        Sentry["Sentry"]
         AI["Optional AI provider (OpenAI-compatible Chat Completions)"]
     end
 
@@ -87,9 +87,9 @@ Configured via [`bot/Dockerfile`](../../bot/Dockerfile), [`web/Dockerfile`](../.
    - Strips any incoming client-supplied `X-Proxy-*`, `Authorization`, and `Cookie` headers (`STRIP_REQUEST_HEADERS`).
    - Classifies the target backend path into one of four route policies:
      - `admin`: Requires an authenticated NextAuth session (`/api/admin/*`, `/api/export/admin/*`).
-     - `authenticated`: Requires an authenticated NextAuth session (trial test submissions/drafts, friend requests, reports, user profile updates, quiz hosting/management).
+     - `authenticated`: Requires an authenticated NextAuth session (trial test submissions/drafts, reports, user profile updates, quiz hosting/management).
      - `guest_capable`: Allows either an authenticated session or a guest (`X-Quiz-Participant-Token` or public PIN lookup/join on `/api/quiz-sessions/*`, `/api/tasks/{id}/questions/check`).
-     - `public`: Allows unauthenticated read access (`/api/health`, `/api/images/*`, `/api/modules/*`, `/api/lessons/*`, `/api/trial-tests`, `/api/quizzes`, `/api/user/public/*`, `/api/friends/invites/{token}`).
+     - `public`: Allows unauthenticated read access (`/api/health`, `/api/images/*`, `/api/modules/*`, `/api/lessons/*`, `/api/trial-tests`, `/api/quizzes`, `/api/user/public/*`).
    - Canonicalizes actor identity: for non-admin authenticated routes, rewrites `email`, `user_email`, `sender_email`, or `blocker_email` in query parameters, JSON payloads, or `FormData` to the session user's email.
    - Signs the outbound request to FastAPI using `INTERNAL_PROXY_SHARED_SECRET` and attaches:
      - `X-Proxy-Request-Ts` (Unix timestamp, validated within a 300-second window)
@@ -142,5 +142,5 @@ The frontend ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)) sele
 
 ### 5.2 Observability & Maintenance
 - **Request Metrics (`bot/middleware/metrics_middleware.py` & `bot/utils/metrics.py`):** Collects rolling 1-minute, 5-minute, and 60-minute request counts, error rates (`4xx`/`5xx`), and `p50`/`p95`/`p99` latencies keyed by normalized route templates (`GET /api/users/{email}`), bounded to 512 endpoint keys and 2,048 error keys.
-- **Operational Health & Incidents (`bot/services/ops_monitor.py` & `bot/repositories/ops_repository.py`):** Samples DB health and in-memory metrics into `ops_health_samples`, opens/resolves deduplicated incidents in `ops_incidents`, and optionally sends rate-limited Telegram alerts (`bot/utils/alerts.py`).
+- **Operational Health & Incidents (`bot/services/ops_monitor.py` & `bot/repositories/ops_repository.py`):** Samples DB health and in-memory metrics into `ops_health_samples`, opens/resolves deduplicated incidents in `ops_incidents`.
 - **Maintenance (`bot/services/maintenance.py` & `bot/routes/maintenance.py`):** Purges soft-deleted tasks (`>10` days for placements, `>30` days for bank tasks), expired quiz entry quota rows, and old ops samples/incidents, and runs `OpsMonitor.run_check_cycle()`.

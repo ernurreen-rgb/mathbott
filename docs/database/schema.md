@@ -1,6 +1,6 @@
 # Database Schema & Migration Reference
 
-This document describes the complete database schema of QazMath (`CursorMathbot`, last reviewed 2026-11-12), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0009`) and the storage adapter in [`bot/storage.py`](../../bot/storage.py).
+This document describes the complete database schema of QazMath (`CursorMathbot`, last reviewed 2026-11-15), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0009`) and the storage adapter in [`bot/storage.py`](../../bot/storage.py).
 
 ---
 
@@ -12,7 +12,7 @@ PostgreSQL is the only supported database: Neon in production, PostgreSQL 17 loc
 |---|---|
 | **Driver** | `psycopg[binary]` (`>=3.2,<4`) via `PostgresConnection` in [`bot/storage.py`](../../bot/storage.py), run in worker threads |
 | **Configuration** | `DATABASE_URL` (required, `postgresql://...`); `DATABASE_MIGRATION_URL` (optional direct URL for migrations) |
-| **Migration Tool** | Checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0009`); applied files must never change |
+| **Migration Tool** | Checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0010`); applied files must never change |
 | **Migration Tracking Table** | `mathbot_schema_migrations` (stores `version`, `checksum`, `applied_at`) |
 | **Query Placeholders** | Repositories write `?`; `postgres_sql()` rewrites them to `%s` outside quotes/comments. All other SQL is PostgreSQL as written (`ON CONFLICT`, `jsonb_each`, `RETURNING`). |
 | **Generated IDs** | `INSERT` into a table with an `id` column gets `RETURNING id` appended unless it has its own `RETURNING`; the value is `cursor.lastrowid` |
@@ -28,8 +28,6 @@ erDiagram
     users ||--o{ user_progress : "completes"
     users ||--o{ user_task_completions : "records"
     users ||--o{ user_achievements : "unlocks"
-    users ||--o| user_onboarding : "submits"
-    users ||--o{ friendships : "friends with"
     users ||--o{ trial_test_results : "attempts"
     users ||--o{ admin_audit_logs : "performs"
 
@@ -63,21 +61,19 @@ erDiagram
 
 ---
 
-## 3. Application Tables by Domain (37 Active Schema Tables)
+## 3. Application Tables by Domain (26 Active Schema Tables)
 
-### 3.1 Users, Roles, Gamification & Onboarding
+### 3.1 Users, Roles & Gamification
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
 | `users` | `id` (Identity) | `telegram_id BIGINT UNIQUE`, `email TEXT UNIQUE`, `nickname TEXT`, `streak INTEGER DEFAULT 0`, `last_streak_date TEXT`, `is_admin INTEGER DEFAULT 0`, `admin_role TEXT` | Core user identity, daily streak state, and admin RBAC role (`viewer`, `content_editor`, `reviewer`, `super_admin`). Note: `total_points` was dropped in PG `0003`. |
-| `user_onboarding` | `user_id` (`FK -> users.id`) | `status TEXT`, `role TEXT`, `grade TEXT`, `goal TEXT`, `completed_at TEXT` | Stores responses from the initial student/teacher onboarding flow (`/api/user/onboarding`). |
 | `user_achievements` | `id` (Identity) | `user_id INTEGER FK -> users.id`, `achievement_id TEXT`, `unlocked_at TEXT` | Unlocked achievement badges per user (`UNIQUE(user_id, achievement_id)`). |
 | `user_progress` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `status TEXT`, `completed_at TEXT` | Tracks per-user completion status (`solved`) for curriculum tasks (`UNIQUE(user_id, task_id)`). |
 | `user_task_completions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `completion_key TEXT`, `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE SET NULL`, `source TEXT`, `completed_at TEXT` | Renamed from `user_task_rewards` in PG `0003` (`points_awarded` and `difficulty` dropped). Deduplicates task completions across curriculum and bank placements (`UNIQUE(user_id, completion_key)`). |
 | `user_task_question_progress` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `question_index INTEGER`, `is_completed INTEGER` | Tracks per-subquestion progress on multi-question curriculum tasks (`UNIQUE(user_id, task_id, question_index)`). |
 | `solutions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `answer TEXT`, `is_correct INTEGER` | Historical log of student task answer submissions. The earliest row per `(user_id, task_id)` is the first attempt used by mistake review and analytics (index `idx_solutions_user_task_id`, PG `0008`). |
 | `module_review_attempts` | `id` (Identity) | `user_id FK -> users.id ON DELETE CASCADE`, `task_id FK -> tasks.id ON DELETE CASCADE` (the reviewed placement), `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE` (the twin or original served), `answer TEXT`, `is_correct`, `created_at` | Added in PG `0008`. Mistake-review answers, kept apart from `solutions` so review never changes progress, streaks or achievements. |
-| `user_progress_summary` | `id` (Identity) | `user_id`, `module_id`, `section_id`, `lesson_id`, `mini_lesson_id`, `completed_tasks`, `total_tasks`, `completion_percent` | **Unused / Legacy**: Created in `0001_initial.sql` with cascading FKs, but no repository currently reads or writes to this table (progress is aggregated on the fly from `user_progress`). |
 
 ### 3.2 Centralized Question Bank (`/admin/bank`)
 
@@ -108,11 +104,6 @@ erDiagram
 | `trial_test_tasks` | `id` (Identity) | `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE CASCADE`, `text TEXT`, `answer TEXT`, `question_type TEXT`, `options TEXT`, `subquestions TEXT`, `difficulty INTEGER`, `expected_tier TEXT`, `sort_order INTEGER` (`0`–`39`), `deleted_at TEXT` | Ordered task slots within a trial test. |
 | `trial_test_drafts` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `answers TEXT` (JSON), `current_index INTEGER`, `updated_at TEXT` | Server-saved in-progress solo exam drafts (`UNIQUE(user_id, trial_test_id)`). |
 | `trial_test_results` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `score INTEGER`, `total INTEGER`, `percentage REAL`, `answers TEXT` (JSON), `completed_at TEXT` | Completed trial test attempt scores and answer breakdowns (`submit_mode` is `solo`; older rows may be `coop`). |
-| `trial_test_coop_sessions` | `id` (Identity) | `trial_test_id INTEGER FK -> trial_tests.id ON DELETE CASCADE`, `owner_id INTEGER FK -> users.id ON DELETE CASCADE`, `mode TEXT DEFAULT 'coop'`, `status TEXT DEFAULT 'active'` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
-| `trial_test_coop_participants` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `color TEXT` (`red` or `blue`), `is_finished INTEGER DEFAULT 0` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
-| `trial_test_coop_answers` | `id` (Identity) | `session_id INTEGER FK -> trial_test_coop_sessions.id ON DELETE CASCADE`, `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER`, `answer TEXT` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
-| `trial_test_coop_invites` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `sender_id FK -> users.id`, `receiver_id FK -> users.id`, `status TEXT DEFAULT 'pending'` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
-| `trial_test_coop_results` | `id` (Identity) | `session_id FK -> trial_test_coop_sessions.id`, `user_id FK -> users.id`, `trial_test_result_id FK -> trial_test_results.id` | Retired with co-op mode (2026-11-14): no code reads or writes it; kept with its data until a drop migration. |
 
 ### 3.5 Live Classroom Quizzes (`/quiz`)
 
@@ -126,16 +117,7 @@ erDiagram
 | `quiz_answers` | `id` (Identity) | `session_id FK -> quiz_sessions.id`, `participant_id FK -> quiz_participants.id ON DELETE CASCADE`, `question_id INTEGER`, `answer TEXT`, `is_correct INTEGER`, `score_awarded INTEGER`, `time_ms INTEGER` | Participant answers (`UNIQUE(session_id, participant_id, question_id)`). |
 | `quiz_entry_limits` | `(scope_type, scope_key)` | `failed_attempts INTEGER DEFAULT 0`, `window_started_at TIMESTAMPTZ`, `blocked_until TIMESTAMPTZ`, `updated_at TIMESTAMPTZ` | Added in PG `0006`. Persists PIN lookup/join rate-limit state across serverless instances. |
 
-### 3.6 Social Graph (Friends, Invites & Blocks)
-
-| Table | Primary Key | Key Columns & Constraints | Description |
-|---|---|---|---|
-| `friendships` | `(user_id, friend_id)` | `user_id FK -> users.id ON DELETE CASCADE`, `friend_id FK -> users.id ON DELETE CASCADE`, `created_at TEXT` | Bidirectional friendship edges (stored as symmetric pairs `(u, v)` and `(v, u)`). |
-| `friend_requests` | `id` (Identity) | `sender_id FK -> users.id ON DELETE CASCADE`, `receiver_id FK -> users.id ON DELETE CASCADE`, `status TEXT DEFAULT 'pending'` | Direct friend requests (`UNIQUE(sender_id, receiver_id)`). |
-| `friend_invites` | `id` (Identity) | `inviter_id FK -> users.id ON DELETE CASCADE`, `token TEXT UNIQUE`, `status TEXT DEFAULT 'active'`, `accepted_by FK -> users.id ON DELETE SET NULL`, `expires_at TEXT` | Shareable friend invite links. |
-| `blocks` | `(blocker_id, blocked_id)` | `blocker_id FK -> users.id ON DELETE CASCADE`, `blocked_id FK -> users.id ON DELETE CASCADE`, `created_at TEXT` | User block list preventing friend requests and invites. |
-
-### 3.7 Reports, Admin Audit & Operational Monitoring
+### 3.6 Reports, Admin Audit & Operational Monitoring
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
@@ -162,3 +144,4 @@ erDiagram
 | `0007` | [`0007_trial_test_folders.sql`](../../bot/migrations/postgres/0007_trial_test_folders.sql) | Creates `trial_test_folders` table and adds `folder_id INTEGER REFERENCES trial_test_folders(id) ON DELETE RESTRICT` to `trial_tests`. |
 | `0008` | [`0008_module_review.sql`](../../bot/migrations/postgres/0008_module_review.sql) | Creates `bank_task_twins` and `module_review_attempts`, and adds `idx_solutions_user_task_id` for first-attempt lookups. |
 | `0009` | [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql) | Adds `ai_model`, `ai_check_status`, `ai_check_answer`, `ai_checked_version` and `ai_checked_at` to `bank_task_twins`. |
+| `0010` | [`0010_remove_unused_tables.sql`](../../bot/migrations/postgres/0010_remove_unused_tables.sql) | Drops the tables of removed features: `trial_test_coop_*`, `friendships`, `friend_requests`, `friend_invites`, `blocks`, `user_onboarding`, and the unused `user_progress_summary`. |

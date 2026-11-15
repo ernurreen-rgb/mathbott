@@ -50,6 +50,20 @@ def _normalize_admin_role(role: Optional[str]) -> Optional[str]:
 class UserRepository(BaseRepository):
     """Repository for user operations"""
     
+    async def heartbeat_presence(self, user_id: int) -> List[Dict[str, Any]]:
+        """Persist activity so hosted instances share the same online roster."""
+        async def operation():
+            async with self._connection() as db:
+                db.row_factory = db_driver.Row
+                await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
+                async with db.execute("""SELECT id, nickname FROM users
+                    WHERE mathbot_datetime(last_active) >= mathbot_datetime('now', '-70 seconds')
+                    ORDER BY id""") as cursor:
+                    users = [dict(row) for row in await cursor.fetchall()]
+                await db.commit()
+                return users
+        return await self._run_with_write_lock(operation)
+
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
         async with self._connection() as db:

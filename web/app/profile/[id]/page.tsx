@@ -2,29 +2,23 @@
 import Icon from "@/components/ui/Icon";
 
 
-import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
-import { FriendStatus, UserData } from "@/types";
-import { getFriendStatus, getPublicUserDataById, sendFriendRequest } from "@/lib/api";
+import { UserData } from "@/types";
+import { getPublicUserDataById } from "@/lib/api";
 import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 
 export default function PublicProfilePage() {
-  const { data: session } = useSession();
   const params = useParams();
   const userId = params?.id ? parseInt(params.id as string, 10) : null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streakAnimated, setStreakAnimated] = useState(false);
-  const [friendStatus, setFriendStatus] = useState<FriendStatus | null>(null);
-  const [friendStatusLoading, setFriendStatusLoading] = useState(false);
-  const [friendActionMessage, setFriendActionMessage] = useState<string | null>(null);
-  const [friendActionLoading, setFriendActionLoading] = useState(false);
 
   const weekDays = [
     { short: "Дс", weekDay: 1 }, // Monday
@@ -84,84 +78,6 @@ export default function PublicProfilePage() {
       setLoading(false);
     }
   }, [userId, fetchUserData]);
-
-  useEffect(() => {
-    const userEmail = session?.user?.email;
-    if (!userEmail || !userId || isNaN(userId)) {
-      setFriendStatus(null);
-      return;
-    }
-    const loadStatus = async () => {
-      setFriendStatusLoading(true);
-      const { data, error: statusError } = await getFriendStatus(userEmail, userId);
-      if (statusError) {
-        // Ensure error is always a string
-        const errorString = typeof statusError === 'string' ? statusError : JSON.stringify(statusError);
-        setFriendActionMessage(errorString);
-        setFriendStatus(null);
-      } else if (data) {
-        setFriendStatus(data);
-      }
-      setFriendStatusLoading(false);
-    };
-    loadStatus();
-  }, [session?.user?.email, userId]);
-
-  const handleSendFriendRequest = async () => {
-    const userEmail = session?.user?.email;
-    // Prevent multiple simultaneous requests
-    if (!userEmail || !userId || friendActionLoading || friendStatusLoading) return;
-    
-    // Also check if request is already pending - don't allow sending again
-    if (friendStatus?.has_pending_outgoing) return;
-    
-    setFriendActionLoading(true);
-    setFriendActionMessage(null);
-    const { error: requestError } = await sendFriendRequest(userEmail, userId);
-    
-    // Always refresh friend status after sending request (even if error)
-    // This ensures UI shows correct state (e.g., hides button if request already pending)
-    const { data } = await getFriendStatus(userEmail, userId);
-    if (data) {
-      setFriendStatus(data);
-    }
-    
-    if (requestError) {
-      // If error is "Request already pending" or similar, show friendly message
-      // Ensure error is always a string (handle both string and object cases)
-      let errorString: string;
-      if (typeof requestError === 'string') {
-        errorString = requestError;
-      } else if (requestError && typeof requestError === 'object') {
-        // Try to extract meaningful error message from object
-        errorString = (requestError as any).detail || 
-                     (requestError as any).message || 
-                     (requestError as any).error ||
-                     JSON.stringify(requestError);
-      } else {
-        errorString = String(requestError);
-      }
-      
-      const errorLower = errorString.toLowerCase();
-      if (errorLower.includes('already pending') || 
-          errorLower.includes('уже отправлен') ||
-          errorLower.includes('request already') ||
-          errorLower.includes('запрос уже')) {
-        // Don't show error message if status shows pending request (button will be hidden)
-        if (data?.has_pending_outgoing) {
-          setFriendActionMessage(null); // Clear message since button will be hidden
-        } else {
-          setFriendActionMessage("Сұраныс жіберілген");
-        }
-      } else {
-        setFriendActionMessage(errorString);
-      }
-    } else {
-      setFriendActionMessage("Сұраныс жіберілді");
-    }
-    
-    setFriendActionLoading(false);
-  };
 
   if (loading) {
     return (
@@ -224,30 +140,6 @@ export default function PublicProfilePage() {
                 <h2 className="text-3xl font-bold mb-1">
                   {userData?.nickname || "Пайдаланушы"}
                 </h2>
-                {session?.user?.email && friendStatus && !friendStatus.is_self && !friendStatus.is_blocked && !friendStatus.is_friend && (
-                  <div className="mt-2">
-                    {friendStatus.has_pending_outgoing ? (
-                      <span className="text-sm text-blue-100">Сұраныс жіберілген</span>
-                    ) : (
-                      <button
-                        onClick={handleSendFriendRequest}
-                        disabled={friendActionLoading || friendStatusLoading}
-                        className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all text-sm font-semibold"
-                      >
-                        {friendActionLoading ? "Жіберілуде..." : "Дос ретінде қосу"}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {friendStatus?.is_friend && (
-                  <div className="mt-2 text-sm text-blue-100">Сіздер доссыздар</div>
-                )}
-                {friendStatus?.is_blocked && (
-                  <div className="mt-2 text-sm text-blue-100">Дос ретінде қосу мүмкін емес</div>
-                )}
-                {friendActionMessage && !friendStatus?.has_pending_outgoing && (
-                  <div className="mt-2 text-sm text-blue-100">{friendActionMessage}</div>
-                )}
               </div>
             </div>
           </div>

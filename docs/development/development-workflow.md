@@ -68,20 +68,17 @@ Triggered on `push` and `pull_request` to `main` or `develop`:
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):
    - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm audit --audit-level=moderate` in `web/`.
 
-### 3.2 Docker Image Build, Trivy Scan & Docker Hub Push ([`.github/workflows/docker-hub.yml`](../../.github/workflows/docker-hub.yml))
-Triggered on push to `main`, Git tags `v*`, or `workflow_dispatch`:
-1. Runs `backend-syntax` and `frontend-check` gates.
-2. Builds `./bot` and `./web` Docker images, scans both with **Aqua Trivy** (`aquasecurity/trivy-action`, failing on `CRITICAL,HIGH` vulnerabilities with `exit-code: 1`), and pushes verified images to Docker Hub (`<DOCKERHUB_USERNAME>/mathbot-backend` and `<DOCKERHUB_USERNAME>/mathbot-web`).
-
-### 3.3 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
+### 3.2 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
 Triggered weekly (`0 6 * * 1` — Mondays at 06:00 UTC) or via `workflow_dispatch`:
 - Runs `pip-audit` on `bot/requirements.txt` and `npm audit --audit-level=moderate` on `web/`.
+
+Docker images are no longer built or pushed by CI (the Docker Hub workflow was removed on 2026-11-15). `bot/Dockerfile`, `web/Dockerfile` and the `deploy/` configs stay for a possible self-hosted setup; build them locally if needed.
 
 ---
 
 ## 4. Database Migrations Workflow
 
-PostgreSQL is the only database. Its schema lives in numbered SQL files: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql), applied in order by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums. The SQLite Alembic track (`bot/migrations/versions/`) was removed on `2026-11-12`.
+PostgreSQL is the only database. Its schema lives in numbered SQL files: [`bot/migrations/postgres/0001_initial.sql`](../../bot/migrations/postgres/0001_initial.sql) through [`0010_remove_unused_tables.sql`](../../bot/migrations/postgres/0010_remove_unused_tables.sql), applied in order by [`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py) and recorded in `mathbot_schema_migrations` with SHA-256 checksums. The SQLite Alembic track (`bot/migrations/versions/`) was removed on `2026-11-12`.
 
 ### Rules When Modifying the Database Schema
 1. **Add the next numbered `.sql` file** in `bot/migrations/postgres/` for every schema change. It runs in one transaction with the other pending migrations at startup or through `python scripts/migrate_to_neon.py`.
@@ -96,7 +93,7 @@ All operational scripts are run from `bot/`:
 
 | Script | Command Example | Purpose |
 |---|---|---|
-| [`migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) | `python scripts/migrate_to_neon.py` | Applies the PostgreSQL migrations (`0001`–`0009`) and startup seeds via `DATABASE_MIGRATION_URL` (falls back to `DATABASE_URL`). `--schema-only` is still accepted and does the same. See [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md). |
+| [`migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py) | `python scripts/migrate_to_neon.py` | Applies the PostgreSQL migrations (`0001`–`0010`) and startup seeds via `DATABASE_MIGRATION_URL` (falls back to `DATABASE_URL`). `--schema-only` is still accepted and does the same. See [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md). |
 | [`postgres_backup.py`](../../bot/scripts/postgres_backup.py) | `python scripts/postgres_backup.py backup --output C:\private-backups\snap`<br>`python scripts/postgres_backup.py restore --backup C:\private-backups\snap`<br>`python scripts/postgres_backup.py restore --backup C:\private-backups\snap --apply` | Creates a `REPEATABLE READ, READ ONLY` snapshot-consistent `pg_dump` (`database.dump`) + `manifest.json` (with SHA-256 digests and all 7 migration checksums) and verifies restoration into an isolated `mathbot_restore_*` database. See [`deploy/POSTGRES_BACKUP_RESTORE.md`](../../deploy/POSTGRES_BACKUP_RESTORE.md). |
 | [`upload_images.py`](../../bot/scripts/upload_images.py) | `python scripts/upload_images.py --source ../images`<br>`python scripts/upload_images.py --source ../images --apply` | Uploads local task images from `images/` to the configured S3 bucket (`S3_BUCKET`) without overwriting mismatched content. |
 | [`preview_bank_workspace.py`](../../bot/scripts/preview_bank_workspace.py) | `python scripts/preview_bank_workspace.py` | Starts an isolated seeded FastAPI fixture server on `127.0.0.1:8100` for testing `/admin/bank`, on its own database on the `TEST_DATABASE_URL` server. |

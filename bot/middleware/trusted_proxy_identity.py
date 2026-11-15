@@ -72,14 +72,12 @@ def _is_sensitive_identity_path(path: str) -> bool:
         "/api/admin/",
         "/api/export/admin/",
         "/api/export/user/",
-        "/api/friends",
         "/api/mini-lessons",
         "/api/presence",
         "/api/reports",
         "/api/task/check",
         "/api/trial-test-reports",
         "/api/trial-tests",
-        "/api/user/onboarding",
         "/api/user/web",
     )
     if any(path.startswith(prefix) for prefix in sensitive_prefixes):

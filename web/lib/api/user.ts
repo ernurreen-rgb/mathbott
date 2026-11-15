@@ -15,6 +15,13 @@ export async function getPresenceWsToken(
   );
 }
 
+export async function heartbeatPresence(email: string) {
+  return fetchWithErrorHandling<{ type: string; users: { id: number; nickname?: string | null }[] }>(
+    `${apiPath("presence/heartbeat")}?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+}
+
 export async function getPublicUserDataById(userId: number): Promise<{ data: UserData | null; error: string | null }> {
   // Use the unified endpoint that accepts both ID and email
   return fetchWithErrorHandling<UserData>(
