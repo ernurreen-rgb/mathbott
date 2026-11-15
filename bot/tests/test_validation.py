@@ -63,5 +63,35 @@ class WrittenModeChoiceValidationTests(unittest.TestCase):
         self.assertEqual(normalize_task_answer_for_compare(task, ["C", "A"]), '["C", "A"]')
 
 
+class PartialAndEmptyAnswerValidationTests(unittest.TestCase):
+    def test_mcq6_choices_rejects_partial_or_empty_answers_without_error(self):
+        task = {
+            "question_type": "mcq6",
+            "answer_mode": "choices",
+            "answer": '["A", "C"]',
+            "options": json.dumps([
+                {"label": label, "text": label} for label in ["A", "B", "C", "D", "E", "F"]
+            ]),
+        }
+        self.assertTrue(is_task_answer_correct(task, '["C", "A"]'))
+        self.assertFalse(is_task_answer_correct(task, "A"))
+        self.assertFalse(is_task_answer_correct(task, '["A"]'))
+        self.assertFalse(is_task_answer_correct(task, ""))
+
+    def test_select_choices_rejects_partial_or_empty_answers_without_error(self):
+        task = {
+            "question_type": "select",
+            "answer_mode": "choices",
+            "answer": '["C", "A"]',
+            "options": json.dumps([
+                {"label": label, "text": label} for label in ["A", "B", "C", "D"]
+            ]),
+        }
+        self.assertTrue(is_task_answer_correct(task, '["C", "A"]'))
+        self.assertFalse(is_task_answer_correct(task, '["C", ""]'))
+        self.assertFalse(is_task_answer_correct(task, '["", "A"]'))
+        self.assertFalse(is_task_answer_correct(task, ""))
+
+
 if __name__ == "__main__":
     unittest.main()

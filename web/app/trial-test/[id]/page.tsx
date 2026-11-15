@@ -11,8 +11,12 @@ import TaskStatement from "@/components/student/TaskStatement";
 import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, reportTrialTestTask, apiPath } from "@/lib/api";
-import { isTaskAnswerComplete } from "@/lib/task-answer";
-import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress } from "@/lib/trial-test-answer";
+import {
+  collectTrialTestAnswers,
+  getAnsweredTrialTaskCount,
+  getTrialTaskAnswerProgress,
+  isTrialTaskAnswered,
+} from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask } from "@/types";
 import styles from "./TrialTestWorkspace.module.css";
 
@@ -301,20 +305,8 @@ export default function TrialTestPage() {
   const handleFinishTest = async () => {
     if (!email || !test || submitting) return;
 
-    const firstUnansweredIndex = test.tasks.findIndex((task) => !isTaskAnswerComplete(task, answers[task.id]));
-    if (firstUnansweredIndex !== -1) {
-      setCurrentTaskIndexAndRef(firstUnansweredIndex);
-      return;
-    }
-    
-    // Collect all answers
-    const allAnswers: Record<string, string> = {};
-    test.tasks.forEach((task) => {
-      const value = answers[task.id];
-      if (isTaskAnswerComplete(task, value) && value != null) {
-        allAnswers[task.id.toString()] = value;
-      }
-    });
+    // Collect all provided answers (partial and unanswered tasks are allowed in trial tests)
+    const allAnswers = collectTrialTestAnswers(test.tasks, answers);
 
     const generation = loadGenerationRef.current;
     writableDraftKeyRef.current = null;
@@ -442,7 +434,7 @@ export default function TrialTestPage() {
                     </div>
                     <div className={styles.taskNumbers}>
                       {test.tasks.map((task, idx) => {
-                        const isAnswered = isTaskAnswerComplete(task, answers[task.id]);
+                        const isAnswered = isTrialTaskAnswered(task, answers[task.id]);
                         const isCurrent = idx === currentTaskIndex;
                         return (
                           <button
