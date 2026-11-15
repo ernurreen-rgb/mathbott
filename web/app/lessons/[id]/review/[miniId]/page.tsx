@@ -171,17 +171,11 @@ export default function MiniLessonReviewPage() {
     <section className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
       <button type="button" onClick={returnToLesson} className="text-gray-700 hover:text-gray-900 inline-flex items-center gap-1.5"><Icon name="arrowLeft" /> Сабаққа оралу</button>
       <h1 className="mt-4 text-2xl font-extrabold text-gray-900">Қателерді талдау</h1>
-      <p className="mt-1 text-sm text-gray-700">Бірінші әрекетте қате кеткен есептерге ұқсас, сандары өзгерген есептерді шығарыңыз. Бұл сабақ прогресіне әсер етпейді.</p>
-      {summary && summary.mistakes > 0 && <>
+      {summary && summary.mistakes > 0 && (
         <div className="mt-4 h-2 rounded-full bg-white/60 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={summary.mistakes} aria-valuenow={done} aria-label="Талдау барысы">
           <div className="h-2 rounded-full bg-purple-600 transition-all" style={{ width: `${(done / summary.mistakes) * 100}%` }} />
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">Түзетілді: {summary.resolved}</span>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Әлсіз тұс: {summary.weak}</span>
-          <span className="rounded-full bg-white/80 px-3 py-1 text-gray-700">Қалды: {summary.pending}</span>
-        </div>
-      </>}
+      )}
     </section>
 
     {error && <div role="alert" className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-800">
