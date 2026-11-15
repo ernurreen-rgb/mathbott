@@ -2,11 +2,10 @@
 Reports роуты
 """
 import logging
-from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Body, Form, Depends
+from fastapi import FastAPI, HTTPException, Query, Body, Depends
 from slowapi import Limiter
 
-from dependencies import get_db, require_admin
+from dependencies import get_db
 from database import Database
 from models.requests import ReportRequest, TrialTestReportRequest
 
@@ -26,16 +25,13 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             user = await db.users.get_user_by_email(email)
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
 
-            # Check if user has attempted this task
-            if not await db.reports.can_user_report_task(user["id"], request.task_id):
-                raise HTTPException(status_code=403, detail="You can only report tasks you have attempted")
-
-            # Check if task exists
+            # A broken task is often noticed before answering it, so no attempt is required:
+            # forcing a guess would also record a first-attempt mistake for the review.
             task = await db.tasks.get_task_by_id(request.task_id)
             if not task:
-                raise HTTPException(status_code=404, detail="Task not found")
+                raise HTTPException(status_code=404, detail="Есеп табылмады")
 
             # Check if user already reported this task
             user_reports = await db.reports.get_user_reports(user["id"])
@@ -57,7 +53,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error creating report: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Internal server error")
+            raise HTTPException(status_code=500, detail="Шағымды жіберу мүмкін болмады")
 
     @app.get("/api/reports")
     async def get_user_reports(
@@ -68,7 +64,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             user = await db.users.get_user_by_email(email)
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
 
             reports = await db.reports.get_user_reports(user["id"])
             return reports
@@ -88,15 +84,15 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             user = await db.users.get_user_by_email(email)
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
 
             trial_test = await db.trial_tests.get_trial_test_by_id(request.trial_test_id)
             if not trial_test:
-                raise HTTPException(status_code=404, detail="Trial test not found")
+                raise HTTPException(status_code=404, detail="Сынақ тесті табылмады")
 
             task = await db.trial_tests.get_trial_test_task(request.task_id)
             if not task or task.get("trial_test_id") != request.trial_test_id:
-                raise HTTPException(status_code=404, detail="Trial test task not found")
+                raise HTTPException(status_code=404, detail="Есеп табылмады")
 
             # Check if user already reported this trial test task
             if await db.trial_test_reports.has_user_reported_trial_test_task(user["id"], request.task_id):
@@ -120,7 +116,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise
         except Exception as e:
             logger.error(f"Error creating trial test report: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Internal server error")
+            raise HTTPException(status_code=500, detail="Шағымды жіберу мүмкін болмады")
 
     @app.get("/api/trial-test-reports")
     async def get_user_trial_test_reports(
@@ -131,7 +127,7 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             user = await db.users.get_user_by_email(email)
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
 
             reports = await db.trial_test_reports.get_user_trial_test_reports(user["id"])
             return reports
