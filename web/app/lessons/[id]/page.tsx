@@ -797,6 +797,7 @@ export default function LessonPage() {
                     primary={summaryPrimary}
                     onPrevTask={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
                     onBackToSection={summaryPrimary.label === "Бөлімге оралу" ? null : () => router.push(sectionHref)}
+                    email={email}
                   />
                 ) : (
                   <div className="space-y-2 md:space-y-4">

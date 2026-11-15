@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     quiz_entry_new_participants_per_minute: int = Field(default=300, ge=1, le=10000)
     quiz_max_participants: int = Field(default=500, ge=1, le=10000)
 
+    # Web Push for the daily streak reminder: off until both keys are set
+    # (python scripts/generate_vapid_keys.py). The subject identifies the sender to push services.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "https://qazmath.vercel.app"
+
     # Observability
     sentry_dsn: str = ""
     sentry_environment: Optional[str] = None
@@ -144,6 +150,9 @@ class Settings(BaseSettings):
         "ai_twin_base_url",
         "ai_twin_api_key",
         "ai_twin_model",
+        "vapid_public_key",
+        "vapid_private_key",
+        "vapid_subject",
         "sentry_dsn",
         "database_url",
         "database_migration_url",

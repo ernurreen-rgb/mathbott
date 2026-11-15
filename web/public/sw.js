@@ -106,6 +106,42 @@ async function cacheFirst(event, request) {
   return response;
 }
 
+// Daily streak reminder (bot/services/streak_reminders.py): the payload is
+// {title, body, url, tag}. One tag means a new reminder replaces an unread one.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (error) {
+    data = {};
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "QazMath", {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      tag: data.tag || "qazmath",
+      data: { url: safeAppPath(data.url) },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(safeAppPath(event.notification.data && event.notification.data.url), self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      // An open QazMath tab is only focused: navigating it could interrupt a lesson.
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      return open ? open.focus() : self.clients.openWindow(url);
+    })
+  );
+});
+
+// Only paths inside the app; never another site ("//host" or "https://...").
+function safeAppPath(value) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : "/modules";
+}
+
 async function trimCache(cache, maxEntries) {
   const keys = await cache.keys();
   // keys() is in insertion order, so the oldest entries go first.

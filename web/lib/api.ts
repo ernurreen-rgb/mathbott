@@ -13,3 +13,4 @@ export * from "./api/admin-bank";
 export * from "./api/admin-mistakes";
 export * from "./api/admin-task-preview";
 export * from "./api/quizzes";
+export * from "./api/push";

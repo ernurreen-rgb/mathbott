@@ -66,6 +66,7 @@ Documented in [`deploy/NEON_VERCEL.md`](../../deploy/NEON_VERCEL.md) and [`bot/v
   - `migrate_on_startup` defaults to `False` (`DATABASE_AUTO_MIGRATE=false`) so cold starts do not run schema migrations or full-table seeds.
   - `run_background_tasks` defaults to `False` (`BACKGROUND_TASKS_ENABLED=false`) so in-process infinite `asyncio` loops are not spawned inside serverless invocations.
   - Scheduled maintenance is triggered daily at `22:00 UTC` via Vercel Cron (`GET /api/maintenance` in `bot/vercel.json`) authenticated with `Authorization: Bearer <CRON_SECRET>`.
+  - The daily streak reminder is sent at `14:00 UTC` (`GET /api/push/reminders`, same secret) over Web Push to students who have not solved anything that day; it is off until `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are set.
 - **Image Storage:** `IMAGE_STORAGE_BACKEND=s3` backed by a private S3-compatible bucket (`S3_BUCKET`, `S3_ENDPOINT_URL`). The API streams validated image keys through `GET /api/images/{filename}`.
 - **AI Twin Drafts (optional):** When `AI_TWIN_BASE_URL`, `AI_TWIN_API_KEY` and `AI_TWIN_MODEL` are set on the API project, `bot/services/ai_twins.py` calls the provider from the API function only; the browser never sees the key. Both the API and the web proxy allow 60 seconds per request.
 

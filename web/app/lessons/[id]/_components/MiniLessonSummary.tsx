@@ -2,6 +2,8 @@
 
 import Icon from "@/components/ui/Icon";
 
+import StreakReminderPrompt from "./StreakReminderPrompt";
+
 type Action = { label: string; onClick: () => void };
 
 type Props = {
@@ -14,6 +16,8 @@ type Props = {
   onPrevTask: () => void;
   /** Null when the primary action already goes back to the section. */
   onBackToSection: (() => void) | null;
+  /** Signed-in student: offers the daily streak reminder. */
+  email?: string | null;
 };
 
 export default function MiniLessonSummary({
@@ -24,6 +28,7 @@ export default function MiniLessonSummary({
   primary,
   onPrevTask,
   onBackToSection,
+  email,
 }: Props) {
   const firstTry = mistakes === null ? null : Math.max(0, totalTasks - mistakes);
   const share = firstTry === null || totalTasks === 0 ? null : Math.round((firstTry / totalTasks) * 100);
@@ -93,6 +98,8 @@ export default function MiniLessonSummary({
           )}
         </div>
       </div>
+
+      {email && <StreakReminderPrompt email={email} />}
     </div>
   );
 }

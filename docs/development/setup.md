@@ -76,7 +76,8 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `DATABASE_MIGRATION_URL` | `""` | Recommended on Neon | Direct (unpooled) PostgreSQL URL for schema migrations at startup and in [`bot/scripts/migrate_to_neon.py`](../../bot/scripts/migrate_to_neon.py); falls back to `DATABASE_URL`. |
 | `DATABASE_AUTO_MIGRATE` | `None` (`VERCEL != "1"`) | Set `false` on Vercel | Controls whether schema migrations run automatically on process startup. |
 | `BACKGROUND_TASKS_ENABLED` | `None` (`VERCEL != "1"`) | Set `false` on Vercel | Controls whether in-process background `asyncio` loops (maintenance, presence cleanup, ops monitor) run. |
-| `CRON_SECRET` | `""` | Yes (on Vercel) | Bearer token required by `GET /api/maintenance` when triggered by Vercel Cron. |
+| `CRON_SECRET` | `""` | Yes (on Vercel) | Bearer token required by `GET /api/maintenance` and `GET /api/push/reminders` when triggered by Vercel Cron. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `""` | For streak reminders | Web Push key pair from [`bot/scripts/generate_vapid_keys.py`](../../bot/scripts/generate_vapid_keys.py); the daily streak reminder is off until both are set. `VAPID_SUBJECT` defaults to `https://qazmath.vercel.app`. |
 | `INTERNAL_PROXY_SHARED_SECRET` | `""` | Yes (`>= 32` chars) | Shared HMAC-SHA256 secret used to verify `X-Proxy-Request-Signature-V2` from the Next.js proxy and sign WebSocket/import tokens. |
 | `ADMIN_SECRET` | `change-me-in-production` | Legacy only | Legacy admin bootstrap secret (only active if `ALLOW_LEGACY_ADMIN_BOOTSTRAP=true`). |
 | `ADMIN_EMAIL` | `None` | Recommended | Bootstrap super-admin email. Automatically promoted to `super_admin` (`is_admin = 1`). |

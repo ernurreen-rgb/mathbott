@@ -40,13 +40,14 @@ Backend production settings:
 | `S3_REGION` | `us-east-2` for the current branch |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Existing storage credentials from Neon |
 | `IMAGE_UPLOAD_MAX_BYTES` | `4194304` (4 MiB; leaves room for multipart framing on Vercel) |
-| `CRON_SECRET` | Random bearer secret for scheduled maintenance |
+| `CRON_SECRET` | Random bearer secret for the scheduled maintenance and streak reminder crons |
 | `DATABASE_AUTO_MIGRATE` | `false` |
 | `BACKGROUND_TASKS_ENABLED` | `false` |
 | `ADMIN_EMAIL` | Optional bootstrap `super_admin` email |
 | `IMPORT_PREVIEW_TOKEN_SECRET` | Optional dedicated HMAC secret for bank JSON import preview tokens (falls back to `INTERNAL_PROXY_SHARED_SECRET`) |
 | `SENTRY_DSN` | Optional Sentry DSN for backend error/trace reporting |
 | `AI_TWIN_BASE_URL`, `AI_TWIN_API_KEY`, `AI_TWIN_MODEL` | Optional; enable AI twin drafts in the bank (see [AI twin drafts](#ai-twin-drafts)) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Optional; enable the daily streak reminder (see [Streak reminders](#streak-reminders)) |
 
 Web production settings:
 
@@ -176,6 +177,37 @@ python scripts/migrate_to_neon.py
 The web proxy treats `/api/mini-lessons` as an identity path and allows functions
 to run for 60 seconds (`maxDuration`), matching the API function in `bot/vercel.json`.
 
+## Streak reminders
+
+Students can turn on a daily Web Push reminder (profile switch, or the prompt on
+the mini-lesson summary). Every evening the `/api/push/reminders` cron sends one
+notification to each device whose student has solved nothing today, by the same
+UTC date the streak uses: the streak at risk when there is one, otherwise an
+invitation to start a new one. Devices the push service reports as gone are
+deleted. iPhones and iPads only receive Web Push in QazMath added to the home
+screen (iOS 16.4+).
+
+PostgreSQL `0011_push_subscriptions` adds the `push_subscriptions` table. It
+only adds objects, so apply it before deploying the API that needs it:
+
+```powershell
+# From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.
+python scripts/migrate_to_neon.py
+```
+
+Generate the key pair once and set both values on the API project:
+
+```powershell
+# In bot/
+python scripts/generate_vapid_keys.py
+```
+
+The private key is a secret. Replacing the pair later invalidates every saved
+subscription, so students would have to turn reminders on again. Without the
+keys the feature stays off: turning the switch on shows an error and the cron
+sends nothing. `VAPID_SUBJECT` (default `https://qazmath.vercel.app`)
+identifies the sender to the push services.
+
 ## AI twin drafts
 
 Teachers can ask an AI provider for three number-only twin drafts of a bank task.
@@ -233,6 +265,9 @@ remain available for content rollback.
   daily cron runs at `22:00 UTC` / `03:00 Asia/Qyzylorda`. PostgreSQL/Neon owns
   autovacuum. Background loops remain available for a conventional local/VPS
   process.
+- `/api/push/reminders` uses the same bearer secret. Its daily cron runs at
+  `14:00 UTC` / `19:00` in Kazakhstan (Hobby plans may start it any time within
+  that hour); see [Streak reminders](#streak-reminders).
 - Request latency/error metrics remain process-local. For fleet-wide alerting,
   use Vercel observability or a shared monitoring service; the daily maintenance
   invocation does not replace a continuous fleet-wide monitor.

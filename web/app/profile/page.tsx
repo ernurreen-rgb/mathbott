@@ -3,6 +3,7 @@ import Icon from "@/components/ui/Icon";
 
 import ProfileHeader from "./_components/ProfileHeader";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
+import StreakReminderCard from "./_components/StreakReminderCard";
 
 import MobileNav from "@/components/MobileNav";
 import { signOut, useSession } from "next-auth/react";
@@ -166,6 +167,8 @@ export default function ProfilePage() {
                 weekDays={weekDays}
                 streakDaysSet={streakDaysSet}
               />
+
+              {sessionEmail && <StreakReminderCard email={sessionEmail} />}
 
               <Link
                 href="/achievements"

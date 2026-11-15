@@ -27,6 +27,7 @@ from repositories.statistics_repository import StatisticsRepository
 from repositories.ops_repository import OpsRepository
 from repositories.quiz_repository import QuizRepository
 from repositories.module_review_repository import ModuleReviewRepository
+from repositories.push_repository import PushRepository
 from utils.connection_pool import ConnectionPool
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class Database:
         self.ops = OpsRepository(url, connection_pool=pool)
         self.quizzes = QuizRepository(url, connection_pool=pool)
         self.module_review = ModuleReviewRepository(url, connection_pool=pool)
+        self.push = PushRepository(url, connection_pool=pool)
 
     async def init(self):
         """Initialize database: apply PostgreSQL migrations, then idempotent seeds"""

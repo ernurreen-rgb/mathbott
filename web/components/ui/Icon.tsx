@@ -59,6 +59,7 @@ const glyphs = {
   alert: { path: "m12 3 10 18H2Z", detail: "M12 9v5m0 3h.01", fill: "m12 3 10 18H2Z" },
   volume: { path: "M4 9h4l5-4v14l-5-4H4Z", detail: "M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11", fill: "M4 9h4l5-4v14l-5-4H4Z" },
   volumeOff: { path: "M4 9h4l5-4v14l-5-4H4Z", detail: "m16 9.5 5 5m0-5-5 5", fill: "M4 9h4l5-4v14l-5-4H4Z" },
+  bell: { path: "M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16Z", detail: "M10 21a2 2 0 0 0 4 0", fill: "M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16Z" },
   help: { path: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", detail: "M9 8.5a3 3 0 0 1 6 0c0 2-3 2-3 4.5m0 3.5h.01" },
   image: { path: "M3 3h18v18H3Zm0 14 6-6 6 6 3-3 3 3", detail: "M17 7h.01", fill: "m3 17 6-6 6 6 3-3 3 3v4H3Z" },
   graduation: { path: "m2 9 10-6 10 6-10 6ZM6 12v6c4 3 8 3 12 0v-6m4-3v8", fill: "m2 9 10-6 10 6-10 6Z" },
