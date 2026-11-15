@@ -615,7 +615,8 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
+    // On phones the lesson is exactly one screen tall: the page itself never scrolls.
+    <div className="flex h-dvh flex-col overflow-hidden bg-gradient-math animate-gradient pb-20 relative md:block md:h-auto md:min-h-screen md:overflow-visible md:pb-0">
       <div className="absolute inset-0 bg-black/5"></div>
 
       {showCongrats && (
@@ -656,10 +657,10 @@ export default function LessonPage() {
       )}
 
       <DesktopNav />
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <div className="w-full max-w-4xl">
-          <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <div className="mb-4">
+      <main className="md:ml-64 flex min-h-0 flex-1 justify-center px-3 sm:px-6 lg:px-8 py-3 md:py-8 relative z-10">
+        <div className="flex h-full min-h-0 w-full max-w-4xl flex-col md:block md:h-auto">
+          <div className="glass rounded-3xl shadow-2xl p-3 md:p-6 border border-white/30 mb-3 md:mb-6 shrink-0">
+            <div className="mb-2 md:mb-4">
               {/* The parent section, not history: after a mistake review, history-back returned to the review. */}
               <button
                 onClick={() => router.push(sectionHref)}
@@ -670,7 +671,7 @@ export default function LessonPage() {
             </div>
 
             {/* 4-step progress bar */}
-            <div className="mt-4">
+            <div className="mt-2 md:mt-4">
               <div className="flex items-center justify-between gap-2">
                 {lesson.mini_lessons
                   .slice()
@@ -716,7 +717,7 @@ export default function LessonPage() {
 
           {/* Selected mini-lesson */}
           {selectedMini ? (
-            <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
+            <div className="glass min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl p-3 md:flex-none md:overflow-visible md:p-6 border border-white/30">
               {selectedMini.progress?.completed && (selectedMini.review?.mistakes ?? 0) > 0 && (
                 selectedMini.review!.pending > 0 ? (
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
@@ -784,12 +785,12 @@ export default function LessonPage() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-2 md:space-y-4">
                   <div className="text-sm text-gray-600">
                     Есеп {orderedMiniTasks.findIndex((t) => t.id === activeTask.id) + 1} / {orderedMiniTasks.length}
                   </div>
 
-                  <div className="bg-white/70 rounded-2xl p-4 border border-white/40">
+                  <div className="bg-white/70 rounded-2xl p-3 md:p-4 border border-white/40">
                     <div>
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <TaskStatement task={activeTask} />
@@ -819,7 +820,7 @@ export default function LessonPage() {
                       action takes its own full-width line above the back and report buttons, and the
                       invisible placeholders that keep Шағым centred on one line are dropped.
                     */}
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3">
+                    <div className="mt-3 md:mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 md:gap-y-3">
                       {currentTaskIndex > 0 ? (
                         <button
                           type="button"
