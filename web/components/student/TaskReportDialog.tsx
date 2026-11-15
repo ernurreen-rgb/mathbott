@@ -69,7 +69,7 @@ export function TaskReportDialog({ open, message, onMessageChange, submitting, o
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Мәселені сипаттаңыз"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 min-h-[100px] resize-none"
+          className="w-full border border-gray-300 bg-white text-base text-gray-900 placeholder:text-gray-400 caret-purple-600 rounded-lg px-3 py-2 mb-4 min-h-[100px] resize-none focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
           maxLength={MAX_TASK_REPORT_LENGTH}
         />
         <div className="text-sm text-gray-500 mb-4">
