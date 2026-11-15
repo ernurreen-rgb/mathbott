@@ -14,11 +14,11 @@ import type { Module } from "@/types";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
 
-const MODULE_GRID_CLASSES = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6";
+const MODULE_GRID_CLASSES = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr";
 
 function ModuleCardSkeleton() {
   return (
-    <div className="glass rounded-2xl shadow-xl p-6 border border-white/30">
+    <div className="glass h-full rounded-2xl shadow-xl p-6 border border-white/30">
       <SkeletonLoader variant="rect" width={32} height={32} className="mb-4 rounded-lg" />
       <SkeletonLoader variant="rect" width="60%" height={20} className="mb-6" />
       <SkeletonLoader variant="rect" height={8} className="rounded-full" />
@@ -139,14 +139,14 @@ export default function ModulesPage() {
               ) : (
                 <div className={MODULE_GRID_CLASSES}>
                   {modules.map((module) => (
-                    <Link key={module.id} href={`/modules/${module.id}`}>
-                      <div className="glass rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all">
+                    <Link key={module.id} href={`/modules/${module.id}`} className="block h-full rounded-2xl">
+                      <div className="glass flex h-full flex-col rounded-2xl shadow-xl p-6 border border-white/30 hover:border-purple-400 transition-all">
                         <ContentIcon value={module.icon} fallback="book" size={32} className="mb-4 text-indigo-600" />
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{module.name}</h3>
                         {module.description && (
-                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">{module.description}</p>
+                          <p className="text-gray-600 text-sm mb-2 line-clamp-2">{module.description}</p>
                         )}
-                        <div className="mt-4">
+                        <div className="mt-auto pt-2">
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full transition-all ${getProgressColor(module.progress)}`}
