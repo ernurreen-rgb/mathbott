@@ -22,6 +22,7 @@ import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswe
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
+import { pickNextTaskId } from "@/lib/lesson-flow";
 import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
 import MiniLessonSummary from "./_components/MiniLessonSummary";
 
@@ -49,6 +50,8 @@ export default function LessonPage() {
     Record<number, { ok: boolean; text: string; error?: boolean; correctMath?: string[]; correctText?: string | null }>
   >({});
   const [soundOn, setSoundOn] = useState(true);
+  // Tasks answered wrong in this visit that came back to be corrected.
+  const [retryTaskIds, setRetryTaskIds] = useState<Set<number>>(() => new Set());
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
   const [showCongrats, setShowCongrats] = useState(false);
@@ -287,27 +290,22 @@ export default function LessonPage() {
   const goToNextTaskOrMini = (currentTaskId: number) => {
     const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
     if (idx < 0) return;
-    const nextTask = orderedMiniTasks[idx + 1];
-    if (nextTask) {
-      setActiveTaskId(nextTask.id);
-      return;
-    }
-    const firstIncomplete = orderedMiniTasks.find(
-      (t) => t.id !== currentTaskId && t.status !== "completed"
+    const nextId = pickNextTaskId(
+      orderedMiniTasks.map((t) => ({ id: t.id, solved: t.status === "completed" })),
+      idx
     );
-    if (firstIncomplete) {
-      resetTaskAttempt(firstIncomplete.id);
-      setActiveTaskId(firstIncomplete.id);
+    if (nextId === null) {
+      // Every task is solved: stop on the summary, which offers the mistake review or the next step.
+      setActiveTaskId(null);
+      playLessonCue("complete");
       return;
     }
-    // The current task is the only one left unsolved: ask it again.
-    if (orderedMiniTasks[idx].status !== "completed") {
-      resetTaskAttempt(currentTaskId);
-      return;
+    // A task answered wrong in this visit comes back clean and marked as a mistake to correct.
+    if (selectedAnswers[nextId] !== undefined) {
+      resetTaskAttempt(nextId);
+      setRetryTaskIds((ids) => new Set(ids).add(nextId));
     }
-    // Every task is solved: stop on the summary, which offers the mistake review or the next step.
-    setActiveTaskId(null);
-    playLessonCue("complete");
+    setActiveTaskId(nextId);
   };
 
   const goToPrevTaskOrMini = (currentTaskId: number) => {
@@ -802,8 +800,13 @@ export default function LessonPage() {
                   />
                 ) : (
                   <div className="space-y-2 md:space-y-4">
-                    <div className="text-sm text-gray-600">
-                      Есеп {currentTaskIndex + 1} / {orderedMiniTasks.length}
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                      <span>Есеп {currentTaskIndex + 1} / {orderedMiniTasks.length}</span>
+                      {retryTaskIds.has(activeTask.id) && activeTask.status !== "completed" && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
+                          <Icon name="target" /> Қатені түзету
+                        </span>
+                      )}
                     </div>
                     <div className="bg-white/70 rounded-2xl p-3 md:p-4 border border-white/40">
                       <div className="mb-3">
