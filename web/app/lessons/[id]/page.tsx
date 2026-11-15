@@ -17,11 +17,13 @@ import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
 import { markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
-import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
 import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
+import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
+import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
+import MiniLessonSummary from "./_components/MiniLessonSummary";
 
 type CheckResult = { correct: boolean; correct_answer?: string | null };
 
@@ -44,8 +46,9 @@ export default function LessonPage() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [checking, setChecking] = useState<Record<number, boolean>>({});
   const [feedback, setFeedback] = useState<
-    Record<number, { ok: boolean; text: string; correctMath?: string[] }>
+    Record<number, { ok: boolean; text: string; error?: boolean; correctMath?: string[]; correctText?: string | null }>
   >({});
+  const [soundOn, setSoundOn] = useState(true);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
   const [showCongrats, setShowCongrats] = useState(false);
@@ -60,10 +63,18 @@ export default function LessonPage() {
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    setSoundOn(isLessonSoundEnabled());
     return () => {
       if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
     };
   }, []);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setLessonSoundEnabled(next);
+    setSoundOn(next);
+    if (next) primeLessonSound();
+  };
 
   const fetchLesson = async (opts?: { silent?: boolean }) => {
     if (!email || !lessonId) return;
@@ -198,6 +209,31 @@ export default function LessonPage() {
     (currentTaskIndex >= 0 && currentTaskIndex < orderedMiniTasks.length - 1) ||
     nextMiniId !== null;
   const canGoNext = isTaskCompleted || (isActiveTaskAnswered && hasSubsequentTask);
+  const activeFeedback = activeTask ? feedback[activeTask.id] : undefined;
+  const summaryPrimary = (() => {
+    const pending = selectedMini?.review?.pending ?? 0;
+    if (selectedMini && pending > 0) {
+      return { label: `Қателерді талдау (${pending})`, onClick: () => openReview(selectedMini.id) };
+    }
+    if (nextMiniId) return { label: "Келесі кіші сабақ", onClick: () => setSelectedMiniId(nextMiniId) };
+    const unfinished = lesson?.mini_lessons
+      .slice()
+      .sort((a, b) => a.mini_index - b.mini_index)
+      .find((ml) => ml.id !== selectedMini?.id && !ml.progress?.completed);
+    if (unfinished) {
+      return { label: `${unfinished.mini_index}-кіші сабаққа өту`, onClick: () => setSelectedMiniId(unfinished.id) };
+    }
+    const nextLesson = lesson?.next_lesson;
+    if (nextLesson && !nextLesson.locked) {
+      return { label: "Келесі сабақ", onClick: () => router.push(`/lessons/${nextLesson.id}`) };
+    }
+    return { label: "Бөлімге оралу", onClick: () => router.push(sectionHref) };
+  })();
+  const verdict: LessonVerdict | null = !activeTask
+    ? null
+    : activeFeedback && !activeFeedback.error
+      ? activeFeedback.ok ? "correct" : "wrong"
+      : activeTask.status === "completed" ? "solved" : null;
 
   // When mini-lesson changes or tasks update, pick the first not completed task
   useEffect(() => {
@@ -266,18 +302,9 @@ export default function LessonPage() {
       setActiveTaskId(firstIncomplete.id);
       return;
     }
-    // Stop on the completion screen so the mistake review is offered before moving on.
-    if ((selectedMini?.review?.pending ?? 0) > 0) {
-      setActiveTaskId(null);
-      return;
-    }
-    if (nextMiniId) {
-      setSelectedMiniId(nextMiniId);
-      setActiveTaskId(null);
-      return;
-    }
-    // lesson fully completed or no next mini
+    // Every task is solved: stop on the summary, which offers the mistake review or the next step.
     setActiveTaskId(null);
+    playLessonCue("complete");
   };
 
   const goToPrevTaskOrMini = (currentTaskId: number) => {
@@ -289,6 +316,8 @@ export default function LessonPage() {
 
   const submitCheck = async (task: LessonTask, answer: string) => {
     if (!email) return;
+    // Unlock audio inside the click: iOS refuses to start it after the request returns.
+    primeLessonSound();
     setChecking((m) => ({ ...m, [task.id]: true }));
     setFeedback((m) => {
       const next = { ...m };
@@ -310,7 +339,7 @@ export default function LessonPage() {
             : typeof detail === "string"
               ? detail
               : "Тексеру қатесі";
-        setFeedback((m) => ({ ...m, [task.id]: { ok: false, text } }));
+        setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text } }));
         // The lesson waits for an earlier mistake review: reload to show why.
         if (res.status === 423) void fetchLesson();
         return;
@@ -319,6 +348,7 @@ export default function LessonPage() {
       if (data.correct) {
         updateTaskStatusLocal(task.id, "completed");
         setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "Дұрыс!" } }));
+        playLessonCue("correct");
         // Save correct answer - if API provides it, use it; otherwise the selected answer is correct
         const correctAns = data.correct_answer || answer;
         setCorrectAnswers((m) => ({ ...m, [task.id]: correctAns }));
@@ -332,22 +362,18 @@ export default function LessonPage() {
               .map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || "")
               .filter(Boolean)
           : [];
-        const correctText = correctMath.length
-          ? "Дұрыс жауап:"
-          : data.correct_answer
-            ? `Дұрыс жауап: ${data.correct_answer}`
-            : "Қате";
         setFeedback((m) => ({
           ...m,
-          [task.id]: { ok: false, text: correctText, correctMath },
+          [task.id]: { ok: false, text: "Қате", correctMath, correctText: isMcqTask ? null : data.correct_answer ?? null },
         }));
+        playLessonCue("wrong");
         // Save correct answer even if wrong
         if (data.correct_answer) {
           setCorrectAnswers((m) => ({ ...m, [task.id]: data.correct_answer! }));
         }
       }
     } catch (e: any) {
-      setFeedback((m) => ({ ...m, [task.id]: { ok: false, text: e?.message || "Желі қатесі" } }));
+      setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text: e?.message || "Желі қатесі" } }));
     } finally {
       setChecking((m) => ({ ...m, [task.id]: false }));
     }
@@ -660,13 +686,23 @@ export default function LessonPage() {
       <main className="md:ml-64 flex min-h-0 flex-1 justify-center px-3 sm:px-6 lg:px-8 py-4 md:py-8 relative z-10">
         <div className="flex h-full min-h-0 w-full max-w-4xl flex-col md:block md:h-auto">
           <div className="glass rounded-3xl shadow-2xl p-4 md:p-6 border border-white/30 mb-4 md:mb-6 shrink-0">
-            <div className="mb-2 md:mb-4">
+            <div className="mb-2 flex items-center justify-between gap-3 md:mb-4">
               {/* The parent section, not history: after a mistake review, history-back returned to the review. */}
               <button
                 onClick={() => router.push(sectionHref)}
                 className="text-gray-700 hover:text-gray-900"
               >
                 <Icon name="arrowLeft" /> Артқа
+              </button>
+              <button
+                type="button"
+                onClick={toggleSound}
+                aria-pressed={soundOn}
+                aria-label={soundOn ? "Дыбыс пен дірілді өшіру" : "Дыбыс пен дірілді қосу"}
+                title={soundOn ? "Дыбысты өшіру" : "Дыбысты қосу"}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-600 hover:bg-white/70 hover:text-gray-900 transition-colors"
+              >
+                <Icon name={soundOn ? "volume" : "volumeOff"} className="h-5 w-5" />
               </button>
             </div>
 
@@ -715,176 +751,86 @@ export default function LessonPage() {
             </div>
           </div>
 
-          {/* Selected mini-lesson */}
+          {/* Selected mini-lesson: on phones the task scrolls and the answer footer stays at the bottom. */}
           {selectedMini ? (
-            <div className="glass min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl p-4 md:flex-none md:overflow-visible md:p-6 border border-white/30">
-              {selectedMini.progress?.completed && (selectedMini.review?.mistakes ?? 0) > 0 && (
-                selectedMini.review!.pending > 0 ? (
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-                    <div className="text-gray-800">
-                      <div className="font-bold">Қателерді талдау</div>
-                      <div className="text-sm">Бірінші әрекетте {selectedMini.review!.mistakes} есепте қате кетті. Оларды ұқсас есептермен қайта шығарып көріңіз.</div>
-                      {lesson.next_lesson?.locked && (
-                        <div className="mt-1 text-sm font-semibold text-amber-800">
-                          <Icon name="lock" className="mr-1" />Келесі сабақ қателер талданғаннан кейін ашылады.
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openReview(selectedMini.id)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
-                    >
-                      Талдауды бастау ({selectedMini.review!.pending}) <Icon name="arrowRight" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
-                    <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />Қателер талданды: түзетілді {selectedMini.review!.resolved}{selectedMini.review!.weak ? `, әлсіз тұс ${selectedMini.review!.weak}` : ""}.</span>
-                    <button type="button" onClick={() => openReview(selectedMini.id)} className="font-semibold text-purple-700 hover:underline">
-                      Нәтижені көру
-                    </button>
-                  </div>
-                )
-              )}
-
-              {orderedMiniTasks.length === 0 ? (
-                <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>
-              ) : !activeTask ? (
-                <div className="text-gray-700 flex items-center justify-between flex-wrap gap-3">
-                  <div>
-                    {orderedMiniTasks.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
-                        className="mr-3 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
-                      >
-                        <Icon name="arrowLeft" /> Алдыңғы есеп
-                      </button>
-                    )}
-                    <span className="font-semibold">Кіші сабақ аяқталды.</span>
-                  </div>
-                  {nextMiniId ? (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMiniId(nextMiniId)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
-                    >
-                      Келесі кіші сабақ <Icon name="arrowRight" />
-                    </button>
-                  ) : lesson.progress?.completed && lesson.next_lesson && !lesson.next_lesson.locked ? (
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/lessons/${lesson.next_lesson!.id}`)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
-                    >
-                      Келесі сабақ <Icon name="arrowRight" />
-                    </button>
-                  ) : (
-                    <span className="font-semibold text-green-700">Сабақ аяқталды!</span>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2 md:space-y-4">
-                  <div className="text-sm text-gray-600">
-                    Есеп {orderedMiniTasks.findIndex((t) => t.id === activeTask.id) + 1} / {orderedMiniTasks.length}
-                  </div>
-
-                  <div className="bg-white/70 rounded-2xl p-3 md:p-4 border border-white/40">
-                    <div>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <TaskStatement task={activeTask} />
-                    </div>
-
-                    {renderTaskControls(activeTask)}
-
-                    {feedback[activeTask.id]?.text && (
-                      <div
-                        className={`mt-2 text-sm ${
-                          feedback[activeTask.id]?.ok ? "text-green-700" : "text-red-700"
-                        }`}
-                      >
-                        <Icon name={feedback[activeTask.id]?.ok ? "checkCircle" : "closeCircle"} className="mr-1.5" /><span>{feedback[activeTask.id]?.text}</span>
-                        {feedback[activeTask.id]?.correctMath?.map((answer, index) => (
-                          <span key={`${activeTask.id}-correct-${index}`} className="ml-2 inline-block font-semibold">
-                            <MathRender inline latex={answer} />
-                          </span>
-                        ))}
+            <div className="glass flex min-h-0 flex-1 flex-col rounded-3xl shadow-2xl border border-white/30 md:block md:flex-none">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:overflow-visible md:p-6">
+                {activeTask && selectedMini.progress?.completed && (selectedMini.review?.mistakes ?? 0) > 0 && (
+                  selectedMini.review!.pending > 0 ? (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                      <div className="text-gray-800">
+                        <div className="font-bold">Қателерді талдау</div>
+                        <div className="text-sm">Бірінші әрекетте {selectedMini.review!.mistakes} есепте қате кетті. Оларды ұқсас есептермен қайта шығарып көріңіз.</div>
+                        {lesson.next_lesson?.locked && (
+                          <div className="mt-1 text-sm font-semibold text-amber-800">
+                            <Icon name="lock" className="mr-1" />Келесі сабақ қателер талданғаннан кейін ашылады.
+                          </div>
+                        )}
                       </div>
-                    )}
-                    </div>
-
-                    {/*
-                      The full row (Алдыңғы, Шағым, Қайта көру, Келесі) needs about 490px, which the
-                      card only has from lg up (the desktop nav takes 16rem from md). Below lg the main
-                      action takes its own full-width line above the back and report buttons, and the
-                      invisible placeholders that keep Шағым centred on one line are dropped.
-                    */}
-                    <div className="mt-3 md:mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 md:gap-y-3">
-                      {currentTaskIndex > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => goToPrevTaskOrMini(activeTask.id)}
-                          className="order-2 lg:order-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-3 sm:px-4 rounded-lg inline-flex items-center gap-1.5 transition-colors"
-                        >
-                          <Icon name="arrowLeft" /> Алдыңғы
-                        </button>
-                      ) : (
-                        <div
-                          className="hidden lg:inline-flex lg:order-1 invisible py-2 px-3 sm:px-4 font-bold items-center gap-1.5 select-none"
-                          aria-hidden="true"
-                        >
-                          <Icon name="arrowLeft" /> Алдыңғы
-                        </div>
-                      )}
                       <button
                         type="button"
-                        onClick={() => report.open(activeTask.id)}
-                        className="order-3 lg:order-2 ml-auto lg:ml-0 min-h-10 inline-flex items-center gap-1.5 text-amber-700 hover:bg-orange-50 text-sm font-semibold py-2 px-3 sm:px-4 rounded-lg transition-colors"
+                        onClick={() => openReview(selectedMini.id)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
                       >
-                        <Icon name="report" /> Шағым
+                        Талдауды бастау ({selectedMini.review!.pending}) <Icon name="arrowRight" />
                       </button>
-                      {!isActiveTaskAnswered && (activeTask.question_type || "input") !== "tf" ? (
-                        <button
-                          type="button"
-                          onClick={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
-                          disabled={!!checking[activeTask.id] || !isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
-                          className="order-1 lg:order-3 w-full lg:w-auto bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center transition-colors"
-                        >
-                          Тексеру
-                        </button>
-                      ) : isActiveTaskAnswered && (!isTaskCompleted || canGoNext) ? (
-                        <div className="order-1 lg:order-3 w-full lg:w-auto flex items-center gap-2">
-                          {!isTaskCompleted && (
-                            <button
-                              type="button"
-                              onClick={() => resetTaskAttempt(activeTask.id)}
-                              className="flex-1 lg:flex-none bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors"
-                            >
-                              Қайта көру
-                            </button>
-                          )}
-                          {canGoNext && (
-                            <button
-                              type="button"
-                              onClick={() => goToNextTaskOrMini(activeTask.id)}
-                              className="flex-1 lg:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 sm:px-5 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors"
-                            >
-                              Келесі <Icon name="arrowRight" />
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div
-                          className="hidden lg:inline-flex lg:order-3 invisible py-2 px-4 sm:px-5 font-bold items-center gap-1.5 select-none"
-                          aria-hidden="true"
-                        >
-                          Келесі <Icon name="arrowRight" />
-                        </div>
-                      )}
+                    </div>
+                  ) : (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
+                      <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />Қателер талданды: түзетілді {selectedMini.review!.resolved}{selectedMini.review!.weak ? `, әлсіз тұс ${selectedMini.review!.weak}` : ""}.</span>
+                      <button type="button" onClick={() => openReview(selectedMini.id)} className="font-semibold text-purple-700 hover:underline">
+                        Нәтижені көру
+                      </button>
+                    </div>
+                  )
+                )}
+
+                {orderedMiniTasks.length === 0 ? (
+                  <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>
+                ) : !activeTask ? (
+                  <MiniLessonSummary
+                    miniIndex={selectedMini.mini_index}
+                    totalTasks={orderedMiniTasks.length}
+                    mistakes={selectedMini.progress?.completed && selectedMini.review ? selectedMini.review.mistakes : null}
+                    pendingReview={selectedMini.review?.pending ?? 0}
+                    primary={summaryPrimary}
+                    onPrevTask={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
+                    onBackToSection={summaryPrimary.label === "Бөлімге оралу" ? null : () => router.push(sectionHref)}
+                  />
+                ) : (
+                  <div className="space-y-2 md:space-y-4">
+                    <div className="text-sm text-gray-600">
+                      Есеп {currentTaskIndex + 1} / {orderedMiniTasks.length}
+                    </div>
+                    <div className="bg-white/70 rounded-2xl p-3 md:p-4 border border-white/40">
+                      <div className="mb-3">
+                        <TaskStatement task={activeTask} />
+                      </div>
+                      {renderTaskControls(activeTask)}
                     </div>
                   </div>
-                </div>
+                )}
+              </div>
+
+              {activeTask && (
+                <LessonTaskFooter
+                  taskId={activeTask.id}
+                  verdict={verdict}
+                  correctMath={activeFeedback?.correctMath}
+                  correctText={activeFeedback?.correctText}
+                  errorText={activeFeedback?.error ? activeFeedback.text : null}
+                  hasPrev={currentTaskIndex > 0}
+                  canGoNext={canGoNext}
+                  canRetry={!isTaskCompleted}
+                  showCheck={(activeTask.question_type || "input") !== "tf"}
+                  checkDisabled={!isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
+                  checking={!!checking[activeTask.id]}
+                  onCheck={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
+                  onRetry={() => resetTaskAttempt(activeTask.id)}
+                  onNext={() => goToNextTaskOrMini(activeTask.id)}
+                  onPrev={() => goToPrevTaskOrMini(activeTask.id)}
+                  onReport={() => report.open(activeTask.id)}
+                />
               )}
             </div>
           ) : (

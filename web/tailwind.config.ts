@@ -45,8 +45,18 @@ const config: Config = {
         'gradient': 'gradient 15s ease infinite',
         'float': 'float 6s ease-in-out infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-up': 'slide-up 220ms ease-out',
+        'pop-in': 'pop-in 360ms cubic-bezier(0.2, 0.9, 0.3, 1.3)',
       },
       keyframes: {
+        'slide-up': {
+          from: { transform: 'translateY(16px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'pop-in': {
+          from: { transform: 'scale(0.6)', opacity: '0' },
+          to: { transform: 'scale(1)', opacity: '1' },
+        },
         gradient: {
           '0%, 100%': {
             'background-size': '200% 200%',
