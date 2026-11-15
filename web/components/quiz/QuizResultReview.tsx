@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import MathRender from "@/components/ui/MathRender";
-import MathFieldInput from "@/components/ui/MathFieldInput";
+import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import TaskStatement from "@/components/student/TaskStatement";
 import { checkQuizPracticeAnswer, getQuizReview } from "@/lib/api/quizzes";
 import { readQuizPlayer } from "@/lib/quiz-player-storage";
@@ -82,8 +82,8 @@ export default function QuizResultReview({ sessionId, participantId }: { session
           {practicing && current ? <section className="space-y-5 rounded-2xl border bg-white p-5 sm:p-8" aria-label="Қайталау тапсырмасы">
             <p className="text-sm text-gray-500">Сұрақ {index + 1} / {mistakes.length} · Осы жаттығуда түзетілді: {solved.size}</p>
             <TaskStatement task={{ text: current.question.question_text, image_filename: current.question.image_filename, text_scale: "md" }} />
-            {current.question.question_type === "input" ? <MathFieldInput key={current.question.id} ariaLabel="Қайталау жауабы" value={answer}
-              onChange={setAnswer} defaultMode="math" smartMode={false} readOnly={checking || !!result?.is_correct} /> :
+            {current.question.question_type === "input" ? <StudentMathAnswerInput key={current.question.id} ariaLabel="Қайталау жауабы" value={answer}
+              onChange={setAnswer} disabled={checking || !!result?.is_correct} /> :
               <div className="grid gap-2">{current.question.options.map((option) => {
                 const selected = answer.split(",").includes(option.id);
                 return <button key={option.id} aria-pressed={selected} disabled={checking || !!result?.is_correct}

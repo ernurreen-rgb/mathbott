@@ -8,6 +8,8 @@ import {
 } from "@/lib/math-normalize";
 import {
   getMathVirtualKeyboardLayouts,
+  STUDENT_KEYBOARD_HIDE_KEY_CLASS,
+  STUDENT_KEYBOARD_MAIN_LAYER,
   type MathVirtualKeyboardLayout,
   type MathVirtualKeyboardPreset,
 } from "@/lib/student-math-keyboard";
@@ -50,6 +52,8 @@ type MathVirtualKeyboard = {
   hide?: () => void;
   container?: HTMLElement | null;
   layouts: readonly ("default" | MathVirtualKeyboardLayout)[];
+  currentLayer?: string;
+  addEventListener?: (type: string, listener: (event: Event) => void) => void;
 };
 
 let initializedVirtualKeyboard: MathVirtualKeyboard | undefined;
@@ -94,18 +98,79 @@ const configureVirtualKeyboardContainer = (keyboard: MathVirtualKeyboard | undef
   if (keyboard.container !== container) keyboard.container = container;
 };
 
-let configuredKeyboard: MathVirtualKeyboard | undefined;
-let configuredKeyboardPreset: MathVirtualKeyboardPreset | undefined;
+// MathLive has ONE keyboard per page, shared by every <math-field>. Each field says which layouts
+// it wants through this attribute, and the keyboard is switched to them whenever a field gets focus
+// or the keyboard is about to open (see installKeyboardPresetGuard).
+const KEYBOARD_PRESET_ATTRIBUTE = "data-math-keyboard-preset";
+
+let appliedKeyboard: MathVirtualKeyboard | undefined;
+let appliedLayouts: MathVirtualKeyboard["layouts"] | undefined;
+let appliedPreset: MathVirtualKeyboardPreset | undefined;
 
 const configureVirtualKeyboard = (
   keyboard: MathVirtualKeyboard | undefined,
   preset: MathVirtualKeyboardPreset
 ) => {
   if (!keyboard) return;
-  if (keyboard === configuredKeyboard && preset === configuredKeyboardPreset) return;
+  // Assigning layouts rebuilds the keyboard, so skip it only while the keyboard still holds exactly
+  // what was assigned last time (MathLive returns the same frozen array until layouts change).
+  if (keyboard === appliedKeyboard && preset === appliedPreset && keyboard.layouts === appliedLayouts) return;
   keyboard.layouts = getMathVirtualKeyboardLayouts(preset);
-  configuredKeyboard = keyboard;
-  configuredKeyboardPreset = preset;
+  appliedKeyboard = keyboard;
+  appliedLayouts = keyboard.layouts;
+  appliedPreset = preset;
+};
+
+const getFieldKeyboardPreset = (target: EventTarget | null): MathVirtualKeyboardPreset | undefined => {
+  if (!(target instanceof Element)) return undefined;
+  const value = target.closest("math-field")?.getAttribute(KEYBOARD_PRESET_ATTRIBUTE);
+  return value === "student" || value === "default" ? value : undefined;
+};
+
+let keyboardPresetGuardInstalled = false;
+
+// The keyboard can be opened by MathLive itself (focus on touch screens, the keyboard icon inside
+// a field, the keyboard shortcut) before any handler of ours ran. Switching the layouts here, before
+// the keyboard is built, means it can never open with another field's layouts (the stock one).
+const installKeyboardPresetGuard = (keyboard: MathVirtualKeyboard | undefined) => {
+  if (keyboardPresetGuardInstalled || !keyboard?.addEventListener) return;
+  keyboardPresetGuardInstalled = true;
+
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      const preset = getFieldKeyboardPreset(event.target);
+      if (preset) configureVirtualKeyboard(keyboard, preset);
+    },
+    true
+  );
+
+  // On touch screens MathLive reopens the keyboard ~300 ms after it was hidden for as long as a
+  // field keeps focus, so the "hide keyboard" key has to release the field as well. The native
+  // blur of the inner input is used on purpose: MathfieldElement.blur() leaves the field believing
+  // it is still focused, and it then takes the focus back when the keyboard hides.
+  document.addEventListener(
+    "pointerup",
+    (event) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest(`.ML__keyboard .${STUDENT_KEYBOARD_HIDE_KEY_CLASS}`)) return;
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !active.matches("math-field")) return;
+      const inner = active.shadowRoot?.activeElement;
+      if (inner instanceof HTMLElement) inner.blur();
+      else active.blur();
+    },
+    true
+  );
+
+  keyboard.addEventListener?.("before-virtual-keyboard-toggle", (event) => {
+    if (!(event as CustomEvent<{ visible?: boolean }>).detail?.visible) return;
+    const preset = getFieldKeyboardPreset(document.activeElement);
+    if (!preset) return;
+    configureVirtualKeyboard(keyboard, preset);
+    // A keyboard that opens for a field always starts on its main keys.
+    if (preset === "student") keyboard.currentLayer = STUDENT_KEYBOARD_MAIN_LAYER;
+  });
 };
 
 const getInternalMathfield = (el: MathFieldElement | null): InternalMathfield | undefined =>
@@ -298,6 +363,7 @@ export default function MathFieldInput({
         }
       ).initVirtualKeyboardInCurrentBrowsingContext;
       initializedVirtualKeyboard = initializeVirtualKeyboard?.() ?? initializedVirtualKeyboard;
+      installKeyboardPresetGuard(getVirtualKeyboard());
       const mfe = (
         ((mod as unknown as { MathfieldElement?: MathfieldElementStaticConfig }).MathfieldElement ??
           (globalThis as unknown as { MathfieldElement?: MathfieldElementStaticConfig }).MathfieldElement)
@@ -323,6 +389,10 @@ export default function MathFieldInput({
       disposed = true;
     };
   }, []);
+
+  useEffect(() => {
+    fieldRef.current?.setAttribute(KEYBOARD_PRESET_ATTRIBUTE, virtualKeyboardPreset);
+  }, [virtualKeyboardPreset]);
 
   useEffect(() => {
     const el = fieldRef.current;
