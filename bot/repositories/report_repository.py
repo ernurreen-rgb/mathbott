@@ -119,16 +119,6 @@ class ReportRepository(BaseRepository):
                     await db.commit()
                     return cursor.rowcount > 0
 
-    async def can_user_report_task(self, user_id: int, task_id: int) -> bool:
-        async with self._connection() as db:
-            async with db.execute(
-                """SELECT COUNT(*) as count FROM solutions
-                   WHERE user_id = ? AND task_id = ?""",
-                (user_id, task_id)
-            ) as cursor:
-                row = await cursor.fetchone()
-                return row[0] > 0 if row else False
-
     async def delete_report(self, report_id: int) -> bool:
         """Delete a report by ID"""
         async with self._connection() as db:
@@ -138,4 +128,3 @@ class ReportRepository(BaseRepository):
             ) as cursor:
                 await db.commit()
                 return cursor.rowcount > 0
-
