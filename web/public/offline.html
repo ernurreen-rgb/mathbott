@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="kk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="robots" content="noindex">
+  <title>QazMath - интернет байланысы жоқ</title>
+  <!-- Self-contained on purpose: no JS bundles, fonts or backend calls, so it renders offline. -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      color: #171717;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+    .card {
+      width: 100%;
+      max-width: 24rem;
+      padding: 32px 24px;
+      text-align: center;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 18px;
+      background: linear-gradient(to top right, #9333ea, #6366f1);
+      color: #ffffff;
+      font-weight: 900;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.375rem; line-height: 1.3; color: #111827; }
+    p { margin: 0 0 24px; font-size: 1rem; line-height: 1.5; color: #4b5563; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 28px;
+      min-height: 44px;
+      background: #7c3aed;
+      color: #ffffff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #6d28d9; }
+    button:focus-visible { outline: 3px solid #c4b5fd; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logo" aria-hidden="true">QM</div>
+    <h1>Интернет байланысы жоқ</h1>
+    <p>Желіге қосылуды тексеріп, қайтадан көріңіз.</p>
+    <button type="button" id="retry">Қайталап көру</button>
+  </main>
+  <script>
+    document.getElementById("retry").addEventListener("click", function () {
+      location.reload();
+    });
+    // Reload automatically as soon as the connection comes back.
+    window.addEventListener("online", function () {
+      location.reload();
+    });
+  </script>
+</body>
+</html>

@@ -73,6 +73,12 @@ const nextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      {
+        // Browsers must always revalidate the service worker script so
+        // updates are picked up on the next load.
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
     ];
   },
 };
