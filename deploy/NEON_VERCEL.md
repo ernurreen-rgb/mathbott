@@ -149,9 +149,16 @@ co-op trial tests (`trial_test_coop_*`), friends (`friendships`,
 `friend_requests`, `friend_invites`, `blocks`), the registration survey
 (`user_onboarding`) and the never-used `user_progress_summary`. Their data is
 deleted for good, so take a Neon branch or a
-[backup](POSTGRES_BACKUP_RESTORE.md) first. Deploy the API that no longer has
-these routes before or together with the migration; the API applies it on
-startup when `DATABASE_AUTO_MIGRATE` is on.
+[backup](POSTGRES_BACKUP_RESTORE.md) first. Unlike the earlier migrations,
+apply it after deploying the API that no longer uses these tables (the API
+from commit `b4b4c71` on). Production keeps `DATABASE_AUTO_MIGRATE=false`, so
+run it by hand with the direct (unpooled) Neon URL:
+
+```powershell
+# In bot/
+$env:DATABASE_MIGRATION_URL = "<direct Neon connection string>"
+python scripts/migrate_to_neon.py
+```
 
 ## Mistake review and twin tasks
 
