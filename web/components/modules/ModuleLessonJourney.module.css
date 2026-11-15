@@ -22,11 +22,15 @@
 
   .viewportSection {
     /* Match MobileNav's 64px content, 1px border and bottom safe area.
-       svh keeps the layout stable when the browser's address bar hides. */
+       Node size stays on svh so it does not change when the address bar hides. */
     --journey-node-size: clamp(64px, 10svh, 88px);
     display: flex;
     flex-direction: column;
     min-height: calc(100svh - var(--journey-top-space, 0px) - var(--journey-nav-space) - 24px);
+    /* svh assumes every browser toolbar is showing, so on a phone whose toolbars
+       have collapsed the section stopped well short of the screen. dvh follows the
+       visible viewport; the svh line above stays as the fallback for old browsers. */
+    min-height: calc(100dvh - var(--journey-top-space, 0px) - var(--journey-nav-space) - 24px);
   }
 
   .viewportSection > header {
