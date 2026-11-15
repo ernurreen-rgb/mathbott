@@ -8,15 +8,12 @@ import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import TaskStatement from "@/components/student/TaskStatement";
-import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
-import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
-import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
+import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, reportTrialTestTask, apiPath } from "@/lib/api";
-import { getTaskMcqCorrectCount } from "@/lib/question-options";
-import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress, isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
-import { TrialTestDetails, LessonTask, QuestionType } from "@/types";
+import { isTaskAnswerComplete } from "@/lib/task-answer";
+import { getAnsweredTrialTaskCount, getTrialTaskAnswerProgress } from "@/lib/trial-test-answer";
+import { TrialTestDetails, LessonTask } from "@/types";
 import styles from "./TrialTestWorkspace.module.css";
 
 
@@ -292,105 +289,19 @@ export default function TrialTestPage() {
     return () => window.removeEventListener("pagehide", flushDraft);
   }, [flushDraft]);
 
-  const renderTaskControls = (task: LessonTask) => {
-    const qt: QuestionType = (task.question_type || "input") as QuestionType;
-    if (qt === "tf") {
-      const currentAnswer = answers[task.id];
-      const isTrueSelected = currentAnswer === "true" || currentAnswer === "1";
-      const isFalseSelected = currentAnswer === "false" || currentAnswer === "0";
-
-      return (
-        <div className="flex gap-2">
-          <button
-            onClick={() => setAnswersAndRef((m) => ({ ...m, [task.id]: "true" }))}
-            className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${
-              isTrueSelected
-                ? "bg-purple-600 text-white"
-                : "bg-green-600 hover:bg-green-700 text-white"
-            }`}
-          >
-            Дұрыс
-          </button>
-          <button
-            onClick={() => setAnswersAndRef((m) => ({ ...m, [task.id]: "false" }))}
-            className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors ${
-              isFalseSelected
-                ? "bg-purple-600 text-white"
-                : "bg-red-600 hover:bg-red-700 text-white"
-            }`}
-          >
-            Жалған
-          </button>
-        </div>
-      );
-    }
-
-    if (qt === "select") {
-      const subquestions = task.subquestions || [];
-      if (getTaskAnswerMode(task) === "choices") {
-        return (
-          <StudentChoiceAnswerFields
-            task={task}
-            layout="stack"
-            value={answers[task.id]}
-            onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
-          />
-        );
-      }
-      return (
-        <div className="space-y-3">
-          <StudentWrittenAnswerFields
-            value={answers[task.id]}
-            onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
-            count={2}
-            labels={[0, 1].map((index) =>
-              `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
-            )}
-          />
-        </div>
-      );
-    }
-
-    if (qt === "mcq" || qt === "mcq6") {
-      const currentAnswer = answers[task.id];
-      const requiredCount = getTaskMcqCorrectCount(task);
-
-      if (getTaskAnswerMode(task) === "choices") {
-        return (
-          <StudentChoiceAnswerFields
-            task={task}
-            layout="stack"
-            value={currentAnswer}
-            onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
-          />
-        );
-      }
-
-      return (
-        <div className="space-y-3">
-          {requiredCount > 1 && <p className="text-sm text-gray-600">{requiredCount} жауап жазыңыз</p>}
-          <StudentWrittenAnswerFields
-            value={currentAnswer}
-            onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
-            count={requiredCount}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <StudentMathAnswerInput
-        value={answers[task.id] || ""}
-        onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
-        placeholder="Жауапты жазыңыз"
-      />
-    );
-  };
+  // Exam mode: the field shows the selection only; results come after the test.
+  const renderTaskControls = (task: LessonTask) => (
+    <StudentAnswerField
+      task={task}
+      value={answers[task.id] || ""}
+      onChange={(value) => setAnswersAndRef((m) => ({ ...m, [task.id]: value }))}
+    />
+  );
 
   const handleFinishTest = async () => {
     if (!email || !test || submitting) return;
 
-    const firstUnansweredIndex = test.tasks.findIndex((task) => !isTrialTaskAnswerComplete(task, answers[task.id]));
+    const firstUnansweredIndex = test.tasks.findIndex((task) => !isTaskAnswerComplete(task, answers[task.id]));
     if (firstUnansweredIndex !== -1) {
       setCurrentTaskIndexAndRef(firstUnansweredIndex);
       return;
@@ -400,7 +311,7 @@ export default function TrialTestPage() {
     const allAnswers: Record<string, string> = {};
     test.tasks.forEach((task) => {
       const value = answers[task.id];
-      if (isTrialTaskAnswerComplete(task, value) && value != null) {
+      if (isTaskAnswerComplete(task, value) && value != null) {
         allAnswers[task.id.toString()] = value;
       }
     });
@@ -531,7 +442,7 @@ export default function TrialTestPage() {
                     </div>
                     <div className={styles.taskNumbers}>
                       {test.tasks.map((task, idx) => {
-                        const isAnswered = isTrialTaskAnswerComplete(task, answers[task.id]);
+                        const isAnswered = isTaskAnswerComplete(task, answers[task.id]);
                         const isCurrent = idx === currentTaskIndex;
                         return (
                           <button

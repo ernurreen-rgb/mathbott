@@ -2,12 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
-import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
+import StudentAnswerField from "@/components/student/StudentAnswerField";
 import TaskStatement from "@/components/student/TaskStatement";
 import { checkAdminTaskAnswerPreview } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import {
   MAX_TASK_FONT_SIZE,
   MIN_TASK_FONT_SIZE,
@@ -17,7 +15,7 @@ import {
   getTaskTextScaleFontSizePx,
   normalizeTaskTextScale,
 } from "@/lib/task-text-scale";
-import { isTrialTaskAnswerComplete } from "@/lib/trial-test-answer";
+import { isTaskAnswerComplete } from "@/lib/task-answer";
 import type { LessonTask, TaskTextScale } from "@/types";
 
 interface StudentTaskPreviewProps {
@@ -107,7 +105,7 @@ export default function StudentTaskPreview({
     setFeedback(null);
   }, [answerDefinitionSignature]);
 
-  const answerComplete = isTrialTaskAnswerComplete(previewTask, answer);
+  const answerComplete = isTaskAnswerComplete(previewTask, answer);
   const updateAnswer = (value: string) => {
     setAnswer(value);
     setFeedback(null);
@@ -135,75 +133,6 @@ export default function StudentTaskPreview({
         ? { kind: "correct", message: "Жауап дұрыс" }
         : { kind: "incorrect", message: "Жауап дұрыс емес" }
     );
-  };
-
-  const renderAnswerFields = () => {
-    const questionType = previewTask.question_type;
-
-    if (questionType === "tf") {
-      return (
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { value: "true", label: "Дұрыс", color: "green" },
-            { value: "false", label: "Жалған", color: "red" },
-          ].map((option) => {
-            const selected = answer === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => updateAnswer(option.value)}
-                className={`rounded-lg px-4 py-3 font-bold text-white transition-colors ${
-                  selected
-                    ? option.color === "green"
-                      ? "bg-green-700 ring-2 ring-green-300"
-                      : "bg-red-700 ring-2 ring-red-300"
-                    : option.color === "green"
-                      ? "bg-green-600 hover:bg-green-700"
-                      : "bg-red-600 hover:bg-red-700"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      );
-    }
-
-    if (questionType === "mcq" || questionType === "mcq6" || questionType === "select") {
-      if (answerMode === "choices") {
-        return (
-          <StudentChoiceAnswerFields
-            task={previewTask}
-            value={answer}
-            onChange={updateAnswer}
-          />
-        );
-      }
-
-      const count = questionType === "select" ? 2 : getTaskMcqCorrectCount(previewTask);
-      const labels =
-        questionType === "select"
-          ? [0, 1].map(
-              (index) =>
-                `${String.fromCharCode(65 + index)}) ${
-                  previewTask.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`
-                }`
-            )
-          : [];
-      return (
-        <StudentWrittenAnswerFields
-          value={answer}
-          onChange={updateAnswer}
-          count={count}
-          labels={labels}
-        />
-      );
-    }
-
-    return <StudentWrittenAnswerFields value={answer} onChange={updateAnswer} />;
   };
 
   return (
@@ -316,7 +245,7 @@ export default function StudentTaskPreview({
           <div className={viewport === "mobile" ? "space-y-5 p-4" : "space-y-6 p-6"}>
             <TaskStatement task={previewTask} imageSrc={imageSrc} viewport={viewport} />
 
-            {renderAnswerFields()}
+            <StudentAnswerField task={previewTask} value={answer} onChange={updateAnswer} />
 
             <div className="border-t border-gray-100 pt-4">
               {feedback && (

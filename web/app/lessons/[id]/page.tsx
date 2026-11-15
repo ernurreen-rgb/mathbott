@@ -9,17 +9,13 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import { getLessonDetails, reportLessonTask } from "@/lib/api";
 import { API_URL } from "@/lib/constants";
-import { getTaskMcqCorrectCount, isMcqAnswerComplete, parseMcqAnswerLabels } from "@/lib/question-options";
-import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { isSelectAnswerComplete } from "@/lib/trial-test-answer";
-import { isWrittenAnswerComplete } from "@/lib/written-answer";
+import { parseMcqAnswerLabels } from "@/lib/question-options";
+import { isTaskAnswerComplete } from "@/lib/task-answer";
 import TaskStatement from "@/components/student/TaskStatement";
-import { LessonDetails, LessonMiniLesson, LessonTask, QuestionType } from "@/types";
+import { LessonDetails, LessonMiniLesson, LessonTask } from "@/types";
 import { markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
-import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
-import StudentWrittenAnswerFields from "@/components/student/StudentWrittenAnswerFields";
-import StudentChoiceAnswerFields from "@/components/student/StudentChoiceAnswerFields";
+import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
 import { pickNextTaskId } from "@/lib/lesson-flow";
@@ -385,182 +381,19 @@ export default function LessonPage() {
     selectedAnswers[task.id] ||
     (task.status === "completed" ? task.answer || "" : "");
 
-  const isTaskAnswerReady = (task: LessonTask, currentAnswer: string) => {
-    const qt: QuestionType = (task.question_type || "input") as QuestionType;
-    if (qt === "select") {
-      return getTaskAnswerMode(task) === "choices"
-        ? isSelectAnswerComplete(currentAnswer)
-        : isWrittenAnswerComplete(currentAnswer, 2);
-    }
-    if (qt === "mcq" || qt === "mcq6") {
-      const requiredCount = getTaskMcqCorrectCount(task);
-      return getTaskAnswerMode(task) === "choices"
-        ? isMcqAnswerComplete(currentAnswer, requiredCount)
-        : isWrittenAnswerComplete(currentAnswer, requiredCount);
-    }
-    return Boolean(currentAnswer.trim());
-  };
-
   const renderTaskControls = (task: LessonTask) => {
-    const qt: QuestionType = (task.question_type || "input") as QuestionType;
-    const isTaskAnswered =
-      task.status === "completed" ||
-      selectedAnswers[task.id] !== undefined;
-    const isTaskCorrect = task.status === "completed" || !!feedback[task.id]?.ok;
-    const currentAnswer = getTaskCurrentAnswer(task);
-    const taskCorrectAnswer =
-      correctAnswers[task.id] || (isTaskCorrect && currentAnswer ? currentAnswer : task.answer || "");
-
-    if (qt === "tf") {
-      const selectedAnswer = currentAnswer;
-      const correctAnswer = taskCorrectAnswer;
-
-      // Normalize answers for comparison (case-insensitive)
-      const normalizeAnswer = (ans: string | undefined) => ans?.toLowerCase().trim();
-      const selectedNormalized = normalizeAnswer(selectedAnswer);
-      const correctNormalized = normalizeAnswer(correctAnswer);
-      const isTrueCorrect =
-        correctNormalized === "true" ||
-        correctNormalized === "1" ||
-        (isTaskCorrect && selectedNormalized === "true");
-      const isFalseCorrect =
-        correctNormalized === "false" ||
-        correctNormalized === "0" ||
-        (isTaskCorrect && selectedNormalized === "false");
-      const isTrueSelected = selectedNormalized === "true" || selectedNormalized === "1";
-      const isFalseSelected = selectedNormalized === "false" || selectedNormalized === "0";
-
-      return (
-        <div className="space-y-3">
-          <div className="flex gap-2" role="group" aria-label="Жауап таңдау">
-            <button
-              onClick={() => submitCheck(task, "true")}
-              disabled={!!checking[task.id] || isTaskAnswered}
-              aria-label="Дұрыс деп таңдау"
-              aria-pressed={isTaskAnswered && isTrueSelected ? "true" : "false"}
-              className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-                isTaskAnswered && isTrueSelected
-                  ? isTrueCorrect
-                    ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
-                    : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
-                  : isTaskAnswered && isTrueCorrect
-                  ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
-                  : isTaskAnswered
-                  ? "bg-gray-100 text-gray-400"
-                  : "bg-green-600 hover:bg-green-700 text-white"
-              }`}
-            >
-              Дұрыс
-            </button>
-            <button
-              onClick={() => submitCheck(task, "false")}
-              disabled={!!checking[task.id] || isTaskAnswered}
-              aria-label="Жалған деп таңдау"
-              aria-pressed={isTaskAnswered && isFalseSelected ? "true" : "false"}
-              className={`flex-1 font-bold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-                isTaskAnswered && isFalseSelected
-                  ? isFalseCorrect
-                    ? "bg-green-600 text-white ring-2 ring-green-300 shadow-sm"
-                    : "bg-red-600 text-white ring-2 ring-red-300 shadow-sm"
-                  : isTaskAnswered && isFalseCorrect
-                  ? "bg-green-100 border-2 border-green-500 text-green-800 font-bold"
-                  : isTaskAnswered
-                  ? "bg-gray-100 text-gray-400"
-                  : "bg-red-600 hover:bg-red-700 text-white"
-              }`}
-            >
-              Жалған
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (qt === "select") {
-      const subquestions = task.subquestions || [];
-
-      if (getTaskAnswerMode(task) === "choices") {
-        return (
-          <div className="space-y-3">
-            <StudentChoiceAnswerFields
-              task={task}
-              value={currentAnswer}
-              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              disabled={isTaskAnswered}
-              isAnswered={isTaskAnswered}
-              isCorrect={isTaskCorrect}
-              correctAnswer={taskCorrectAnswer}
-              selectedAnswer={currentAnswer}
-            />
-          </div>
-        );
-      }
-
-      return (
-        <div className="space-y-3">
-          <div className={isTaskAnswered ? (isTaskCorrect ? "p-1 rounded-xl bg-green-50 border border-green-300" : "p-1 rounded-xl bg-red-50 border border-red-300") : ""}>
-            <StudentWrittenAnswerFields
-              value={currentAnswer}
-              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              count={2}
-              disabled={isTaskAnswered}
-              labels={[0, 1].map((index) =>
-                `${String.fromCharCode(65 + index)}) ${subquestions[index]?.text || `Қосымша сұрақ ${index + 1}`}`
-              )}
-            />
-          </div>
-        </div>
-      );
-    }
-
-    if (qt === "mcq" || qt === "mcq6") {
-      const requiredCount = getTaskMcqCorrectCount(task);
-
-      if (getTaskAnswerMode(task) === "choices") {
-        return (
-          <div className="space-y-3">
-            <StudentChoiceAnswerFields
-              task={task}
-              value={currentAnswer}
-              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              disabled={isTaskAnswered}
-              isAnswered={isTaskAnswered}
-              isCorrect={isTaskCorrect}
-              correctAnswer={taskCorrectAnswer}
-              selectedAnswer={currentAnswer}
-            />
-          </div>
-        );
-      }
-
-      return (
-        <div className="space-y-3">
-          {requiredCount > 1 && (
-            <p className="text-sm text-gray-600">{requiredCount} жауап жазыңыз</p>
-          )}
-          <div className={isTaskAnswered ? (isTaskCorrect ? "p-1 rounded-xl bg-green-50 border border-green-300" : "p-1 rounded-xl bg-red-50 border border-red-300") : ""}>
-            <StudentWrittenAnswerFields
-              value={currentAnswer}
-              onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-              count={requiredCount}
-              disabled={isTaskAnswered}
-            />
-          </div>
-        </div>
-      );
-    }
-
+    const answered = task.status === "completed" || selectedAnswers[task.id] !== undefined;
+    const correct = task.status === "completed" || !!feedback[task.id]?.ok;
+    const value = getTaskCurrentAnswer(task);
     return (
-      <div className="flex flex-col gap-3">
-        <div className={isTaskAnswered ? (isTaskCorrect ? "p-0.5 rounded-xl ring-2 ring-green-500 bg-green-50" : "p-0.5 rounded-xl ring-2 ring-red-500 bg-red-50") : ""}>
-          <StudentMathAnswerInput
-            value={currentAnswer}
-            onChange={(value) => setAnswers((m) => ({ ...m, [task.id]: value }))}
-            disabled={isTaskAnswered}
-            placeholder="Жауапты жазыңыз"
-          />
-        </div>
-      </div>
+      <StudentAnswerField
+        task={task}
+        value={value}
+        onChange={(next) => setAnswers((m) => ({ ...m, [task.id]: next }))}
+        result={answered ? { correct, correctAnswer: correctAnswers[task.id] || (correct && value ? value : task.answer || "") } : null}
+        onSubmit={(next) => void submitCheck(task, next)}
+        checking={!!checking[task.id]}
+      />
     );
   };
 
@@ -829,7 +662,7 @@ export default function LessonPage() {
                   hasPrev={currentTaskIndex > 0}
                   canGoNext={canGoNext}
                   showCheck={(activeTask.question_type || "input") !== "tf"}
-                  checkDisabled={!isTaskAnswerReady(activeTask, getTaskCurrentAnswer(activeTask))}
+                  checkDisabled={!isTaskAnswerComplete(activeTask, getTaskCurrentAnswer(activeTask))}
                   checking={!!checking[activeTask.id]}
                   onCheck={() => submitCheck(activeTask, getTaskCurrentAnswer(activeTask))}
                   onNext={() => goToNextTaskOrMini(activeTask.id)}
