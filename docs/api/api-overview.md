@@ -114,7 +114,8 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 #### Quiz Templates (`bot/routes/quizzes.py`)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/quizzes` | Authenticated | Lists quizzes created by the user or public quizzes. |
+| `GET` | `/api/quizzes` | Authenticated | Lists quizzes created by the user or public quizzes. Superseded by the catalog below; kept for installed PWA clients that still call it. |
+| `GET` | `/api/quizzes/catalog` | Optional | One page of the quiz library: `scope` (`all`/`mine`), `visibility`, `q` (every word must match title, topic or description), `grade`, `topic`, `untagged`, `sort` (`newest`/`popular`), `limit` (max 60), `offset`. Returns `items`, `total` and `facets` (grade and topic counts, each computed with the other filters applied). |
 | `GET` | `/api/quizzes/{quiz_id}` | Authenticated | Fetches quiz metadata. |
 | `GET` | `/api/quizzes/{quiz_id}/questions` | Authenticated | Lists questions in a quiz template. |
 | `GET` | `/api/quizzes/{quiz_id}/sessions` | Authenticated | Lists historical live sessions hosted for `quiz_id`. |

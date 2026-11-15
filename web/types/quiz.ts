@@ -31,8 +31,43 @@ export interface Quiz {
   author_nickname?: string | null;
   question_count?: number;
   is_public: boolean;
+  /** School grade 1–11; null when the quiz is not tied to one. */
+  grade?: number | null;
+  /** Catalog topic; an empty string means untagged. */
+  topic?: string;
+  /** Catalog only: the sum of the question time limits. */
+  duration_seconds?: number;
+  /** Catalog only: how many games were hosted from this quiz. */
+  play_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export type QuizCatalogSort = "newest" | "popular";
+
+export interface QuizCatalogQuery {
+  scope: "all" | "mine";
+  visibility?: "public" | "private";
+  q?: string;
+  grade?: number;
+  topic?: string;
+  untagged?: boolean;
+  sort?: QuizCatalogSort;
+  limit?: number;
+  offset?: number;
+}
+
+export interface QuizCatalog {
+  items: Quiz[];
+  total: number;
+  limit: number;
+  offset: number;
+  /** Each list counts the quizzes matching every other filter, so it shows what a click would return. */
+  facets: {
+    grades: Array<{ grade: number; count: number }>;
+    topics: Array<{ topic: string; count: number }>;
+    untagged: number;
+  };
 }
 
 export interface QuizParticipant {

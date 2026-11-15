@@ -1,398 +1,554 @@
 "use client";
-import Icon from "@/components/ui/Icon";
 
-
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import toast from "react-hot-toast";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { getQuizzes, deleteQuiz, updateQuiz, forkQuiz } from "@/lib/api/quizzes";
-import { Quiz } from "@/types/quiz";
-import toast from "react-hot-toast";
+import Icon from "@/components/ui/Icon";
+import { deleteQuiz, forkQuiz, getQuizCatalog, updateQuiz } from "@/lib/api/quizzes";
+import { Quiz, QuizCatalog, QuizCatalogSort } from "@/types/quiz";
+import QuizRow from "./_components/QuizRow";
 
-export default function QuizzesCatalogPage() {
+const PAGE_SIZE = 24;
+const SORTS: Array<{ value: QuizCatalogSort; label: string }> = [
+  { value: "newest", label: "Жаңалары" },
+  { value: "popular", label: "Танымалдары" },
+];
+const number = new Intl.NumberFormat("ru-RU");
+const HIDE_SCROLLBAR = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+interface Filters {
+  scope: "all" | "mine";
+  visibility?: "public" | "private";
+  q: string;
+  grade?: number;
+  topic: string;
+  untagged: boolean;
+  sort: QuizCatalogSort;
+  page: number;
+}
+
+/** The catalog state lives in the URL, so Back from a quiz returns to the same search, filters and page. */
+function readFilters(params: URLSearchParams | null): Filters {
+  const get = (key: string) => params?.get(key) || "";
+  const grade = Number(get("grade"));
+  const page = Number(get("page"));
+  const visibility = get("visibility");
+  const scope = get("scope") === "mine" ? "mine" : "all";
+  return {
+    scope,
+    visibility: scope === "mine" && (visibility === "public" || visibility === "private") ? visibility : undefined,
+    q: get("q").trim().slice(0, 100),
+    grade: Number.isInteger(grade) && grade >= 1 && grade <= 11 ? grade : undefined,
+    topic: get("untagged") === "1" ? "" : get("topic").slice(0, 80),
+    untagged: get("untagged") === "1",
+    sort: SORTS.some((s) => s.value === get("sort")) ? (get("sort") as QuizCatalogSort) : "newest",
+    page: Number.isInteger(page) && page > 1 ? page : 1,
+  };
+}
+
+function writeFilters(filters: Filters): string {
+  const params = new URLSearchParams();
+  if (filters.scope === "mine") params.set("scope", "mine");
+  if (filters.visibility) params.set("visibility", filters.visibility);
+  if (filters.q) params.set("q", filters.q);
+  if (filters.grade) params.set("grade", String(filters.grade));
+  if (filters.untagged) params.set("untagged", "1");
+  else if (filters.topic) params.set("topic", filters.topic);
+  if (filters.sort !== "newest") params.set("sort", filters.sort);
+  if (filters.page > 1) params.set("page", String(filters.page));
+  return params.toString();
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+        active
+          ? "border-purple-600 bg-purple-600 text-white"
+          : "border-slate-200 bg-white text-slate-700 hover:border-purple-300 hover:text-purple-700"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Segmented<T extends string>({ value, options, onChange, label }: {
+  value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void; label: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-xl bg-slate-200/70 p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+            value === option.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Page numbers around the current one: 1 … 4 5 6 … 42. */
+function pageWindow(current: number, last: number): Array<number | "gap"> {
+  const pages = new Set([1, last, current - 1, current, current + 1].filter((p) => p >= 1 && p <= last));
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  return sorted.flatMap((page, index) => (index > 0 && page - sorted[index - 1] > 1 ? ["gap" as const, page] : [page]));
+}
+
+function QuizzesCatalog() {
   const router = useRouter();
-  const { data: session } = useSession();
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const pathname = usePathname() || "/quizzes";
+  const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
+  const email = session?.user?.email || undefined;
+
+  const urlFilters = useMemo(() => readFilters(searchParams), [searchParams]);
+  // "My quizzes" needs an account; a shared ?scope=mine link falls back to the public catalog.
+  const filters = useMemo<Filters>(
+    () => (urlFilters.scope === "mine" && status === "unauthenticated" ? { ...urlFilters, scope: "all", visibility: undefined } : urlFilters),
+    [urlFilters, status]
+  );
+
+  const [catalog, setCatalog] = useState<QuizCatalog | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"all" | "my">("all");
-  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "private">("all");
-  const [togglingId, setTogglingId] = useState<number | null>(null);
-  const [forkingId, setForkingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [topicFilter, setTopicFilter] = useState("");
+  const [showRail, setShowRail] = useState(false);
 
-  const fetchQuizzes = useCallback(async (tab: "all" | "my") => {
-    setLoading(true);
-    setError(null);
-    try {
-      const isMy = tab === "my";
-      const { data, error } = await getQuizzes(isMy, session?.user?.email || undefined);
-      if (error) {
-        setError(error);
-      } else {
-        setQuizzes(data || []);
-      }
-    } catch {
-      setError("Квиздерді жүктеу кезінде қате орын алды");
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.user?.email]);
+  const setFilters = useCallback((patch: Partial<Filters>) => {
+    // Any change except paging starts again from the first page.
+    const next = { ...filters, page: 1, ...patch };
+    if (next.scope !== "mine") next.visibility = undefined;
+    const query = writeFilters(next);
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [filters, pathname, router]);
 
+  // --- Search box: typed text is local, the URL follows after a pause ---
+  const [searchText, setSearchText] = useState(urlFilters.q);
+  const pushedQuery = useRef(urlFilters.q);
+  const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    fetchQuizzes(activeTab);
-  }, [activeTab, fetchQuizzes]);
-
-  const handleDelete = async (quizId: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm("Бұл квизді өшіргіңіз келетініне сенімдісіз бе?")) return;
-    try {
-      const result = await deleteQuiz(quizId, session?.user?.email || undefined);
-      if (result.error) { setError(result.error); return; }
-      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
-      toast.success("Квиз өшірілді");
-    } catch {
-      toast.error("Квизді өшіру мүмкін болмады");
+    const q = searchText.trim();
+    if (q === pushedQuery.current) return;
+    const timer = setTimeout(() => {
+      pushedQuery.current = q;
+      setFilters({ q });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText, setFilters]);
+  useEffect(() => {
+    // The URL changed from outside the box (reset, Back): show that query.
+    if (filters.q !== pushedQuery.current) {
+      pushedQuery.current = filters.q;
+      setSearchText(filters.q);
     }
+  }, [filters.q]);
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    };
+    document.addEventListener("keydown", focusSearch);
+    return () => document.removeEventListener("keydown", focusSearch);
+  }, []);
+
+  // --- Loading ---
+  const request = useRef(0);
+  const load = useCallback(async () => {
+    const id = ++request.current;
+    setLoading(true);
+    const { data, error: loadError } = await getQuizCatalog({
+      scope: filters.scope, visibility: filters.visibility, q: filters.q, grade: filters.grade,
+      topic: filters.topic, untagged: filters.untagged, sort: filters.sort,
+      limit: PAGE_SIZE, offset: (filters.page - 1) * PAGE_SIZE,
+    }, email);
+    if (id !== request.current) return; // a newer search already replaced this one
+    if (loadError || !data) {
+      setError(loadError || "Квиздерді жүктеу кезінде қате орын алды");
+    } else {
+      setError(null);
+      setCatalog(data);
+      if (data.facets.topics.length > 0) setShowRail(true);
+    }
+    setLoading(false);
+  }, [filters, email]);
+  useEffect(() => {
+    if (status !== "loading") void load();
+  }, [load, status]);
+
+  const total = catalog?.total ?? 0;
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  useEffect(() => {
+    // A page past the end (a deleted quiz, a stale link) snaps back to the last one.
+    if (catalog && !loading && filters.page > lastPage) setFilters({ page: lastPage });
+  }, [catalog, loading, filters.page, lastPage, setFilters]);
+
+  const goToPage = (page: number) => {
+    setFilters({ page });
+    window.scrollTo({ top: 0 });
   };
 
-  const handleFork = async (quizId: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!session?.user) {
-      toast.error("Квизді көшіру үшін алдымен жүйеге кіріңіз");
-      return;
-    }
-    setForkingId(quizId);
-    try {
-      const email = session?.user?.email || undefined;
-      const { data: forked, error: forkErr } = await forkQuiz(quizId, email);
-      if (forkErr || !forked) {
-        toast.error(forkErr || "Квизді көшіру сәтсіз аяқталды");
-        setForkingId(null);
-        return;
+  // --- Row actions ---
+  useEffect(() => {
+    if (openMenuId === null) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !(event.target as Element).closest?.("[data-quiz-menu]")) {
+        setOpenMenuId(null);
       }
-      toast.success("Квиз көшірмесі сәтті сақталды! Өңдеу терезесі ашылуда...");
-      router.push(`/quizzes/${forked.id}/edit`);
-    } catch {
-      toast.error("Қате орын алды");
-      setForkingId(null);
-    }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [openMenuId]);
+
+  const handleDelete = async (quiz: Quiz) => {
+    setOpenMenuId(null);
+    if (!confirm(`«${quiz.title}» квизін өшіргіңіз келетініне сенімдісіз бе?`)) return;
+    setBusyId(quiz.id);
+    const result = await deleteQuiz(quiz.id, email);
+    setBusyId(null);
+    if (result.error) return void toast.error(result.error);
+    toast.success("Квиз өшірілді");
+    void load();
   };
 
-  const handleTogglePrivacy = async (quiz: Quiz, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setTogglingId(quiz.id);
-    const nextPublic = !quiz.is_public;
-    try {
-      const result = await updateQuiz(
-        quiz.id,
-        { is_public: nextPublic },
-        session?.user?.email || undefined
-      );
-      if (result.error || !result.data) {
-        toast.error(result.error || "Квиз мәртебесін өзгерту мүмкін болмады");
-      } else {
-        setQuizzes((prev) =>
-          prev.map((q) => (q.id === quiz.id ? { ...q, is_public: nextPublic } : q))
-        );
-        toast.success(
-          nextPublic
-            ? "Квиз енді баршаға ашық (Public)"
-            : "Квиз жеке форматқа ауыстырылды (Private)"
-        );
-      }
-    } catch {
-      toast.error("Қате орын алды");
-    } finally {
-      setTogglingId(null);
-    }
+  const handleTogglePrivacy = async (quiz: Quiz) => {
+    setOpenMenuId(null);
+    setBusyId(quiz.id);
+    const result = await updateQuiz(quiz.id, { is_public: !quiz.is_public }, email);
+    setBusyId(null);
+    if (result.error || !result.data) return void toast.error(result.error || "Квиз мәртебесін өзгерту мүмкін болмады");
+    toast.success(quiz.is_public ? "Квиз енді жеке: каталогтан жасырылды" : "Квиз енді баршаға ашық");
+    void load();
   };
 
-  const publicCount = useMemo(() => quizzes.filter((q) => q.is_public).length, [quizzes]);
-  const privateCount = useMemo(() => quizzes.filter((q) => !q.is_public).length, [quizzes]);
+  const handleFork = async (quiz: Quiz) => {
+    setOpenMenuId(null);
+    setBusyId(quiz.id);
+    const { data: forked, error: forkError } = await forkQuiz(quiz.id, email);
+    if (forkError || !forked) {
+      setBusyId(null);
+      return void toast.error(forkError || "Квизді көшіру сәтсіз аяқталды");
+    }
+    toast.success("Көшірме сақталды. Өңдеу терезесі ашылуда...");
+    router.push(`/quizzes/${forked.id}/edit`);
+  };
 
-  const displayedQuizzes = useMemo(() => {
-    if (activeTab !== "my") return quizzes;
-    if (privacyFilter === "public") return quizzes.filter((q) => q.is_public);
-    if (privacyFilter === "private") return quizzes.filter((q) => !q.is_public);
-    return quizzes;
-  }, [activeTab, quizzes, privacyFilter]);
+  // --- Filter lists: keep the selected value visible even when nothing matches it ---
+  const grades = useMemo(() => {
+    const list = catalog?.facets.grades || [];
+    return filters.grade && !list.some((g) => g.grade === filters.grade)
+      ? [...list, { grade: filters.grade, count: 0 }].sort((a, b) => a.grade - b.grade)
+      : list;
+  }, [catalog, filters.grade]);
+  const topics = useMemo(() => {
+    // Kazakh alphabetical order; the database only knows code points.
+    const list = [...(catalog?.facets.topics || [])].sort((a, b) => a.topic.localeCompare(b.topic, "kk"));
+    return filters.topic && !list.some((t) => t.topic === filters.topic) ? [{ topic: filters.topic, count: 0 }, ...list] : list;
+  }, [catalog, filters.topic]);
+  const untaggedCount = catalog?.facets.untagged ?? 0;
+  const visibleTopics = useMemo(() => {
+    const needle = topicFilter.trim().toLocaleLowerCase("kk");
+    return needle ? topics.filter((t) => t.topic.toLocaleLowerCase("kk").includes(needle)) : topics;
+  }, [topics, topicFilter]);
+  const topicTotal = topics.reduce((sum, t) => sum + t.count, 0) + untaggedCount;
+
+  const hasFilters = Boolean(filters.q || filters.grade || filters.topic || filters.untagged || filters.visibility);
+  const resetFilters = () => setFilters({ q: "", grade: undefined, topic: "", untagged: false, visibility: undefined });
+  const rail = showRail || Boolean(filters.topic) || filters.untagged;
+  const items = catalog?.items || [];
+  const firstLoad = loading && !catalog;
+
+  const topicButton = (label: string, count: number, active: boolean, onClick: () => void, key?: string) => (
+    <li key={key ?? label}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+          active ? "bg-purple-100 font-semibold text-purple-800" : "text-slate-700 hover:bg-slate-100"
+        }`}
+      >
+        <span className="min-w-0 break-words">{label}</span>
+        <span className={`shrink-0 text-xs tabular-nums ${active ? "text-purple-700" : "text-slate-400"}`}>{number.format(count)}</span>
+      </button>
+    </li>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 md:pb-8 md:pl-64">
+    <div className="min-h-screen bg-slate-50 pb-24 md:pb-10 md:pl-64">
       <DesktopNav currentPage="quizzes" />
       <MobileNav currentPage="quizzes" />
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-              Интерактивті квиздер
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            <Link href="/quiz/history" className="rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-purple-700">Менің ойындарым</Link>
-            <Link
-              href="/join"
-              className="flex-1 sm:flex-none text-center px-4 py-2.5 rounded-xl font-bold text-sm bg-white border border-gray-200 text-gray-800 shadow-sm hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Icon name="logIn" className="w-4 h-4 text-purple-600" />
+      <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
+        <header className="flex flex-wrap items-center gap-x-2 gap-y-3">
+          <h1 className="mr-auto bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
+            Квиздер
+          </h1>
+          <Link href="/quiz/history" className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200/60 hover:text-slate-900">
+            <Icon name="clock" className="h-4 w-4" />
+            Менің ойындарым
+          </Link>
+          {/* On a phone the two main actions share one full-width line under the title. */}
+          <div className="order-last flex w-full gap-2 sm:order-none sm:w-auto">
+            <Link href="/join" className="inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-purple-300 hover:text-purple-700">
+              <Icon name="logIn" className="h-4 w-4 text-purple-600" />
               PIN-кодпен қосылу
             </Link>
-            <Link
-              href="/quizzes/create"
-              className="flex-1 sm:flex-none text-center px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:from-purple-700 hover:to-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Icon name="plus" className="w-4 h-4" />
-              Жаңа квиз жасау
+            <Link href="/quizzes/create" className="inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-purple-700">
+              <Icon name="plus" className="h-4 w-4" />
+              Жаңа квиз
             </Link>
           </div>
+        </header>
+
+        {/* Search stays in reach while the list scrolls */}
+        <div className="sticky top-0 z-20 -mx-4 mt-4 bg-slate-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="relative">
+              <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchRef}
+                type="search"
+                value={searchText}
+                maxLength={100}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Квиз атауы немесе тақырыбы"
+                aria-label="Квиздерді іздеу"
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-11 text-base text-slate-900 shadow-sm transition-shadow placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-100 [&::-webkit-search-cancel-button]:hidden"
+              />
+              {searchText ? (
+                <button
+                  type="button"
+                  onClick={() => { setSearchText(""); searchRef.current?.focus(); }}
+                  aria-label="Іздеуді тазалау"
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <Icon name="close" className="h-4 w-4" />
+                </button>
+              ) : (
+                <kbd className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 px-1.5 text-xs font-semibold text-slate-400 md:block">/</kbd>
+              )}
+            </div>
         </div>
 
-        {/* Tabs and filters */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/80 mb-6 pb-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab("all")}
-              className={`pb-3 px-3 text-sm font-bold border-b-2 transition-all ${
-                activeTab === "all"
-                  ? "border-purple-600 text-purple-600"
-                  : "border-transparent text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              Барлық квиздер
-            </button>
-            {session && (
-              <button
-                onClick={() => setActiveTab("my")}
-                className={`pb-3 px-3 text-sm font-bold border-b-2 transition-all ${
-                  activeTab === "my"
-                    ? "border-purple-600 text-purple-600"
-                    : "border-transparent text-gray-500 hover:text-gray-800"
-                }`}
-              >
-                Менің квиздерім
-              </button>
-            )}
-          </div>
-
-          {activeTab === "my" && quizzes.length > 0 && (
-            <div className="flex items-center gap-1.5 self-start sm:self-auto bg-gray-100/80 p-1 rounded-xl text-xs font-semibold">
-              <button
-                onClick={() => setPrivacyFilter("all")}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  privacyFilter === "all"
-                    ? "bg-white text-gray-900 shadow-sm font-bold"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Барлығы ({quizzes.length})
-              </button>
-              <button
-                onClick={() => setPrivacyFilter("public")}
-                className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
-                  privacyFilter === "public"
-                    ? "bg-white text-emerald-700 shadow-sm font-bold"
-                    : "text-gray-600 hover:text-emerald-700"
-                }`}
-              >
-                <span><Icon name="globe" /> Ашық</span>
-                <span>({publicCount})</span>
-              </button>
-              <button
-                onClick={() => setPrivacyFilter("private")}
-                className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
-                  privacyFilter === "private"
-                    ? "bg-white text-amber-700 shadow-sm font-bold"
-                    : "text-gray-600 hover:text-amber-700"
-                }`}
-              >
-                <span><Icon name="lock" /> Жеке</span>
-                <span>({privateCount})</span>
-              </button>
-            </div>
+        {/* Scope and grade */}
+        <div className={`-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 ${HIDE_SCROLLBAR}`}>
+          {session && (
+            <Segmented
+              label="Қай квиздер"
+              value={filters.scope}
+              onChange={(scope) => setFilters({ scope })}
+              options={[{ value: "all", label: "Каталог" }, { value: "mine", label: "Менің квиздерім" }]}
+            />
+          )}
+          {filters.scope === "mine" && (
+            <Segmented
+              label="Қолжетімділік"
+              value={filters.visibility || "any"}
+              onChange={(visibility) => setFilters({ visibility: visibility === "any" ? undefined : visibility })}
+              options={[{ value: "any", label: "Бәрі" }, { value: "public", label: "Ашық" }, { value: "private", label: "Жеке" }]}
+            />
+          )}
+          {grades.length > 0 && (
+            <>
+              {session && <span className="mx-1 hidden h-6 w-px shrink-0 bg-slate-200 sm:block" />}
+              <span className="shrink-0 text-sm font-semibold text-slate-500">Сынып</span>
+              <Chip active={!filters.grade} onClick={() => setFilters({ grade: undefined })}>Бәрі</Chip>
+              {grades.map((g) => (
+                <Chip key={g.grade} active={filters.grade === g.grade} onClick={() => setFilters({ grade: filters.grade === g.grade ? undefined : g.grade })}>
+                  {g.grade}
+                </Chip>
+              ))}
+            </>
           )}
         </div>
 
-        {/* Content */}
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-48 rounded-2xl bg-white/60 animate-pulse border border-white" />
+        {/* Topics on small screens: one scrollable line */}
+        {rail && (
+          <div className={`-mx-4 mt-2 flex items-center gap-2 overflow-x-auto px-4 pb-1 lg:hidden ${HIDE_SCROLLBAR}`}>
+            <Chip active={!filters.topic && !filters.untagged} onClick={() => setFilters({ topic: "", untagged: false })}>Барлық тақырып</Chip>
+            {/* The picked topic leads the line, or it would sit somewhere off screen. */}
+            {[...topics].sort((a, b) => Number(b.topic === filters.topic) - Number(a.topic === filters.topic)).map((t) => (
+              <Chip key={t.topic} active={filters.topic === t.topic} onClick={() => setFilters({ topic: filters.topic === t.topic ? "" : t.topic, untagged: false })}>
+                {t.topic} <span className="ml-1 font-normal opacity-70">{number.format(t.count)}</span>
+              </Chip>
             ))}
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center bg-white rounded-2xl border border-red-100 shadow-sm">
-            <p className="text-red-600 font-medium">{error}</p>
-            <button
-              onClick={() => fetchQuizzes(activeTab)}
-              className="mt-3 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-colors"
-            >
-              Қайталау
-            </button>
-          </div>
-        ) : quizzes.length === 0 ? (
-          <div className="text-center py-16 px-4 bg-white/70 backdrop-blur-sm rounded-3xl border border-white/60 shadow-sm">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center">
-              <Icon name="layers" className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">
-              {activeTab === "my" ? "Сізде әлі квиздер жоқ" : "Квиздер табылмады"}
-            </h3>
-            <p className="text-gray-500 text-sm max-w-sm mx-auto mb-6">
-              Алғашқы интерактивті викторинаңызды жасап, сыныптастарыңызбен бірге ойнаңыз!
-            </p>
-            <Link
-              href="/quizzes/create"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 text-white font-bold text-sm shadow-md shadow-purple-500/20 hover:bg-purple-700 transition-all"
-            >
-              Квиз жасау
-            </Link>
-          </div>
-        ) : displayedQuizzes.length === 0 ? (
-          <div className="text-center py-12 px-4 bg-white/70 backdrop-blur-sm rounded-3xl border border-white/60 shadow-sm">
-            <div className="text-3xl mb-2">{privacyFilter === "public" ? <><Icon name="globe" /></> : <><Icon name="lock" /></>}</div>
-            <h3 className="text-base font-bold text-gray-800 mb-1">
-              {privacyFilter === "public" ? "Ашық квиздер табылмады" : "Жеке квиздер табылмады"}
-            </h3>
-            <p className="text-gray-500 text-xs mb-4">
-              Таңдалған санат бойынша квиздер жоқ
-            </p>
-            <button
-              onClick={() => setPrivacyFilter("all")}
-              className="text-xs font-bold text-purple-600 hover:text-purple-700 underline"
-            >
-              Барлық квиздерді көрсету
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayedQuizzes.map((quiz) => (
-              <div
-                key={quiz.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/quizzes/${quiz.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    const tag = (e.target as HTMLElement).tagName;
-                    if (tag !== "BUTTON" && tag !== "A") {
-                      e.preventDefault();
-                      router.push(`/quizzes/${quiz.id}`);
-                    }
-                  }
-                }}
-                className="group relative bg-white/90 backdrop-blur-md rounded-2xl border border-purple-100/60 p-5 shadow-sm hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all flex flex-col justify-between cursor-pointer"
-              >
-                <div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-2 gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md">
-                        <Icon name="help" className="w-3.5 h-3.5" />
-                        {quiz.question_count || 0} сұрақ
-                      </span>
-                      {quiz.is_public ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70" title="Баршаға ашық квиз">
-                          <span><Icon name="globe" /></span>
-                          <span>Ашық</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/70" title="Тек сізге көрінетін жеке квиз">
-                          <span><Icon name="lock" /></span>
-                          <span>Жеке</span>
-                        </span>
-                      )}
-                    </div>
-                    {quiz.author_nickname && (
-                      <span className="text-gray-400 truncate max-w-[120px]" title={`Автор: ${quiz.author_nickname}`}>
-                        Автор: {quiz.author_nickname}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors line-clamp-2 mb-1">
-                    {quiz.title}
-                  </h3>
-                  {quiz.description && (
-                    <p className="text-gray-600 text-xs line-clamp-2 mb-4">
-                      {quiz.description}
-                    </p>
-                  )}
-                </div>
-
-                <div className="pt-4 border-t border-gray-100 flex items-center justify-between gap-2 mt-4">
-                  <Link
-                    href={`/quizzes/${quiz.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 text-center py-2 px-3 rounded-xl bg-purple-50 text-purple-700 font-bold text-xs hover:bg-purple-600 hover:text-white transition-all"
-                  >
-                    Ашу & Ойнау
-                  </Link>
-                  {(quiz.can_manage || activeTab === "my") ? (
-                    <>
-                      <Link
-                        href={`/quizzes/${quiz.id}/edit`}
-                        title="Өңдеу"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-xl bg-purple-50 hover:bg-purple-100"
-                      >
-                        <Icon name="edit" className="w-4 h-4" />
-                      </Link>
-                      <button
-                        onClick={(e) => handleTogglePrivacy(quiz, e)}
-                        disabled={togglingId === quiz.id}
-                        title={quiz.is_public ? "Жекеге ауыстыру (каталогтан жасыру)" : "Баршаға ашық ету (каталогқа шығару)"}
-                        className={`py-2 px-2.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1 ${
-                          quiz.is_public
-                            ? "border-emerald-200 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/80"
-                            : "border-amber-200 text-amber-700 bg-amber-50/50 hover:bg-amber-100/80"
-                        } disabled:opacity-50`}
-                      >
-                        {togglingId === quiz.id ? (
-                          <span className="text-xs"><Icon name="loader" className="animate-spin" /></span>
-                        ) : (
-                          <span>{quiz.is_public ? <><Icon name="globe" /></> : <><Icon name="lock" /></>}</span>
-                        )}
-                        <span className="text-[11px] hidden sm:inline">
-                          {quiz.is_public ? "Ашық" : "Жеке"}
-                        </span>
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(quiz.id, e)}
-                        title="Өшіру"
-                        className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-xl hover:bg-red-50"
-                      >
-                        <Icon name="trash" className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : quiz.is_public ? (
-                    <button
-                      onClick={(e) => handleFork(quiz.id, e)}
-                      disabled={forkingId === quiz.id}
-                      title="Өзіме көшіріп өңдеу"
-                      className="p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-xl bg-purple-50 hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
-                    >
-                      {forkingId === quiz.id ? (
-                        <Icon name="loader" className="animate-spin w-4 h-4" />
-                      ) : (
-                        <Icon name="copy" className="w-4 h-4" />
-                      )}
-                      <span className="hidden sm:inline">Көшіріп алу</span>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
+            {untaggedCount > 0 && (
+              <Chip active={filters.untagged} onClick={() => setFilters({ topic: "", untagged: !filters.untagged })}>
+                Тақырыпсыз <span className="ml-1 font-normal opacity-70">{number.format(untaggedCount)}</span>
+              </Chip>
+            )}
           </div>
         )}
+
+        <div className="mt-4 flex items-start gap-6">
+          {rail && (
+            <aside aria-label="Тақырыптар" className="sticky top-[84px] hidden max-h-[calc(100vh-108px)] w-60 shrink-0 flex-col rounded-2xl border border-slate-200 bg-white p-2 lg:flex">
+              <h2 className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-500">Тақырыптар</h2>
+              {topics.length > 10 && (
+                <input
+                  type="search"
+                  value={topicFilter}
+                  onChange={(event) => setTopicFilter(event.target.value)}
+                  placeholder="Тақырыпты табу"
+                  aria-label="Тақырыпты табу"
+                  className="mx-1 mb-1 mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-purple-500 focus:bg-white focus:outline-none"
+                />
+              )}
+              <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+                {!topicFilter.trim() && topicButton("Барлық тақырып", topicTotal, !filters.topic && !filters.untagged, () => setFilters({ topic: "", untagged: false }), "__all")}
+                {visibleTopics.map((t) => topicButton(t.topic, t.count, filters.topic === t.topic, () => setFilters({ topic: t.topic, untagged: false })))}
+                {!topicFilter.trim() && untaggedCount > 0 && topicButton("Тақырыпсыз", untaggedCount, filters.untagged, () => setFilters({ topic: "", untagged: true }), "__untagged")}
+                {visibleTopics.length === 0 && topicFilter.trim() && <li className="px-3 py-2 text-sm text-slate-400">Тақырып табылмады</li>}
+              </ul>
+            </aside>
+          )}
+
+          <section className="min-w-0 flex-1" aria-busy={loading}>
+            <div className="mb-2 flex min-h-[32px] flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm text-slate-500">
+              <span role="status">
+                {firstLoad ? "Жүктелуде..." : total === 0 ? "" : hasFilters
+                  ? `${number.format(total)} квиз табылды`
+                  : `${number.format(total)} квиз`}
+              </span>
+              {hasFilters && (
+                <button type="button" onClick={resetFilters} className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:underline">
+                  <Icon name="close" className="h-3.5 w-3.5" />
+                  Сүзгілерді тазалау
+                </button>
+              )}
+              <div role="group" aria-label="Сұрыптау" className="ml-auto flex items-center gap-1">
+                {SORTS.map((sort) => (
+                  <button key={sort.value} type="button" aria-pressed={filters.sort === sort.value} onClick={() => setFilters({ sort: sort.value })}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${filters.sort === sort.value ? "bg-slate-200/80 text-slate-900" : "hover:text-slate-900"}`}>
+                    {sort.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {firstLoad ? (
+              <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white" aria-hidden>
+                {Array.from({ length: 8 }, (_, i) => (
+                  <li key={i} className="flex animate-pulse items-center gap-4 px-4 py-3.5">
+                    <span className="h-11 w-11 shrink-0 rounded-xl bg-slate-100" />
+                    <span className="flex-1 space-y-2">
+                      <span className="block h-4 w-2/5 rounded bg-slate-100" />
+                      <span className="block h-3 w-1/4 rounded bg-slate-100" />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : error ? (
+              <div className="rounded-2xl border border-red-200 bg-white p-8 text-center">
+                <p className="font-medium text-red-600">{error}</p>
+                <button type="button" onClick={() => void load()} className="mt-3 rounded-lg bg-purple-100 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-200">
+                  Қайталау
+                </button>
+              </div>
+            ) : items.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-16 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
+                  <Icon name={hasFilters ? "search" : "layers"} className="h-7 w-7" />
+                </div>
+                {hasFilters ? (
+                  <>
+                    <h2 className="text-lg font-bold text-slate-800">Ештеңе табылмады</h2>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Іздеу сөзін қысқартып көріңіз немесе сүзгілерді алып тастаңыз.</p>
+                    <button type="button" onClick={resetFilters} className="mt-5 rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-purple-700">
+                      Сүзгілерді тазалау
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-lg font-bold text-slate-800">{filters.scope === "mine" ? "Сізде әлі квиздер жоқ" : "Квиздер әлі жоқ"}</h2>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Алғашқы квизіңізді жасап, сыныппен бірге ойнаңыз.</p>
+                    <Link href="/quizzes/create" className="mt-5 inline-flex rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-purple-700">
+                      Квиз жасау
+                    </Link>
+                  </>
+                )}
+              </div>
+            ) : (
+              <ul className={`divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white transition-opacity ${loading ? "opacity-60" : ""}`}>
+                {items.map((quiz) => (
+                  <QuizRow
+                    key={quiz.id}
+                    quiz={quiz}
+                    busy={busyId === quiz.id}
+                    signedIn={Boolean(session)}
+                    menuOpen={openMenuId === quiz.id}
+                    onToggleMenu={() => setOpenMenuId(openMenuId === quiz.id ? null : quiz.id)}
+                    onPickTopic={(topic) => setFilters({ topic, untagged: false })}
+                    onTogglePrivacy={() => void handleTogglePrivacy(quiz)}
+                    onDelete={() => void handleDelete(quiz)}
+                    onFork={() => void handleFork(quiz)}
+                  />
+                ))}
+              </ul>
+            )}
+
+            {!error && lastPage > 1 && items.length > 0 && (
+              <nav aria-label="Беттер" className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-slate-500">
+                  {number.format((filters.page - 1) * PAGE_SIZE + 1)}–{number.format(Math.min(filters.page * PAGE_SIZE, total))} / {number.format(total)}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label="Алдыңғы бет"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-purple-300 disabled:opacity-40 disabled:hover:border-slate-200">
+                    <Icon name="chevronLeft" className="h-4 w-4" />
+                  </button>
+                  {pageWindow(filters.page, lastPage).map((page, index) => page === "gap" ? (
+                    <span key={`gap-${index}`} className="px-1 text-slate-400">…</span>
+                  ) : (
+                    <button key={page} type="button" onClick={() => goToPage(page)} aria-current={page === filters.page ? "page" : undefined}
+                      className={`h-10 min-w-10 rounded-xl px-2 text-sm font-semibold tabular-nums ${
+                        page === filters.page ? "bg-purple-600 text-white" : "border border-slate-200 bg-white text-slate-700 hover:border-purple-300"
+                      }`}>
+                      {page}
+                    </button>
+                  ))}
+                  <button type="button" disabled={filters.page >= lastPage} onClick={() => goToPage(filters.page + 1)} aria-label="Келесі бет"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-purple-300 disabled:opacity-40 disabled:hover:border-slate-200">
+                    <Icon name="chevronRight" className="h-4 w-4" />
+                  </button>
+                </div>
+              </nav>
+            )}
+          </section>
+        </div>
       </main>
     </div>
+  );
+}
+
+export default function QuizzesCatalogPage() {
+  // useSearchParams needs a Suspense boundary to prerender.
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <QuizzesCatalog />
+    </Suspense>
   );
 }

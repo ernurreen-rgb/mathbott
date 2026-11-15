@@ -12,6 +12,21 @@ from .quiz_entry_limits import QuizEntryLimitsMixin
 
 logger = logging.getLogger(__name__)
 
+KEEP = object()  # update_quiz: leave the grade as it is
+
+CATALOG_SORTS = {
+    "newest": "q.created_at DESC, q.id DESC",
+    "popular": "play_count DESC, q.id DESC",
+}
+# The server locale may be plain C, where LOWER() leaves Cyrillic untouched; PostgreSQL 17's
+# built-in pg_c_utf8 collation lowercases every script the same way on any server.
+_CATALOG_SEARCH_SQL = " OR ".join(
+    f"LOWER(q.{column} COLLATE \"pg_c_utf8\") LIKE ? ESCAPE '\\'" for column in ("title", "topic", "description"))
+
+
+def _clean_topic(topic: Optional[str]) -> str:
+    return " ".join(str(topic or "").split())
+
 
 class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
     """Repository handling quizzes, questions, game sessions and participants."""
@@ -26,14 +41,16 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
         cover_image: Optional[str] = None,
         is_public: bool = False,
         questions: Optional[List[Dict[str, Any]]] = None,
+        grade: Optional[int] = None,
+        topic: str = "",
     ) -> Dict[str, Any]:
         async with self._write_transaction() as db:
             cursor = await db.execute(
                 """
-                INSERT INTO quizzes (title, description, cover_image, created_by, is_public)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO quizzes (title, description, cover_image, created_by, is_public, grade, topic)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (title, description, cover_image, created_by, 1 if is_public else 0),
+                (title, description, cover_image, created_by, 1 if is_public else 0, grade, _clean_topic(topic)),
             )
             quiz_id = cursor.lastrowid
             for question in questions or []:
@@ -64,9 +81,17 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
         cover_image: Optional[str] = None,
         is_public: Optional[bool] = None,
         questions: Optional[List[Dict[str, Any]]] = None,
+        grade: Any = KEEP,
+        topic: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         updates = []
         params = []
+        if grade is not KEEP:  # None clears the grade, so "unchanged" needs its own marker
+            updates.append("grade = ?")
+            params.append(grade)
+        if topic is not None:
+            updates.append("topic = ?")
+            params.append(_clean_topic(topic))
         if title is not None:
             updates.append("title = ?")
             params.append(title)
@@ -112,10 +137,11 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
         async with self._write_transaction() as db:
             cursor = await db.execute(
                 """
-                INSERT INTO quizzes (title, description, cover_image, created_by, is_public)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO quizzes (title, description, cover_image, created_by, is_public, grade, topic)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (title, quiz.get("description") or "", quiz.get("cover_image"), user_id, 0),
+                (title, quiz.get("description") or "", quiz.get("cover_image"), user_id, 0,
+                 quiz.get("grade"), quiz.get("topic") or ""),
             )
             new_quiz_id = cursor.lastrowid
             for q in questions:
@@ -173,6 +199,89 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
             async with db.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
+
+    async def get_catalog(
+        self,
+        created_by: Optional[int] = None,
+        is_public: Optional[bool] = None,
+        search: Optional[str] = None,
+        grade: Optional[int] = None,
+        topic: Optional[str] = None,
+        untagged: bool = False,
+        sort: str = "newest",
+        limit: int = 24,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """One catalog page plus the grade and topic counts for its filters.
+
+        Each facet is counted with every other filter applied but not its own, so the
+        counts show what picking another grade or topic would return.
+        """
+        words = (search or "").lower().split()[:8]
+        topic = _clean_topic(topic)
+
+        def where(skip: Optional[str] = None):
+            conditions: List[str] = []
+            params: List[Any] = []
+            if created_by is not None:
+                conditions.append("q.created_by = ?")
+                params.append(created_by)
+            if is_public is not None:
+                conditions.append("q.is_public = ?")
+                params.append(1 if is_public else 0)
+            for word in words:  # every word must appear somewhere, in any order
+                conditions.append(f"({_CATALOG_SEARCH_SQL})")
+                params.extend([self._contains_like_pattern(word)] * 3)
+            if grade is not None and skip != "grade":
+                conditions.append("q.grade = ?")
+                params.append(grade)
+            if skip != "topic":
+                if untagged:
+                    conditions.append("q.topic = ''")
+                elif topic:
+                    conditions.append("q.topic = ?")
+                    params.append(topic)
+            return (f"WHERE {' AND '.join(conditions)}" if conditions else ""), params
+
+        clause, params = where()
+        grade_clause, grade_params = where(skip="grade")
+        topic_clause, topic_params = where(skip="topic")
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            cursor = await db.execute(f"SELECT COUNT(*) AS total FROM quizzes q {clause}", params)
+            total = (await cursor.fetchone())["total"]
+            cursor = await db.execute(f"""
+                SELECT q.*, u.nickname AS author_nickname, s.question_count, s.duration_seconds,
+                       (SELECT COUNT(*) FROM quiz_sessions qs WHERE qs.quiz_id = q.id) AS play_count
+                FROM quizzes q
+                LEFT JOIN users u ON u.id = q.created_by
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS question_count, COALESCE(SUM(time_limit_seconds), 0) AS duration_seconds
+                    FROM quiz_questions WHERE quiz_id = q.id
+                ) s ON TRUE
+                {clause}
+                ORDER BY {CATALOG_SORTS.get(sort, CATALOG_SORTS["newest"])}
+                LIMIT ? OFFSET ?
+            """, [*params, limit, offset])
+            items = [dict(row) for row in await cursor.fetchall()]
+            cursor = await db.execute(f"""
+                SELECT q.grade, COUNT(*) AS count FROM quizzes q {grade_clause}
+                GROUP BY q.grade ORDER BY q.grade
+            """, grade_params)
+            grades = [dict(row) for row in await cursor.fetchall() if row["grade"] is not None]
+            cursor = await db.execute(f"""
+                SELECT q.topic, COUNT(*) AS count FROM quizzes q {topic_clause}
+                GROUP BY q.topic ORDER BY q.topic
+            """, topic_params)
+            topics = [dict(row) for row in await cursor.fetchall()]
+        return {
+            "items": items, "total": total, "limit": limit, "offset": offset,
+            "facets": {
+                "grades": grades,
+                "topics": [row for row in topics if row["topic"]],
+                "untagged": next((row["count"] for row in topics if not row["topic"]), 0),
+            },
+        }
 
     # --- Questions CRUD ---
 

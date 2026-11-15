@@ -1,13 +1,13 @@
 "use client";
 
 import Icon from "@/components/ui/Icon";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
-import { createQuiz, updateQuiz } from "@/lib/api/quizzes";
+import { createQuiz, getQuizCatalog, updateQuiz } from "@/lib/api/quizzes";
 import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { QuestionType, Quiz, QuizOption, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
@@ -26,7 +26,8 @@ interface DraftQuestion {
   explanation: string;
 }
 
-interface EditorDraft { title: string; description: string; isPublic: boolean; questions: DraftQuestion[]; activeQuestionIndex: number }
+// grade and topic are optional: drafts saved before the catalog fields existed lack them.
+interface EditorDraft { title: string; description: string; isPublic: boolean; grade?: number | null; topic?: string; questions: DraftQuestion[]; activeQuestionIndex: number }
 function isEditorDraft(raw: unknown): raw is EditorDraft {
   const draft = raw as EditorDraft | null;
   return !!draft && typeof draft.title === "string" && typeof draft.description === "string" &&
@@ -63,6 +64,9 @@ export default function QuizEditor({
   const [title, setTitle] = useState(initialQuiz?.title || "");
   const [description, setDescription] = useState(initialQuiz?.description || "");
   const [isPublic, setIsPublic] = useState(initialQuiz?.is_public ?? false);
+  const [grade, setGrade] = useState<number | null>(initialQuiz?.grade ?? null);
+  const [topic, setTopic] = useState(initialQuiz?.topic || "");
+  const [topicSuggestions, setTopicSuggestions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const [questions, setQuestions] = useState<DraftQuestion[]>(() => {
@@ -129,12 +133,28 @@ export default function QuizEditor({
   const currentQ = questions[activeQuestionIndex];
   const email = session?.user?.email;
   const autosave = useQuizDraft<EditorDraft>(email ? quizDraftKey(email, initialQuiz?.id) : null,
-    { title, description, isPublic, questions, activeQuestionIndex },
+    { title, description, isPublic, grade, topic, questions, activeQuestionIndex },
     (draft) => {
       setTitle(draft.title); setDescription(draft.description); setIsPublic(draft.isPublic);
+      if (draft.grade !== undefined) setGrade(draft.grade);
+      if (draft.topic !== undefined) setTopic(draft.topic);
       setQuestions(draft.questions);
       setActiveQuestionIndex(Math.max(0, Math.min(draft.activeQuestionIndex, draft.questions.length - 1)));
     }, isEditorDraft);
+
+  // Offer the topics already in use, so one topic does not end up spelled three ways.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getQuizCatalog({ scope: "all", limit: 1 }),
+      email ? getQuizCatalog({ scope: "mine", limit: 1 }, email) : null,
+    ]).then((results) => {
+      if (cancelled) return;
+      const names = results.flatMap((result) => result?.data?.facets.topics.map((t) => t.topic) || []);
+      setTopicSuggestions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, "kk")));
+    });
+    return () => { cancelled = true; };
+  }, [email]);
 
   const updateCurrentQuestion = (updates: Partial<DraftQuestion>) => {
     setQuestions((prev) => {
@@ -342,6 +362,8 @@ export default function QuizEditor({
             title: title.trim(),
             description: description.trim(),
             is_public: isPublic,
+            grade,
+            topic: topic.trim(),
             questions: payloadQuestions as any,
           },
           email
@@ -354,7 +376,7 @@ export default function QuizEditor({
         }
 
         toast.success("Квиз сәтті жаңартылды!");
-        autosave.clear({ title, description, isPublic, questions, activeQuestionIndex });
+        autosave.clear({ title, description, isPublic, grade, topic, questions, activeQuestionIndex });
         router.push(`/quizzes/${initialQuiz.id}`);
       } else {
         const { data: newQuiz, error: quizErr } = await createQuiz(
@@ -362,6 +384,8 @@ export default function QuizEditor({
             title: title.trim(),
             description: description.trim(),
             is_public: isPublic,
+            grade,
+            topic: topic.trim(),
             questions: payloadQuestions as any,
           },
           email
@@ -374,7 +398,7 @@ export default function QuizEditor({
         }
 
         toast.success("Квиз сәтті сақталды!");
-        autosave.clear({ title, description, isPublic, questions, activeQuestionIndex });
+        autosave.clear({ title, description, isPublic, grade, topic, questions, activeQuestionIndex });
         router.push(`/quizzes/${newQuiz.id}`);
       }
     } catch (err: any) {
@@ -456,6 +480,41 @@ export default function QuizEditor({
               onChange={(e) => setDescription(e.target.value)}
               className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-3 py-1.5 text-xs text-gray-900 transition-all focus:outline-none"
             />
+
+            {/* Catalog placement: what students filter the library by */}
+            <div className="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
+              <div>
+                <label htmlFor="quiz-grade" className="text-xs font-bold text-gray-700 block mb-1.5">Сынып</label>
+                <select
+                  id="quiz-grade"
+                  value={grade ?? ""}
+                  onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-2 py-2 text-sm text-gray-900 transition-all focus:outline-none"
+                >
+                  <option value="">—</option>
+                  {Array.from({ length: 11 }, (_, i) => i + 1).map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="quiz-topic" className="text-xs font-bold text-gray-700 block mb-1.5">Тақырып</label>
+                <input
+                  id="quiz-topic"
+                  type="text"
+                  list="quiz-topic-suggestions"
+                  maxLength={80}
+                  placeholder="Мысалы: Бөлшектер"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-3 py-2 text-sm text-gray-900 transition-all focus:outline-none"
+                />
+                <datalist id="quiz-topic-suggestions">
+                  {topicSuggestions.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[10px] leading-tight text-gray-500">
+              Каталогта квиз осы сынып пен тақырып бойынша табылады
+            </p>
 
             <div className="mt-4 pt-3 border-t border-gray-100">
               <label className="text-xs font-bold text-gray-700 block mb-2">

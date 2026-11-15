@@ -109,7 +109,7 @@ erDiagram
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
-| `quizzes` | `id` (Identity) | `title TEXT`, `description TEXT`, `created_by INTEGER FK -> users.id`, `is_public INTEGER DEFAULT 0`, `mode TEXT DEFAULT 'teacher_paced'` | Reusable quiz templates. |
+| `quizzes` | `id` (Identity) | `title TEXT`, `description TEXT`, `created_by INTEGER FK -> users.id`, `is_public INTEGER DEFAULT 0`, `mode TEXT DEFAULT 'teacher_paced'`, `grade SMALLINT` (1–11, nullable), `topic TEXT DEFAULT ''` | Reusable quiz templates. `grade` and `topic` are the catalog filters (PG `0012`). |
 | `quiz_questions` | `id` (Identity) | `quiz_id INTEGER FK -> quizzes.id ON DELETE CASCADE`, `text TEXT`, `question_type TEXT`, `options TEXT`, `answer TEXT`, `time_limit INTEGER DEFAULT 30`, `sort_order INTEGER` | Questions belonging to a quiz template. |
 | `quiz_sessions` | `id` (Identity) | `quiz_id INTEGER FK -> quizzes.id ON DELETE CASCADE`, `host_id INTEGER FK -> users.id`, `pin_code TEXT UNIQUE`, `status TEXT DEFAULT 'waiting'`, `mode TEXT`, `current_question_index INTEGER DEFAULT 0` | Live hosted quiz rooms identified by a 6-digit `pin_code`. |
 | `quiz_session_questions` | `(session_id, question_id)` | `session_id FK -> quiz_sessions.id ON DELETE CASCADE`, `question_id INTEGER`, `sort_order INTEGER`, `snapshot_json TEXT` | Immutable snapshot of quiz questions captured when a live session is created. |
@@ -145,3 +145,4 @@ erDiagram
 | `0008` | [`0008_module_review.sql`](../../bot/migrations/postgres/0008_module_review.sql) | Creates `bank_task_twins` and `module_review_attempts`, and adds `idx_solutions_user_task_id` for first-attempt lookups. |
 | `0009` | [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql) | Adds `ai_model`, `ai_check_status`, `ai_check_answer`, `ai_checked_version` and `ai_checked_at` to `bank_task_twins`. |
 | `0010` | [`0010_remove_unused_tables.sql`](../../bot/migrations/postgres/0010_remove_unused_tables.sql) | Drops the tables of removed features: `trial_test_coop_*`, `friendships`, `friend_requests`, `friend_invites`, `blocks`, `user_onboarding`, and the unused `user_progress_summary`. |
+| `0012` | [`0012_quiz_catalog.sql`](../../bot/migrations/postgres/0012_quiz_catalog.sql) | Adds the catalog filters `quizzes.grade` and `quizzes.topic` (grade backfilled from titles such as "4-сынып: ...") and the index `idx_quiz_sessions_quiz` used to count games per quiz. |

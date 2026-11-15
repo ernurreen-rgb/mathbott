@@ -19,6 +19,8 @@ class CreateQuizRequest(BaseModel):
     description: Optional[str] = Field(default="", max_length=1000)
     cover_image: Optional[str] = None
     is_public: bool = False
+    grade: Optional[int] = Field(default=None, ge=1, le=11)
+    topic: str = Field(default="", max_length=80)
     questions: List["QuizQuestionItem"] = Field(default_factory=list, max_length=200)
 
 
@@ -27,6 +29,8 @@ class UpdateQuizRequest(BaseModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     cover_image: Optional[str] = None
     is_public: Optional[bool] = None
+    grade: Optional[int] = Field(default=None, ge=1, le=11)  # an explicit null clears it
+    topic: Optional[str] = Field(default=None, max_length=80)
     questions: Optional[List["QuizQuestionItem"]] = Field(default=None, max_length=200)
 
 
@@ -94,6 +98,37 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         return [{**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': can_manage(quiz, current_user)} for quiz in quizzes]
 
+    # Declared before /api/quizzes/{quiz_id}, which would otherwise capture "catalog".
+    @app.get("/api/quizzes/catalog")
+    async def quiz_catalog_endpoint(
+        scope: Literal["all", "mine"] = Query("all"),
+        visibility: Optional[Literal["public", "private"]] = Query(None),
+        q: Optional[str] = Query(None, max_length=100),
+        grade: Optional[int] = Query(None, ge=1, le=11),
+        topic: Optional[str] = Query(None, max_length=80),
+        untagged: bool = Query(False),
+        sort: Literal["newest", "popular"] = Query("newest"),
+        limit: int = Query(24, ge=1, le=60),
+        offset: int = Query(0, ge=0),
+        db: Database = Depends(get_db),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
+    ):
+        """A searchable, filterable page of public quizzes (or the caller's own) with filter counts."""
+        filters = dict(search=q, grade=grade, topic=topic, untagged=untagged, sort=sort, limit=limit, offset=offset)
+        if scope == "mine":
+            if not current_user:
+                return {"items": [], "total": 0, "limit": limit, "offset": offset,
+                        "facets": {"grades": [], "topics": [], "untagged": 0}}
+            catalog = await db.quizzes.get_catalog(
+                created_by=current_user["id"],
+                is_public=None if visibility is None else visibility == "public", **filters)
+        else:
+            catalog = await db.quizzes.get_catalog(is_public=True, **filters)
+        catalog["items"] = [
+            {**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': can_manage(quiz, current_user)}
+            for quiz in catalog["items"]]
+        return catalog
+
     @app.get("/api/quizzes/{quiz_id}")
     async def get_quiz_endpoint(
         quiz_id: int,
@@ -144,6 +179,8 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             description=payload.description or "",
             cover_image=payload.cover_image,
             is_public=payload.is_public,
+            grade=payload.grade,
+            topic=payload.topic,
             questions=[q.model_dump() for q in payload.questions],
         )
         return {**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': True}
@@ -171,6 +208,8 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             cover_image=payload.cover_image,
             is_public=payload.is_public,
             questions=[q.model_dump() for q in payload.questions] if payload.questions is not None else None,
+            topic=payload.topic,
+            **({"grade": payload.grade} if "grade" in payload.model_fields_set else {}),
         )
         return {**updated, 'is_public': bool(updated['is_public']), 'can_manage': can_manage(updated, current_user)}
 

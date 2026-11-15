@@ -1,6 +1,8 @@
 import { apiPath, fetchWithErrorHandling as fetchBase, FetchResult } from "./client";
 import {
   Quiz,
+  QuizCatalog,
+  QuizCatalogQuery,
   QuizQuestion,
   QuizSession,
   QuizParticipant,
@@ -22,17 +24,18 @@ const authQuery = (auth?: QuizAuth) => auth?.email ? `?email=${encodeURIComponen
 const authHeaders = (auth?: QuizAuth): Record<string, string> =>
   auth?.participantToken ? { "X-Quiz-Participant-Token": auth.participantToken } : {};
 
-export async function getQuizzes(
-  myOnly: boolean = false,
-  email?: string,
-  isPublic?: boolean
-): Promise<FetchResult<Quiz[]>> {
-  const params = new URLSearchParams();
-  if (myOnly) params.set("my_only", "true");
+export async function getQuizCatalog(query: QuizCatalogQuery, email?: string): Promise<FetchResult<QuizCatalog>> {
+  const params = new URLSearchParams({ scope: query.scope });
+  if (query.visibility) params.set("visibility", query.visibility);
+  if (query.q) params.set("q", query.q);
+  if (query.grade) params.set("grade", String(query.grade));
+  if (query.untagged) params.set("untagged", "true");
+  else if (query.topic) params.set("topic", query.topic);
+  if (query.sort) params.set("sort", query.sort);
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.offset) params.set("offset", String(query.offset));
   if (email) params.set("email", email);
-  if (isPublic !== undefined) params.set("is_public", isPublic ? "true" : "false");
-  const qs = params.toString() ? `?${params.toString()}` : "";
-  return fetchWithErrorHandling<Quiz[]>(`${apiPath("quizzes")}${qs}`);
+  return fetchWithErrorHandling<QuizCatalog>(`${apiPath("quizzes/catalog")}?${params}`);
 }
 
 export async function getQuiz(quizId: number, email?: string): Promise<FetchResult<Quiz>> {
@@ -44,7 +47,7 @@ export async function getQuizQuestions(quizId: number, email?: string): Promise<
 }
 
 export async function createQuiz(
-  payload: { title: string; description?: string; cover_image?: string; is_public?: boolean; questions?: Partial<QuizQuestion>[] },
+  payload: { title: string; description?: string; cover_image?: string; is_public?: boolean; grade?: number | null; topic?: string; questions?: Partial<QuizQuestion>[] },
   email?: string
 ): Promise<FetchResult<Quiz>> {
   const qs = email ? `?email=${encodeURIComponent(email)}` : "";
