@@ -72,7 +72,7 @@ export default function TrialTestsCatalog({ folderId, category }: { folderId?: n
           <Link className={styles.itemLink} href={trialFolderPath(item.id)}><div className={local.folderName}><Icon name="folder" size={22} className="text-slate-500" /><h3>{item.name}</h3></div><span className={styles.itemOpen}>{item.test_count} тест<Icon name="arrowRight" size={16} /></span></Link>
           <div className={`${styles.rowActions} ${local.folderActions}`}>
             <button type="button" className={styles.textButton} aria-label={`${item.name} папкасын өңдеу`} onClick={() => setFolderAction({ mode: "rename", folder: item })}><Icon name="edit" size={15} />Өңдеу</button>
-            <button type="button" className={styles.textButton} aria-label={`${item.name} папкасын көшіру`} onClick={() => setFolderAction({ mode: "move", folder: item })}>Көшіру</button>
+            <button type="button" className={styles.textButton} aria-label={`${item.name} папкасын көшіру`} onClick={() => setFolderAction({ mode: "move", folder: item })}><Icon name="folder" size={15} />Көшіру</button>
             <button type="button" disabled={deleting !== null || item.child_count > 0 || item.direct_test_count > 0} className={styles.dangerButton} aria-label={`${item.name} папкасын жою`} onClick={() => void remove(item, true)}><Icon name="trash" size={15} />Жою</button>
           </div>
         </li>)}</ul>
