@@ -116,6 +116,7 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 |---|---|---|---|
 | `GET` | `/api/quizzes` | Authenticated | Lists quizzes created by the user or public quizzes. Superseded by the catalog below; kept for installed PWA clients that still call it. |
 | `GET` | `/api/quizzes/catalog` | Optional | One page of the quiz library: `scope` (`all`/`mine`), `visibility`, `q` (every word must match title, topic or description), `grade`, `topic`, `untagged`, `sort` (`newest`/`popular`), `limit` (max 60), `offset`. Returns `items`, `total` and `facets` (grade and topic counts, each computed with the other filters applied). |
+| `POST` | `/api/quizzes/bulk-catalog` | Authenticated | Sets `grade` and/or `topic` on up to 200 quizzes (`quiz_ids`) at once. All or nothing: `404` if an id does not exist, `403` unless the caller is the author of every quiz or an admin. An omitted field is left alone; `grade: null` clears the grade. |
 | `GET` | `/api/quizzes/{quiz_id}` | Authenticated | Fetches quiz metadata. |
 | `GET` | `/api/quizzes/{quiz_id}/questions` | Authenticated | Lists questions in a quiz template. |
 | `GET` | `/api/quizzes/{quiz_id}/sessions` | Authenticated | Lists historical live sessions hosted for `quiz_id`. |

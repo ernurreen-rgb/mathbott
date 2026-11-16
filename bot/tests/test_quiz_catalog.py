@@ -115,6 +115,39 @@ class QuizCatalogTests(PostgresTestCase):
             forked = (await client.post("/api/quizzes/42/fork", params=reader)).json()
             self.assertEqual((forked["grade"], forked["topic"]), (5 + 42 % 5, TOPICS[42 % 4]))
 
+    async def test_bulk_catalog_update_is_all_or_nothing_and_owner_only(self):
+        app = FastAPI()
+        app.state.db = self.db
+        setup_quizzes_routes(app, self.db, Limiter(key_func=get_remote_address))
+        author, reader = {"email": "author@example.test"}, {"email": "reader@example.test"}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://quiz.test") as client:
+            post = lambda who, body: client.post("/api/quizzes/bulk-catalog", params=who, json=body)
+            self.assertEqual((await post({}, {"quiz_ids": [1], "topic": "X"})).status_code, 401)
+            self.assertEqual((await post(reader, {"quiz_ids": [1, 2], "topic": "X"})).status_code, 403)
+            self.assertEqual((await post(author, {"quiz_ids": [1, 5000], "topic": "X"})).status_code, 404)
+            for invalid in ({"quiz_ids": [1]}, {"quiz_ids": [], "topic": "X"}, {"quiz_ids": [1], "grade": 0},
+                            {"quiz_ids": list(range(1, 202)), "topic": "X"}):
+                self.assertEqual((await post(author, invalid)).status_code, 422, invalid)
+            self.assertEqual((await self.db.quizzes.get_quiz_by_id(1))["topic"], TOPICS[1])  # nothing above changed it
+
+            # Topic only: the grades stay. A repeated id counts once.
+            response = await post(author, {"quiz_ids": [1, 2, 3, 3], "topic": "  Жаңа   тақырып "})
+            self.assertEqual(response.json(), {"updated": 3})
+            rows = [await self.db.quizzes.get_quiz_by_id(i) for i in (1, 2, 3, 4)]
+            self.assertEqual([q["topic"] for q in rows], ["Жаңа тақырып"] * 3 + [TOPICS[0]])
+            self.assertEqual([q["grade"] for q in rows], [6, 7, 8, 9])
+            # Grade only, cleared with an explicit null: the topics stay.
+            self.assertEqual((await post(author, {"quiz_ids": [1, 2], "grade": None})).json(), {"updated": 2})
+            rows = [await self.db.quizzes.get_quiz_by_id(i) for i in (1, 2, 3)]
+            self.assertEqual([(q["grade"], q["topic"]) for q in rows],
+                             [(None, "Жаңа тақырып"), (None, "Жаңа тақырып"), (8, "Жаңа тақырып")])
+
+            # A forked copy belongs to the reader, who may retag it but not the original next to it.
+            fork = (await client.post("/api/quizzes/42/fork", params=reader)).json()
+            self.assertEqual((await post(reader, {"quiz_ids": [fork["id"]], "grade": 11})).json(), {"updated": 1})
+            self.assertEqual((await post(reader, {"quiz_ids": [fork["id"], 42], "grade": 10})).status_code, 403)
+            self.assertEqual((await self.db.quizzes.get_quiz_by_id(fork["id"]))["grade"], 11)
+
 
 if __name__ == "__main__":
     unittest.main()

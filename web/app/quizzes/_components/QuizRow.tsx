@@ -23,9 +23,14 @@ export interface QuizRowProps {
   onTogglePrivacy: () => void;
   onDelete: () => void;
   onFork: () => void;
+  /** Set while the catalog is in selection mode: the row then ticks the quiz instead of opening it. */
+  selection?: { selected: boolean; onToggle: () => void };
 }
 
-export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, onPickTopic, onTogglePrivacy, onDelete, onFork }: QuizRowProps) {
+const TITLE = "line-clamp-2 font-semibold text-slate-900 after:absolute after:inset-0 focus:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-purple-500 sm:line-clamp-1";
+
+export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, onPickTopic, onTogglePrivacy, onDelete, onFork, selection }: QuizRowProps) {
+  const selectable = Boolean(selection && quiz.can_manage);
   const minutes = Math.max(1, Math.round((quiz.duration_seconds || 0) / 60));
   const questions = quiz.question_count || 0;
   const canFork = !quiz.can_manage && quiz.is_public && signedIn;
@@ -36,7 +41,16 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
   ].filter(Boolean);
 
   return (
-    <li className={`group relative flex items-center gap-3 px-3 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl hover:bg-purple-50/50 sm:gap-4 sm:px-4 ${busy ? "opacity-50" : ""}`}>
+    <li className={`group relative flex items-center gap-3 px-3 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl sm:gap-4 sm:px-4 ${
+      busy || (selection && !selectable) ? "opacity-40" : selection?.selected ? "bg-purple-50" : "hover:bg-purple-50/50"
+    }`}>
+      {selectable && (
+        <span aria-hidden className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+          selection!.selected ? "border-purple-600 bg-purple-600 text-white" : "border-slate-300 bg-white"
+        }`}>
+          {selection!.selected && <Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} />}
+        </span>
+      )}
       <div className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl ${gradeTone(quiz.grade)}`}>
         {quiz.grade ? (
           <>
@@ -50,19 +64,26 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
 
       <div className="min-w-0 flex-1">
         {/* The stretched link makes the whole row open the quiz; real controls sit above it. */}
-        <Link
-          href={`/quizzes/${quiz.id}`}
-          className="line-clamp-2 font-semibold text-slate-900 after:absolute after:inset-0 focus:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-purple-500 group-hover:text-purple-700 sm:line-clamp-1"
-        >
-          {quiz.title}
-        </Link>
+        {selectable ? (
+          <button type="button" role="checkbox" aria-checked={selection!.selected} onClick={selection!.onToggle} className={`${TITLE} text-left`}>
+            {quiz.title}
+          </button>
+        ) : selection ? (
+          <span className="line-clamp-2 font-semibold text-slate-900 sm:line-clamp-1">{quiz.title}</span>
+        ) : (
+          <Link href={`/quizzes/${quiz.id}`} className={`${TITLE} group-hover:text-purple-700`}>
+            {quiz.title}
+          </Link>
+        )}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
-          {quiz.topic && (
+          {quiz.topic && (selection ? (
+            <span className="max-w-full truncate font-semibold text-purple-700">{quiz.topic}</span>
+          ) : (
             <button type="button" onClick={() => onPickTopic(quiz.topic!)} title="Осы тақырыптағы квиздер"
               className="relative z-10 max-w-full truncate font-semibold text-purple-700 hover:underline">
               {quiz.topic}
             </button>
-          )}
+          ))}
           {facts.map((fact) => <span key={fact}>{fact}</span>)}
           {!quiz.is_public && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700" title="Тек сізге көрінетін жеке квиз">
@@ -74,12 +95,14 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
         {quiz.description && <p className="mt-1 hidden text-xs text-slate-400 md:line-clamp-1">{quiz.description}</p>}
       </div>
 
-      <span aria-hidden className="hidden shrink-0 items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-sm font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:inline-flex">
-        <Icon name="play" className="h-3.5 w-3.5" />
-        Ашу
-      </span>
+      {!selection && (
+        <span aria-hidden className="hidden shrink-0 items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-sm font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:inline-flex">
+          <Icon name="play" className="h-3.5 w-3.5" />
+          Ашу
+        </span>
+      )}
 
-      {(quiz.can_manage || canFork) && (
+      {!selection && (quiz.can_manage || canFork) && (
         <div data-quiz-menu className={`relative shrink-0 ${menuOpen ? "z-20" : "z-10"}`}>
           <button
             type="button"

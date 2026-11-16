@@ -288,7 +288,7 @@ export default function QuizDetailPage({ params }: PageProps) {
         <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/70 shadow-lg shadow-purple-500/5 mb-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
                     quiz.is_public
@@ -309,6 +309,16 @@ export default function QuizDetailPage({ params }: PageProps) {
                 <span className="text-xs text-gray-500 font-medium">
                   {questions.length} сұрақ
                 </span>
+                {quiz.grade && (
+                  <Link href={`/quizzes?grade=${quiz.grade}`} className="px-2.5 py-1 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">
+                    {quiz.grade}-сынып
+                  </Link>
+                )}
+                {quiz.topic && (
+                  <Link href={`/quizzes?topic=${encodeURIComponent(quiz.topic)}`} className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100" title="Осы тақырыптағы квиздер">
+                    {quiz.topic}
+                  </Link>
+                )}
               </div>
               {!quiz.is_public && (
                 <div className="mb-3 p-2.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-start gap-2 text-xs text-amber-900">

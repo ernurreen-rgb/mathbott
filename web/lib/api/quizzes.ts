@@ -38,6 +38,20 @@ export async function getQuizCatalog(query: QuizCatalogQuery, email?: string): P
   return fetchWithErrorHandling<QuizCatalog>(`${apiPath("quizzes/catalog")}?${params}`);
 }
 
+/** Put several quizzes into one grade and/or topic. Omit a field to leave it; `grade: null` clears the grade. */
+export async function setQuizCatalogFields(
+  quizIds: number[],
+  change: { grade?: number | null; topic?: string },
+  email?: string
+): Promise<FetchResult<{ updated: number }>> {
+  const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+  return fetchWithErrorHandling<{ updated: number }>(`${apiPath("quizzes/bulk-catalog")}${qs}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quiz_ids: quizIds, ...change }),
+  });
+}
+
 export async function getQuiz(quizId: number, email?: string): Promise<FetchResult<Quiz>> {
   return fetchWithErrorHandling<Quiz>(`${apiPath(`quizzes/${quizId}`)}${authQuery({ email })}`);
 }

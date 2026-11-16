@@ -161,6 +161,34 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
                 )
         return await self.get_quiz_by_id(new_quiz_id)
 
+    async def get_quiz_owners(self, quiz_ids: List[int]) -> Dict[int, int]:
+        """Map each existing quiz id to its author's user id."""
+        if not quiz_ids:
+            return {}
+        async with self._connection() as db:
+            cursor = await db.execute(
+                f"SELECT id, created_by FROM quizzes WHERE id IN ({','.join('?' * len(quiz_ids))})", quiz_ids)
+            return {row[0]: row[1] for row in await cursor.fetchall()}
+
+    async def set_catalog_fields(self, quiz_ids: List[int], grade: Any = KEEP, topic: Optional[str] = None) -> int:
+        """Put several quizzes into one grade and/or topic; returns how many rows changed."""
+        updates = []
+        params: List[Any] = []
+        if grade is not KEEP:
+            updates.append("grade = ?")
+            params.append(grade)
+        if topic is not None:
+            updates.append("topic = ?")
+            params.append(_clean_topic(topic))
+        if not updates or not quiz_ids:
+            return 0
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                f"""UPDATE quizzes SET {', '.join(updates)}, updated_at = mathbot_datetime('now')
+                    WHERE id IN ({','.join('?' * len(quiz_ids))})""",
+                [*params, *quiz_ids])
+            return cursor.rowcount or 0
+
     async def delete_quiz(self, quiz_id: int) -> bool:
         async with self._write_transaction() as db:
             cursor = await db.execute("DELETE FROM quizzes WHERE id = ?", (quiz_id,))

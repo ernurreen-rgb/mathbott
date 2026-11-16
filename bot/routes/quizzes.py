@@ -53,6 +53,18 @@ class QuizQuestionItem(BaseModel):
         return self
 
 
+class BulkCatalogRequest(BaseModel):
+    quiz_ids: List[int] = Field(min_length=1, max_length=200)
+    grade: Optional[int] = Field(default=None, ge=1, le=11)  # an explicit null clears it
+    topic: Optional[str] = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_change(self):
+        if "grade" not in self.model_fields_set and self.topic is None:
+            raise ValueError("Send a grade or a topic to set")
+        return self
+
+
 class UpdateQuestionItem(BaseModel):
     question_text: Optional[str] = Field(default=None, min_length=1, max_length=5000)
     question_type: Optional[Literal["mcq", "multi_select", "input", "tf"]] = None
@@ -165,6 +177,24 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             return []
         host_filter = None if current_user.get("is_admin") else current_user["id"]
         return await db.quizzes.get_quiz_sessions(quiz_id, host_id=host_filter)
+
+    @app.post("/api/quizzes/bulk-catalog")
+    async def bulk_catalog_endpoint(
+        payload: BulkCatalogRequest,
+        current_user: dict = Depends(require_internal_identity),
+        db: Database = Depends(get_db),
+    ):
+        """Set the grade and/or topic of several quizzes at once (author or admin); all or nothing."""
+        quiz_ids = list(dict.fromkeys(payload.quiz_ids))
+        owners = await db.quizzes.get_quiz_owners(quiz_ids)
+        if len(owners) != len(quiz_ids):
+            raise HTTPException(status_code=404, detail="Quiz not found")
+        if not current_user.get("is_admin") and any(owner != current_user["id"] for owner in owners.values()):
+            raise HTTPException(status_code=403, detail="Forbidden: You are not the author of every selected quiz")
+        updated = await db.quizzes.set_catalog_fields(
+            quiz_ids, topic=payload.topic,
+            **({"grade": payload.grade} if "grade" in payload.model_fields_set else {}))
+        return {"updated": updated}
 
     @app.post("/api/quizzes")
     async def create_quiz_endpoint(

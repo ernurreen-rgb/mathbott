@@ -8,11 +8,13 @@ import toast from "react-hot-toast";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
-import { deleteQuiz, forkQuiz, getQuizCatalog, updateQuiz } from "@/lib/api/quizzes";
+import { deleteQuiz, forkQuiz, getQuizCatalog, setQuizCatalogFields, updateQuiz } from "@/lib/api/quizzes";
 import { Quiz, QuizCatalog, QuizCatalogSort } from "@/types/quiz";
+import QuizBulkBar from "./_components/QuizBulkBar";
 import QuizRow from "./_components/QuizRow";
 
 const PAGE_SIZE = 24;
+const MAX_SELECTED = 200; // the API's limit for one bulk change
 const SORTS: Array<{ value: QuizCatalogSort; label: string }> = [
   { value: "newest", label: "Жаңалары" },
   { value: "popular", label: "Танымалдары" },
@@ -130,6 +132,10 @@ function QuizzesCatalog() {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [topicFilter, setTopicFilter] = useState("");
   const [showRail, setShowRail] = useState(false);
+  // Selection mode: null when off, otherwise the picked quiz ids (kept across pages and searches).
+  const [selected, setSelected] = useState<Set<number> | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [knownTopics, setKnownTopics] = useState<string[]>([]);
 
   const setFilters = useCallback((patch: Partial<Filters>) => {
     // Any change except paging starts again from the first page.
@@ -188,6 +194,11 @@ function QuizzesCatalog() {
       setError(null);
       setCatalog(data);
       if (data.facets.topics.length > 0) setShowRail(true);
+      // Filters hide topics from the counts; the bulk bar should still suggest every topic seen.
+      setKnownTopics((known) => {
+        const names = new Set([...known, ...data.facets.topics.map((t) => t.topic)]);
+        return names.size === known.length ? known : Array.from(names).sort((a, b) => a.localeCompare(b, "kk"));
+      });
     }
     setLoading(false);
   }, [filters, email]);
@@ -256,6 +267,32 @@ function QuizzesCatalog() {
     router.push(`/quizzes/${forked.id}/edit`);
   };
 
+  // --- Selection mode ---
+  const pageIds = (catalog?.items || []).filter((quiz) => quiz.can_manage).map((quiz) => quiz.id);
+  const pageSelected = selected !== null && pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const toggleSelected = (ids: number[], on: boolean) => {
+    const next = new Set(selected);
+    for (const id of ids) {
+      if (!on) next.delete(id);
+      else if (next.size < MAX_SELECTED || next.has(id)) next.add(id);
+      else {
+        toast.error(`Бір жолда ең көбі ${MAX_SELECTED} квиз таңдауға болады`);
+        break;
+      }
+    }
+    setSelected(next);
+  };
+  const applyToSelected = async (change: { grade?: number | null; topic?: string }) => {
+    if (!selected?.size) return;
+    setApplying(true);
+    const { data, error: applyError } = await setQuizCatalogFields(Array.from(selected), change, email);
+    setApplying(false);
+    if (applyError || !data) return void toast.error(applyError || "Квиздерді жаңарту мүмкін болмады");
+    toast.success(`${data.updated} квиз жаңартылды`);
+    setSelected(null);
+    void load();
+  };
+
   // --- Filter lists: keep the selected value visible even when nothing matches it ---
   const grades = useMemo(() => {
     const list = catalog?.facets.grades || [];
@@ -298,7 +335,7 @@ function QuizzesCatalog() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 md:pb-10 md:pl-64">
+    <div className={`min-h-screen bg-slate-50 md:pl-64 ${selected ? "pb-56 md:pb-28" : "pb-24 md:pb-10"}`}>
       <DesktopNav currentPage="quizzes" />
       <MobileNav currentPage="quizzes" />
 
@@ -439,6 +476,13 @@ function QuizzesCatalog() {
                   Сүзгілерді тазалау
                 </button>
               )}
+              {pageIds.length > 0 && selected === null && (
+                <button type="button" onClick={() => { setOpenMenuId(null); setSelected(new Set()); }}
+                  className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:underline">
+                  <Icon name="checkCircle" className="h-3.5 w-3.5" />
+                  Бірнешеуін таңдау
+                </button>
+              )}
               <div role="group" aria-label="Сұрыптау" className="ml-auto flex items-center gap-1">
                 {SORTS.map((sort) => (
                   <button key={sort.value} type="button" aria-pressed={filters.sort === sort.value} onClick={() => setFilters({ sort: sort.value })}
@@ -505,6 +549,7 @@ function QuizzesCatalog() {
                     onTogglePrivacy={() => void handleTogglePrivacy(quiz)}
                     onDelete={() => void handleDelete(quiz)}
                     onFork={() => void handleFork(quiz)}
+                    selection={selected ? { selected: selected.has(quiz.id), onToggle: () => toggleSelected([quiz.id], !selected.has(quiz.id)) } : undefined}
                   />
                 ))}
               </ul>
@@ -540,6 +585,19 @@ function QuizzesCatalog() {
           </section>
         </div>
       </main>
+
+      {selected && (
+        <QuizBulkBar
+          count={selected.size}
+          pageCount={pageIds.length}
+          pageSelected={pageSelected}
+          topics={knownTopics}
+          busy={applying}
+          onTogglePage={() => toggleSelected(pageIds, !pageSelected)}
+          onApply={(change) => void applyToSelected(change)}
+          onCancel={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
