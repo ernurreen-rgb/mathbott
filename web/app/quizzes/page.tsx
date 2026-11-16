@@ -252,6 +252,10 @@ function QuizzesCatalog() {
     setBusyId(null);
     if (result.error || !result.data) return void toast.error(result.error || "Квиз мәртебесін өзгерту мүмкін болмады");
     toast.success(quiz.is_public ? "Квиз енді жеке: каталогтан жасырылды" : "Квиз енді баршаға ашық");
+    // Flip the switch at once; the reload then settles counts and drops the row if a filter excludes it now.
+    setCatalog((current) => current && {
+      ...current, items: current.items.map((item) => (item.id === quiz.id ? { ...item, is_public: !quiz.is_public } : item)),
+    });
     void load();
   };
 

@@ -86,7 +86,8 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
           ))}
           {facts.map((fact) => <span key={fact}>{fact}</span>)}
           {!quiz.is_public && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700" title="Тек сізге көрінетін жеке квиз">
+            // From sm up the switch on the right says "Жеке" itself; a phone only has room for its track.
+            <span className={`items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ${quiz.can_manage && !selection ? "inline-flex sm:hidden" : "inline-flex"}`} title="Тек сізге көрінетін жеке квиз">
               <Icon name="lock" className="h-3 w-3" />
               Жеке
             </span>
@@ -100,6 +101,27 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
           <Icon name="play" className="h-3.5 w-3.5" />
           Ашу
         </span>
+      )}
+
+      {/* Open or hide the quiz in the catalog right from the list. */}
+      {!selection && quiz.can_manage && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={quiz.is_public}
+          aria-label={`«${quiz.title}» каталогта ашық`}
+          title={quiz.is_public ? "Каталогта бәріне көрінеді. Жасыру үшін басыңыз" : "Тек сізге көрінеді. Каталогқа шығару үшін басыңыз"}
+          onClick={onTogglePrivacy}
+          disabled={busy}
+          className="relative z-10 inline-flex shrink-0 items-center gap-2 rounded-xl px-2 py-2 text-xs font-bold transition-colors hover:bg-slate-200/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+        >
+          <span className={`hidden w-9 text-right sm:inline ${quiz.is_public ? "text-emerald-700" : "text-amber-700"}`}>
+            {quiz.is_public ? "Ашық" : "Жеке"}
+          </span>
+          <span aria-hidden className={`flex h-5 w-9 items-center rounded-full p-0.5 transition-colors ${quiz.is_public ? "bg-emerald-500" : "bg-slate-300"}`}>
+            <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${quiz.is_public ? "translate-x-4" : ""}`} />
+          </span>
+        </button>
       )}
 
       {!selection && (quiz.can_manage || canFork) && (
@@ -123,10 +145,6 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
                     <Icon name="edit" className="h-4 w-4 text-slate-400" />
                     Өңдеу
                   </Link>
-                  <button role="menuitem" type="button" onClick={onTogglePrivacy} className={`${MENU_ITEM} text-slate-700`}>
-                    <Icon name={quiz.is_public ? "lock" : "globe"} className="h-4 w-4 text-slate-400" />
-                    {quiz.is_public ? "Каталогтан жасыру" : "Каталогқа шығару"}
-                  </button>
                   <button role="menuitem" type="button" onClick={onDelete} className={`${MENU_ITEM} border-t border-slate-100 text-red-600 hover:bg-red-50`}>
                     <Icon name="trash" className="h-4 w-4" />
                     Өшіру
