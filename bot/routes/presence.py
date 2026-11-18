@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from slowapi import Limiter
 
 from database import Database
@@ -104,8 +104,15 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = PresenceConnectionManager()
 
     @app.post("/api/presence/heartbeat")
-    async def heartbeat(user: dict = Depends(require_internal_identity), database: Database = Depends(get_db)):
-        return {"type": "presence_snapshot", "users": await database.users.heartbeat_presence(user["id"])}
+    async def heartbeat(
+        path: Optional[str] = Query(None, max_length=200),
+        user: dict = Depends(require_internal_identity),
+        database: Database = Depends(get_db),
+    ):
+        return {
+            "type": "presence_snapshot",
+            "users": await database.users.heartbeat_presence(user["id"], path=path),
+        }
 
     @app.get("/api/presence/ws-token")
     async def get_presence_ws_token(

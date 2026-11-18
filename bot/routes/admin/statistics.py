@@ -6,6 +6,8 @@ daily series follow the admin's clock instead of the server's.
 """
 from typing import Literal
 
+from fastapi import HTTPException, Path
+
 from repositories.statistics_repository import (
     DEFAULT_TZ_OFFSET_MINUTES,
     MAX_TZ_OFFSET_MINUTES,
@@ -83,3 +85,16 @@ def register_statistics_routes(app: FastAPI, db: Database, limiter: Limiter):
         window: StatsWindow = Depends(statistics_window),
     ):
         return await db.statistics.get_quizzes(window)
+
+    @app.get("/api/admin/statistics/students/{user_id}/activity")
+    async def get_student_activity_detail(
+        user_id: int = Path(..., gt=0),
+        admin_user: dict = Depends(require_admin_review_manage),
+        db: Database = Depends(get_db),
+    ):
+        activity = await db.statistics.get_student_activity(
+            user_id, include_email=bool(admin_user.get("is_super_admin")),
+        )
+        if activity is None:
+            raise HTTPException(status_code=404, detail="Student not found")
+        return activity

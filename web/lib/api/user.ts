@@ -15,9 +15,11 @@ export async function getPresenceWsToken(
   );
 }
 
-export async function heartbeatPresence(email: string) {
+export async function heartbeatPresence(email: string, path?: string) {
+  const params = new URLSearchParams({ email });
+  if (path) params.set("path", path);
   return fetchWithErrorHandling<{ type: string; users: { id: number; nickname?: string | null }[] }>(
-    `${apiPath("presence/heartbeat")}?email=${encodeURIComponent(email)}`,
+    `${apiPath("presence/heartbeat")}?${params.toString()}`,
     { method: "POST" }
   );
 }

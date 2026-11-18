@@ -93,6 +93,8 @@ export interface StatisticsStudent {
   email?: string | null;
   registered_at: string | null;
   last_seen_at: string | null;
+  last_seen_path: string | null;
+  page_visits: number;
   attempts: number;
   correct: number;
   accuracy: number | null;
@@ -113,6 +115,37 @@ export interface StatisticsStudent {
   is_new: boolean;
   is_churned: boolean;
   never_active: boolean;
+}
+
+export interface StatisticsStudentActivity {
+  user_id: number;
+  nickname: string | null;
+  email?: string | null;
+  last_seen_at: string | null;
+  last_seen_path: string | null;
+  last_seen_label: string | null;
+  visit_tracking_enabled: boolean;
+  visits: Array<{
+    id: number;
+    path: string;
+    label: string;
+    visited_at: string | null;
+  }>;
+  drafts: Array<{
+    trial_test_id: number;
+    title: string;
+    answers_count: number;
+    current_task_index: number;
+    updated_at: string | null;
+  }>;
+  quizzes: Array<{
+    session_id: number;
+    title: string;
+    joined_at: string | null;
+    is_finished: boolean;
+    answers: number;
+    correct: number;
+  }>;
 }
 
 export interface StatisticsStudents {

@@ -1,9 +1,11 @@
 """
 User repository for user-related database operations
 """
+from datetime import datetime, timezone
 import storage as db_driver
 import json
 import logging
+import re
 import secrets
 from typing import Optional, Dict, Any, List
 from .base import BaseRepository
@@ -47,15 +49,78 @@ def _normalize_admin_role(role: Optional[str]) -> Optional[str]:
     return normalized
 
 
+_VISIT_PATH_DEDUPE_SECONDS = 300
+
+
+def normalize_visit_path(raw: Optional[str]) -> Optional[str]:
+    """Normalize an in-app route path (no query/hash/origin), or None if invalid."""
+    if not isinstance(raw, str):
+        return None
+    cleaned = raw.strip().split("?", 1)[0].split("#", 1)[0].strip()
+    if not cleaned.startswith("/") or cleaned.startswith("//") or cleaned.startswith("/\\"):
+        return None
+    if any(ch.isspace() for ch in cleaned):
+        return None
+    cleaned = re.sub(r"/{2,}", "/", cleaned)
+    if len(cleaned) > 1 and cleaned.endswith("/"):
+        cleaned = cleaned[:-1]
+    if cleaned.startswith("/api/"):
+        return None
+    return cleaned[:160]
+
+
+def _should_log_page_visit(
+    last_path: Optional[str],
+    last_visited_at: Optional[str],
+    next_path: str,
+    now_utc: Optional[datetime] = None,
+) -> bool:
+    if last_path != next_path:
+        return True
+    if not last_visited_at:
+        return True
+    try:
+        previous = datetime.fromisoformat(str(last_visited_at).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if previous.tzinfo is not None:
+        previous = previous.astimezone(timezone.utc).replace(tzinfo=None)
+    current = (now_utc or datetime.now(timezone.utc))
+    if current.tzinfo is not None:
+        current = current.astimezone(timezone.utc).replace(tzinfo=None)
+    return (current - previous).total_seconds() >= _VISIT_PATH_DEDUPE_SECONDS
+
+
 class UserRepository(BaseRepository):
     """Repository for user operations"""
-    
-    async def heartbeat_presence(self, user_id: int) -> List[Dict[str, Any]]:
-        """Persist activity so hosted instances share the same online roster."""
+
+    async def heartbeat_presence(self, user_id: int, path: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Persist activity (and optionally deduplicated page visit) for hosted presence."""
+        clean_path = normalize_visit_path(path)
+
         async def operation():
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
-                await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
+                track_pages = await self._has_page_visit_tracking(db)
+                if track_pages and clean_path is not None:
+                    await db.execute(
+                        "UPDATE users SET last_active = mathbot_datetime('now'), last_seen_path = ? WHERE id = ?",
+                        (clean_path, user_id),
+                    )
+                    async with db.execute(
+                        "SELECT path, visited_at FROM user_page_visits WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                        (user_id,),
+                    ) as visit_cursor:
+                        last_visit = await visit_cursor.fetchone()
+                    last_path = last_visit["path"] if last_visit else None
+                    last_visited_at = last_visit["visited_at"] if last_visit else None
+                    if _should_log_page_visit(last_path, last_visited_at, clean_path):
+                        await db.execute(
+                            "INSERT INTO user_page_visits (user_id, path) VALUES (?, ?)",
+                            (user_id, clean_path),
+                        )
+                else:
+                    await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
                 async with db.execute("""SELECT id, nickname FROM users
                     WHERE mathbot_datetime(last_active) >= mathbot_datetime('now', '-70 seconds')
                     ORDER BY id""") as cursor:

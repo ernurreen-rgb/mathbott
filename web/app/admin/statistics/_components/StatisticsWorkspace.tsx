@@ -214,7 +214,7 @@ export default function StatisticsWorkspace() {
             {!data ? (entry?.error ? null : <Skeleton />) : (
               <div className={styles.panel} data-stale={stale} aria-busy={stale}>
                 {tab === "overview" && <OverviewTab data={data as StatisticsByTab["overview"]} onNavigate={navigate} />}
-                {tab === "students" && <StudentsTab key={tabIntent?.token ?? "students"} data={data as StatisticsByTab["students"]} initialSegment={studentSegment} />}
+                {tab === "students" && <StudentsTab key={tabIntent?.token ?? "students"} data={data as StatisticsByTab["students"]} initialSegment={studentSegment} viewerEmail={email} />}
                 {tab === "tasks" && <TasksTab key={tabIntent?.token ?? "tasks"} data={data as StatisticsByTab["tasks"]} initialFilter={taskFilter} />}
                 {tab === "modules" && <ModulesTab data={data as StatisticsByTab["modules"]} />}
                 {tab === "trial-tests" && <TrialTestsTab data={data as StatisticsByTab["trial-tests"]} />}

@@ -21,7 +21,10 @@ from slowapi.util import get_remote_address
 import storage
 from database import Database
 from postgres_test_db import create_database, drop_database, requires_postgres
-from repositories.statistics_repository import bucket_plan, build_window, count_draft_answers, effective_streak
+from repositories.statistics_repository import (
+    bucket_plan, build_window, count_draft_answers, effective_streak, parse_visit_route,
+)
+from repositories.user_repository import _should_log_page_visit, normalize_visit_path
 from routes.admin.statistics import register_statistics_routes
 
 # Noon in Kazakhstan (UTC+5) on Wednesday 2026-11-11.
@@ -78,6 +81,21 @@ class PeriodTests(unittest.TestCase):
             count_draft_answers(json.dumps({"1": "42", "2": '["A"]', "3": '["", "B"]', "4": '["", ""]'})),
             3,
         )
+
+    def test_visit_path_normalization_deduplication_and_labels(self):
+        self.assertEqual(normalize_visit_path("/modules/10/?tab=1#top"), "/modules/10")
+        self.assertEqual(normalize_visit_path("//evil.com/path"), None)
+        self.assertEqual(normalize_visit_path("/api/admin/stats"), None)
+        self.assertEqual(normalize_visit_path("https://example.com"), None)
+        self.assertEqual(normalize_visit_path("/"), "/")
+        self.assertEqual(parse_visit_route("/modules/10"), ("Модуль #10", ("module", 10)))
+        self.assertEqual(parse_visit_route("/lessons/42"), ("Сабақ #42", ("lesson", 42)))
+        self.assertEqual(parse_visit_route("/lessons/42/review/5"), ("Қателер талдауы · Сабақ #42", ("lesson", 42)))
+        self.assertEqual(parse_visit_route("/trial-test/3"), ("Сынақ тесті #3", ("trial_test", 3)))
+        now = datetime(2026, 11, 11, 10, 10, 0)
+        self.assertFalse(_should_log_page_visit("/modules", "2026-11-11 10:07:00", "/modules", now_utc=now))
+        self.assertTrue(_should_log_page_visit("/modules", "2026-11-11 10:04:00", "/modules", now_utc=now))
+        self.assertTrue(_should_log_page_visit("/modules", "2026-11-11 10:09:50", "/trial-test", now_utc=now))
 
 
 @requires_postgres
@@ -352,6 +370,44 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
                              (True, 0, 1, 2))
         finally:
             await self._run("DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = 1", self.ids["erlan"])
+
+    async def test_page_visits_are_recorded_deduplicated_and_shown_in_student_activity(self):
+        erlan_id = self.ids["erlan"]
+        try:
+            await self.db.users.heartbeat_presence(erlan_id, path="/trial-test")
+            await self.db.users.heartbeat_presence(erlan_id, path="/trial-test")
+            await self.db.users.heartbeat_presence(erlan_id, path="/modules/1?foo=bar")
+            await self.db.users.heartbeat_presence(erlan_id, path="/lessons/1")
+
+            activity = await self.stats.get_student_activity(erlan_id, include_email=True)
+            self.assertIsNotNone(activity)
+            self.assertEqual(activity["last_seen_path"], "/lessons/1")
+            self.assertEqual(activity["last_seen_label"], "Сабақ: Теңдеулер")
+            self.assertTrue(activity["visit_tracking_enabled"])
+            self.assertEqual(
+                [(v["path"], v["label"]) for v in activity["visits"]],
+                [
+                    ("/lessons/1", "Сабақ: Теңдеулер"),
+                    ("/modules/1", "Модуль: Алгебра"),
+                    ("/trial-test", "Сынақ тесттері"),
+                ],
+            )
+
+            students = await self.stats.get_students(self.window("all"))
+            erlan = next(student for student in students["students"] if student["user_id"] == erlan_id)
+            self.assertEqual((erlan["last_seen_path"], erlan["page_visits"]), ("/lessons/1", 3))
+
+            ok = await self.client.get(f"/api/admin/statistics/students/{erlan_id}/activity", params={"email": ADMIN})
+            self.assertEqual(ok.status_code, 200)
+            self.assertEqual(ok.json()["email"], STUDENTS["erlan"])
+            rev = await self.client.get(f"/api/admin/statistics/students/{erlan_id}/activity", params={"email": REVIEWER})
+            self.assertEqual(rev.status_code, 200)
+            self.assertNotIn("email", rev.json())
+            denied = await self.client.get(f"/api/admin/statistics/students/{erlan_id}/activity", params={"email": STUDENTS["bek"]})
+            self.assertEqual(denied.status_code, 403)
+        finally:
+            await self._run("DELETE FROM user_page_visits WHERE user_id = ?", erlan_id)
+            await self._run("UPDATE users SET last_active = '2026-11-11 05:00:00', last_seen_path = NULL WHERE id = ?", erlan_id)
 
     async def test_tasks_count_first_attempts_and_flag_hard_ones(self):
         data = await self.stats.get_tasks(self.window())

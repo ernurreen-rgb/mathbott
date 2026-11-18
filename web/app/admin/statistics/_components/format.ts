@@ -153,6 +153,42 @@ export function formatAgo(value: string | null | undefined, now: number = Date.n
   return formatDate(value);
 }
 
+const STATIC_VISIT_LABELS: Record<string, string> = {
+  "/": "Кіру беті",
+  "/modules": "Модуль картасы",
+  "/trial-test": "Сынақ тесттері",
+  "/trial-test/history": "Тест өту тарихы",
+  "/quizzes": "Квиздер каталогы",
+  "/quizzes/create": "Квиз құру",
+  "/join": "Квизге қосылу",
+  "/quiz/history": "Квиз тарихы",
+  "/profile": "Профиль",
+  "/profile/export": "Деректер экспорты",
+  "/achievements": "Жетістіктер",
+};
+
+/** Short Kazakh label for a tracked student path shown in the students table. */
+export function formatVisitPath(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const clean = path.trim();
+  if (!clean) return null;
+  if (STATIC_VISIT_LABELS[clean]) return STATIC_VISIT_LABELS[clean];
+  const parts = clean.split("/").filter(Boolean);
+  if (parts[0] === "modules" && parts[1]) return `Модуль #${parts[1]}`;
+  if (parts[0] === "lessons" && parts[1]) {
+    return parts[2] === "review" ? `Қателер талдауы · Сабақ #${parts[1]}` : `Сабақ #${parts[1]}`;
+  }
+  if (parts[0] === "trial-test" && parts[1]) {
+    return parts[2] === "results" ? `Тест нәтижесі #${parts[1]}` : `Сынақ тесті #${parts[1]}`;
+  }
+  if (parts[0] === "quizzes" && parts[1]) return `Квиз #${parts[1]}`;
+  if (parts[0] === "quiz" && parts[1] === "play" && parts[2]) return `Квиз ойыны #${parts[2]}`;
+  if (parts[0] === "quiz" && parts[1] === "review" && parts[2]) return `Квиз талдауы #${parts[2]}`;
+  if (parts[0] === "profile" && parts[1]) return `Оқушы профилі #${parts[1]}`;
+  if (parts[0] === "admin") return "Әкімші панелі";
+  return clean;
+}
+
 /** Opens a CSV in Excel with Cyrillic intact (UTF-8 BOM, semicolon-free quoting). */
 export function downloadCsv(filename: string, header: string[], rows: Array<Array<string | number | null | undefined>>): void {
   const cell = (value: string | number | null | undefined) => {

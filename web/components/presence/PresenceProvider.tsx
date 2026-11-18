@@ -3,6 +3,7 @@
 import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { getPresenceWsToken, heartbeatPresence } from "@/lib/api";
 import { resolveWebSocketBase } from "@/lib/websocket-url";
 
@@ -61,6 +62,7 @@ function presenceDisplayName(user: PresenceUser): string {
 
 const HEARTBEAT_INTERVAL_MS = 25000;
 const HEARTBEAT_RESUME_GAP_MS = 15000;
+const HEARTBEAT_IDLE_MS = 120000;
 
 function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
@@ -68,40 +70,66 @@ function isTabVisible(): boolean {
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
+  const pathname = usePathname() || "/";
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [status, setStatus] = useState<PresenceStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  const lastInteractionAtRef = useRef<number>(Date.now());
+  const lastSentPathRef = useRef<string>("");
+  const pollingRefreshRef = useRef<((opts?: { force?: boolean }) => Promise<void>) | null>(null);
   const email = session?.user?.email?.trim().toLowerCase() || "";
 
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !email) {
       setUsers([]);
       setStatus("disconnected");
+      lastSentPathRef.current = "";
+      pollingRefreshRef.current = null;
       return;
     }
 
     if (process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === "polling") {
       let disposed = false;
       let busy = false;
+      let queuedForce = false;
+      let inFlightPath = "";
       let lastBeatAt = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
+      lastInteractionAtRef.current = Date.now();
 
-      const refresh = async () => {
-        if (busy || disposed || !isTabVisible()) return;
+      const refresh = async (opts?: { force?: boolean }) => {
+        if (disposed || !isTabVisible()) return;
+        const path = pathnameRef.current || "/";
+        const idle = Date.now() - lastInteractionAtRef.current > HEARTBEAT_IDLE_MS;
+        if (!opts?.force && idle) return;
+        if (busy) {
+          if (opts?.force && path !== inFlightPath) queuedForce = true;
+          return;
+        }
         busy = true;
+        inFlightPath = path;
         lastBeatAt = Date.now();
         try {
-          const { data, error } = await heartbeatPresence(email);
+          const { data, error } = await heartbeatPresence(email, path);
           if (disposed) return;
           if (error || !data) setStatus("disconnected");
           else {
+            lastSentPathRef.current = path;
             setUsers(sortPresenceUsers(data.users.map(normalizePresenceUser).filter(Boolean) as PresenceUser[]));
             setStatus("connected");
           }
         } finally {
           busy = false;
+          inFlightPath = "";
+          if (!disposed && queuedForce) {
+            queuedForce = false;
+            void refresh({ force: true });
+          }
         }
       };
+      pollingRefreshRef.current = refresh;
 
       const stopPolling = () => {
         if (timer) {
@@ -112,12 +140,21 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
       const startPolling = () => {
         if (disposed || !isTabVisible()) return;
+        lastInteractionAtRef.current = Date.now();
         if (lastBeatAt === 0 || Date.now() - lastBeatAt >= HEARTBEAT_RESUME_GAP_MS) {
           setStatus((prev) => (prev === "connected" ? prev : "connecting"));
-          void refresh();
+          void refresh({ force: true });
         }
         if (!timer) {
           timer = setInterval(() => void refresh(), HEARTBEAT_INTERVAL_MS);
+        }
+      };
+
+      const markInteraction = () => {
+        const wasIdle = Date.now() - lastInteractionAtRef.current > HEARTBEAT_IDLE_MS;
+        lastInteractionAtRef.current = Date.now();
+        if (wasIdle && isTabVisible() && Date.now() - lastBeatAt >= HEARTBEAT_RESUME_GAP_MS) {
+          void refresh({ force: true });
         }
       };
 
@@ -129,11 +166,19 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         }
       };
 
+      const interactionEvents: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "scroll", "touchstart"];
+      interactionEvents.forEach((eventName) => {
+        window.addEventListener(eventName, markInteraction, { passive: true });
+      });
       document.addEventListener("visibilitychange", onVisibilityChange);
       startPolling();
 
       return () => {
         disposed = true;
+        pollingRefreshRef.current = null;
+        interactionEvents.forEach((eventName) => {
+          window.removeEventListener(eventName, markInteraction);
+        });
         document.removeEventListener("visibilitychange", onVisibilityChange);
         stopPolling();
       };
@@ -290,6 +335,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       setUsers([]);
     };
   }, [email, sessionStatus]);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !email || !isTabVisible()) return;
+    lastInteractionAtRef.current = Date.now();
+    if (pathname !== lastSentPathRef.current) {
+      void pollingRefreshRef.current?.({ force: true });
+    }
+  }, [email, pathname, sessionStatus]);
 
   const value = useMemo<PresenceContextValue>(() => {
     const onlineIds = new Set(users.map((user) => user.id));

@@ -1,5 +1,5 @@
 import { apiPath, fetchWithErrorHandling, type FetchResult } from "./client";
-import type { StatisticsByTab, StatisticsPeriodKey, StatisticsTab } from "@/types";
+import type { StatisticsByTab, StatisticsPeriodKey, StatisticsStudentActivity, StatisticsTab } from "@/types";
 
 export type AdminStatisticsQuery = {
   period: StatisticsPeriodKey;
@@ -24,5 +24,16 @@ export async function getAdminStatistics<Tab extends StatisticsTab>(
   return fetchWithErrorHandling<StatisticsByTab[Tab]>(
     `${apiPath(`admin/statistics/${tab}`)}?${params.toString()}`,
     fresh ? { cache: "no-store" } : undefined,
+  );
+}
+
+export async function getAdminStudentActivity(
+  userId: number,
+  email: string,
+): Promise<FetchResult<StatisticsStudentActivity>> {
+  const params = new URLSearchParams({ email });
+  return fetchWithErrorHandling<StatisticsStudentActivity>(
+    `${apiPath(`admin/statistics/students/${userId}/activity`)}?${params.toString()}`,
+    { cache: "no-store" },
   );
 }

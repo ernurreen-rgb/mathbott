@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Icon from "@/components/ui/Icon";
-import type { StatisticsStudent, StatisticsStudents } from "@/types";
+import { getAdminStudentActivity } from "@/lib/api";
+import type { StatisticsStudent, StatisticsStudentActivity, StatisticsStudents } from "@/types";
 import styles from "../Statistics.module.css";
 import { BucketChart, type ChartRow } from "./charts";
 import {
-  ACTIVE_DAY_LABELS, BUCKET_NAMES, bucketLabel, bucketTitle, downloadCsv, formatAgo, formatDate, formatDateTime, formatNumber, formatPercent,
+  ACTIVE_DAY_LABELS, BUCKET_NAMES, bucketLabel, bucketTitle, downloadCsv, formatAgo, formatDate, formatDateTime, formatNumber, formatPercent, formatVisitPath,
 } from "./format";
 import { VIZ } from "./palette";
 import { Card, clampPage, Empty, Meter, Pager, ShareBar, SortHeader, sortRows, StatTile, type SortState } from "./primitives";
@@ -38,14 +39,112 @@ const SORT_VALUE: Record<SortKey, (student: StatisticsStudent) => number | strin
   streak: (student) => student.streak,
 };
 
-type Props = { data: StatisticsStudents; initialSegment?: StudentSegment };
+type Props = { data: StatisticsStudents; initialSegment?: StudentSegment; viewerEmail?: string | null };
 
-export default function StudentsTab({ data, initialSegment = "all" }: Props) {
+type ActivityEntry = { loading: boolean; error: string | null; data: StatisticsStudentActivity | null };
+
+function StudentActivityDetail({ entry }: { entry: ActivityEntry | undefined }) {
+  if (!entry || entry.loading) {
+    return <p className={styles.note}>Белсенділік тарихы жүктелуде...</p>;
+  }
+  if (entry.error) {
+    return <p className={styles.note} style={{ color: "var(--bad)" }}>Қате: {entry.error}</p>;
+  }
+  const activity = entry.data;
+  if (!activity) return null;
+  if (!activity.visit_tracking_enabled) {
+    return (
+      <p className={styles.note}>
+        Беттер тарихы миграция (<code>0013_user_page_visits</code>) қолданылғаннан кейін жазылады.
+      </p>
+    );
+  }
+  return (
+    <div className={styles.detail}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            Соңғы ашқан беттері ({formatNumber(activity.visits.length)})
+          </div>
+          {!activity.visits.length ? (
+            <p className={styles.note}>Жаңа бетке кіру жазбасы әлі түспеген.</p>
+          ) : (
+            <div className={styles.list}>
+              {activity.visits.slice(0, 15).map((visit) => (
+                <div key={visit.id} className={styles.listItem} style={{ padding: "5px 0" }}>
+                  <div className={styles.listMain}>
+                    <span>{visit.label}</span>{" "}
+                    <span className={styles.muted} style={{ fontSize: 11 }}>{visit.path}</span>
+                  </div>
+                  <div className={styles.listSide} title={formatDateTime(visit.visited_at)}>
+                    <small>{formatDateTime(visit.visited_at)}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {activity.drafts.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Тест черновиктері</div>
+            <div className={styles.list}>
+              {activity.drafts.map((draft) => (
+                <div key={draft.trial_test_id} className={styles.listItem} style={{ padding: "4px 0" }}>
+                  <span className={styles.listMain}>{draft.title}</span>
+                  <span className={styles.listSide}>
+                    <small>{formatNumber(draft.answers_count)} жауап · {formatDateTime(draft.updated_at)}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activity.quizzes.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Квиз ойындары</div>
+            <div className={styles.list}>
+              {activity.quizzes.map((quiz) => (
+                <div key={`${quiz.session_id}-${quiz.joined_at ?? ""}`} className={styles.listItem} style={{ padding: "4px 0" }}>
+                  <span className={styles.listMain}>{quiz.title}</span>
+                  <span className={styles.listSide}>
+                    <small>{formatNumber(quiz.correct)} / {formatNumber(quiz.answers)} дұрыс · {formatDateTime(quiz.joined_at)}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function StudentsTab({ data, initialSegment = "all", viewerEmail = null }: Props) {
   const { summary, series, period } = data;
   const [segment, setSegment] = useState<StudentSegment>(initialSegment);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortState<SortKey>>({ key: "attempts", descending: true });
   const [page, setPage] = useState(0);
+  const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
+  const [activityMap, setActivityMap] = useState<Record<number, ActivityEntry>>({});
+
+  const toggleActivity = async (userId: number) => {
+    if (expandedUserId === userId) {
+      setExpandedUserId(null);
+      return;
+    }
+    setExpandedUserId(userId);
+    if (!viewerEmail) return;
+    setActivityMap((prev) => ({
+      ...prev,
+      [userId]: { loading: true, error: null, data: prev[userId]?.data ?? null },
+    }));
+    const result = await getAdminStudentActivity(userId, viewerEmail);
+    setActivityMap((prev) => ({
+      ...prev,
+      [userId]: { loading: false, error: result.error, data: result.data },
+    }));
+  };
 
   const segments = SEGMENTS.filter((item) => item.key !== "churned" || period.days);
   const activeSegment = segments.find((item) => item.key === segment) ?? segments[0];
@@ -70,12 +169,14 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
   }));
   const exportCsv = () => downloadCsv(
     `qazmath-oqushylar-${period.end}.csv`,
-    ["ID", "Оқушы", ...(data.emails_visible ? ["Email"] : []), "Тіркелген", "Соңғы рет көрінді", "Жауаптар", "Дұрыс", "Дәлдік %",
+    ["ID", "Оқушы", ...(data.emails_visible ? ["Email"] : []), "Тіркелген", "Соңғы рет көрінді", "Соңғы бет", "Қаралған беттер",
+      "Жауаптар", "Дұрыс", "Дәлдік %",
       "Белсенді күндер", "Сынақ тесттері", "Тесттің орташа нәтижесі %", "Тест черновигі", "Черновик жауаптары",
       "Квиздер", "Квиз жауаптары", "Квиз дәлдігі %", "Барлығы шешілген", "Серия"],
     visible.map((student) => [
       student.user_id, student.nickname, ...(data.emails_visible ? [student.email] : []), formatDateTime(student.registered_at),
-      formatDateTime(student.last_seen_at), student.attempts, student.correct,
+      formatDateTime(student.last_seen_at), student.last_seen_path || "", student.page_visits,
+      student.attempts, student.correct,
       student.accuracy === null ? "" : Math.round(student.accuracy * 1000) / 10, student.active_days, student.trial_attempts,
       student.trial_average === null ? "" : Math.round(student.trial_average * 1000) / 10,
       student.trial_drafts, student.trial_draft_answers, student.quiz_sessions, student.quiz_answers,
@@ -161,7 +262,7 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
           <table className={styles.table} style={{ minWidth: 960 }}>
             <thead><tr>
               <SortHeader label="Оқушы" column="nickname" sort={sort} onSort={reset(setSort)} />
-              <SortHeader label="Соңғы рет көрінді" column="last_seen_at" sort={sort} onSort={reset(setSort)} hint="Қойынды ашық және көрініп тұрғандағы соңғы белсенді уақыты" />
+              <SortHeader label="Соңғы рет көрінді" column="last_seen_at" sort={sort} onSort={reset(setSort)} hint="Белсенді көрініп тұрған соңғы уақыты мен беті. Басып соңғы ашқан беттерін көруге болады" />
               <SortHeader label="Жауаптар" column="attempts" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі модуль есептеріне жауаптар" />
               <SortHeader label="Дәлдік" column="accuracy" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі дұрыс жауап үлесі" />
               <SortHeader label="Белсенді күн" column="active_days" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде неше түрлі күні оқыды" />
@@ -172,67 +273,96 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
               <SortHeader label="Тіркелген" column="registered_at" sort={sort} onSort={reset(setSort)} numeric />
             </tr></thead>
             <tbody>
-              {pageRows.map((student) => (
-                <tr key={student.user_id}>
-                  <td>
-                    <div className={styles.cellMain}>
-                      <Link href={`/profile/${student.user_id}`}>{student.nickname || `Оқушы #${student.user_id}`}</Link>
-                      <span className={styles.badges}>
-                        {student.is_admin && <span className={styles.badge} data-tone="accent">әкімші</span>}
-                        {student.is_new && <span className={styles.badge} data-tone="good">жаңа</span>}
-                        {student.is_churned && <span className={styles.badge} data-tone="warn">тоқтап қалды</span>}
-                        {student.never_active && student.trial_drafts > 0 && (
-                          <span className={styles.badge} data-tone="warn" title="Сынақ тестті ашып, жауаптар сақтаған, бірақ «Тапсыру» батырмасын баспаған">
-                            тест черновигі
+              {pageRows.map((student) => {
+                const open = expandedUserId === student.user_id;
+                const visitLabel = formatVisitPath(student.last_seen_path);
+                return (
+                  <Fragment key={student.user_id}>
+                    <tr className={open ? styles.expanded : undefined}>
+                      <td>
+                        <div className={styles.cellMain}>
+                          <Link href={`/profile/${student.user_id}`}>{student.nickname || `Оқушы #${student.user_id}`}</Link>
+                          <span className={styles.badges}>
+                            {student.is_admin && <span className={styles.badge} data-tone="accent">әкімші</span>}
+                            {student.is_new && <span className={styles.badge} data-tone="good">жаңа</span>}
+                            {student.is_churned && <span className={styles.badge} data-tone="warn">тоқтап қалды</span>}
+                            {student.never_active && student.trial_drafts > 0 && (
+                              <span className={styles.badge} data-tone="warn" title="Сынақ тестті ашып, жауаптар сақтаған, бірақ «Тапсыру» батырмасын баспаған">
+                                тест черновигі
+                              </span>
+                            )}
+                            {student.never_active && student.has_quiz_history && (
+                              <span className={styles.badge} data-tone="accent" title="Тікелей квиз ойынына қатысқан">
+                                квиз ойнаған
+                              </span>
+                            )}
+                            {student.never_active && !student.trial_drafts && !student.has_quiz_history && (
+                              <span className={styles.badge}>бастамаған</span>
+                            )}
                           </span>
+                        </div>
+                        {student.email && <div className={styles.cellSub}>{student.email}</div>}
+                      </td>
+                      <td title={formatDateTime(student.last_seen_at)}>
+                        <button
+                          type="button"
+                          className={styles.rowButton}
+                          aria-expanded={open}
+                          onClick={() => void toggleActivity(student.user_id)}
+                        >
+                          <span>{formatAgo(student.last_seen_at)}</span>
+                          <Icon name={open ? "chevronUp" : "chevronDown"} variant="outline" size={12} />
+                        </button>
+                        {(visitLabel || student.page_visits > 0) && (
+                          <div className={styles.cellSub} title={student.last_seen_path || undefined}>
+                            {visitLabel || "—"}
+                            {student.page_visits > 0 && ` · ${formatNumber(student.page_visits)} бет`}
+                          </div>
                         )}
-                        {student.never_active && student.has_quiz_history && (
-                          <span className={styles.badge} data-tone="accent" title="Тікелей квиз ойынына қатысқан">
-                            квиз ойнаған
-                          </span>
+                      </td>
+                      <td className={styles.num}>{student.attempts ? formatNumber(student.attempts) : <span className={styles.muted}>—</span>}</td>
+                      <td className={styles.num}>{student.accuracy === null ? <span className={styles.muted}>—</span>
+                        : <ShareBar share={student.accuracy} label={formatPercent(student.accuracy)} />}</td>
+                      <td className={styles.num}>{student.active_days || <span className={styles.muted}>—</span>}</td>
+                      <td className={styles.num}>
+                        {student.trial_attempts
+                          ? <>{formatNumber(student.trial_attempts)} <span className={styles.muted}>· {formatPercent(student.trial_average)}</span></>
+                          : !student.trial_drafts && <span className={styles.muted}>—</span>}
+                        {student.trial_drafts > 0 && (
+                          <div
+                            className={styles.cellSub}
+                            title="Оқушы тестті ашып, жауаптарды сақтаған, бірақ тапсырмаған"
+                          >
+                            {student.trial_draft_answers > 0
+                              ? `${formatNumber(student.trial_drafts)} черновик · ${formatNumber(student.trial_draft_answers)} жауап`
+                              : `${formatNumber(student.trial_drafts)} басталған`}
+                          </div>
                         )}
-                        {student.never_active && !student.trial_drafts && !student.has_quiz_history && (
-                          <span className={styles.badge}>бастамаған</span>
-                        )}
-                      </span>
-                    </div>
-                    {student.email && <div className={styles.cellSub}>{student.email}</div>}
-                  </td>
-                  <td title={formatDateTime(student.last_seen_at)}>{formatAgo(student.last_seen_at)}</td>
-                  <td className={styles.num}>{student.attempts ? formatNumber(student.attempts) : <span className={styles.muted}>—</span>}</td>
-                  <td className={styles.num}>{student.accuracy === null ? <span className={styles.muted}>—</span>
-                    : <ShareBar share={student.accuracy} label={formatPercent(student.accuracy)} />}</td>
-                  <td className={styles.num}>{student.active_days || <span className={styles.muted}>—</span>}</td>
-                  <td className={styles.num}>
-                    {student.trial_attempts
-                      ? <>{formatNumber(student.trial_attempts)} <span className={styles.muted}>· {formatPercent(student.trial_average)}</span></>
-                      : !student.trial_drafts && <span className={styles.muted}>—</span>}
-                    {student.trial_drafts > 0 && (
-                      <div
-                        className={styles.cellSub}
-                        title="Оқушы тестті ашып, жауаптарды сақтаған, бірақ тапсырмаған"
+                      </td>
+                      <td
+                        className={styles.num}
+                        title={student.quiz_answers > 0 ? `${formatNumber(student.quiz_correct)} / ${formatNumber(student.quiz_answers)} дұрыс` : undefined}
                       >
-                        {student.trial_draft_answers > 0
-                          ? `${formatNumber(student.trial_drafts)} черновик · ${formatNumber(student.trial_draft_answers)} жауап`
-                          : `${formatNumber(student.trial_drafts)} басталған`}
-                      </div>
+                        {student.quiz_sessions > 0
+                          ? student.quiz_answers > 0
+                            ? <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· {formatPercent(student.quiz_accuracy)}</span></>
+                            : <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· 0 жауап</span></>
+                          : <span className={styles.muted}>—</span>}
+                      </td>
+                      <td className={styles.num}>{formatNumber(student.total_solved)}</td>
+                      <td className={styles.num}>{student.streak ? `${student.streak} күн` : <span className={styles.muted}>—</span>}</td>
+                      <td className={styles.num}>{formatDate(student.registered_at)}</td>
+                    </tr>
+                    {open && (
+                      <tr className={styles.expanded}>
+                        <td colSpan={10}>
+                          <StudentActivityDetail entry={activityMap[student.user_id]} />
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td
-                    className={styles.num}
-                    title={student.quiz_answers > 0 ? `${formatNumber(student.quiz_correct)} / ${formatNumber(student.quiz_answers)} дұрыс` : undefined}
-                  >
-                    {student.quiz_sessions > 0
-                      ? student.quiz_answers > 0
-                        ? <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· {formatPercent(student.quiz_accuracy)}</span></>
-                        : <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· 0 жауап</span></>
-                      : <span className={styles.muted}>—</span>}
-                  </td>
-                  <td className={styles.num}>{formatNumber(student.total_solved)}</td>
-                  <td className={styles.num}>{student.streak ? `${student.streak} күн` : <span className={styles.muted}>—</span>}</td>
-                  <td className={styles.num}>{formatDate(student.registered_at)}</td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

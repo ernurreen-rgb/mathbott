@@ -209,3 +209,24 @@ class BaseRepository:
         """Run a write operation while holding this process's write lock."""
         async with _get_process_write_lock():
             return await operation()
+
+    async def _has_page_visit_tracking(self, conn: db_driver.Connection) -> bool:
+        """True once migration 0013_user_page_visits has been applied; safe before rollout."""
+        if getattr(self, "_page_visit_tracking_ready", False):
+            return True
+        async with conn.execute(
+            """SELECT (
+                   to_regclass(current_schema() || '.user_page_visits') IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = current_schema()
+                         AND table_name = 'users'
+                         AND column_name = 'last_seen_path'
+                   )
+               )::int"""
+        ) as cursor:
+            row = await cursor.fetchone()
+        ready = bool(row and row[0])
+        if ready:
+            self._page_visit_tracking_ready = True
+        return ready

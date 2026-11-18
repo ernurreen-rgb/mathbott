@@ -187,6 +187,60 @@ def count_draft_answers(raw_answers: Any) -> int:
     return sum(1 for value in parsed.values() if _draft_answer_has_value(value))
 
 
+_STATIC_VISIT_LABELS: Dict[str, str] = {
+    "/": "Кіру беті",
+    "/modules": "Модуль картасы",
+    "/trial-test": "Сынақ тесттері",
+    "/trial-test/history": "Тест өту тарихы",
+    "/quizzes": "Квиздер каталогы",
+    "/quizzes/create": "Квиз құру",
+    "/join": "Квизге қосылу",
+    "/quiz/history": "Квиз тарихы",
+    "/profile": "Профиль",
+    "/profile/export": "Деректер экспорты",
+    "/achievements": "Жетістіктер",
+}
+
+
+def parse_visit_route(path: Optional[str]) -> Tuple[str, Optional[Tuple[str, int]]]:
+    """Return a default Kazakh label and optional (entity_kind, entity_id) for title lookup."""
+    if not path:
+        return "—", None
+    parts = [part for part in path.strip().split("/") if part]
+    if not parts:
+        return _STATIC_VISIT_LABELS["/"], None
+    if path in _STATIC_VISIT_LABELS:
+        return _STATIC_VISIT_LABELS[path], None
+
+    def _pos_int(raw: str) -> Optional[int]:
+        return int(raw) if raw.isdigit() and int(raw) > 0 else None
+
+    if parts[0] == "modules" and len(parts) == 2 and (entity_id := _pos_int(parts[1])):
+        return f"Модуль #{entity_id}", ("module", entity_id)
+    if parts[0] == "lessons" and len(parts) >= 2 and (entity_id := _pos_int(parts[1])):
+        if len(parts) >= 4 and parts[2] == "review":
+            return f"Қателер талдауы · Сабақ #{entity_id}", ("lesson", entity_id)
+        return f"Сабақ #{entity_id}", ("lesson", entity_id)
+    if parts[0] == "trial-test" and len(parts) >= 2 and (entity_id := _pos_int(parts[1])):
+        if len(parts) >= 3 and parts[2] == "results":
+            return f"Тест нәтижесі #{entity_id}", ("trial_test", entity_id)
+        return f"Сынақ тесті #{entity_id}", ("trial_test", entity_id)
+    if parts[0] == "quizzes" and len(parts) >= 2 and (entity_id := _pos_int(parts[1])):
+        return f"Квиз #{entity_id}", ("quiz", entity_id)
+    if parts[0] == "quiz" and len(parts) >= 3 and (entity_id := _pos_int(parts[2])):
+        if parts[1] == "play":
+            return f"Квиз ойыны #{entity_id}", None
+        if parts[1] == "review":
+            return f"Квиз талдауы #{entity_id}", None
+        if parts[1] == "host":
+            return f"Квиз жүргізу #{entity_id}", None
+    if parts[0] == "profile" and len(parts) == 2 and (entity_id := _pos_int(parts[1])):
+        return f"Оқушы профилі #{entity_id}", None
+    if parts[0] == "admin":
+        return "Әкімші панелі", None
+    return path, None
+
+
 def _without_admins(column: str, exclude_admins: bool) -> str:
     return f" AND {column} NOT IN (SELECT id FROM users WHERE is_admin = 1)" if exclude_admins else ""
 
@@ -492,11 +546,13 @@ class StatisticsRepository(BaseRepository):
     async def get_students(self, window: StatsWindow, *, exclude_admins: bool = False,
                            include_email: bool = False) -> Dict[str, Any]:
         async with self._connection() as db:
+            track_pages = await self._has_page_visit_tracking(db)
             activity = await self._load_activity(db, window, exclude_admins)
             registrations = await self._load_registrations(db, window, exclude_admins)
+            last_seen_path_col = "last_seen_path" if track_pages else "NULL"
             user_rows = await self._rows(db, f"""
                 SELECT id, nickname, email, created_at, last_active, total_solved, streak, last_streak_date,
-                       is_admin, {window.local_day("created_at")}
+                       is_admin, {window.local_day("created_at")}, {last_seen_path_col}
                 FROM users
                 WHERE TRUE{" AND is_admin = 0" if exclude_admins else ""}
             """)
@@ -541,7 +597,14 @@ class StatisticsRepository(BaseRepository):
                 FROM trial_test_drafts
                 WHERE TRUE{_without_admins("user_id", exclude_admins)}
             """)
+            visit_rows = await self._rows(db, f"""
+                SELECT user_id, COUNT(*)
+                FROM user_page_visits
+                WHERE visited_at >= ? AND visited_at < ?{_without_admins("user_id", exclude_admins)}
+                GROUP BY user_id
+            """, (window.start_utc, window.end_utc)) if track_pages else []
 
+        visits_by_user: Dict[int, int] = {int(row[0]): _int(row[1]) for row in visit_rows}
         quiz_by_user: Dict[int, Dict[str, int]] = {
             int(row[0]): {"sessions": _int(row[1]), "answers": _int(row[2]), "correct": _int(row[3])}
             for row in quiz_rows
@@ -575,6 +638,8 @@ class StatisticsRepository(BaseRepository):
                 "nickname": row[1],
                 "registered_at": _iso(row[3]),
                 "last_seen_at": _iso(row[4]),
+                "last_seen_path": row[10],
+                "page_visits": visits_by_user.get(user_id, 0),
                 "attempts": attempts,
                 "correct": int(cell["correct"]) if cell else 0,
                 "accuracy": _ratio(cell["correct"], attempts) if cell else None,
@@ -636,6 +701,140 @@ class StatisticsRepository(BaseRepository):
             "truncated": len(students) > STUDENT_LIMIT,
             "emails_visible": include_email,
         }
+
+    async def _resolve_visit_labels(self, db: db_driver.Connection, paths: Iterable[str]) -> Dict[str, str]:
+        parsed = {path: parse_visit_route(path) for path in paths}
+        ids_by_kind: Dict[str, Set[int]] = {}
+        for _, entity in parsed.values():
+            if entity is not None:
+                ids_by_kind.setdefault(entity[0], set()).add(entity[1])
+
+        table_queries = {
+            "module": ("modules", "name", "Модуль"),
+            "lesson": ("lessons", "title", "Сабақ"),
+            "trial_test": ("trial_tests", "title", "Тест"),
+            "quiz": ("quizzes", "title", "Квиз"),
+        }
+        names: Dict[Tuple[str, int], str] = {}
+        for kind, ids in ids_by_kind.items():
+            table, col, _ = table_queries[kind]
+            placeholders = ",".join("?" for _ in ids)
+            for row in await self._rows(db, f"SELECT id, {col} FROM {table} WHERE id IN ({placeholders})", tuple(sorted(ids))):
+                if row[1]:
+                    names[(kind, int(row[0]))] = str(row[1])
+
+        labels: Dict[str, str] = {}
+        for path, (default_label, entity) in parsed.items():
+            if entity is not None and entity in names:
+                kind, _ = entity
+                prefix = table_queries[kind][2]
+                if kind == "lesson" and "/review/" in path:
+                    labels[path] = f"Қателер талдауы · {names[entity]}"
+                elif kind == "trial_test" and path.endswith("/results"):
+                    labels[path] = f"Тест нәтижесі: {names[entity]}"
+                else:
+                    labels[path] = f"{prefix}: {names[entity]}"
+            else:
+                labels[path] = default_label
+        return labels
+
+    async def get_student_activity(
+        self, user_id: int, *, include_email: bool = False, limit: int = 40,
+    ) -> Optional[Dict[str, Any]]:
+        """Recent page visits, unfinished trial-test drafts, and quiz sessions for one student."""
+        async with self._connection() as db:
+            track_pages = await self._has_page_visit_tracking(db)
+            last_seen_path_col = "last_seen_path" if track_pages else "NULL"
+            user_rows = await self._rows(
+                db,
+                f"SELECT id, nickname, email, last_active, {last_seen_path_col} FROM users WHERE id = ?",
+                (user_id,),
+            )
+            if not user_rows:
+                return None
+            user_row = user_rows[0]
+
+            visit_rows = await self._rows(
+                db,
+                "SELECT id, path, visited_at FROM user_page_visits WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+                (user_id, limit),
+            ) if track_pages else []
+
+            draft_rows = await self._rows(
+                db,
+                """SELECT d.trial_test_id, tt.title, d.answers, d.current_task_index, d.updated_at
+                   FROM trial_test_drafts d
+                   LEFT JOIN trial_tests tt ON tt.id = d.trial_test_id
+                   WHERE d.user_id = ?
+                   ORDER BY d.updated_at DESC""",
+                (user_id,),
+            )
+            quiz_rows = await self._rows(
+                db,
+                """SELECT qp.session_id, q.title, qp.joined_at, qp.is_finished,
+                          COUNT(qa.id), COALESCE(SUM(qa.is_correct), 0)
+                   FROM quiz_participants qp
+                   JOIN quiz_sessions s ON s.id = qp.session_id
+                   JOIN quizzes q ON q.id = s.quiz_id
+                   LEFT JOIN quiz_answers qa ON qa.session_id = qp.session_id AND qa.participant_id = qp.id
+                   WHERE qp.user_id = ?
+                   GROUP BY qp.id, qp.session_id, q.title, qp.joined_at, qp.is_finished
+                   ORDER BY qp.id DESC
+                   LIMIT 20""",
+                (user_id,),
+            )
+
+            all_paths = {str(row[1]) for row in visit_rows if row[1]}
+            if user_row[4]:
+                all_paths.add(str(user_row[4]))
+            labels = await self._resolve_visit_labels(db, all_paths) if all_paths else {}
+
+        drafts = []
+        for row in draft_rows:
+            answer_count = count_draft_answers(row[2])
+            task_idx = _int(row[3])
+            if answer_count > 0 or task_idx > 0:
+                drafts.append({
+                    "trial_test_id": int(row[0]),
+                    "title": row[1] or f"Тест #{int(row[0])}",
+                    "answers_count": answer_count,
+                    "current_task_index": task_idx,
+                    "updated_at": _iso(row[4]),
+                })
+
+        last_seen_path = str(user_row[4]) if user_row[4] else None
+        payload: Dict[str, Any] = {
+            "user_id": int(user_row[0]),
+            "nickname": user_row[1],
+            "last_seen_at": _iso(user_row[3]),
+            "last_seen_path": last_seen_path,
+            "last_seen_label": labels.get(last_seen_path) if last_seen_path else None,
+            "visit_tracking_enabled": track_pages,
+            "visits": [
+                {
+                    "id": int(row[0]),
+                    "path": str(row[1]),
+                    "label": labels.get(str(row[1]), str(row[1])),
+                    "visited_at": _iso(row[2]),
+                }
+                for row in visit_rows
+            ],
+            "drafts": drafts,
+            "quizzes": [
+                {
+                    "session_id": int(row[0]),
+                    "title": row[1],
+                    "joined_at": _iso(row[2]),
+                    "is_finished": bool(row[3]),
+                    "answers": _int(row[4]),
+                    "correct": _int(row[5]),
+                }
+                for row in quiz_rows
+            ],
+        }
+        if include_email:
+            payload["email"] = user_row[2]
+        return payload
 
     async def get_tasks(self, window: StatsWindow, *, exclude_admins: bool = False) -> Dict[str, Any]:
         """Answers to module tasks in the period; a first attempt is a student's earliest answer to a task."""
