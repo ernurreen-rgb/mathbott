@@ -46,6 +46,21 @@ class FinalFormTests(unittest.TestCase):
         ]:
             self.assertAccepted(key, answer)
 
+    def test_an_integer_key_takes_every_way_a_student_types_the_number(self):
+        # Every written key in the bank is an integer, so none of these may ever be rejected.
+        for key, answers in {
+            "5": ["5", " 5 ", "+5", "(5)", "{5}", r"\left(5\right)", r"\text{5}", r"5\,", "5.0", "5,0", "5{,}0"],
+            "-5": ["-5", "−5", "–5", "- 5", "(-5)", "-(5)", "+(-5)", r"\left(-5\right)", "-5,0"],
+            "1000": ["1000", "1 000", "1 000", r"1\,000", r"1\ 000", "1000.0"],
+        }.items():
+            for answer in answers:
+                self.assertAccepted(key, answer)
+
+    def test_an_integer_key_rejects_what_is_still_to_compute(self):
+        for key, answer in [("5", "10/2"), ("5", "5/1"), ("5", "2+3"), ("5", "5^1"), ("5", r"5\cdot1"),
+                            ("-5", "-10/2"), ("-5", r"\frac{-10}{2}"), ("1000", "10^3")]:
+            self.assertRejected(key, answer)
+
     def test_fractions_must_be_reduced_unless_the_task_accepts_more(self):
         self.assertRejected("1/2", "2/4")
         self.assertRejected(r"\frac{2}{3}", r"\frac{4}{6}")
