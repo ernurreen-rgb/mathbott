@@ -4,13 +4,16 @@ import Icon from "@/components/ui/Icon";
 import { useSession, signIn } from "next-auth/react";
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { resolveSafeCallbackPath } from "@/lib/use-require-auth";
+import { DEFAULT_AUTHENTICATED_PATH, resolveSafeCallbackPath } from "@/lib/use-require-auth";
 
 function HomeContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = resolveSafeCallbackPath(searchParams?.get("callbackUrl"), "/trial-test");
+  const callbackUrl = resolveSafeCallbackPath(
+    searchParams?.get("callbackUrl"),
+    DEFAULT_AUTHENTICATED_PATH,
+  );
 
   useEffect(() => {
     if (status === "authenticated") {
