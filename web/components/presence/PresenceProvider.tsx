@@ -59,6 +59,13 @@ function presenceDisplayName(user: PresenceUser): string {
 }
 
 
+const HEARTBEAT_INTERVAL_MS = 25000;
+const HEARTBEAT_RESUME_GAP_MS = 15000;
+
+function isTabVisible(): boolean {
+  return typeof document === "undefined" || document.visibilityState === "visible";
+}
+
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const [users, setUsers] = useState<PresenceUser[]>([]);
@@ -76,9 +83,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     if (process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === "polling") {
       let disposed = false;
       let busy = false;
+      let lastBeatAt = 0;
+      let timer: ReturnType<typeof setInterval> | null = null;
+
       const refresh = async () => {
-        if (busy || disposed) return;
+        if (busy || disposed || !isTabVisible()) return;
         busy = true;
+        lastBeatAt = Date.now();
         try {
           const { data, error } = await heartbeatPresence(email);
           if (disposed) return;
@@ -91,16 +102,46 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           busy = false;
         }
       };
-      setStatus("connecting");
-      void refresh();
-      const timer = setInterval(() => void refresh(), 25000);
+
+      const stopPolling = () => {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      };
+
+      const startPolling = () => {
+        if (disposed || !isTabVisible()) return;
+        if (lastBeatAt === 0 || Date.now() - lastBeatAt >= HEARTBEAT_RESUME_GAP_MS) {
+          setStatus((prev) => (prev === "connected" ? prev : "connecting"));
+          void refresh();
+        }
+        if (!timer) {
+          timer = setInterval(() => void refresh(), HEARTBEAT_INTERVAL_MS);
+        }
+      };
+
+      const onVisibilityChange = () => {
+        if (isTabVisible()) {
+          startPolling();
+        } else {
+          stopPolling();
+        }
+      };
+
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      startPolling();
+
       return () => {
         disposed = true;
-        clearInterval(timer);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        stopPolling();
       };
     }
 
     let closed = false;
+    let generation = 0;
+    let connecting = false;
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -116,11 +157,25 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const disconnect = () => {
+      generation += 1;
+      connecting = false;
+      clearTimers();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      if (ws) {
+        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+        ws.close();
+      }
+      setStatus("disconnected");
+    };
+
     const scheduleReconnect = () => {
-      if (closed) return;
+      if (closed || !isTabVisible() || reconnectTimer) return;
       const delayMs = Math.min(30000, 1000 * 2 ** reconnectAttempts);
       reconnectAttempts += 1;
       reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
         void connect();
       }, delayMs);
     };
@@ -144,33 +199,45 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     const connect = async () => {
       const wsBase = resolveWebSocketBase();
-      if (!wsBase || closed) {
-        setStatus("disconnected");
+      if (!wsBase || closed || !isTabVisible() || connecting || wsRef.current) {
+        if (!wsBase) setStatus("disconnected");
         return;
       }
 
+      connecting = true;
+      const attempt = generation;
       setStatus("connecting");
-      const { data, error } = await getPresenceWsToken(email);
-      if (closed) return;
-      if (error || !data?.token) {
-        setStatus("disconnected");
-        scheduleReconnect();
-        return;
+      let token = "";
+      try {
+        const { data, error } = await getPresenceWsToken(email);
+        if (closed || attempt !== generation || !isTabVisible()) return;
+        if (error || !data?.token) {
+          setStatus("disconnected");
+          scheduleReconnect();
+          return;
+        }
+        token = data.token;
+      } finally {
+        if (attempt === generation) connecting = false;
       }
 
       const ws = new WebSocket(
-        `${wsBase}/ws/presence?email=${encodeURIComponent(email)}&token=${encodeURIComponent(data.token)}`
+        `${wsBase}/ws/presence?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`
       );
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (closed || attempt !== generation) {
+          ws.close();
+          return;
+        }
         reconnectAttempts = 0;
         setStatus("connected");
         pingTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
+          if (isTabVisible() && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping" }));
           }
-        }, 25000);
+        }, HEARTBEAT_INTERVAL_MS);
       };
 
       ws.onmessage = (event) => {
@@ -193,22 +260,34 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           clearInterval(pingTimer);
           pingTimer = null;
         }
-        if (!closed) {
+        if (!closed && attempt === generation) {
           setStatus("disconnected");
           scheduleReconnect();
         }
       };
     };
 
+    const onVisibilityChange = () => {
+      if (isTabVisible()) {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+        void connect();
+      } else {
+        disconnect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
     void connect();
 
     return () => {
       closed = true;
-      clearTimers();
-      wsRef.current?.close();
-      wsRef.current = null;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      disconnect();
       setUsers([]);
-      setStatus("disconnected");
     };
   }, [email, sessionStatus]);
 

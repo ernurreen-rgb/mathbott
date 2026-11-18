@@ -14,7 +14,7 @@ import { Card, clampPage, Empty, Meter, Pager, ShareBar, SortHeader, sortRows, S
 
 /** "silent" is a new student who has not answered anything yet. */
 export type StudentSegment = "all" | "active" | "new" | "churned" | "silent" | "never";
-type SortKey = "nickname" | "registered_at" | "last_seen_at" | "attempts" | "accuracy" | "active_days" | "trial_attempts" | "total_solved" | "streak";
+type SortKey = "nickname" | "registered_at" | "last_seen_at" | "attempts" | "accuracy" | "active_days" | "trial_attempts" | "quiz_answers" | "total_solved" | "streak";
 
 const PAGE_SIZE = 25;
 const SEGMENTS: Array<{ key: StudentSegment; label: string; match: (student: StatisticsStudent) => boolean }> = [
@@ -33,6 +33,7 @@ const SORT_VALUE: Record<SortKey, (student: StatisticsStudent) => number | strin
   accuracy: (student) => student.accuracy,
   active_days: (student) => student.active_days,
   trial_attempts: (student) => student.trial_attempts,
+  quiz_answers: (student) => student.quiz_answers * 1000 + student.quiz_sessions,
   total_solved: (student) => student.total_solved,
   streak: (student) => student.streak,
 };
@@ -70,12 +71,16 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
   const exportCsv = () => downloadCsv(
     `qazmath-oqushylar-${period.end}.csv`,
     ["ID", "Оқушы", ...(data.emails_visible ? ["Email"] : []), "Тіркелген", "Соңғы рет көрінді", "Жауаптар", "Дұрыс", "Дәлдік %",
-      "Белсенді күндер", "Сынақ тесттері", "Тесттің орташа нәтижесі %", "Барлығы шешілген", "Серия"],
+      "Белсенді күндер", "Сынақ тесттері", "Тесттің орташа нәтижесі %", "Тест черновигі", "Черновик жауаптары",
+      "Квиздер", "Квиз жауаптары", "Квиз дәлдігі %", "Барлығы шешілген", "Серия"],
     visible.map((student) => [
       student.user_id, student.nickname, ...(data.emails_visible ? [student.email] : []), formatDateTime(student.registered_at),
       formatDateTime(student.last_seen_at), student.attempts, student.correct,
       student.accuracy === null ? "" : Math.round(student.accuracy * 1000) / 10, student.active_days, student.trial_attempts,
-      student.trial_average === null ? "" : Math.round(student.trial_average * 1000) / 10, student.total_solved, student.streak,
+      student.trial_average === null ? "" : Math.round(student.trial_average * 1000) / 10,
+      student.trial_drafts, student.trial_draft_answers, student.quiz_sessions, student.quiz_answers,
+      student.quiz_accuracy === null ? "" : Math.round(student.quiz_accuracy * 1000) / 10,
+      student.total_solved, student.streak,
     ]),
   );
   const activeShare = summary.total ? summary.active / summary.total : null;
@@ -132,7 +137,7 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
     </div>
 
     <Card title="Оқушылар тізімі"
-      hint={`Жауаптар, дәлдік, белсенді күндер мен сынақ тесттер — таңдалған кезең үшін. «Барлығы шешілген» мен серия — қазіргі жалпы күй.${data.truncated ? " Тізімде ең белсенді 2000 оқушы көрсетілген." : ""}`}
+      hint={`Жауаптар, дәлдік, белсенді күндер, сынақ тесттер мен квиздер — таңдалған кезең үшін. «Барлығы шешілген», серия және тест черновиктері — қазіргі күй.${data.truncated ? " Тізімде ең белсенді 2000 оқушы көрсетілген." : ""}`}
       actions={<button type="button" className={`${styles.button} ${styles.buttonSmall}`} onClick={exportCsv} disabled={!visible.length}>
         <Icon name="download" variant="outline" size={13} /> CSV жүктеп алу
       </button>}>
@@ -153,14 +158,15 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
       </div>
       {!visible.length ? <Empty>Бұл шарттарға сай оқушы табылмады.</Empty> : (
         <div className={styles.tableWrap}>
-          <table className={styles.table} style={{ minWidth: 860 }}>
+          <table className={styles.table} style={{ minWidth: 960 }}>
             <thead><tr>
               <SortHeader label="Оқушы" column="nickname" sort={sort} onSort={reset(setSort)} />
-              <SortHeader label="Соңғы рет көрінді" column="last_seen_at" sort={sort} onSort={reset(setSort)} hint="Сайтта соңғы рет болған уақыты" />
+              <SortHeader label="Соңғы рет көрінді" column="last_seen_at" sort={sort} onSort={reset(setSort)} hint="Қойынды ашық және көрініп тұрғандағы соңғы белсенді уақыты" />
               <SortHeader label="Жауаптар" column="attempts" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі модуль есептеріне жауаптар" />
               <SortHeader label="Дәлдік" column="accuracy" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі дұрыс жауап үлесі" />
               <SortHeader label="Белсенді күн" column="active_days" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде неше түрлі күні оқыды" />
-              <SortHeader label="Сынақ тест" column="trial_attempts" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде тапсырылған тест саны және орташа нәтижесі" />
+              <SortHeader label="Сынақ тест" column="trial_attempts" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде тапсырылған тест саны, орташа нәтижесі және аяқталмаған черновиктер" />
+              <SortHeader label="Квиз" column="quiz_answers" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі тікелей квиз ойындары мен жауаптар" />
               <SortHeader label="Барлығы шешілген" column="total_solved" sort={sort} onSort={reset(setSort)} numeric hint="Барлық уақытта дұрыс шығарылған есептер" />
               <SortHeader label="Серия" column="streak" sort={sort} onSort={reset(setSort)} numeric hint="Қатарынан неше күн оқып келеді" />
               <SortHeader label="Тіркелген" column="registered_at" sort={sort} onSort={reset(setSort)} numeric />
@@ -175,7 +181,19 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
                         {student.is_admin && <span className={styles.badge} data-tone="accent">әкімші</span>}
                         {student.is_new && <span className={styles.badge} data-tone="good">жаңа</span>}
                         {student.is_churned && <span className={styles.badge} data-tone="warn">тоқтап қалды</span>}
-                        {student.never_active && <span className={styles.badge}>бастамаған</span>}
+                        {student.never_active && student.trial_drafts > 0 && (
+                          <span className={styles.badge} data-tone="warn" title="Сынақ тестті ашып, жауаптар сақтаған, бірақ «Тапсыру» батырмасын баспаған">
+                            тест черновигі
+                          </span>
+                        )}
+                        {student.never_active && student.has_quiz_history && (
+                          <span className={styles.badge} data-tone="accent" title="Тікелей квиз ойынына қатысқан">
+                            квиз ойнаған
+                          </span>
+                        )}
+                        {student.never_active && !student.trial_drafts && !student.has_quiz_history && (
+                          <span className={styles.badge}>бастамаған</span>
+                        )}
                       </span>
                     </div>
                     {student.email && <div className={styles.cellSub}>{student.email}</div>}
@@ -185,9 +203,31 @@ export default function StudentsTab({ data, initialSegment = "all" }: Props) {
                   <td className={styles.num}>{student.accuracy === null ? <span className={styles.muted}>—</span>
                     : <ShareBar share={student.accuracy} label={formatPercent(student.accuracy)} />}</td>
                   <td className={styles.num}>{student.active_days || <span className={styles.muted}>—</span>}</td>
-                  <td className={styles.num}>{student.trial_attempts
-                    ? <>{formatNumber(student.trial_attempts)} <span className={styles.muted}>· {formatPercent(student.trial_average)}</span></>
-                    : <span className={styles.muted}>—</span>}</td>
+                  <td className={styles.num}>
+                    {student.trial_attempts
+                      ? <>{formatNumber(student.trial_attempts)} <span className={styles.muted}>· {formatPercent(student.trial_average)}</span></>
+                      : !student.trial_drafts && <span className={styles.muted}>—</span>}
+                    {student.trial_drafts > 0 && (
+                      <div
+                        className={styles.cellSub}
+                        title="Оқушы тестті ашып, жауаптарды сақтаған, бірақ тапсырмаған"
+                      >
+                        {student.trial_draft_answers > 0
+                          ? `${formatNumber(student.trial_drafts)} черновик · ${formatNumber(student.trial_draft_answers)} жауап`
+                          : `${formatNumber(student.trial_drafts)} басталған`}
+                      </div>
+                    )}
+                  </td>
+                  <td
+                    className={styles.num}
+                    title={student.quiz_answers > 0 ? `${formatNumber(student.quiz_correct)} / ${formatNumber(student.quiz_answers)} дұрыс` : undefined}
+                  >
+                    {student.quiz_sessions > 0
+                      ? student.quiz_answers > 0
+                        ? <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· {formatPercent(student.quiz_accuracy)}</span></>
+                        : <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· 0 жауап</span></>
+                      : <span className={styles.muted}>—</span>}
+                  </td>
                   <td className={styles.num}>{formatNumber(student.total_solved)}</td>
                   <td className={styles.num}>{student.streak ? `${student.streak} күн` : <span className={styles.muted}>—</span>}</td>
                   <td className={styles.num}>{formatDate(student.registered_at)}</td>

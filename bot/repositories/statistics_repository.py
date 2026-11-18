@@ -8,6 +8,7 @@ across days are computed in Python.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from statistics import median
@@ -149,6 +150,41 @@ def _ratio(part: float, whole: float) -> Optional[float]:
 def _preview(value: Optional[str], limit: int = 160) -> str:
     text = " ".join((value or "").split())
     return text if len(text) <= limit else f"{text[:limit]}..."
+
+
+def _draft_answer_has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, list):
+        return any(_draft_answer_has_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_draft_answer_has_value(item) for item in value.values())
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if not trimmed:
+            return False
+        if trimmed[0] in "[{":
+            try:
+                parsed = json.loads(trimmed)
+            except ValueError:
+                return True
+            if isinstance(parsed, (list, dict)):
+                return _draft_answer_has_value(parsed)
+        return True
+    return bool(str(value).strip())
+
+
+def count_draft_answers(raw_answers: Any) -> int:
+    """Count non-empty task answers inside a serialized trial_test_drafts payload."""
+    if not raw_answers:
+        return 0
+    try:
+        parsed = json.loads(raw_answers) if isinstance(raw_answers, str) else raw_answers
+    except (TypeError, ValueError):
+        return 0
+    if not isinstance(parsed, dict):
+        return 0
+    return sum(1 for value in parsed.values() if _draft_answer_has_value(value))
 
 
 def _without_admins(column: str, exclude_admins: bool) -> str:
@@ -476,6 +512,48 @@ class StatisticsRepository(BaseRepository):
                 WHERE TRUE{_without_admins("user_id", exclude_admins)}
                 GROUP BY achievement_id
             """)
+            quiz_rows = await self._rows(db, f"""
+                SELECT qp.user_id,
+                       COUNT(DISTINCT qp.session_id),
+                       COALESCE(SUM(qa.answers), 0),
+                       COALESCE(SUM(qa.correct), 0)
+                FROM quiz_participants qp
+                JOIN quiz_sessions s ON s.id = qp.session_id
+                LEFT JOIN (
+                    SELECT session_id, participant_id,
+                           COUNT(*) AS answers,
+                           COUNT(*) FILTER (WHERE is_correct = 1) AS correct
+                    FROM quiz_answers
+                    GROUP BY session_id, participant_id
+                ) qa ON qa.session_id = qp.session_id AND qa.participant_id = qp.id
+                WHERE qp.user_id IS NOT NULL
+                  AND s.created_at >= ? AND s.created_at < ?{_without_admins("qp.user_id", exclude_admins)}
+                GROUP BY qp.user_id
+            """, (window.start_utc, window.end_utc))
+            ever_quiz = {
+                int(row[0]) for row in await self._rows(db, f"""
+                    SELECT DISTINCT user_id FROM quiz_participants
+                    WHERE user_id IS NOT NULL{_without_admins("user_id", exclude_admins)}
+                """)
+            }
+            draft_rows = await self._rows(db, f"""
+                SELECT user_id, answers, current_task_index
+                FROM trial_test_drafts
+                WHERE TRUE{_without_admins("user_id", exclude_admins)}
+            """)
+
+        quiz_by_user: Dict[int, Dict[str, int]] = {
+            int(row[0]): {"sessions": _int(row[1]), "answers": _int(row[2]), "correct": _int(row[3])}
+            for row in quiz_rows
+        }
+        drafts_by_user: Dict[int, Dict[str, int]] = {}
+        for row in draft_rows:
+            uid = int(row[0])
+            answer_count = count_draft_answers(row[1])
+            if answer_count > 0 or _int(row[2]) > 0:
+                entry = drafts_by_user.setdefault(uid, {"count": 0, "answers": 0})
+                entry["count"] += 1
+                entry["answers"] += answer_count
 
         current = activity.totals(window.start, window.today)
         previous = activity.totals(window.previous_start, window.previous_end) if window.days else _Totals()
@@ -487,6 +565,11 @@ class StatisticsRepository(BaseRepository):
             cell = current.per_user.get(user_id)
             attempts = int(cell["attempts"]) if cell else 0
             trials = int(cell["trials"]) if cell else 0
+            quiz_cell = quiz_by_user.get(user_id)
+            quiz_sessions = quiz_cell["sessions"] if quiz_cell else 0
+            quiz_answers = quiz_cell["answers"] if quiz_cell else 0
+            quiz_correct = quiz_cell["correct"] if quiz_cell else 0
+            draft_cell = drafts_by_user.get(user_id)
             student = {
                 "user_id": user_id,
                 "nickname": row[1],
@@ -498,6 +581,13 @@ class StatisticsRepository(BaseRepository):
                 "active_days": int(cell["active_days"]) if cell else 0,
                 "trial_attempts": trials,
                 "trial_average": _ratio(cell["trial_score"], trials * 100) if cell else None,
+                "trial_drafts": draft_cell["count"] if draft_cell else 0,
+                "trial_draft_answers": draft_cell["answers"] if draft_cell else 0,
+                "quiz_sessions": quiz_sessions,
+                "quiz_answers": quiz_answers,
+                "quiz_correct": quiz_correct,
+                "quiz_accuracy": _ratio(quiz_correct, quiz_answers),
+                "has_quiz_history": user_id in ever_quiz,
                 "total_solved": _int(row[5]),
                 "streak": effective_streak(row[6], row[7], utc_today),
                 "is_admin": bool(row[8]),

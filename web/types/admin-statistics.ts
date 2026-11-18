@@ -99,6 +99,13 @@ export interface StatisticsStudent {
   active_days: number;
   trial_attempts: number;
   trial_average: number | null;
+  trial_drafts: number;
+  trial_draft_answers: number;
+  quiz_sessions: number;
+  quiz_answers: number;
+  quiz_correct: number;
+  quiz_accuracy: number | null;
+  has_quiz_history: boolean;
   total_solved: number;
   streak: number;
   is_admin: boolean;

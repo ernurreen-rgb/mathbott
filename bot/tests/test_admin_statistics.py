@@ -21,7 +21,7 @@ from slowapi.util import get_remote_address
 import storage
 from database import Database
 from postgres_test_db import create_database, drop_database, requires_postgres
-from repositories.statistics_repository import bucket_plan, build_window, effective_streak
+from repositories.statistics_repository import bucket_plan, build_window, count_draft_answers, effective_streak
 from routes.admin.statistics import register_statistics_routes
 
 # Noon in Kazakhstan (UTC+5) on Wednesday 2026-11-11.
@@ -66,6 +66,18 @@ class PeriodTests(unittest.TestCase):
         self.assertEqual(effective_streak(5, "2026-11-10", today), 5)
         self.assertEqual(effective_streak(5, "2026-11-09", today), 0)
         self.assertEqual(effective_streak(5, None, today), 0)
+
+    def test_count_draft_answers_ignores_empty_and_broken_payloads(self):
+        self.assertEqual(count_draft_answers(None), 0)
+        self.assertEqual(count_draft_answers(""), 0)
+        self.assertEqual(count_draft_answers("{}"), 0)
+        self.assertEqual(count_draft_answers("not-json"), 0)
+        self.assertEqual(count_draft_answers('["1", "2"]'), 0)
+        self.assertEqual(count_draft_answers(json.dumps({"1": "", "2": "[]", "3": '["", ""]'})), 0)
+        self.assertEqual(
+            count_draft_answers(json.dumps({"1": "42", "2": '["A"]', "3": '["", "B"]', "4": '["", ""]'})),
+            3,
+        )
 
 
 @requires_postgres
@@ -319,6 +331,27 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         ])
         self.assertEqual(data["achievements"][0], {"id": "first_solve", "name": "Бірінші есеп", "count": 1})
         self.assertEqual((data["truncated"], data["emails_visible"], len(data["series"]["points"])), (False, True, 30))
+        self.assertEqual({key: students["bek"][key] for key in (
+            "quiz_sessions", "quiz_answers", "quiz_correct", "quiz_accuracy", "has_quiz_history",
+            "trial_drafts", "trial_draft_answers",
+        )}, {
+            "quiz_sessions": 1, "quiz_answers": 2, "quiz_correct": 1, "quiz_accuracy": 0.5, "has_quiz_history": True,
+            "trial_drafts": 0, "trial_draft_answers": 0,
+        })
+        self.assertEqual((students["dana"]["quiz_sessions"], students["dana"]["has_quiz_history"]), (0, True))
+
+    async def test_students_report_trial_test_drafts_without_submission(self):
+        try:
+            await self._run(
+                "INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index) VALUES (?, 1, ?, 2)",
+                self.ids["erlan"], json.dumps({"101": "42", "102": '["A"]', "103": ""}),
+            )
+            data = await self.stats.get_students(self.window())
+            erlan = next(student for student in data["students"] if student["nickname"] == "erlan")
+            self.assertEqual((erlan["never_active"], erlan["trial_attempts"], erlan["trial_drafts"], erlan["trial_draft_answers"]),
+                             (True, 0, 1, 2))
+        finally:
+            await self._run("DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = 1", self.ids["erlan"])
 
     async def test_tasks_count_first_attempts_and_flag_hard_ones(self):
         data = await self.stats.get_tasks(self.window())
