@@ -2,7 +2,7 @@
 
 import StudentChoiceAnswerFields from "./StudentChoiceAnswerFields";
 import StudentMathAnswerInput from "./StudentMathAnswerInput";
-import StudentWrittenAnswerFields from "./StudentWrittenAnswerFields";
+import StudentWrittenAnswerFields, { type WrittenAnswerLabel } from "./StudentWrittenAnswerFields";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import type { LessonTask } from "@/types";
@@ -38,8 +38,11 @@ const normalizeTf = (value?: string | null) => {
   return "";
 };
 
-const selectLabels = (task: LessonTask) =>
-  [0, 1].map((index) => `${String.fromCharCode(65 + index)}) ${task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`}`);
+const selectLabels = (task: LessonTask): WrittenAnswerLabel[] =>
+  [0, 1].map((index) => ({
+    prefix: `${String.fromCharCode(65 + index)})`,
+    text: task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`,
+  }));
 
 /**
  * The answer controls of one task, picked by its type and answer mode. The lesson, the mistake

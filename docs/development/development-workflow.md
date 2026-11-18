@@ -69,8 +69,9 @@ Triggered on `push` and `pull_request` to `main` or `develop`:
    - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run audit:ci` in `web/`. The last one is `npm audit` failing on any moderate-or-worse advisory except those in [`web/audit-allowlist.json`](../../web/audit-allowlist.json): each entry names the advisory, the reason it cannot be fixed yet and an `until` date after which it fails again ([`web/scripts/audit.mjs`](../../web/scripts/audit.mjs)).
 
 ### 3.2 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
-Triggered weekly (`0 6 * * 1` — Mondays at 06:00 UTC) or via `workflow_dispatch`:
-- Runs `pip-audit` on `bot/requirements.txt` and `npm audit --audit-level=moderate` on `web/`.
+Triggered weekly (`0 0 * * 1` — Mondays at 00:00 UTC) or via `workflow_dispatch`:
+- Runs `pip-audit` on `bot/requirements.txt` and `npm audit` on `web/`, and uploads both JSON reports as the `security-audit-results` artifact (the frontend report lists allowlisted advisories too).
+- Fails like CI: on any backend vulnerability, or a moderate-or-worse frontend advisory outside [`web/audit-allowlist.json`](../../web/audit-allowlist.json) (`npm run audit:ci`).
 
 Docker images are no longer built or pushed by CI (the Docker Hub workflow was removed on 2026-11-15). `bot/Dockerfile`, `web/Dockerfile` and the `deploy/` configs stay for a possible self-hosted setup; build them locally if needed.
 

@@ -31,7 +31,11 @@ jobs:
     
     - name: Frontend security audit
       working-directory: ./web
-      run: npm audit --json > frontend-audit.json
+      run: |
+        # The full report, allowlisted advisories included, goes into the artifact;
+        # the job fails only on advisories outside web/audit-allowlist.json, as in CI.
+        npm audit --json > frontend-audit.json || true
+        npm run audit:ci
     
     - name: Upload audit results
       if: always()

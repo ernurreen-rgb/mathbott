@@ -1,5 +1,6 @@
 "use client";
 
+import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "./StudentMathAnswerInput";
 import { parseWrittenAnswerSlots, serializeWrittenAnswerSlots } from "@/lib/written-answer";
 
@@ -8,8 +9,11 @@ interface StudentWrittenAnswerFieldsProps {
   onChange: (value: string) => void;
   count?: number;
   disabled?: boolean;
-  labels?: string[];
+  /** One per field, e.g. a matching task's "A)" and its subquestion; the text may hold formulas. */
+  labels?: WrittenAnswerLabel[];
 }
+
+export type WrittenAnswerLabel = { prefix: string; text: string };
 
 export default function StudentWrittenAnswerFields({
   value,
@@ -25,7 +29,9 @@ export default function StudentWrittenAnswerFields({
       {slots.map((slot, index) => (
         <div key={`written-answer-${index}`} className="space-y-1.5">
           {labels[index] && (
-            <div className="text-sm font-semibold text-gray-700">{labels[index]}</div>
+            <div className="text-sm font-semibold text-gray-700">
+              {labels[index].prefix} <MathRender inline latex={labels[index].text} />
+            </div>
           )}
           <StudentMathAnswerInput
             value={slot}
@@ -35,7 +41,7 @@ export default function StudentWrittenAnswerFields({
               onChange(serializeWrittenAnswerSlots(next));
             }}
             disabled={disabled}
-            ariaLabel={labels[index] || (slots.length > 1 ? `Жауап ${index + 1}` : "Математикалық жауап")}
+            ariaLabel={labels[index] ? `${labels[index].prefix} ${labels[index].text}` : slots.length > 1 ? `Жауап ${index + 1}` : "Математикалық жауап"}
             placeholder={slots.length > 1 ? `${index + 1}-жауап` : "Жауапты жазыңыз"}
           />
         </div>
