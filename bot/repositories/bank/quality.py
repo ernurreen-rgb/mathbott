@@ -1,11 +1,80 @@
 """
 Content-quality reports (dead, untopiced, duplicate clusters).
 """
-from typing import Optional, List, Dict, Any
+import asyncio
+from typing import Optional, List, Dict, Any, Tuple
 from difflib import SequenceMatcher
 import storage as db_driver
 
 from .twins import NOT_TWIN_SQL
+
+
+_COUNT_CAP = 8
+
+
+def _letter_signature(blob: str, offsets: Dict[str, int]) -> Tuple[int, int]:
+    """Unary-coded letter counts (capped) packed into one int, plus the count above the cap."""
+    signature = 0
+    excess = 0
+    counts: Dict[str, int] = {}
+    for char in blob:
+        counts[char] = counts.get(char, 0) + 1
+    for char, count in counts.items():
+        offset = offsets.get(char)
+        if offset is None:
+            offset = offsets[char] = len(offsets) * _COUNT_CAP
+        signature |= ((1 << min(count, _COUNT_CAP)) - 1) << offset
+        if count > _COUNT_CAP:
+            excess += count - _COUNT_CAP
+    return signature, excess
+
+
+def _find_similar_pairs(
+    groups: List[List[Tuple[int, int, str]]], threshold: float
+) -> List[Tuple[int, int, float]]:
+    """Task pairs whose similarity blobs score at least ``threshold``.
+
+    Comparing every pair with SequenceMatcher is quadratic and took minutes on a
+    bank of thousands of tasks. Cheap upper bounds (length, then a letter-count
+    signature, then SequenceMatcher.quick_ratio) discard almost every pair first;
+    the exact ratio is only computed for the survivors, so the result is identical
+    to the brute-force scan. Each group holds ``(position, task_id, blob)`` tuples.
+    """
+    edges: List[Tuple[int, int, float]] = []
+    # ratio = 2*M/T <= 2*min/(la+lb), so a longer blob can only match within this factor.
+    growth = (2.0 - threshold) / threshold if threshold > 0 else float("inf")
+    offsets: Dict[str, int] = {}
+    for entries in groups:
+        ordered = sorted((entry for entry in entries if entry[2]), key=lambda entry: len(entry[2]))
+        prepared = [
+            (pos, task_id, blob, len(blob), *_letter_signature(blob, offsets))
+            for pos, task_id, blob in ordered
+        ]
+        for i, (first_pos, first_id, first_blob, first_len, first_sig, first_excess) in enumerate(prepared):
+            max_len = first_len * growth
+            half_threshold = threshold / 2.0
+            bound = None
+            for second_pos, second_id, second_blob, second_len, second_sig, second_excess in prepared[i + 1:]:
+                if second_len > max_len:
+                    break
+                # Letters both blobs share, never undercounted: capped overlap plus the smaller excess.
+                shared = (first_sig & second_sig).bit_count() + min(first_excess, second_excess)
+                if shared < half_threshold * (first_len + second_len):
+                    continue
+                if bound is None:
+                    bound = SequenceMatcher(None)
+                    bound.set_seq2(first_blob)
+                bound.set_seq1(second_blob)
+                if bound.real_quick_ratio() < threshold or bound.quick_ratio() < threshold:
+                    continue
+                # Keep the original (newest first) orientation so scores do not change.
+                if first_pos < second_pos:
+                    score = SequenceMatcher(None, first_blob, second_blob).ratio()
+                else:
+                    score = SequenceMatcher(None, second_blob, first_blob).ratio()
+                if score >= threshold:
+                    edges.append((first_id, second_id, float(score)))
+    return edges
 
 
 class BankTaskQualityMixin:
@@ -283,33 +352,23 @@ class BankTaskQualityMixin:
         nodes_with_edges: set[int] = set()
         best_scores: Dict[int, float] = {task_id: 0.0 for task_id in candidates_by_id}
 
-        for entries in grouped.values():
-            entries_count = len(entries)
-            if entries_count < 2:
-                continue
-            for i in range(entries_count):
-                first = entries[i]
-                first_blob = first.get("similarity_blob") or ""
-                if not first_blob:
-                    continue
-                for j in range(i + 1, entries_count):
-                    second = entries[j]
-                    second_blob = second.get("similarity_blob") or ""
-                    if not second_blob:
-                        continue
-                    score = SequenceMatcher(None, first_blob, second_blob).ratio()
-                    if score < threshold:
-                        continue
-                    first_id = int(first["id"])
-                    second_id = int(second["id"])
-                    union(first_id, second_id)
-                    nodes_with_edges.add(first_id)
-                    nodes_with_edges.add(second_id)
-                    edges.append((first_id, second_id, float(score)))
-                    if score > best_scores[first_id]:
-                        best_scores[first_id] = float(score)
-                    if score > best_scores[second_id]:
-                        best_scores[second_id] = float(score)
+        position = {int(row["id"]): index for index, row in enumerate(rows)}
+        groups = [
+            [(position[int(item["id"])], int(item["id"]), item.get("similarity_blob") or "") for item in entries]
+            for entries in grouped.values()
+            if len(entries) >= 2
+        ]
+        # CPU-bound: keep it off the event loop so other requests are not stalled.
+        found = await asyncio.to_thread(_find_similar_pairs, groups, float(threshold))
+        for first_id, second_id, score in found:
+            union(first_id, second_id)
+            nodes_with_edges.add(first_id)
+            nodes_with_edges.add(second_id)
+            edges.append((first_id, second_id, score))
+            if score > best_scores[first_id]:
+                best_scores[first_id] = score
+            if score > best_scores[second_id]:
+                best_scores[second_id] = score
 
         if not nodes_with_edges:
             return {
