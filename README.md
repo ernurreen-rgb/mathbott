@@ -97,6 +97,7 @@ pip-audit --desc -r requirements.txt
 # Frontend lint, typecheck, production build, and audit (from web/)
 npm run lint
 npm run typecheck
+npm test           # Vitest unit tests in web/tests/
 npm run build
 npm run audit:ci   # npm audit minus web/audit-allowlist.json
 ```
