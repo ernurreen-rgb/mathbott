@@ -237,4 +237,8 @@ class TrustedProxyIdentityMiddleware:
             await response(scope, replay_receive, send)
             return
 
+        if is_valid_proxy and proxy_email:
+            # For EnsureSignedInUserMiddleware: a signature is only checked once per request.
+            request.state.trusted_proxy_email = proxy_email
+
         await self.app(scope, replay_receive, send)

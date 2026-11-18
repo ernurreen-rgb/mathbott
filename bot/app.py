@@ -24,6 +24,7 @@ from middleware.csrf import CSRFMiddleware
 from middleware.cache_headers_middleware import CacheHeadersMiddleware
 from middleware.request_context_middleware import RequestContextMiddleware
 from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
+from middleware.ensure_signed_in_user import EnsureSignedInUserMiddleware
 from config import get_cors_origins
 from instrument import APP_VERSION, ENVIRONMENT, SENTRY_ENABLED
 from settings import get_settings
@@ -105,6 +106,8 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     if settings.csrf_enabled or environment == "production":
         app.add_middleware(CSRFMiddleware)
 
+    # Added first so it runs just inside the identity check, with the verified email.
+    app.add_middleware(EnsureSignedInUserMiddleware)
     app.add_middleware(TrustedProxyIdentityMiddleware)
 
     # Must be outermost middleware for request_id propagation through the full stack.
