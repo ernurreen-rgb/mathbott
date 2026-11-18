@@ -4,7 +4,8 @@ import Icon from "@/components/ui/Icon";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
@@ -13,7 +14,7 @@ import { getTrialTestDetails, getTrialTestResults } from "@/lib/api";
 import { TrialTestDetails, TrialTestResult } from "@/types";
 
 export default function TrialTestResultsPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,12 +69,8 @@ export default function TrialTestResultsPage() {
     }
   }, [email, testId, fetchData]);
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Нәтижелерді көру үшін кіріңіз</div>
-      </div>
-    );
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   if (loading) {

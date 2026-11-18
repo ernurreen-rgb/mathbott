@@ -4,13 +4,14 @@ import Icon from "@/components/ui/Icon";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import TaskStatement from "@/components/student/TaskStatement";
 import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { getTrialTestDetails, getTrialTestResults, submitTrialTest, getTrialTestDraft, reportTrialTestTask, apiPath } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import {
   collectTrialTestAnswers,
   getAnsweredTrialTaskCount,
@@ -22,7 +23,7 @@ import styles from "./TrialTestWorkspace.module.css";
 
 
 export default function TrialTestPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
   const testId = parseInt(params.id as string);
@@ -356,12 +357,8 @@ export default function TrialTestPage() {
     }
   };
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Тестке қолжетімділік үшін кіріңіз</div>
-      </div>
-    );
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   if (loading) {

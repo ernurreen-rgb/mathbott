@@ -5,8 +5,10 @@ import ProfileHeader from "./_components/ProfileHeader";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
 import StreakReminderCard from "./_components/StreakReminderCard";
 
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import MobileNav from "@/components/MobileNav";
-import { signOut, useSession } from "next-auth/react";
+import { useRequireAuth } from "@/lib/use-require-auth";
+import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -19,7 +21,7 @@ import { UserData } from "@/types";
 export const dynamic = "force-dynamic";
 
 export default function ProfilePage() {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useRequireAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [nickname, setNickname] = useState("");
@@ -136,7 +138,7 @@ export default function ProfilePage() {
   }
 
   if (!session) {
-    return null;
+    return <AuthRedirectScreen loading={false} />;
   }
 
   return (

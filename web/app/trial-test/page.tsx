@@ -1,6 +1,5 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -11,12 +10,14 @@ import {
 } from "@/lib/api";
 import { TrialTest, TrialTestFolder } from "@/types";
 import { folderAncestors, sortFolders } from "@/lib/trial-folders";
+import { useRequireAuth } from "@/lib/use-require-auth";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
 
 function TrialTestListPageContent() {
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
   const router = useRouter();
   const pathname = usePathname() || "/trial-test";
   const searchParams = useSearchParams();
@@ -100,16 +101,8 @@ function TrialTestListPageContent() {
   const ancestors = folderAncestors(folderTree, selectedFolder);
   const currentFolderTests = tests.filter((t) => t.folder_id === selectedFolder);
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
-            Сынақ тесті үшін кіріңіз
-          </h1>
-        </div>
-      </div>
-    );
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   return (

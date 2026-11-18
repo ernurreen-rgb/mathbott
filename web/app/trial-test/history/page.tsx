@@ -2,7 +2,8 @@
 import Icon from "@/components/ui/Icon";
 
 
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getTrialTestsAttempted } from "@/lib/api";
@@ -11,7 +12,7 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 
 export default function TrialTestHistoryPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
   const [tests, setTests] = useState<TrialTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,16 +43,8 @@ export default function TrialTestHistoryPage() {
     fetchTests();
   }, [fetchTests]);
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
-            Өту тарихын көру үшін кіріңіз
-          </h1>
-        </div>
-      </div>
-    );
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   return (

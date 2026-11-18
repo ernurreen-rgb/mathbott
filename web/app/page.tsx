@@ -1,20 +1,22 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 
-
 import { useSession, signIn } from "next-auth/react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { resolveSafeCallbackPath } from "@/lib/use-require-auth";
 
-export default function Home() {
+function HomeContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = resolveSafeCallbackPath(searchParams?.get("callbackUrl"), "/trial-test");
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.push("/trial-test");
+      router.replace(callbackUrl);
     }
-  }, [status, router]);
+  }, [status, router, callbackUrl]);
 
   if (status === "loading") {
     return (
@@ -40,7 +42,7 @@ export default function Home() {
               </p>
             </div>
             <button
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl })}
               className="w-full bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 hover:from-purple-700 hover:via-pink-700 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-glow-pink transform hover:scale-105 text-lg"
             >
               Google арқылы кіру
@@ -58,3 +60,16 @@ export default function Home() {
   );
 }
 
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-xl">Жүктелуде...</div>
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
+  );
+}

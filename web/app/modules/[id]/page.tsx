@@ -4,7 +4,6 @@ import Icon from "@/components/ui/Icon";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   useCallback,
   useEffect,
@@ -13,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import ModuleLessonJourney, {
@@ -22,6 +22,7 @@ import ModuleLessonJourney, {
   sortJourneySections,
 } from "@/components/modules/ModuleLessonJourney";
 import { getModuleDetails } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import type { ModuleDetails } from "@/types";
 import styles from "./ModuleDetail.module.css";
 
@@ -89,7 +90,7 @@ function PageLoader({ label }: { label: string }) {
 }
 
 export default function ModuleDetailPage() {
-  const { data: session, status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus } = useRequireAuth();
   const params = useParams();
   const rawModuleId = Array.isArray(params.id) ? params.id[0] : params.id;
   const moduleId = Number(rawModuleId);
@@ -234,16 +235,7 @@ export default function ModuleDetailPage() {
     return <PageLoader label="Сессия жүктелуде" />;
 
   if (!session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-3xl border border-white/80 bg-white/85 p-8 text-center shadow-2xl">
-          <div className="text-5xl"><Icon name="lock" /></div>
-          <h1 className="mt-4 text-2xl font-black text-slate-900">
-            Модульді көру үшін кіріңіз
-          </h1>
-        </div>
-      </div>
-    );
+    return <AuthRedirectScreen loading={false} />;
   }
 
   if (loading) return <PageLoader label="Модуль жүктелуде" />;

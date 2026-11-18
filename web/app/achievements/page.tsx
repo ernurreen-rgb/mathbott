@@ -2,18 +2,17 @@
 import Icon, { ContentIcon } from "@/components/ui/Icon";
 
 
-import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
 import { UserData } from "@/types";
 import { getUserData } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 
 export default function AchievementsPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { data: session, status } = useRequireAuth();
   const sessionEmail = session?.user?.email || null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,17 +44,14 @@ export default function AchievementsPage() {
   }, [sessionEmail]);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/");
-      return;
-    }
-
     if (sessionEmail) {
       void fetchUserData();
+    } else if (status !== "loading") {
+      setLoading(false);
     }
-  }, [sessionEmail, status, router, fetchUserData]);
+  }, [sessionEmail, status, fetchUserData]);
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || (session && loading)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center pb-20 md:pb-0">
         <div className="text-center">
@@ -67,7 +63,7 @@ export default function AchievementsPage() {
   }
 
   if (!session) {
-    return null;
+    return <AuthRedirectScreen loading={false} />;
   }
 
   const unlockedCount = userData?.achievements?.filter(a => a.unlocked).length || 0;

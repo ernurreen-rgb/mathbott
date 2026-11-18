@@ -4,10 +4,11 @@ import Icon from "@/components/ui/Icon";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import { getLessonDetails, reportLessonTask } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import { API_URL } from "@/lib/constants";
 import { parseMcqAnswerLabels } from "@/lib/question-options";
 import { isTaskAnswerComplete } from "@/lib/task-answer";
@@ -30,7 +31,7 @@ function clamp01(n: number) {
 }
 
 export default function LessonPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
   const lessonId = parseInt(params.id as string);
@@ -421,12 +422,8 @@ export default function LessonPage() {
     );
   };
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Сабақтарға қолжетімділік үшін кіріңіз</div>
-      </div>
-    );
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   if (loading) {

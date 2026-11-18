@@ -3,13 +3,14 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import Icon from "@/components/ui/Icon";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import TaskStatement from "@/components/student/TaskStatement";
 import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { apiPath, getMiniLessonReview, submitMiniLessonReviewAnswer } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { consumeReviewOpenedFromLesson, markReviewFinished } from "@/lib/module-review-navigation";
 import { playLessonCue, primeLessonSound } from "@/lib/lesson-sound";
@@ -50,7 +51,7 @@ function correctAnswerParts(task: LessonTask, raw: string): string[] {
 }
 
 export default function MiniLessonReviewPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
   const lessonId = Number(params.id);
@@ -117,8 +118,8 @@ export default function MiniLessonReviewPage() {
     </main>
   </div>;
 
-  if (status !== "loading" && !session) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Сабақтарға қолжетімділік үшін кіріңіз</div></div>;
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
   if ((loading && !review) || finished) return shell(<><SkeletonLoader variant="card" /><SkeletonLoader variant="card" /></>);
 

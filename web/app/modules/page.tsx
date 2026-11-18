@@ -3,13 +3,14 @@ import { ContentIcon } from "@/components/ui/Icon";
 
 
 import { useCallback, useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
 
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { getModulesMap } from "@/lib/api";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import type { Module } from "@/types";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
@@ -28,7 +29,7 @@ function ModuleCardSkeleton() {
 }
 
 export default function ModulesPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useRequireAuth();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,15 +87,7 @@ export default function ModulesPage() {
   }
 
   if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
-            Модульдерді көру үшін кіріңіз
-          </h1>
-        </div>
-      </div>
-    );
+    return <AuthRedirectScreen loading={false} />;
   }
 
   const retry = () => {

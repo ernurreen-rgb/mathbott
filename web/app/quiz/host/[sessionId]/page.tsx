@@ -3,7 +3,8 @@ import Icon from "@/components/ui/Icon";
 
 
 import { useEffect, useState, useCallback, use } from "react";
-import { useSession } from "next-auth/react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import Link from "next/link";
 import QRCode from "react-qr-code";
 import {
@@ -25,7 +26,7 @@ interface PageProps {
 export default function HostQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const sessionId = parseInt(resolvedParams.sessionId, 10);
-  const { data: session, status: authStatus } = useSession();
+  const { data: session, status: authStatus } = useRequireAuth();
 
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [participants, setParticipants] = useState<QuizParticipant[]>([]);
@@ -118,8 +119,8 @@ export default function HostQuizPage({ params }: PageProps) {
     toast.success("Сілтеме көшірілді!");
   };
 
-  if (authStatus === "unauthenticated") {
-    return <div className="p-8 text-center"><Link href="/">Жүргізуші ретінде кіру</Link></div>;
+  if (authStatus === "loading" || !session) {
+    return <AuthRedirectScreen loading={authStatus === "loading"} />;
   }
   if (loading) {
     return (

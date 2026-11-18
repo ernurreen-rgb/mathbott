@@ -1,29 +1,19 @@
 "use client";
 
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
 import { API_URL } from "@/lib/constants";
 import { showToast } from "@/lib/toast";
+import { useRequireAuth } from "@/lib/use-require-auth";
 
 export default function ExportPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { data: session, status } = useRequireAuth();
   const [exporting, setExporting] = useState(false);
 
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Жүктелуде...</div>
-      </div>
-    );
-  }
-
-  if (status === "unauthenticated" || !session?.user?.email) {
-    router.push("/");
-    return null;
+  if (status === "loading" || !session?.user?.email) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
   }
 
   const handleExport = async (format: "json" | "csv") => {
