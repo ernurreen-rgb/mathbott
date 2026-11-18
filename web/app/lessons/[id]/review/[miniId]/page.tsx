@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DesktopNav from "@/components/DesktopNav";
@@ -11,7 +11,7 @@ import TaskStatement from "@/components/student/TaskStatement";
 import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { apiPath, getMiniLessonReview, submitMiniLessonReviewAnswer } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { consumeReviewOpenedFromLesson } from "@/lib/module-review-navigation";
+import { consumeReviewOpenedFromLesson, markReviewFinished } from "@/lib/module-review-navigation";
 import { playLessonCue, primeLessonSound } from "@/lib/lesson-sound";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { isTaskAnswerComplete } from "@/lib/task-answer";
@@ -97,6 +97,17 @@ export default function MiniLessonReviewPage() {
     if (consumeReviewOpenedFromLesson(window.location.pathname)) router.back();
     else router.replace(backHref);
   };
+  // A finished review has no screen of its own: the lesson goes straight on to the next step.
+  const continuedRef = useRef(false);
+  const continueAfterReview = useCallback(() => {
+    if (continuedRef.current) return;
+    continuedRef.current = true;
+    markReviewFinished(review?.lesson_id ?? lessonId, miniLessonId);
+    if (consumeReviewOpenedFromLesson(window.location.pathname)) router.back();
+    else router.replace(`/lessons/${review?.lesson_id ?? lessonId}`);
+  }, [lessonId, miniLessonId, review?.lesson_id, router]);
+  const finished = !!review && !review.current && review.summary.mistakes > 0;
+  useEffect(() => { if (finished) continueAfterReview(); }, [finished, continueAfterReview]);
   // On phones the review is exactly one screen tall with no bottom nav, like the lesson.
   const shell = (children: ReactNode) => <div className="flex h-dvh flex-col overflow-hidden bg-gradient-math animate-gradient relative md:block md:h-auto md:min-h-screen md:overflow-visible">
     <div className="absolute inset-0 bg-black/5" />
@@ -109,12 +120,14 @@ export default function MiniLessonReviewPage() {
   if (status !== "loading" && !session) {
     return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Сабақтарға қолжетімділік үшін кіріңіз</div></div>;
   }
-  if (loading && !review) return shell(<><SkeletonLoader variant="card" /><SkeletonLoader variant="card" /></>);
+  if ((loading && !review) || finished) return shell(<><SkeletonLoader variant="card" /><SkeletonLoader variant="card" /></>);
 
   const summary = review?.summary;
   const current = review?.current;
   const task = current ? toLessonTask(current.task) : null;
   const done = summary ? summary.resolved + summary.weak : 0;
+  // After a checked answer: another twin of the same mistake, the next mistake, or on out of the review.
+  const after = !result ? null : !result.correct && result.has_next_twin ? "twin" : result.summary.pending > 0 ? "mistake" : "finish";
 
   return shell(<>
     <section className="glass shrink-0 rounded-3xl shadow-2xl p-4 md:p-6 border border-white/30">
@@ -165,23 +178,16 @@ export default function MiniLessonReviewPage() {
         detail={result?.correct ? "Бұл қате түзетілді." : undefined}
         hasPrev={false}
         canGoNext={!!result}
-        nextLabel={result && !result.correct && result.has_next_twin ? "Тағы бір ұқсас есеп" : result && result.summary.pending > 0 ? "Келесі қате" : "Нәтижені көру"}
+        nextLabel={after === "twin" ? "Тағы бір ұқсас есеп" : after === "mistake" ? "Келесі қате" : "Жалғастыру"}
         showCheck={task.question_type !== "tf"}
         checkDisabled={!isTaskAnswerComplete(task, answer)}
         checking={checking}
         onCheck={() => void submit(answer)}
-        onNext={() => void load()}
+        onNext={() => (after === "finish" ? continueAfterReview() : void load())}
       />
     </section>
     : review && <section className="glass min-h-0 overflow-y-auto rounded-3xl shadow-2xl p-6 border border-white/30 text-center space-y-3 md:overflow-visible">
-      {review.summary.mistakes === 0
-        ? <p className="text-gray-700">Бұл мини-сабақта талдайтын қате жоқ. Талдау мини-сабақтың есептері шешілгеннен кейін ашылады.</p>
-        : <>
-          <div className="text-5xl"><Icon name="sparkles" /></div>
-          <h2 className="text-xl font-extrabold text-gray-900">Талдау аяқталды!</h2>
-          <p className="text-gray-700">Түзетілген қателер: {review.summary.resolved} / {review.summary.mistakes}</p>
-          {review.summary.weak > 0 && <p className="text-amber-800">Әлсіз тұстар: {review.summary.weak} есеп. Сабақ түсіндірмесін қайта қарап, кейін тағы жаттығыңыз.</p>}
-        </>}
+      <p className="text-gray-700">Бұл мини-сабақта талдайтын қате жоқ. Талдау мини-сабақтың есептері шешілгеннен кейін ашылады.</p>
       <button type="button" onClick={returnToLesson} className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg">Сабаққа оралу <Icon name="arrowRight" /></button>
     </section>}
   </>);

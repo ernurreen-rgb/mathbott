@@ -13,12 +13,12 @@ import { parseMcqAnswerLabels } from "@/lib/question-options";
 import { isTaskAnswerComplete } from "@/lib/task-answer";
 import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask } from "@/types";
-import { markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
+import { consumeFinishedReview, markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
-import { pickNextTaskId } from "@/lib/lesson-flow";
+import { pickNextTaskId, pickStepAfterReview } from "@/lib/lesson-flow";
 import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
 import MiniLessonSummary from "./_components/MiniLessonSummary";
 
@@ -169,6 +169,30 @@ export default function LessonPage() {
     markReviewOpenedFromLesson(reviewHref(miniLessonId));
     router.push(reviewHref(miniLessonId));
   };
+
+  // Back from a finished mistake review: go straight on instead of showing that mini-lesson again.
+  const continuationCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!lesson || continuationCheckedRef.current) return;
+    continuationCheckedRef.current = true;
+    const reviewedMiniId = consumeFinishedReview(lesson.id);
+    if (reviewedMiniId === null || lesson.lock) return;
+    const step = pickStepAfterReview(
+      lesson.mini_lessons.map((ml) => ({
+        id: ml.id,
+        index: ml.mini_index,
+        completed: !!ml.progress?.completed,
+        pendingReview: ml.review?.pending ?? 0,
+      })),
+      reviewedMiniId,
+      lesson.next_lesson
+    );
+    if (step.kind === "mini") setSelectedMiniId(step.id);
+    else if (step.kind === "review") openReview(step.id);
+    else if (step.kind === "lesson") router.replace(`/lessons/${step.id}`);
+    else router.replace(sectionHref);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson]);
 
   const selectedMini: LessonMiniLesson | null = useMemo(() => {
     if (!lesson || !selectedMiniId) return null;

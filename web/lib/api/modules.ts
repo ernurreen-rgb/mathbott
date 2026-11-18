@@ -19,11 +19,13 @@ export async function getModuleDetails(moduleId: number, email?: string): Promis
 }
 
 
+// Progress, reviews and the next-lesson lock change with every answer, so the lesson is never served
+// from the short GET cache: a refresh right after a check (or after a review) must see the result.
 export async function getLessonDetails(lessonId: number, email?: string): Promise<{ data: LessonDetails | null; error: string | null }> {
   const url = email
     ? `${apiPath(`lessons/${lessonId}`)}?email=${encodeURIComponent(email)}`
     : apiPath(`lessons/${lessonId}`);
-  return fetchWithErrorHandling<LessonDetails>(url);
+  return fetchWithErrorHandling<LessonDetails>(url, { cache: "no-store" });
 }
 
 
