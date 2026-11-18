@@ -72,4 +72,5 @@ jobs:
         run: npm run build
       - name: Check frontend dependencies
         working-directory: ./web
-        run: npm audit --audit-level=moderate
+        # npm audit, minus the advisories in audit-allowlist.json (each with a reason and an expiry date).
+        run: npm run audit:ci

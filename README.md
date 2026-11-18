@@ -98,7 +98,7 @@ pip-audit --desc -r requirements.txt
 npm run lint
 npm run typecheck
 npm run build
-npm audit --audit-level=moderate
+npm run audit:ci   # npm audit minus web/audit-allowlist.json
 ```
 
 For detailed setup, database migration, and operational instructions, see [`docs/development/setup.md`](docs/development/setup.md) and [`docs/development/development-workflow.md`](docs/development/development-workflow.md).

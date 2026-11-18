@@ -66,7 +66,7 @@ Triggered on `push` and `pull_request` to `main` or `develop`:
    - Installs `bot/requirements.txt`, `flake8`, `pip-audit`, `pytest`, and `httpx` (test-only).
    - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests`, and `pip-audit --desc -r requirements.txt`.
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):
-   - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm audit --audit-level=moderate` in `web/`.
+   - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run audit:ci` in `web/`. The last one is `npm audit` failing on any moderate-or-worse advisory except those in [`web/audit-allowlist.json`](../../web/audit-allowlist.json): each entry names the advisory, the reason it cannot be fixed yet and an `until` date after which it fails again ([`web/scripts/audit.mjs`](../../web/scripts/audit.mjs)).
 
 ### 3.2 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
 Triggered weekly (`0 6 * * 1` — Mondays at 06:00 UTC) or via `workflow_dispatch`:
