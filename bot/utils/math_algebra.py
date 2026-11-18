@@ -387,9 +387,9 @@ def _serialize_polynomial(value: Polynomial) -> str:
     return ";".join(terms)
 
 
-def _parse_algebraic_expression(
-    value: str, *, normalize: bool = True
-) -> Optional[_RationalPolynomial]:
+def algebraic_python_expression(value: str) -> Optional[str]:
+    """Rewrite a written answer as a Python expression: LaTeX fractions and roots become
+    operators and root() calls, implicit multiplication becomes explicit. Nothing is evaluated."""
     if not value or len(value) > _MAX_EXPRESSION_LENGTH:
         return None
 
@@ -406,7 +406,13 @@ def _parse_algebraic_expression(
     if expression is None:
         return None
     expression = expression.replace("^", "**").replace("{", "(").replace("}", ")")
-    expression = _tokenize_with_implicit_multiplication(expression)
+    return _tokenize_with_implicit_multiplication(expression)
+
+
+def _parse_algebraic_expression(
+    value: str, *, normalize: bool = True
+) -> Optional[_RationalPolynomial]:
+    expression = algebraic_python_expression(value)
     if expression is None:
         return None
 

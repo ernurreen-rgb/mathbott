@@ -14,6 +14,7 @@ from utils.math_equivalence import (
     canonicalize_interval_set,
     canonicalize_math_statement,
 )
+from utils.math_final_form import matches_key_form
 
 MCQ_ANSWER_LABELS = tuple("ABCDEFGH")
 MAX_MCQ_CORRECT_OPTIONS = 3
@@ -208,7 +209,8 @@ def _parse_written_answer_slots(raw_answer: Any) -> List[str]:
     return [text]
 
 
-def _normalize_written_math_answer(value: str) -> str:
+def _prepare_written_math_text(value: str) -> str:
+    """Notation-only cleanup shared by the value and the form comparison."""
     normalized = _normalize_freeform_answer(value)
     previous = None
     while previous != normalized:
@@ -217,7 +219,19 @@ def _normalize_written_math_answer(value: str) -> str:
     normalized = normalized.replace(r"\left", "").replace(r"\right", "")
     normalized = normalized.replace(r"\dfrac", r"\frac").replace(r"\tfrac", r"\frac")
     normalized = normalized.replace("{,}", ",")
-    normalized = re.sub(r"\\[,;:! ]", "", normalized)
+    return re.sub(r"\\[,;:! ]", "", normalized)
+
+
+def _same_written_form(answer: Any, key: Any) -> bool:
+    """An answer equal to the key in value must also be written in its form: "88+22" is the
+    task's condition, not the answer 110 (see utils/math_final_form.py)."""
+    answer_text = re.sub(r"\s+", "", _prepare_written_math_text("" if answer is None else str(answer)))
+    key_text = re.sub(r"\s+", "", _prepare_written_math_text("" if key is None else str(key)))
+    return matches_key_form(answer_text, key_text) is not False
+
+
+def _normalize_written_math_answer(value: str) -> str:
+    normalized = _prepare_written_math_text(value)
     interval_set = canonicalize_interval_set(normalized)
     mathematical_statement = canonicalize_math_statement(normalized)
     normalized = re.sub(r"\s+", "", normalized)
@@ -452,11 +466,13 @@ def _map_written_slots_to_option_labels(
         return None
 
     option_values: dict[str, str] = {}
+    option_texts: dict[str, str] = {}
     for option in _parse_task_options(task):
         label = str(option.get("label") or "").strip().upper()
         text = str(option.get("text") or "").strip()
         if label in MCQ_ANSWER_LABELS and text:
             option_values[label] = _normalize_written_math_answer(text)
+            option_texts[label] = text
 
     if not option_values:
         return None
@@ -468,10 +484,15 @@ def _map_written_slots_to_option_labels(
     used_labels: set[str] = set()
     for slot_index, slot in enumerate(slots):
         normalized_slot = _normalize_written_math_answer(slot)
+
+        def matches(label: str) -> bool:
+            # The written value must be the option itself, not an expression equal to it.
+            return option_values.get(label) == normalized_slot and _same_written_form(slot, option_texts[label])
+
         preferred: List[str] = []
         if ordered and slot_index < len(correct_labels):
             expected_label = correct_labels[slot_index]
-            if expected_label not in used_labels and option_values.get(expected_label) == normalized_slot:
+            if expected_label not in used_labels and matches(expected_label):
                 preferred.append(expected_label)
         # Assign each written slot to a distinct option label so equivalent option values don't collapse.
         candidates = preferred + [
@@ -479,13 +500,13 @@ def _map_written_slots_to_option_labels(
             for label in correct_labels
             if label not in used_labels
             and label not in preferred
-            and option_values.get(label) == normalized_slot
+            and matches(label)
         ]
         if not candidates:
             candidates = [
                 label
-                for label, option_value in option_values.items()
-                if label not in used_labels and option_value == normalized_slot
+                for label in option_values
+                if label not in used_labels and matches(label)
             ]
         if not candidates:
             return None
@@ -562,8 +583,10 @@ def is_task_answer_correct(task: dict, user_answer: Any) -> bool:
     except ValueError:
         alternatives = []
     expected_answers = [task.get("answer"), *alternatives]
+    written = (task.get("question_type") or "input").strip().lower() == "input"
     return any(
         normalize_task_answer_for_compare(task, expected) == user_normalized
+        and (not written or _same_written_form(user_answer, expected))
         for expected in expected_answers
         if expected is not None
     )
