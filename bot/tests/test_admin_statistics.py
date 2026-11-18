@@ -393,7 +393,8 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
                 ],
             )
 
-            students = await self.stats.get_students(self.window("all"))
+            # Heartbeats store the real time, so this window ends now rather than at the frozen NOW.
+            students = await self.stats.get_students(build_window("all", 300))
             erlan = next(student for student in students["students"] if student["user_id"] == erlan_id)
             self.assertEqual((erlan["last_seen_path"], erlan["page_visits"]), ("/lessons/1", 3))
 
