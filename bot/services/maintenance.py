@@ -8,6 +8,8 @@ async def run_maintenance_cycle(db, monitor=None):
     tasks = await db.tasks.cleanup_old_deleted_tasks(days=10)
     bank = await db.bank_tasks.cleanup_old_deleted_tasks(days=get_settings().bank_trash_retention_days)
     entry_limits = await db.quizzes.cleanup_entry_limits()
+    page_visits = await db.users.cleanup_old_page_visits(get_settings().page_visit_retention_days)
     retention = await monitor.run_cleanup()
     await monitor.run_cycle()
-    return {"tasks_deleted": tasks, "bank_tasks_deleted": bank, "quiz_entry_limits_deleted": entry_limits, "retention": retention}
+    return {"tasks_deleted": tasks, "bank_tasks_deleted": bank, "quiz_entry_limits_deleted": entry_limits,
+            "page_visits_deleted": page_visits, "retention": retention}

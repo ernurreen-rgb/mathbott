@@ -125,6 +125,8 @@ export interface StatisticsStudentActivity {
   last_seen_path: string | null;
   last_seen_label: string | null;
   visit_tracking_enabled: boolean;
+  /** Visits older than this are deleted by the daily maintenance job. */
+  visit_retention_days: number;
   visits: Array<{
     id: number;
     path: string;

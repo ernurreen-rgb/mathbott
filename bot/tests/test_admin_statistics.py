@@ -410,6 +410,28 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
             await self._run("DELETE FROM user_page_visits WHERE user_id = ?", erlan_id)
             await self._run("UPDATE users SET last_active = '2026-11-11 05:00:00', last_seen_path = NULL WHERE id = ?", erlan_id)
 
+    async def test_page_visits_older_than_the_retention_period_are_deleted(self):
+        erlan_id = self.ids["erlan"]
+        insert = ("INSERT INTO user_page_visits (user_id, path, visited_at) "
+                  "VALUES (?, ?, mathbot_datetime('now', ?))")
+        try:
+            await self._run("UPDATE users SET last_seen_path = '/modules' WHERE id = ?", erlan_id)
+            await self._run(insert, erlan_id, "/old", "-91 days")
+            await self._run(insert, erlan_id, "/edge", "-89 days")
+            await self._run(insert, erlan_id, "/today", "-1 hours")
+
+            self.assertEqual(await self.db.users.cleanup_old_page_visits(90), 1)
+            self.assertEqual(await self.db.users.cleanup_old_page_visits(90), 0)
+
+            activity = await self.stats.get_student_activity(erlan_id)
+            self.assertEqual([visit["path"] for visit in activity["visits"]], ["/today", "/edge"])
+            # The last page a student was seen on is not history and stays.
+            self.assertEqual(activity["last_seen_path"], "/modules")
+            self.assertEqual(activity["visit_retention_days"], 90)
+        finally:
+            await self._run("DELETE FROM user_page_visits WHERE user_id = ?", erlan_id)
+            await self._run("UPDATE users SET last_seen_path = NULL WHERE id = ?", erlan_id)
+
     async def test_tasks_count_first_attempts_and_flag_hard_ones(self):
         data = await self.stats.get_tasks(self.window())
         self.assertEqual(data["summary"], {

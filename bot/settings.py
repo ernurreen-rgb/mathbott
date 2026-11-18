@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     ops_health_sample_retention_days: int = 30
     ops_incident_retention_days: int = 365
 
+    # Student page visits (admin statistics) are kept for the longest statistics period.
+    page_visit_retention_days: int = 90
+
     @field_validator("environment", mode="before")
     @classmethod
     def _normalize_environment(cls, value: object) -> str:
@@ -112,6 +115,7 @@ class Settings(BaseSettings):
         "bank_trash_retention_days",
         "ops_health_sample_retention_days",
         "ops_incident_retention_days",
+        "page_visit_retention_days",
         mode="before",
     )
     @classmethod
@@ -121,6 +125,7 @@ class Settings(BaseSettings):
             "bank_trash_retention_days": 30,
             "ops_health_sample_retention_days": 30,
             "ops_incident_retention_days": 365,
+            "page_visit_retention_days": 90,
         }
         try:
             return int(str(value).strip())

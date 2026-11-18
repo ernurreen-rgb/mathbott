@@ -101,6 +101,10 @@ async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monito
                     logger.info(
                         f"Cleaned up {deleted_bank_count} bank tasks older than {bank_trash_retention_days} days"
                     )
+                visit_days = get_settings().page_visit_retention_days
+                deleted_visits = await db.users.cleanup_old_page_visits(visit_days)
+                if deleted_visits > 0:
+                    logger.info(f"Cleaned up {deleted_visits} page visits older than {visit_days} days")
                 if ops_monitor is not None:
                     cleanup_result = await ops_monitor.run_cleanup()
                     logger.info(

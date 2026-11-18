@@ -129,6 +129,21 @@ class UserRepository(BaseRepository):
                 return users
         return await self._run_with_write_lock(operation)
 
+    async def cleanup_old_page_visits(self, retention_days: int) -> int:
+        """Delete page visits older than the retention period; users.last_seen_path stays."""
+        async def operation() -> int:
+            async with self._connection() as db:
+                if not await self._has_page_visit_tracking(db):
+                    return 0
+                cursor = await db.execute(
+                    "DELETE FROM user_page_visits WHERE visited_at < mathbot_datetime('now', '-' || ? || ' days')",
+                    (max(1, int(retention_days)),),
+                )
+                await db.commit()
+                return int(cursor.rowcount or 0)
+
+        return await self._run_with_write_lock(operation)
+
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
         async with self._connection() as db:

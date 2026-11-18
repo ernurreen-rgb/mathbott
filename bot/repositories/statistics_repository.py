@@ -15,6 +15,7 @@ from statistics import median
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import storage as db_driver
+from settings import get_settings
 
 from .base import BaseRepository
 
@@ -810,6 +811,7 @@ class StatisticsRepository(BaseRepository):
             "last_seen_path": last_seen_path,
             "last_seen_label": labels.get(last_seen_path) if last_seen_path else None,
             "visit_tracking_enabled": track_pages,
+            "visit_retention_days": get_settings().page_visit_retention_days,
             "visits": [
                 {
                     "id": int(row[0]),

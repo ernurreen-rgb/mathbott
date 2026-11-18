@@ -65,6 +65,9 @@ function StudentActivityDetail({ entry }: { entry: ActivityEntry | undefined }) 
         <div>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
             Соңғы ашқан беттері ({formatNumber(activity.visits.length)})
+            <span className={styles.muted} style={{ fontWeight: 400, fontSize: 12 }}>
+              {" "}· тарих {formatNumber(activity.visit_retention_days)} күн сақталады
+            </span>
           </div>
           {!activity.visits.length ? (
             <p className={styles.note}>Жаңа бетке кіру жазбасы әлі түспеген.</p>
