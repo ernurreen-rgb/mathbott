@@ -214,6 +214,33 @@ class PushReminderTests(PostgresTestCase):
         self.assertEqual(config.json(), {"enabled": False, "public_key": None})
         self.assertEqual(subscribe.status_code, 503)
 
+    async def test_what_students_do_with_the_reminder_offer_is_recorded_and_pruned(self):
+        async with self._client() as client:
+            for body in [
+                {"device_state": "install", "action": "seen"},
+                {"device_state": "off", "action": "offered"},
+                {"device_state": "off", "action": "snoozed"},
+            ]:
+                response = await client.post("/api/push/prompt-events", params={"email": STUDENT}, json=body)
+                self.assertEqual(response.json(), {"recorded": True}, body)
+            for bad in [{"device_state": "maybe", "action": "seen"}, {"device_state": "off", "action": "clicked"}]:
+                response = await client.post("/api/push/prompt-events", params={"email": STUDENT}, json=bad)
+                self.assertEqual(response.status_code, 422, bad)
+        async with self.connect() as connection:
+            async with connection.execute(
+                "SELECT user_id, device_state, action FROM reminder_prompt_events ORDER BY id"
+            ) as cursor:
+                rows = [tuple(row) for row in await cursor.fetchall()]
+        self.assertEqual(rows, [(self.student["id"], "install", "seen"), (self.student["id"], "off", "offered"),
+                                (self.student["id"], "off", "snoozed")])
+
+        async with self.seed() as connection:
+            await connection.execute(
+                "UPDATE reminder_prompt_events SET created_at = mathbot_datetime('now', '-91 days') WHERE action = 'seen'"
+            )
+        self.assertEqual(await self.db.push.cleanup_old_prompt_events(90), 1)
+        self.assertEqual(await self.db.push.cleanup_old_prompt_events(90), 0)
+
 
 def _flat(subscription: dict) -> dict:
     return {"endpoint": subscription["endpoint"], **subscription["keys"]}

@@ -26,3 +26,14 @@ export async function deletePushSubscription(endpoint: string, email: string) {
     body: JSON.stringify({ endpoint }),
   });
 }
+
+export type ReminderPromptAction = "seen" | "offered" | "enabled" | "snoozed" | "failed";
+
+/** What this device could do when the reminder was offered, and what the student chose. */
+export async function recordReminderPromptEvent(email: string, deviceState: string, action: ReminderPromptAction) {
+  return fetchWithErrorHandling<{ recorded: boolean }>(withEmail("push/prompt-events", email), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_state: deviceState, action }),
+  });
+}

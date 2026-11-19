@@ -5,6 +5,7 @@ import base64
 import binascii
 import hmac
 import logging
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -71,6 +72,14 @@ class PushUnsubscribeRequest(BaseModel):
     endpoint: str = Field(min_length=1, max_length=1000)
 
 
+class ReminderPromptEvent(BaseModel):
+    # The browser's ReminderState (web/lib/push-reminders.ts) when the summary was shown.
+    device_state: Literal["unsupported", "install", "denied", "off", "on"]
+    # seen: the student reached a mini-lesson summary; offered: the reminder card was on it;
+    # enabled / snoozed: what they chose; failed: turning it on did not work.
+    action: Literal["seen", "offered", "enabled", "snoozed", "failed"]
+
+
 def setup_push_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.get("/api/push/config")
     async def get_push_config():
@@ -111,6 +120,18 @@ def setup_push_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         removed = await db.push.delete_subscription(int(current_user["id"]), payload.endpoint)
         return {"unsubscribed": removed}
+
+    @app.post("/api/push/prompt-events")
+    @limiter.limit("30/minute")
+    async def record_prompt_event(
+        request: Request,
+        payload: ReminderPromptEvent,
+        current_user: dict = Depends(require_internal_identity),
+        db: Database = Depends(get_db),
+    ):
+        """How many students can get reminders on their device, and what they do when offered one."""
+        recorded = await db.push.record_prompt_event(int(current_user["id"]), payload.device_state, payload.action)
+        return {"recorded": recorded}
 
     @app.get("/api/push/reminders")
     async def send_reminders(authorization: str = Header(default=""), db: Database = Depends(get_db)):

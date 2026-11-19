@@ -106,7 +106,7 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `AI_TWIN_TIMEOUT_SECONDS` | `45` | Optional | Provider request timeout (`5`–`55`), kept under the 60-second Vercel function limit. |
 | `OPS_HEALTH_SAMPLE_RETENTION_DAYS` | `30` | No | Retention window for `ops_health_samples`. |
 | `OPS_INCIDENT_RETENTION_DAYS` | `365` | No | Retention window for resolved rows in `ops_incidents`. |
-| `PAGE_VISIT_RETENTION_DAYS` | `90` | No | Days of student page visits (`user_page_visits`) kept for admin statistics; the daily `/api/maintenance` run deletes older rows. `users.last_seen_path` is kept. |
+| `PAGE_VISIT_RETENTION_DAYS` | `90` | No | Days of student activity records kept: page visits (`user_page_visits`) for admin statistics and streak reminder offers (`reminder_prompt_events`). The daily `/api/maintenance` run deletes older rows; `users.last_seen_path` is kept. |
 
 ### 2.2 Frontend Environment Variables (`web/.env.local`)
 

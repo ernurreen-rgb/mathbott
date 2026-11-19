@@ -71,6 +71,9 @@ export default function MiniLessonSummary({
         </p>
       )}
 
+      {/* Above the buttons, so a phone shows it without scrolling before "next" is tapped. */}
+      {email && <StreakReminderPrompt email={email} />}
+
       <div className="mt-5 w-full max-w-sm space-y-2">
         <button
           type="button"
@@ -98,8 +101,6 @@ export default function MiniLessonSummary({
           )}
         </div>
       </div>
-
-      {email && <StreakReminderPrompt email={email} />}
     </div>
   );
 }

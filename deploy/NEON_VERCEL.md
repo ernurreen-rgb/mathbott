@@ -187,8 +187,22 @@ invitation to start a new one. Devices the push service reports as gone are
 deleted. iPhones and iPads only receive Web Push in QazMath added to the home
 screen (iOS 16.4+).
 
-PostgreSQL `0011_push_subscriptions` adds the `push_subscriptions` table. It
-only adds objects, so apply it before deploying the API that needs it:
+The summary shows the offer above its buttons. «Кейін» puts it off for three days,
+and after three refusals it stops. On an iPhone outside the home-screen app it
+explains how to add QazMath there instead. Each summary records the device's
+reminder state (`unsupported`, `install`, `denied`, `off`, `on`) and what the
+student did (`seen`, `offered`, `enabled`, `snoozed`, `failed`) in
+`reminder_prompt_events`. These rows are kept for `PAGE_VISIT_RETENTION_DAYS`
+days, like page visits. To see how many students can get reminders at all:
+
+```sql
+SELECT device_state, action, COUNT(DISTINCT user_id) FROM reminder_prompt_events
+GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
+PostgreSQL `0011_push_subscriptions` adds the `push_subscriptions` table, and
+`0014_reminder_prompt_events` the events table; the API records nothing until 0014
+is applied. Both only add objects, so apply them before deploying the API that needs them:
 
 ```powershell
 # From bot/, with DATABASE_MIGRATION_URL pointing to the same database as runtime.

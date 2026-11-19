@@ -79,3 +79,37 @@ class PushRepository(BaseRepository):
             ) as cursor:
                 rows = await cursor.fetchall()
         return [dict(zip(_CLAIM_COLUMNS, row)) for row in rows]
+
+    async def _has_prompt_events(self, db) -> bool:
+        """True once migration 0014_reminder_prompt_events is applied; the API runs safely before it."""
+        if getattr(self, "_prompt_events_ready", False):
+            return True
+        async with db.execute(
+            "SELECT (to_regclass(current_schema() || '.reminder_prompt_events') IS NOT NULL)::int"
+        ) as cursor:
+            row = await cursor.fetchone()
+        ready = bool(row and row[0])
+        if ready:
+            self._prompt_events_ready = True
+        return ready
+
+    async def record_prompt_event(self, user_id: int, device_state: str, action: str) -> bool:
+        """Note what the device could do when the reminder was offered and what the student chose."""
+        async with self._write_transaction() as db:
+            if not await self._has_prompt_events(db):
+                return False
+            await db.execute(
+                "INSERT INTO reminder_prompt_events (user_id, device_state, action) VALUES (?, ?, ?)",
+                (user_id, device_state, action),
+            )
+        return True
+
+    async def cleanup_old_prompt_events(self, retention_days: int) -> int:
+        async with self._write_transaction() as db:
+            if not await self._has_prompt_events(db):
+                return 0
+            async with db.execute(
+                "DELETE FROM reminder_prompt_events WHERE created_at < mathbot_datetime('now', '-' || ? || ' days')",
+                (max(1, int(retention_days)),),
+            ) as cursor:
+                return max(cursor.rowcount, 0)

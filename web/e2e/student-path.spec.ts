@@ -38,6 +38,9 @@ test("a signed-in student lands on the modules map", async ({ studentPage: page 
 });
 
 test("a new student solves a lesson, reviews the mistake and goes straight on", async ({ studentPage: page }) => {
+  // Headless Chrome reports notifications as blocked; a student's browser has usually never asked.
+  await page.addInitScript(() => Object.defineProperty(Notification, "permission", { get: () => "default" }));
+
   // A brand-new account: the API creates it on the first request ("User not found" regression).
   await page.goto("/modules");
   await page.locator('a[href="/modules/1"]').click();
@@ -65,7 +68,13 @@ test("a new student solves a lesson, reviews the mistake and goes straight on", 
   await expect(feedback).not.toContainText("Қате");
   await feedback.getByRole("button", { name: "Келесі" }).click();
 
-  // The summary offers the review of the one first-try mistake.
+  // The summary offers the streak reminder above its buttons; «Кейін» puts it off for a few days.
+  const reminderOffer = page.getByRole("region", { name: "Серия үзілмесін" });
+  await expect(reminderOffer).toBeVisible();
+  await reminderOffer.getByRole("button", { name: "Кейін" }).click();
+  await expect(reminderOffer).toBeHidden();
+
+  // It also offers the review of the one first-try mistake.
   await page.getByRole("button", { name: /Қателерді талдау \(1\)/ }).click();
 
   // The mistake review serves the task again; finishing it continues with mini-lesson 2.
