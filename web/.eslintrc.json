@@ -1,5 +1,12 @@
 {
   "extends": "next/core-web-vitals",
-  "ignorePatterns": ["output/**"]
+  "ignorePatterns": ["output/**", "playwright-report/**", "test-results/**"],
+  "overrides": [
+    {
+      "files": ["e2e/**/*.ts"],
+      "rules": {
+        "react-hooks/rules-of-hooks": "off"
+      }
+    }
+  ]
 }
-

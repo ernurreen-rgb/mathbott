@@ -25,6 +25,10 @@ node_modules/
 *.tsbuildinfo
 coverage/
 .playwright-cli/
+# Playwright browser tests (web/e2e): traces, screenshots and the HTML report
+test-results/
+playwright-report/
+blob-report/
 web/output/
 tmp/pdfs/
 output/pdf/

@@ -98,6 +98,7 @@ pip-audit --desc -r requirements.txt
 npm run lint
 npm run typecheck
 npm test           # Vitest unit tests in web/tests/
+npm run test:e2e   # Playwright browser tests in web/e2e/ (see docs/development/development-workflow.md)
 npm run build
 npm run audit:ci   # npm audit minus web/audit-allowlist.json
 ```

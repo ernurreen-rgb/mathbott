@@ -67,8 +67,28 @@ Triggered on `push` and `pull_request` to `main` or `develop`:
    - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests`, and `pip-audit --desc -r requirements.txt`.
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):
    - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (Vitest unit tests in [`web/tests/`](../../web/tests/): lesson flow, answer completeness, the student keyboard, review navigation and the service worker), `npm run build`, and `npm run audit:ci` in `web/`. The last one is `npm audit` failing on any moderate-or-worse advisory except those in [`web/audit-allowlist.json`](../../web/audit-allowlist.json): each entry names the advisory, the reason it cannot be fixed yet and an `until` date after which it fails again ([`web/scripts/audit.mjs`](../../web/scripts/audit.mjs)).
+3. **`e2e`** (Python `3.11`, Node.js `24`, a `postgres:17` service): Playwright browser tests of the student path in [`web/e2e/`](../../web/e2e/), run with `npm run test:e2e`. See [section 3.3](#33-browser-tests-webe2e). On failure the HTML report, screenshots and traces are uploaded as the `playwright-report` artifact.
 
-### 3.2 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
+### 3.3 Browser Tests (`web/e2e/`)
+[`web/playwright.config.ts`](../../web/playwright.config.ts) starts everything the tests need:
+- **Database and API:** [`bot/scripts/seed_e2e.py`](../../bot/scripts/seed_e2e.py) drops and recreates the database in `E2E_DATABASE_URL` (its name must end in `_e2e`), applies the migrations and adds a small course (one module, two lessons, one trial test). Then the API starts on port `8031` with `ENVIRONMENT=production`, so requests pass the same signed-proxy checks as in production.
+- **Web app:** `npm run build` and `next start` on port `3031`.
+- **Students:** the tests do not sign in through Google. They set a NextAuth session cookie signed with the test-only secret in [`web/e2e/env.ts`](../../web/e2e/env.ts), with a new email for every test, so the API creates a fresh account on the first request.
+
+What they cover: the sign-in redirect keeps the requested page; a signed-in student lands on `/modules`; a new student solves a lesson with one mistake, reviews it and goes straight on to the next mini-lesson and lesson; a trial test is answered and scored.
+
+To run them locally (from `web/`):
+```powershell
+npx playwright install chromium   # once
+$env:E2E_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/qazmath_e2e"   # disposable server
+$env:E2E_PYTHON = "..\bot\venv\Scripts\python.exe"   # Python with bot/requirements.txt
+npm run test:e2e
+```
+- `E2E_WEB_COMMAND="npx next start -p 3031"` reuses the last build when only the tests changed.
+- `E2E_API_PORT` and `E2E_WEB_PORT` move the servers off `8031` and `3031`.
+- Do not build in a `web/` folder whose dev server is running: both use `.next/`. Use a separate worktree instead.
+
+### 3.4 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))
 Triggered weekly (`0 0 * * 1` — Mondays at 00:00 UTC) or via `workflow_dispatch`:
 - Runs `pip-audit` on `bot/requirements.txt` and `npm audit` on `web/`, and uploads both JSON reports as the `security-audit-results` artifact (the frontend report lists allowlisted advisories too).
 - Fails like CI: on any backend vulnerability, or a moderate-or-worse frontend advisory outside [`web/audit-allowlist.json`](../../web/audit-allowlist.json) (`npm run audit:ci`).
