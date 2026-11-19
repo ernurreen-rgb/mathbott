@@ -1,7 +1,8 @@
 """
 CSRF protection middleware
 """
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
@@ -13,30 +14,30 @@ logger = logging.getLogger(__name__)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-    """CSRF protection middleware for POST/PUT/DELETE requests"""
-    
+    """CSRF protection middleware for POST/PUT/PATCH/DELETE requests"""
+
     def __init__(self, app, exempt_paths: list[str] | None = None):
         super().__init__(app)
         self.exempt_paths = exempt_paths or []
         # Allow health check and docs
         self.exempt_paths.extend(["/api/health", "/docs", "/redoc", "/openapi.json"])
-    
+
     async def dispatch(self, request: Request, call_next):
         # Skip CSRF check for GET, HEAD, OPTIONS
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
 
         path = get_scope_path(request)
-        
+
         # Skip CSRF check for exempt paths
         if any(path.startswith(exempt_path) for exempt_path in self.exempt_paths):
             return await call_next(request)
-        
-        # Skip CSRF check in development if disabled
+
+        # Skip CSRF check in non-production only if explicitly disabled
         settings = get_settings()
-        if settings.environment == "development" and not settings.csrf_enabled:
+        if not settings.is_production and not settings.csrf_enabled:
             return await call_next(request)
-        
+
         # In production, writes must come through the trusted Next.js proxy.
         if has_proxy_signature_headers(request):
             is_valid_proxy, _, _ = verify_proxy_signature(request)
@@ -44,8 +45,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
 
         logger.warning("Rejected unsigned write request for %s %s", request.method, path)
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Trusted proxy signature required for write requests",
+            content={"detail": "Trusted proxy signature required for write requests"},
         )
 

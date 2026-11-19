@@ -580,8 +580,13 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                                 "accepted_answers",
                                 JSON.stringify(Array.isArray(taskData.accepted_answers) ? taskData.accepted_answers.map(normalizeMathFieldValueForStorage) : [])
                               );
+                              if (taskData.question_type !== "select") {
+                                formData.append("subquestions", "");
+                              }
                               if (taskData.imageFile) {
                                 formData.append("image", taskData.imageFile);
+                              } else if (taskData.removeImage) {
+                                formData.append("remove_image", "true");
                               }
 
                               if (taskData.id) {

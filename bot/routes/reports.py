@@ -2,30 +2,37 @@
 Reports роуты
 """
 import logging
-from fastapi import FastAPI, HTTPException, Query, Body, Depends
+from fastapi import FastAPI, HTTPException, Body, Depends
 from slowapi import Limiter
 
-from dependencies import get_db
+from dependencies import get_db, require_internal_identity
 from database import Database
 from models.requests import ReportRequest, TrialTestReportRequest
 
 logger = logging.getLogger(__name__)
 
+_REPORT_SECRET_FIELDS = ("task_answer", "answer", "accepted_answers")
+
+
+def _strip_report_answers(reports: list[dict]) -> list[dict]:
+    return [
+        {k: v for k, v in report.items() if k not in _REPORT_SECRET_FIELDS}
+        for report in reports
+    ]
+
 
 def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Настроить reports роуты"""
-    
+
     @app.post("/api/reports")
     async def create_report(
         request: ReportRequest = Body(...),
-        email: str = Query(...),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Create a new report about a task"""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
+            user = current_user
 
             # A broken task is often noticed before answering it, so no attempt is required:
             # forcing a guess would also record a first-attempt mistake for the review.
@@ -57,17 +64,13 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/reports")
     async def get_user_reports(
-        email: str = Query(...),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
-        """Get user's own reports"""
+        """Get user's own reports (without exposing task answers)"""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
-
-            reports = await db.reports.get_user_reports(user["id"])
-            return reports
+            reports = await db.reports.get_user_reports(current_user["id"])
+            return _strip_report_answers(reports)
         except HTTPException:
             raise
         except Exception as e:
@@ -77,14 +80,12 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.post("/api/trial-test-reports")
     async def create_trial_test_report(
         request: TrialTestReportRequest = Body(...),
-        email: str = Query(...),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Create a new report about a trial test task"""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
+            user = current_user
 
             trial_test = await db.trial_tests.get_trial_test_by_id(request.trial_test_id)
             if not trial_test:
@@ -120,17 +121,13 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/trial-test-reports")
     async def get_user_trial_test_reports(
-        email: str = Query(...),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
-        """Get user's own trial test reports"""
+        """Get user's own trial test reports (without exposing task answers)"""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Пайдаланушы табылмады")
-
-            reports = await db.trial_test_reports.get_user_trial_test_reports(user["id"])
-            return reports
+            reports = await db.trial_test_reports.get_user_trial_test_reports(current_user["id"])
+            return _strip_report_answers(reports)
         except HTTPException:
             raise
         except Exception as e:

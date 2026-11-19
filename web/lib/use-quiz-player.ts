@@ -12,6 +12,7 @@ export function useQuizPlayer(sessionId: number) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasPendingAnswer, setHasPendingAnswer] = useState(false);
   const [rank, setRank] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const busy = useRef(false);
@@ -32,6 +33,7 @@ export function useQuizPlayer(sessionId: number) {
     busy.current = false;
     pendingAnswer.current = null;
     timeoutAttempt.current = null;
+    setHasPendingAnswer(false);
     setProgress(null);
     setSessionData(null);
     setRank(null);
@@ -49,7 +51,10 @@ export function useQuizPlayer(sessionId: number) {
     setSessionData((previous) => data.session ?? (previous ? { ...previous, status: data.status,
       participants: data.status === "lobby" ? previous.participants : undefined } : null));
     if (data.rank !== undefined) setRank(data.rank);
-    if (data.result) pendingAnswer.current = null;
+    if (data.result) {
+      pendingAnswer.current = null;
+      setHasPendingAnswer(false);
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -98,6 +103,7 @@ export function useQuizPlayer(sessionId: number) {
     busy.current = true;
     const version = ++mutationVersion.current;
     pendingAnswer.current = answer;
+    setHasPendingAnswer(true);
     setSubmitting(true);
     setError(null);
     let recover = false;
@@ -108,6 +114,7 @@ export function useQuizPlayer(sessionId: number) {
       if (!live.current || version !== mutationVersion.current) return;
       if (result.data) {
         pendingAnswer.current = null;
+        setHasPendingAnswer(false);
         const saved = result.data.progress ?? (await getQuizProgress(sessionId, { participantToken: credentials.token })).data;
         if (!live.current || version !== mutationVersion.current) return;
         if (saved) applyProgress(saved);
@@ -133,19 +140,24 @@ export function useQuizPlayer(sessionId: number) {
     busy.current = true;
     const version = ++mutationVersion.current;
     setSubmitting(true);
-    const result = await activateQuizQuestion(sessionId, { participantToken: credentials.token }, true, progress.current_question?.id);
-    if (!live.current || version !== mutationVersion.current) return false;
-    busy.current = false;
-    setSubmitting(false);
-    if (result.data) {
-      applyProgress(result.data);
-      setError(null);
-      timeoutAttempt.current = null;
-      return true;
+    try {
+      const result = await activateQuizQuestion(sessionId, { participantToken: credentials.token }, true, progress.current_question?.id);
+      if (!live.current || version !== mutationVersion.current) return false;
+      if (result.data) {
+        applyProgress(result.data);
+        setError(null);
+        timeoutAttempt.current = null;
+        return true;
+      }
+      setError(result.error || "Келесі сұрақ жүктелмеді");
+      void refresh();
+      return false;
+    } finally {
+      if (activeSession.current === sessionId && version === mutationVersion.current) {
+        busy.current = false;
+        if (live.current) setSubmitting(false);
+      }
     }
-    setError(result.error || "Келесі сұрақ жүктелмеді");
-    void refresh();
-    return false;
   }, [credentials, progress, sessionId, applyProgress, refresh]);
 
   const submitRef = useRef(submitAnswer);
@@ -193,6 +205,14 @@ export function useQuizPlayer(sessionId: number) {
     return false;
   }, [credentials, sessionId]);
 
-  return { credentials, progress, sessionData, loading, submitting, error, rank, timeLeft,
-    submitAnswer, advance, refresh, updateAvatar, retryAnswer: () => void submitAnswer(pendingAnswer.current ?? "__timeout__") };
+  const retryAnswer = useCallback(() => {
+    if (pendingAnswer.current !== null) {
+      void submitAnswer(pendingAnswer.current);
+      return;
+    }
+    void refresh();
+  }, [submitAnswer, refresh]);
+
+  return { credentials, progress, sessionData, loading, submitting, error, hasPendingAnswer, rank, timeLeft,
+    submitAnswer, advance, refresh, updateAvatar, retryAnswer };
 }

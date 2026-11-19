@@ -37,6 +37,9 @@ interface Report {
   task_text: string;
   task_answer?: string;
   task_question_type?: string;
+  task_options?: Array<{ label: string; text: string }> | string | null;
+  task_subquestions?: Array<{ text: string; correct?: string }> | string | null;
+  task_text_scale?: string | null;
   mini_lesson_title?: string;
   lesson_title?: string;
   section_name?: string;
@@ -65,7 +68,8 @@ function ReportsPageContent() {
   const [taskForm, setTaskForm] = useState({
     text: "",
     answer: "",
-    question_type: "input" as "tf" | "mcq" | "mcq6" | "input",
+    question_type: "input" as "tf" | "mcq" | "mcq6" | "input" | "select",
+    text_scale: "md",
     optionA: "",
     optionB: "",
     optionC: "",
@@ -74,6 +78,10 @@ function ReportsPageContent() {
     optionF: "",
     correctOptions: ["A"] as McqOptionLabel[],
     correctTf: "true" as "true" | "false",
+    subQuestion1: "",
+    subQuestion2: "",
+    correctSub1: "A" as "A" | "B" | "C" | "D",
+    correctSub2: "A" as "A" | "B" | "C" | "D",
   });
 
   const reportKey = (report: Report) => `${report.source || "lesson"}:${report.id}`;
@@ -157,7 +165,7 @@ function ReportsPageContent() {
         report.source === "trial_test"
           ? `admin/trial-test-reports/${report.id}`
           : `admin/reports/${report.id}`;
-      const response = await fetch(`${apiPath(endpoint)}?email=${session.user.email}`, {
+      const response = await fetch(`${apiPath(endpoint)}?email=${encodeURIComponent(session.user.email)}`, {
         method: "DELETE",
       });
 
@@ -181,19 +189,71 @@ function ReportsPageContent() {
       showToast.error("Сынақ тесті тапсырмаларын бұл беттен өзгертуге болмайды");
       return;
     }
+
+    let parsedOptions: Array<{ label: string; text: string }> = [];
+    if (Array.isArray(report.task_options)) {
+      parsedOptions = report.task_options;
+    } else if (typeof report.task_options === "string" && report.task_options.trim()) {
+      try {
+        const parsed = JSON.parse(report.task_options);
+        if (Array.isArray(parsed)) parsedOptions = parsed;
+      } catch {
+        parsedOptions = [];
+      }
+    }
+    const optionMap = new Map(
+      parsedOptions.map((opt) => [String(opt.label || "").trim().toUpperCase(), String(opt.text || "")])
+    );
+
+    let parsedSubquestions: Array<{ text: string; correct?: string }> = [];
+    if (Array.isArray(report.task_subquestions)) {
+      parsedSubquestions = report.task_subquestions;
+    } else if (typeof report.task_subquestions === "string" && report.task_subquestions.trim()) {
+      try {
+        const parsed = JSON.parse(report.task_subquestions);
+        if (Array.isArray(parsed)) parsedSubquestions = parsed;
+      } catch {
+        parsedSubquestions = [];
+      }
+    }
+
+    let selectAnswers: string[] = ["A", "A"];
+    if (report.task_question_type === "select" && report.task_answer) {
+      try {
+        const parsedAns = JSON.parse(report.task_answer);
+        if (Array.isArray(parsedAns) && parsedAns.length >= 2) {
+          selectAnswers = [String(parsedAns[0] || "A").toUpperCase(), String(parsedAns[1] || "A").toUpperCase()];
+        }
+      } catch {
+        // fall back to subquestion.correct below
+      }
+    }
+    const sub1Correct = String(parsedSubquestions[0]?.correct || selectAnswers[0] || "A").toUpperCase();
+    const sub2Correct = String(parsedSubquestions[1]?.correct || selectAnswers[1] || "A").toUpperCase();
+    const validSelectLabel = (v: string): "A" | "B" | "C" | "D" =>
+      (["A", "B", "C", "D"].includes(v) ? v : "A") as "A" | "B" | "C" | "D";
+
+    const qType = (report.task_question_type || "input") as "tf" | "mcq" | "mcq6" | "input" | "select";
+    const parsedCorrectMcq = parseMcqAnswerLabels(report.task_answer || "");
+
     setEditingTask({ reportId: report.id, task: report });
     setTaskForm({
       text: report.task_text || "",
       answer: report.task_answer || "",
-      question_type: (report.task_question_type as any) || "input",
-      optionA: "",
-      optionB: "",
-      optionC: "",
-      optionD: "",
-      optionE: "",
-      optionF: "",
-      correctOptions: parseMcqAnswerLabels(report.task_answer || "A"),
-      correctTf: report.task_question_type === "tf" ? (report.task_answer === "true" ? "true" : "false") : "true",
+      question_type: qType,
+      text_scale: report.task_text_scale || "md",
+      optionA: optionMap.get("A") || "",
+      optionB: optionMap.get("B") || "",
+      optionC: optionMap.get("C") || "",
+      optionD: optionMap.get("D") || "",
+      optionE: optionMap.get("E") || "",
+      optionF: optionMap.get("F") || "",
+      correctOptions: parsedCorrectMcq.length > 0 ? parsedCorrectMcq : ["A"],
+      correctTf: qType === "tf" ? (report.task_answer === "true" || report.task_answer === "1" ? "true" : "false") : "true",
+      subQuestion1: parsedSubquestions[0]?.text || "",
+      subQuestion2: parsedSubquestions[1]?.text || "",
+      correctSub1: validSelectLabel(sub1Correct),
+      correctSub2: validSelectLabel(sub2Correct),
     });
   };
 
@@ -201,13 +261,12 @@ function ReportsPageContent() {
     if (!session?.user?.email || !editingTask) return;
 
     try {
-      // Prepare form data
       const formData = new FormData();
       formData.append("text", taskForm.text);
       formData.append("answer", taskForm.answer);
       formData.append("question_type", taskForm.question_type);
+      formData.append("text_scale", taskForm.text_scale || "md");
 
-      // Handle options for MCQ
       if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") {
         const options = [
           { label: "A", text: taskForm.optionA },
@@ -221,9 +280,34 @@ function ReportsPageContent() {
               ]
             : []),
         ];
+        if (options.some((o) => !o.text.trim())) {
+          showToast.error("Барлық жауап нұсқаларын толтырыңыз");
+          return;
+        }
+        if (taskForm.correctOptions.length === 0) {
+          showToast.error("Кем дегенде бір дұрыс жауап таңдаңыз");
+          return;
+        }
         formData.append("options", JSON.stringify(options));
-        // Update answer to be the correct option label
         formData.set("answer", serializeMcqAnswerLabels(taskForm.correctOptions));
+      } else if (taskForm.question_type === "select") {
+        const options = [
+          { label: "A", text: taskForm.optionA },
+          { label: "B", text: taskForm.optionB },
+          { label: "C", text: taskForm.optionC },
+          { label: "D", text: taskForm.optionD },
+        ];
+        if (options.some((o) => !o.text.trim()) || !taskForm.subQuestion1.trim() || !taskForm.subQuestion2.trim()) {
+          showToast.error("Барлық нұсқалар мен қосымша сұрақтарды толтырыңыз");
+          return;
+        }
+        const subquestions = [
+          { text: taskForm.subQuestion1, correct: taskForm.correctSub1 },
+          { text: taskForm.subQuestion2, correct: taskForm.correctSub2 },
+        ];
+        formData.append("options", JSON.stringify(options));
+        formData.append("subquestions", JSON.stringify(subquestions));
+        formData.set("answer", JSON.stringify([taskForm.correctSub1, taskForm.correctSub2]));
       } else if (taskForm.question_type === "tf") {
         formData.set("answer", taskForm.correctTf);
       }
@@ -559,7 +643,7 @@ function ReportsPageContent() {
                   />
                 </div>
 
-                {(taskForm.question_type === "input" || taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") && (
+                {taskForm.question_type === "input" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Жауап
@@ -579,17 +663,28 @@ function ReportsPageContent() {
                   </label>
                   <select
                     value={taskForm.question_type}
-                    onChange={(e) => setTaskForm({ ...taskForm, question_type: e.target.value as any, correctOptions: taskForm.correctOptions.filter((label) => getMcqEditorLabels(e.target.value).includes(label)).slice(0, getMcqCorrectOptionLimit(e.target.value)) })}
+                    onChange={(e) => {
+                      const nextType = e.target.value as "tf" | "mcq" | "mcq6" | "input" | "select";
+                      const filteredCorrect = taskForm.correctOptions
+                        .filter((label) => getMcqEditorLabels(nextType).includes(label))
+                        .slice(0, getMcqCorrectOptionLimit(nextType));
+                      setTaskForm({
+                        ...taskForm,
+                        question_type: nextType,
+                        correctOptions: filteredCorrect.length > 0 ? filteredCorrect : ["A"],
+                      });
+                    }}
                     className="border border-gray-300 rounded-md px-3 py-2 text-sm"
                   >
                     <option value="input">Мәтін енгізу</option>
                     <option value="tf">Шын/Жалған</option>
                     <option value="mcq">Көп таңдаулы (4 жауап)</option>
                     <option value="mcq6">Көп таңдаулы (6 жауап)</option>
+                    <option value="select">Сәйкестендіру</option>
                   </select>
                 </div>
 
-                {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") && (
+                {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "select") && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-gray-900">Нұсқалар:</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -652,6 +747,7 @@ function ReportsPageContent() {
                         </>
                       )}
                     </div>
+                    {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Дұрыс жауап
@@ -688,6 +784,45 @@ function ReportsPageContent() {
                         })}
                       </div>
                     </div>
+                    )}
+                    {taskForm.question_type === "select" && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="text"
+                            placeholder="1-қосымша сұрақ"
+                            value={taskForm.subQuestion1}
+                            onChange={(e) => setTaskForm({ ...taskForm, subQuestion1: e.target.value })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                          <select
+                            aria-label="1-қосымша сұрақтың дұрыс жауабы"
+                            value={taskForm.correctSub1}
+                            onChange={(e) => setTaskForm({ ...taskForm, correctSub1: e.target.value as "A" | "B" | "C" | "D" })}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                          >
+                            {["A", "B", "C", "D"].map((l) => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="text"
+                            placeholder="2-қосымша сұрақ"
+                            value={taskForm.subQuestion2}
+                            onChange={(e) => setTaskForm({ ...taskForm, subQuestion2: e.target.value })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                          <select
+                            aria-label="2-қосымша сұрақтың дұрыс жауабы"
+                            value={taskForm.correctSub2}
+                            onChange={(e) => setTaskForm({ ...taskForm, correctSub2: e.target.value as "A" | "B" | "C" | "D" })}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                          >
+                            {["A", "B", "C", "D"].map((l) => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

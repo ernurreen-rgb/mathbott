@@ -5,7 +5,25 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from math import isqrt
 from typing import Dict, Optional
-from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_rationals, _negate_polynomial, _power_rational, _variable_polynomial
+from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_TOTAL_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_rationals, _negate_polynomial, _power_rational, _variable_polynomial
+
+
+def looks_like_comma_collection(value: str) -> bool:
+    """Detect coordinate pairs (1, 2), sets {1, 2}, intervals [1, 2], or comma-separated root lists."""
+    stripped = (value or "").strip()
+    if "," not in stripped:
+        return False
+    if re.search(r",\s+", stripped):
+        return True
+    if stripped.count(",") > 1:
+        return True
+    if (
+        (stripped.startswith("(") and stripped.endswith(")"))
+        or (stripped.startswith("{") and stripped.endswith("}"))
+        or (stripped.startswith("[") and stripped.endswith("]"))
+    ):
+        return True
+    return False
 
 
 def _read_group(value: str, start: int, opening: str = "{", closing: str = "}") -> Optional[tuple[str, int]]:
@@ -276,11 +294,17 @@ def _divide_univariate(
 ) -> tuple[Dict[int, Fraction], Dict[int, Fraction]]:
     if not divisor:
         raise ValueError("division by zero polynomial")
+    divisor_degree = max(divisor)
+    if divisor_degree > _MAX_TOTAL_DEGREE or (dividend and max(dividend) > _MAX_TOTAL_DEGREE):
+        raise ValueError("polynomial degree is too large")
     remainder = dict(dividend)
     quotient: Dict[int, Fraction] = {}
-    divisor_degree = max(divisor)
     divisor_lead = divisor[divisor_degree]
+    steps = 0
     while remainder and max(remainder) >= divisor_degree:
+        steps += 1
+        if steps > _MAX_TOTAL_DEGREE + 1:
+            raise ValueError("polynomial division exceeded maximum steps")
         remainder_degree = max(remainder)
         exponent = remainder_degree - divisor_degree
         coefficient = _ensure_number_size(remainder[remainder_degree] / divisor_lead)
@@ -391,6 +415,8 @@ def algebraic_python_expression(value: str) -> Optional[str]:
     """Rewrite a written answer as a Python expression: LaTeX fractions and roots become
     operators and root() calls, implicit multiplication becomes explicit. Nothing is evaluated."""
     if not value or len(value) > _MAX_EXPRESSION_LENGTH:
+        return None
+    if looks_like_comma_collection(value):
         return None
 
     expression = _replace_superscripts(value)

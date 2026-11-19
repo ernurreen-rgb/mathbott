@@ -9,6 +9,7 @@ from fractions import Fraction
 from math import isqrt
 from typing import Any, List, Optional
 
+from utils.math_algebra import looks_like_comma_collection
 from utils.math_equivalence import (
     canonicalize_algebraic_expression,
     canonicalize_interval_set,
@@ -203,7 +204,7 @@ def _parse_written_answer_slots(raw_answer: Any) -> List[str]:
     try:
         parsed = json.loads(text)
         if isinstance(parsed, list):
-            return [str(item or "").strip() for item in parsed]
+            return [("" if item is None else str(item)).strip() for item in parsed]
     except Exception:
         pass
     return [text]
@@ -234,17 +235,21 @@ def _normalize_written_math_answer(value: str) -> str:
     normalized = _prepare_written_math_text(value)
     interval_set = canonicalize_interval_set(normalized)
     mathematical_statement = canonicalize_math_statement(normalized)
-    normalized = re.sub(r"\s+", "", normalized)
-    numeric_value = _parse_exact_numeric_expression(normalized)
-    if numeric_value is not None:
-        if numeric_value.denominator == 1:
-            return str(numeric_value.numerator)
-        return f"{numeric_value.numerator}/{numeric_value.denominator}"
+    is_comma_collection = looks_like_comma_collection(normalized)
+    compact = re.sub(r"\s+", "", normalized)
+    if not is_comma_collection:
+        numeric_value = _parse_exact_numeric_expression(compact)
+        if numeric_value is not None:
+            if numeric_value.denominator == 1:
+                return str(numeric_value.numerator)
+            return f"{numeric_value.numerator}/{numeric_value.denominator}"
     if mathematical_statement is not None:
         return mathematical_statement
     if interval_set is not None:
         return interval_set
-    return canonicalize_algebraic_expression(normalized) or normalized
+    if is_comma_collection:
+        return compact
+    return canonicalize_algebraic_expression(compact) or compact
 
 
 def _read_latex_group(value: str, start: int, opening: str = "{", closing: str = "}") -> Optional[tuple[str, int]]:
@@ -424,6 +429,8 @@ def _parse_exact_numeric_expression(value: str) -> Optional[Fraction]:
     """
     if not value or len(value) > _MAX_NUMERIC_EXPRESSION_LENGTH:
         return None
+    if looks_like_comma_collection(value):
+        return None
 
     expression = value.translate(_MATH_CHAR_TRANSLATION)
     expression = expression.replace(r"\cdot", "*").replace(r"\times", "*").replace(r"\div", "/")
@@ -435,6 +442,9 @@ def _parse_exact_numeric_expression(value: str) -> Optional[Fraction]:
         return None
     expression = _replace_latex_roots(expression)
     if expression is None:
+        return None
+    # Treat 'e'/'E' as Euler's constant / variable in algebraic parser, never Python float scientific notation.
+    if re.search(r"[eE]", expression):
         return None
 
     if expression.endswith(r"\%"):
@@ -516,52 +526,68 @@ def _map_written_slots_to_option_labels(
     return mapped
 
 
-def _normalize_choice_or_written_answer_for_compare(task: dict, raw_answer: Any, *, ordered: bool) -> str:
-    labels = parse_mcq_answer_labels(raw_answer)
-    if labels and all(label in MCQ_ANSWER_LABELS for label in labels):
-        normalized_labels = labels if ordered else sorted(labels)
-        correct_labels = [
-            label for label in parse_mcq_answer_labels(task.get("answer")) if label in MCQ_ANSWER_LABELS
-        ]
-        normalized_correct = correct_labels if ordered else sorted(correct_labels)
-        if normalized_labels == normalized_correct:
+def _normalize_choice_or_written_answer_for_compare(
+    task: dict,
+    raw_answer: Any,
+    *,
+    ordered: bool,
+    strict_mode: bool = False,
+) -> str:
+    mode = (task.get("answer_mode") or "").strip().lower() or "choices"
+    allow_label_match = (not strict_mode) or (mode != "written")
+    allow_written_match = (not strict_mode) or (mode == "written")
+
+    if allow_label_match:
+        labels = parse_mcq_answer_labels(raw_answer)
+        if labels and all(label in MCQ_ANSWER_LABELS for label in labels):
+            normalized_labels = labels if ordered else sorted(labels)
+            correct_labels = [
+                label for label in parse_mcq_answer_labels(task.get("answer")) if label in MCQ_ANSWER_LABELS
+            ]
+            normalized_correct = correct_labels if ordered else sorted(correct_labels)
+            if normalized_labels == normalized_correct:
+                if len(normalized_labels) <= 1:
+                    return normalized_labels[0] if normalized_labels else ""
+                return json.dumps(normalized_labels, ensure_ascii=False)
+
+            if allow_written_match:
+                # Only in non-strict mode (or written mode): try matching option text when value is a letter.
+                mapped_labels = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
+                if mapped_labels is not None:
+                    normalized_mapped = mapped_labels if ordered else sorted(mapped_labels)
+                    if normalized_mapped == normalized_correct:
+                        if len(normalized_mapped) <= 1:
+                            return normalized_mapped[0] if normalized_mapped else ""
+                        return json.dumps(normalized_mapped, ensure_ascii=False)
+
             if len(normalized_labels) <= 1:
                 return normalized_labels[0] if normalized_labels else ""
             return json.dumps(normalized_labels, ensure_ascii=False)
 
-        # A written answer can itself be a letter (for example, the value "A").
-        # Before treating it as a legacy option label, try matching option text.
-        mapped_labels = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
-        if mapped_labels is not None:
-            normalized_mapped = mapped_labels if ordered else sorted(mapped_labels)
-            if normalized_mapped == normalized_correct:
-                if len(normalized_mapped) <= 1:
-                    return normalized_mapped[0] if normalized_mapped else ""
-                return json.dumps(normalized_mapped, ensure_ascii=False)
-
-        if len(normalized_labels) <= 1:
-            return normalized_labels[0] if normalized_labels else ""
-        return json.dumps(normalized_labels, ensure_ascii=False)
-
-    mapped = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
-    if mapped is not None:
-        normalized_mapped = mapped if ordered else sorted(mapped)
-        if len(normalized_mapped) <= 1:
-            return normalized_mapped[0] if normalized_mapped else ""
-        return json.dumps(normalized_mapped, ensure_ascii=False)
+    if allow_written_match:
+        mapped = _map_written_slots_to_option_labels(task, raw_answer, ordered=ordered)
+        if mapped is not None:
+            normalized_mapped = mapped if ordered else sorted(mapped)
+            if len(normalized_mapped) <= 1:
+                return normalized_mapped[0] if normalized_mapped else ""
+            return json.dumps(normalized_mapped, ensure_ascii=False)
 
     slots = [_normalize_written_math_answer(item) for item in _parse_written_answer_slots(raw_answer)]
     return "__written__" + json.dumps(slots, ensure_ascii=False)
 
 
-def normalize_task_answer_for_compare(task: dict, user_answer: Any) -> str:
+def normalize_task_answer_for_compare(task: dict, user_answer: Any, *, strict_mode: bool = False) -> str:
     """Normalize user answer depending on task type (mcq/tf/input)."""
     qt = (task.get("question_type") or "input").strip().lower()
     ans = "" if user_answer is None else str(user_answer).strip()
     if qt in {"mcq", "mcq6"}:
-        return _normalize_choice_or_written_answer_for_compare(task, user_answer, ordered=False)
+        return _normalize_choice_or_written_answer_for_compare(
+            task, user_answer, ordered=False, strict_mode=strict_mode
+        )
     if qt == "select":
-        return _normalize_choice_or_written_answer_for_compare(task, user_answer, ordered=True)
+        return _normalize_choice_or_written_answer_for_compare(
+            task, user_answer, ordered=True, strict_mode=strict_mode
+        )
     if qt == "tf":
         v = ans.strip().lower()
         true_set = {"true", "1", "t", "да", "истина", "правда", "верно", "yes"}
@@ -666,17 +692,9 @@ def _extract_mcq6_user_counts(task: dict, user_answer: Any, expected_labels: Lis
 
             unmatched_slots += 1
 
-        if right_count > 0 or wrong_count > 0 or not all(
-            slot.strip().upper() in MCQ_ANSWER_LABELS for slot in slots
-        ):
-            return right_count, wrong_count + unmatched_slots
+        return right_count, wrong_count + unmatched_slots
 
-    user_labels = [label for label in parse_mcq_answer_labels(user_answer) if label in MCQ_ANSWER_LABELS]
-    if not user_labels or len(user_labels) > MAX_MCQ_CORRECT_OPTIONS:
-        return None
-    user_set = set(user_labels)
-    expected_set = set(expected_labels)
-    return len(user_set & expected_set), len(user_set - expected_set)
+    return None
 
 
 def _grade_mcq6_against_expected(task: dict, user_answer: Any, expected: Any) -> int:
@@ -732,8 +750,6 @@ def _grade_select_against_expected(task: dict, user_answer: Any, expected: Any) 
             ):
                 score += 1
                 continue
-        if user_slot.upper() == expected_label and user_slot.upper() in MCQ_ANSWER_LABELS:
-            score += 1
     return score
 
 
@@ -771,7 +787,7 @@ def grade_task_answer(task: dict, user_answer: Any) -> tuple[int, int]:
 
 def is_task_answer_correct(task: dict, user_answer: Any) -> bool:
     """Compare an answer against the primary answer and all accepted aliases."""
-    user_normalized = normalize_task_answer_for_compare(task, user_answer)
+    user_normalized = normalize_task_answer_for_compare(task, user_answer, strict_mode=True)
     try:
         alternatives = normalize_accepted_answers(task.get("accepted_answers"))
     except ValueError:
@@ -779,7 +795,7 @@ def is_task_answer_correct(task: dict, user_answer: Any) -> bool:
     expected_answers = [task.get("answer"), *alternatives]
     written = (task.get("question_type") or "input").strip().lower() == "input"
     return any(
-        normalize_task_answer_for_compare(task, expected) == user_normalized
+        normalize_task_answer_for_compare(task, expected, strict_mode=False) == user_normalized
         and (not written or _same_written_form(user_answer, expected))
         for expected in expected_answers
         if expected is not None

@@ -393,8 +393,20 @@ export default function PlayQuizPage({ params }: PageProps) {
       {game.error && (
         <div role="alert" className="bg-red-50 p-4 text-center text-red-800">
           <p>{game.error}</p>
-          <button disabled={submitting} onClick={isAnswered ? () => void game.advance() : game.retryAnswer}
-            className="mt-2 rounded bg-purple-600 px-4 py-2 text-white disabled:opacity-50">Қайта жіберу</button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={
+              isAnswered
+                ? () => void game.advance()
+                : game.hasPendingAnswer
+                ? game.retryAnswer
+                : () => void game.refresh()
+            }
+            className="mt-2 rounded bg-purple-600 px-4 py-2 text-white disabled:opacity-50"
+          >
+            {isAnswered || game.hasPendingAnswer ? "Қайта жіберу" : "Қайта жүктеу"}
+          </button>
         </div>
       )}
       {/* Animated Timer Progress Bar */}

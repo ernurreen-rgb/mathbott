@@ -42,8 +42,13 @@ logs/
 
 # Environment
 .env
+.env.*
+*.env
 .env.local
 .env.*.local
+
+# Maintenance & backup scripts (not needed in API runtime image)
+scripts/
 
 # Documentation
 *.md

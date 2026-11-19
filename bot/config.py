@@ -61,16 +61,32 @@ def validate_configuration():
             errors.append("INTERNAL_PROXY_SHARED_SECRET must not use a documented placeholder value")
         else:
             logger.info("INTERNAL_PROXY_SHARED_SECRET is configured (production mode)")
+
+        raw_admin_secret_env = os.environ.get("ADMIN_SECRET", "").strip()
+        if raw_admin_secret_env and (
+            raw_admin_secret_env == DEFAULT_ADMIN_SECRET
+            or raw_admin_secret_env in KNOWN_PLACEHOLDER_SECRETS
+        ):
+            errors.append("ADMIN_SECRET must not use a default or placeholder value in production")
+
+        import_secret = (settings.import_preview_token_secret or "").strip()
+        if import_secret and (
+            import_secret == DEFAULT_ADMIN_SECRET
+            or import_secret in KNOWN_PLACEHOLDER_SECRETS
+            or len(import_secret) < 32
+        ):
+            errors.append("IMPORT_PREVIEW_TOKEN_SECRET must be at least 32 characters and not a placeholder")
     else:
         if settings.admin_secret == DEFAULT_ADMIN_SECRET:
             warnings.append("ADMIN_SECRET is using default value. Change it in development if you still use legacy admin bootstrap.")
 
     # Check CORS configuration
     if settings.is_production:
-        if not settings.allowed_origins.strip():
+        parsed_origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+        if not parsed_origins:
             errors.append("ALLOWED_ORIGINS must be set in production")
-        elif "*" in settings.allowed_origins:
-            warnings.append("ALLOWED_ORIGINS contains '*'. This is insecure in production!")
+        elif "*" in parsed_origins:
+            errors.append("ALLOWED_ORIGINS must not contain '*' when allow_credentials=True in production")
 
     # Check PORT
     if settings.port < 1 or settings.port > 65535:

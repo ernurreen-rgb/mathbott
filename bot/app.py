@@ -59,56 +59,65 @@ def create_app(lifespan: Optional[Any] = None) -> FastAPI:
     Returns:
         FastAPI: Настроенное приложение
     """
-    # Создать приложение
-    app = FastAPI(title="Mathbot API", version=APP_VERSION, lifespan=lifespan)
-    
-    # Инициализировать базу данных и лимитер
+    # Создать приложение (отключить публичные Swagger/ReDoc/OpenAPI в production)
     settings = get_settings()
+    app = FastAPI(
+        title="Mathbot API",
+        version=APP_VERSION,
+        lifespan=lifespan,
+        docs_url=None if settings.is_production else "/docs",
+        redoc_url=None if settings.is_production else "/redoc",
+        openapi_url=None if settings.is_production else "/openapi.json",
+    )
+
+    # Инициализировать базу данных и лимитер
     db = Database(settings.database_url, migration_url=settings.database_migration_url,
                   auto_migrate=settings.migrate_on_startup)
     limiter = Limiter(key_func=get_rate_limit_key)
-    
+
     # Сохранить в app.state для доступа через dependencies
     app.state.db = db
     app.state.limiter = limiter
-    app.state.environment = environment
+    app.state.environment = settings.environment
     app.state.version = APP_VERSION
     app.state.sentry_enabled = SENTRY_ENABLED
     app.state.started_at_epoch = time.time()
-    
+
     # Настроить rate limiting
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    
+
     # Настроить обработчики ошибок
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, general_exception_handler)
-    
-    # Добавить middleware
+
+    # Добавить middleware (Starlette применяет add_middleware в порядке LIFO: последний добавленный — самый внешний)
     # Use FastAPI's built-in GZipMiddleware instead of custom CompressionMiddleware
     # It properly handles Content-Length for UTF-8 characters and is well-tested
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)  # Compress responses >= 1KB
     app.add_middleware(CacheHeadersMiddleware)  # Add cache headers
+
+    # CSRF middleware (fail-closed in production; can only be disabled in explicit dev/test environments)
+    if settings.csrf_enabled or settings.is_production:
+        app.add_middleware(CSRFMiddleware)
+
+    # Added before TrustedProxyIdentityMiddleware so it runs just inside the identity check, with verified email.
+    app.add_middleware(EnsureSignedInUserMiddleware)
+    app.add_middleware(TrustedProxyIdentityMiddleware)
+
+    # Metrics sits outside auth/CSRF so rejected 401/403 traffic is also observed.
     app.add_middleware(MetricsMiddleware)
-    
-    # Настроить CORS
+
+    # CORS sits outside auth/CSRF so preflight OPTIONS and 401/403 responses carry proper CORS headers.
     allowed_origins = get_cors_origins()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["*"],
     )
-    
-    # CSRF middleware (опционально, можно отключить в development)
-    if settings.csrf_enabled or environment == "production":
-        app.add_middleware(CSRFMiddleware)
-
-    # Added first so it runs just inside the identity check, with the verified email.
-    app.add_middleware(EnsureSignedInUserMiddleware)
-    app.add_middleware(TrustedProxyIdentityMiddleware)
 
     # Must be outermost middleware for request_id propagation through the full stack.
     app.add_middleware(RequestContextMiddleware)

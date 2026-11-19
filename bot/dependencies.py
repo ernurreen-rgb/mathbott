@@ -67,7 +67,7 @@ async def _resolve_authenticated_email(
     email: Optional[str] = None,
 ) -> str:
     resolved_request = _resolve_request(request)
-    environment = _get_runtime_environment()
+    settings = get_settings()
 
     if resolved_request is not None and has_proxy_signature_headers(resolved_request):
         is_valid_proxy, proxy_email, _ = verify_proxy_signature(resolved_request)
@@ -77,7 +77,7 @@ async def _resolve_authenticated_email(
             raise HTTPException(status_code=401, detail="Authenticated proxy user is missing.")
         return proxy_email
 
-    if environment == "production":
+    if settings.is_production:
         raise HTTPException(status_code=401, detail="Trusted proxy authentication required.")
 
     fallback_email = _resolve_legacy_email(email=email, request=resolved_request)
@@ -135,11 +135,12 @@ async def optional_internal_identity(request: Request, db: Database = Depends(ge
     return await db.users.get_user_by_email(email) if email else None
 
 
-async def require_admin(
+async def _require_admin_with_capability(
+    *,
     email: Optional[str] = None,
     request: Request = None,
-    db: Database = Depends(get_db),
-    capability: Optional[str] = CAPABILITY_CONTENT_MANAGE,
+    db: Database,
+    capability: Optional[str],
 ) -> dict:
     authenticated_email = await _resolve_authenticated_email(request=request, email=email)
 
@@ -153,11 +154,9 @@ async def require_admin(
 
     raw_role = user.get("admin_role")
     admin_role = _normalize_admin_role(raw_role)
-    if raw_role is not None and str(raw_role).strip() and admin_role is None:
-        logger.warning("Invalid admin_role='%s' for user email=%s", raw_role, authenticated_email)
-        raise HTTPException(status_code=403, detail="Access denied. Invalid admin role.")
     if admin_role is None:
-        admin_role = ADMIN_ROLE_SUPER_ADMIN
+        logger.warning("Missing or invalid admin_role='%s' for user email=%s", raw_role, authenticated_email)
+        raise HTTPException(status_code=403, detail="Access denied. Invalid or unassigned admin role.")
 
     if capability and not has_admin_capability(admin_role, capability):
         raise HTTPException(status_code=403, detail="Access denied. Insufficient admin role.")
@@ -170,12 +169,26 @@ async def require_admin(
     return enriched_user
 
 
+async def require_admin(
+    email: Optional[str] = None,
+    request: Request = None,
+    db: Database = Depends(get_db),
+) -> dict:
+    """FastAPI dependency and helper enforcing content_manage capability (no query-param capability override)."""
+    return await _require_admin_with_capability(
+        email=email,
+        request=request,
+        db=db,
+        capability=CAPABILITY_CONTENT_MANAGE,
+    )
+
+
 async def require_admin_any_admin(
     email: Optional[str] = None,
     request: Request = None,
     db: Database = Depends(get_db),
 ) -> dict:
-    return await require_admin(email=email, request=request, db=db, capability=None)
+    return await _require_admin_with_capability(email=email, request=request, db=db, capability=None)
 
 
 async def require_admin_review_manage(
@@ -183,7 +196,7 @@ async def require_admin_review_manage(
     request: Request = None,
     db: Database = Depends(get_db),
 ) -> dict:
-    return await require_admin(
+    return await _require_admin_with_capability(
         email=email,
         request=request,
         db=db,
@@ -196,7 +209,7 @@ async def require_admin_super_critical(
     request: Request = None,
     db: Database = Depends(get_db),
 ) -> dict:
-    return await require_admin(
+    return await _require_admin_with_capability(
         email=email,
         request=request,
         db=db,

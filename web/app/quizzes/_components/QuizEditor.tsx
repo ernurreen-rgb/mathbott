@@ -21,6 +21,8 @@ interface DraftQuestion {
   question_type: QuestionType;
   options: QuizOption[];
   correct_answer: string;
+  accepted_answers?: string[];
+  image_filename?: string | null;
   time_limit_seconds: number;
   points: number;
   explanation: string;
@@ -32,11 +34,15 @@ function isEditorDraft(raw: unknown): raw is EditorDraft {
   const draft = raw as EditorDraft | null;
   return !!draft && typeof draft.title === "string" && typeof draft.description === "string" &&
     typeof draft.isPublic === "boolean" && Number.isInteger(draft.activeQuestionIndex) &&
+    (draft.grade === undefined || draft.grade === null || typeof draft.grade === "number") &&
+    (draft.topic === undefined || typeof draft.topic === "string") &&
     Array.isArray(draft.questions) && draft.questions.length > 0 && draft.questions.every((q) =>
       q && typeof q.id === "string" && typeof q.question_text === "string" &&
       ["mcq", "multi_select", "input", "tf"].includes(q.question_type) &&
       typeof q.correct_answer === "string" && typeof q.explanation === "string" &&
       typeof q.time_limit_seconds === "number" && typeof q.points === "number" &&
+      (q.image_filename === undefined || q.image_filename === null || typeof q.image_filename === "string") &&
+      (q.accepted_answers === undefined || (Array.isArray(q.accepted_answers) && q.accepted_answers.every((a) => typeof a === "string"))) &&
       Array.isArray(q.options) && q.options.every((option) => typeof option.id === "string" && typeof option.text === "string"));
 }
 
@@ -100,6 +106,8 @@ export default function QuizEditor({
                 : q.correct_answer === opt.id || opt.is_correct || false,
           })),
           correct_answer: q.correct_answer || "",
+          accepted_answers: Array.isArray(q.accepted_answers) ? [...q.accepted_answers] : [],
+          image_filename: q.image_filename ?? null,
           time_limit_seconds: q.time_limit_seconds || 30,
           points: q.points || 1000,
           explanation: q.explanation || "",
@@ -119,6 +127,8 @@ export default function QuizEditor({
           { id: "D", text: "", is_correct: false },
         ],
         correct_answer: "A",
+        accepted_answers: [],
+        image_filename: null,
         time_limit_seconds: 30,
         points: 1000,
         explanation: "",
@@ -140,7 +150,7 @@ export default function QuizEditor({
       if (draft.topic !== undefined) setTopic(draft.topic);
       setQuestions(draft.questions);
       setActiveQuestionIndex(Math.max(0, Math.min(draft.activeQuestionIndex, draft.questions.length - 1)));
-    }, isEditorDraft);
+    }, isEditorDraft, initialQuiz?.updated_at ?? null);
 
   // Offer the topics already in use, so one topic does not end up spelled three ways.
   useEffect(() => {
@@ -349,6 +359,8 @@ export default function QuizEditor({
         question_type: q.question_type,
         options: q.options,
         correct_answer: normalizeMathFieldValueForStorage(q.correct_answer),
+        accepted_answers: Array.isArray(q.accepted_answers) ? q.accepted_answers : [],
+        image_filename: q.image_filename ?? null,
         time_limit_seconds: q.time_limit_seconds,
         points: q.points,
         sort_order: index + 1,

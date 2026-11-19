@@ -8,14 +8,16 @@ from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 
-def _environment(request: Request) -> str:
+def _is_production(request: Request) -> bool:
     try:
-        return str(getattr(request.app.state, "environment", "development")).lower()
+        return get_settings().is_production
     except Exception:
-        return "development"
+        return True
 
 
 def _request_id(request: Optional[Request]) -> Optional[str]:
@@ -29,6 +31,7 @@ def create_error_response(
     detail: Union[str, Dict[str, Any], List[Any]],
     error_code: str = None,
     request: Request = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> JSONResponse:
     """Create standardized error response."""
     error_data = {
@@ -39,17 +42,17 @@ def create_error_response(
             "request_id": _request_id(request),
         }
     }
-    return JSONResponse(status_code=status_code, content=error_data)
+    return JSONResponse(status_code=status_code, content=error_data, headers=headers)
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle HTTP exceptions with production-safe 500 sanitization."""
     status_code = int(exc.status_code)
-    env = _environment(request)
+    is_prod = _is_production(request)
     error_code = f"ERR_{status_code}"
     detail: Any = exc.detail
 
-    if status_code >= 500 and env == "production":
+    if status_code >= 500 and is_prod:
         detail = "An internal server error occurred"
         error_code = "INTERNAL_SERVER_ERROR"
     elif isinstance(detail, dict):
@@ -65,7 +68,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
                 "error_type": "http_exception",
                 "status_code": status_code,
                 "error_code": error_code,
-                "detail": str(detail),
+                "detail": str(exc.detail),
                 "method": request.method,
                 "path": request.url.path,
                 "request_id": _request_id(request),
@@ -78,6 +81,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         detail=detail,
         error_code=error_code,
         request=request,
+        headers=dict(exc.headers) if exc.headers else None,
     )
 
 
@@ -117,8 +121,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unhandled exceptions."""
-    env = _environment(request)
-    if env == "production":
+    if _is_production(request):
         detail = "An internal server error occurred"
     else:
         detail = f"Internal server error: {str(exc)}"

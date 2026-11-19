@@ -196,6 +196,16 @@ def answer_form(value: str) -> Optional[Any]:
     """The form of a written answer already normalized for comparison (see validation)."""
     if not value:
         return None
+    if value.endswith(r"\%"):
+        inner_form = _expression_form(value[:-2])
+        if inner_form is None:
+            return None
+        return ("percent_number", inner_form) if _is_plain_number(inner_form) else ("percent_expr", inner_form)
+    if value.endswith("%"):
+        inner_form = _expression_form(value[:-1])
+        if inner_form is None:
+            return None
+        return ("percent_number", inner_form) if _is_plain_number(inner_form) else ("percent_expr", inner_form)
     statement = _normalize_relation_syntax(value)
     if any(operator in statement for operator in _RELATIONS):
         return _statement_form(statement)
@@ -211,6 +221,10 @@ def _is_plain_number(form: Any) -> bool:
     return isinstance(form, tuple) and len(form) == 2 and isinstance(form[1], tuple) and form[1][0] == "n"
 
 
+def _is_plain_percent(form: Any) -> bool:
+    return isinstance(form, tuple) and len(form) == 2 and form[0] == "percent_number"
+
+
 def matches_key_form(answer: str, key: str) -> Optional[bool]:
     """False when the answer still differs from the key in form (something left to compute).
 
@@ -220,4 +234,8 @@ def matches_key_form(answer: str, key: str) -> Optional[bool]:
     answer_value, key_value = answer_form(answer), answer_form(key)
     if answer_value is None or key_value is None:
         return None
-    return answer_value == key_value or _is_plain_number(answer_value)
+    if answer_value == key_value or _is_plain_number(answer_value):
+        return True
+    if _is_plain_percent(answer_value) and (_is_plain_percent(key_value) or _is_plain_number(key_value)):
+        return True
+    return False

@@ -214,7 +214,13 @@ def parse_visit_route(path: Optional[str]) -> Tuple[str, Optional[Tuple[str, int
         return _STATIC_VISIT_LABELS[path], None
 
     def _pos_int(raw: str) -> Optional[int]:
-        return int(raw) if raw.isdigit() and int(raw) > 0 else None
+        if not raw or not raw.isascii() or not raw.isdigit():
+            return None
+        try:
+            val = int(raw)
+        except ValueError:
+            return None
+        return val if 1 <= val <= 2_147_483_647 else None
 
     if parts[0] == "modules" and len(parts) == 2 and (entity_id := _pos_int(parts[1])):
         return f"Модуль #{entity_id}", ("module", entity_id)

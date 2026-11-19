@@ -3,11 +3,20 @@ import json
 import base64
 import hashlib
 import hmac
+import secrets
 import time
+from collections import OrderedDict
+from threading import Lock
 from typing import List, Any, Dict, Tuple
 from fastapi import HTTPException
-from settings import get_settings
+from config import KNOWN_PLACEHOLDER_SECRETS
+from settings import DEFAULT_ADMIN_SECRET, get_settings
 from .content_validation import BANK_IMPORT_PREVIEW_TOKEN_TTL_SECONDS, BANK_IMPORT_PREVIEW_TOKEN_VERSION
+
+_CONSUMED_JTI_MAX_SIZE = 4096
+_consumed_import_jtis: "OrderedDict[str, int]" = OrderedDict()
+_consumed_import_jtis_lock = Lock()
+_DEV_FALLBACK_IMPORT_SECRET = "dev-only-import-preview-token-secret-not-for-production"
 
 
 def _canonical_json_dumps(value: Any) -> str:
@@ -32,12 +41,39 @@ def _base64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(f"{value}{padding}")
 
 
+def _is_weak_secret(secret: str) -> bool:
+    return not secret or secret == DEFAULT_ADMIN_SECRET or secret in KNOWN_PLACEHOLDER_SECRETS
+
+
 def _get_import_preview_token_secret() -> str:
     settings = get_settings()
-    if settings.import_preview_token_secret and settings.import_preview_token_secret.strip():
-        return settings.import_preview_token_secret.strip()
-    if settings.admin_secret and settings.admin_secret.strip():
-        return settings.admin_secret.strip()
+    explicit = (settings.import_preview_token_secret or "").strip()
+    if explicit:
+        if settings.is_production and (_is_weak_secret(explicit) or len(explicit) < 32):
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "IMPORT_PREVIEW_SECRET_MISSING",
+                    "message": "Import preview token secret is misconfigured.",
+                },
+            )
+        return explicit
+
+    admin_secret = (settings.admin_secret or "").strip()
+    if admin_secret and not _is_weak_secret(admin_secret):
+        return admin_secret
+
+    proxy_secret = (settings.internal_proxy_shared_secret or "").strip()
+    if proxy_secret and not _is_weak_secret(proxy_secret):
+        return hmac.new(
+            proxy_secret.encode("utf-8"),
+            b"qazmath:import-preview-token:v1",
+            hashlib.sha256,
+        ).hexdigest()
+
+    if not settings.is_production:
+        return _DEV_FALLBACK_IMPORT_SECRET
+
     raise HTTPException(
         status_code=500,
         detail={
@@ -52,6 +88,7 @@ def _issue_import_preview_token(email_norm: str, payload_hash: str) -> Tuple[str
     exp_ts = now_ts + BANK_IMPORT_PREVIEW_TOKEN_TTL_SECONDS
     payload = {
         "v": BANK_IMPORT_PREVIEW_TOKEN_VERSION,
+        "jti": secrets.token_urlsafe(16),
         "email_norm": email_norm,
         "payload_hash": payload_hash,
         "iat": now_ts,
@@ -63,6 +100,24 @@ def _issue_import_preview_token(email_norm: str, payload_hash: str) -> Tuple[str
     signature = hmac.new(secret, payload_b64.encode("utf-8"), hashlib.sha256).digest()
     token = f"{payload_b64}.{_base64url_encode(signature)}"
     return token, exp_ts
+
+
+def _consume_import_preview_token_jti(jti: Any, exp_ts: int) -> None:
+    if not isinstance(jti, str) or not jti.strip():
+        raise _import_http_error("IMPORT_PREVIEW_TOKEN_INVALID", "preview_token is invalid")
+    now_ts = int(time.time())
+    with _consumed_import_jtis_lock:
+        expired_keys = [k for k, v in _consumed_import_jtis.items() if v < now_ts]
+        for key in expired_keys:
+            _consumed_import_jtis.pop(key, None)
+        if jti in _consumed_import_jtis:
+            raise _import_http_error(
+                "IMPORT_PREVIEW_TOKEN_REPLAYED",
+                "preview_token has already been used. Run dry-run again.",
+            )
+        _consumed_import_jtis[jti] = exp_ts
+        while len(_consumed_import_jtis) > _CONSUMED_JTI_MAX_SIZE:
+            _consumed_import_jtis.popitem(last=False)
 
 
 def _import_http_error(code: str, message: str, status_code: int = 400) -> HTTPException:
@@ -99,12 +154,15 @@ def _verify_import_preview_token(token: Any, expected_email_norm: str) -> Dict[s
         raise _import_http_error("IMPORT_PREVIEW_TOKEN_INVALID", "preview_token is invalid")
 
     token_version = payload.get("v")
+    jti = payload.get("jti")
     email_norm = payload.get("email_norm")
     payload_hash = payload.get("payload_hash")
     exp_ts = payload.get("exp")
     iat_ts = payload.get("iat")
 
     if token_version != BANK_IMPORT_PREVIEW_TOKEN_VERSION:
+        raise _import_http_error("IMPORT_PREVIEW_TOKEN_INVALID", "preview_token is invalid")
+    if not isinstance(jti, str) or not jti.strip():
         raise _import_http_error("IMPORT_PREVIEW_TOKEN_INVALID", "preview_token is invalid")
     if not isinstance(email_norm, str) or not email_norm:
         raise _import_http_error("IMPORT_PREVIEW_TOKEN_INVALID", "preview_token is invalid")

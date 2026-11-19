@@ -56,12 +56,13 @@ export default function VisualTaskEditor({
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const cropImageRef = useRef<HTMLImageElement>(null);
 
-  const currentTask = tasks[currentTaskIndex] || null;
-  const currentTaskId = currentTask?.id ?? null;
   const isNewTask = editingTaskId === null && Object.keys(tempTaskData).length > 0;
+  const currentTask = isNewTask ? null : (tasks[currentTaskIndex] || null);
+  const currentTaskId = currentTask?.id ?? null;
   const editingTask = isNewTask ? tempTaskData : (editingTaskId ? tasks.find(t => t.id === editingTaskId) : null);
 
   useEffect(() => {
+    if (isNewTask && currentTaskIndex === tasks.length) return;
     if (currentTaskId !== null) {
       setEditingTaskId(null);
       setTempTaskData({});
@@ -73,9 +74,10 @@ export default function VisualTaskEditor({
       setInlineCropSrc(null);
       setBankTopicInput("");
     }
-  }, [currentTaskIndex, currentTaskId]);
+  }, [currentTaskIndex, currentTaskId, isNewTask, tasks.length]);
 
   useEffect(() => {
+    if (isNewTask) return;
     if (tasks.length === 0) {
       if (currentTaskIndex !== 0) {
         setCurrentTaskIndex(0);
@@ -85,7 +87,7 @@ export default function VisualTaskEditor({
     if (currentTaskIndex > tasks.length - 1) {
       setCurrentTaskIndex(tasks.length - 1);
     }
-  }, [tasks.length, currentTaskIndex]);
+  }, [tasks.length, currentTaskIndex, isNewTask]);
 
   // Inline crop: handle drag
   const applyCropFromHandle = useCallback((handle: typeof HANDLES[number], xPct: number, yPct: number) => {

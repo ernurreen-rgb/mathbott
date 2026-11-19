@@ -18,10 +18,14 @@ describe("default landing and auth callback path", () => {
     expect(resolveSafeCallbackPath("/api/auth/signin")).toBe("/modules");
   });
 
-  it("rejects external or protocol-relative callback targets", () => {
+  it("rejects external, protocol-relative, control-char, backslash, and /api/ traversal callback targets", () => {
     expect(resolveSafeCallbackPath("https://evil.example/modules")).toBe("/modules");
     expect(resolveSafeCallbackPath("//evil.example")).toBe("/modules");
     expect(resolveSafeCallbackPath("/\\evil.example")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/\t/evil.example")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/\n/evil.example")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/modules/../api/auth/signout")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/api")).toBe("/modules");
   });
 
   it("preserves explicit safe in-app routes for shared links", () => {

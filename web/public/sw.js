@@ -111,7 +111,8 @@ async function cacheFirst(event, request) {
 self.addEventListener("push", (event) => {
   let data = {};
   try {
-    data = event.data ? event.data.json() : {};
+    const parsed = event.data ? event.data.json() : {};
+    data = parsed && typeof parsed === "object" ? parsed : {};
   } catch (error) {
     data = {};
   }
@@ -131,15 +132,32 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       // An open QazMath tab is only focused: navigating it could interrupt a lesson.
-      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      const open = windows.find((client) => {
+        try {
+          return new URL(client.url).origin === self.location.origin;
+        } catch {
+          return false;
+        }
+      });
       return open ? open.focus() : self.clients.openWindow(url);
     })
   );
 });
 
-// Only paths inside the app; never another site ("//host" or "https://...").
+// Only normalized same-origin paths inside the app; never another site ("//host", "/\host", "/\t/host", "https://...").
 function safeAppPath(value) {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : "/modules";
+  if (typeof value !== "string") return "/modules";
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\") || /[\u0000-\u001F\u007F]/.test(value)) {
+    return "/modules";
+  }
+  try {
+    const parsed = new URL(value, self.location.origin);
+    if (parsed.origin !== self.location.origin) return "/modules";
+    if (parsed.pathname === "/api" || parsed.pathname.startsWith("/api/")) return "/modules";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/modules";
+  }
 }
 
 async function trimCache(cache, maxEntries) {

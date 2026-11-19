@@ -136,7 +136,7 @@ class BankTaskVersionsMixin:
         actor_user_id: Optional[int] = None,
         actor_email: Optional[str] = None,
     ) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             task_row = await self._fetch_task_row(db, task_id)
             if not task_row:
@@ -174,6 +174,9 @@ class BankTaskVersionsMixin:
             if len(existing_versions) <= 1:
                 raise BankTaskVersionDeleteError("LAST_VERSION")
 
+            if int(version_no) == current_version_before:
+                raise BankTaskVersionDeleteError("CURRENT_VERSION")
+
             delete_cursor = await db.execute(
                 """
                 DELETE FROM bank_task_versions
@@ -182,26 +185,6 @@ class BankTaskVersionsMixin:
                 (task_id, version_no),
             )
             deleted = (delete_cursor.rowcount or 0) > 0
-
-            current_version_after = current_version_before
-            if deleted and int(version_no) == current_version_before:
-                async with db.execute(
-                    "SELECT MAX(version_no) AS max_version FROM bank_task_versions WHERE bank_task_id = ?",
-                    (task_id,),
-                ) as max_cursor:
-                    max_row = await max_cursor.fetchone()
-                next_current = int(max_row["max_version"]) if max_row and max_row["max_version"] is not None else None
-                if next_current is None:
-                    raise BankTaskVersionDeleteError("LAST_VERSION")
-                await db.execute(
-                    """
-                    UPDATE bank_tasks
-                    SET current_version = ?, updated_at = mathbot_datetime('now')
-                    WHERE id = ?
-                    """,
-                    (next_current, task_id),
-                )
-                current_version_after = next_current
 
             if deleted:
                 deleted_snapshot = self._parse_json_field(deleted_version_row["snapshot_json"]) or {}
@@ -223,13 +206,12 @@ class BankTaskVersionsMixin:
                         "deleted_version_source": deleted_version_row["source"],
                         "deleted_version_created_at": deleted_version_row["created_at"],
                         "current_version_before": current_version_before,
-                        "current_version_after": current_version_after,
-                        "was_current_version": int(version_no) == current_version_before,
+                        "current_version_after": current_version_before,
+                        "was_current_version": False,
                         "deleted_version_text_preview": deleted_text_preview,
                     },
                 )
 
-            await db.commit()
             return deleted
 
     async def rollback_task(

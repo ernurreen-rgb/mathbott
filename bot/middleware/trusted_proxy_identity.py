@@ -158,7 +158,6 @@ class TrustedProxyIdentityMiddleware:
         is_valid_proxy = False
         proxy_email: Optional[str] = None
 
-        environment = _get_environment()
         explicit_query_emails = _extract_query_emails(scope)
         explicit_path_email = _private_email_from_path(path)
 
@@ -220,7 +219,7 @@ class TrustedProxyIdentityMiddleware:
         ]
         has_explicit_email = any(email is not None for email in explicit_emails)
 
-        if environment == "production" and (_is_sensitive_identity_path(path) or has_explicit_email):
+        if get_settings().is_production and (_is_sensitive_identity_path(path) or has_explicit_email):
             if not is_valid_proxy or not proxy_email:
                 response = JSONResponse(
                     {"detail": "Trusted proxy authentication required."},

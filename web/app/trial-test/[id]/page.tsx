@@ -31,9 +31,11 @@ export default function TrialTestPage() {
   const [test, setTest] = useState<TrialTestDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [taskNavigatorOpen, setTaskNavigatorOpen] = useState(false);
   const taskNavigatorRef = useRef<HTMLDivElement>(null);
 
@@ -242,6 +244,11 @@ export default function TrialTestPage() {
   }, [buildDraftSnapshot, email, testId]);
 
   useEffect(() => {
+    if (!Number.isInteger(testId) || testId <= 0) {
+      setError("Жарамсыз тест идентификаторы");
+      setLoading(false);
+      return;
+    }
     if (email && testId) {
       void fetchTest();
     }
@@ -304,15 +311,18 @@ export default function TrialTestPage() {
   );
 
   const handleFinishTest = async () => {
-    if (!email || !test || submitting) return;
+    if (!email || !test || submitting || submittingRef.current) return;
 
     // Collect all provided answers (partial and unanswered tasks are allowed in trial tests)
     const allAnswers = collectTrialTestAnswers(test.tasks, answers);
 
     const generation = loadGenerationRef.current;
+    submittingRef.current = true;
     writableDraftKeyRef.current = null;
     pendingDraftSaveRef.current = null;
+    setSubmitError(null);
     setSubmitting(true);
+    let submitFailed = false;
     try {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -333,7 +343,7 @@ export default function TrialTestPage() {
       });
 
       if (generation !== loadGenerationRef.current) return;
-      
+
       if (err) {
         // Recover only this attempt; older results must not swallow a failed retake.
         const savedResults = await getTrialTestResults(testId, email);
@@ -342,16 +352,27 @@ export default function TrialTestPage() {
         if (savedAttempt) {
           openSavedResult(savedAttempt.id);
         } else {
-          setError(err);
+          submitFailed = true;
+          setSubmitError(err);
         }
       } else if (data) {
         openSavedResult(data.result_id);
       }
     } catch (e: any) {
-      if (generation === loadGenerationRef.current) setError(e?.message || "Тестті жіберу қатесі");
-    } finally {
       if (generation === loadGenerationRef.current) {
-        if (!submittedRef.current) writableDraftKeyRef.current = `${email}:${testId}`;
+        submitFailed = true;
+        setSubmitError(e?.message || "Тестті жіберу қатесі");
+      }
+    } finally {
+      submittingRef.current = false;
+      if (generation === loadGenerationRef.current) {
+        if (!submittedRef.current) {
+          writableDraftKeyRef.current = `${email}:${testId}`;
+          if (submitFailed) {
+            // Persist any final edits that had been cancelled when submit started.
+            flushDraft();
+          }
+        }
         setSubmitting(false);
       }
     }
@@ -474,6 +495,23 @@ export default function TrialTestPage() {
               <div style={{ width: `${answerProgress}%` }} />
             </div>
           </header>
+
+          {submitError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+              <span>{submitError}</span>
+              <button
+                type="button"
+                onClick={handleFinishTest}
+                disabled={submitting}
+                className="rounded-lg bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {submitting ? "Жіберілуде..." : "Қайта жіберу"}
+              </button>
+            </div>
+          )}
 
           {/* Current task */}
           {currentTask && (

@@ -71,10 +71,21 @@ describe("service worker: streak reminder notifications", () => {
     expect(shown[0].options.data.url).toBe("/modules");
   });
 
-  it("never links to another site", async () => {
+  it("never links to another site or /api/ routes and handles null JSON payloads", async () => {
     await fire("push", push({ title: "x", url: "//evil.example.com" }));
     await fire("push", push({ title: "x", url: "https://evil.example.com" }));
-    expect(shown.map((notification) => notification.options.data.url)).toEqual(["/modules", "/modules"]);
+    await fire("push", push({ title: "x", url: "/\\evil.example.com" }));
+    await fire("push", push({ title: "x", url: "/\t/evil.example.com" }));
+    await fire("push", push({ title: "x", url: "/modules/../api/auth/signout" }));
+    await fire("push", push(null));
+    expect(shown.map((notification) => notification.options.data.url)).toEqual([
+      "/modules",
+      "/modules",
+      "/modules",
+      "/modules",
+      "/modules",
+      "/modules",
+    ]);
   });
 
   it("opens the app when no QazMath tab is open", async () => {

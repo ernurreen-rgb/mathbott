@@ -54,12 +54,12 @@ _VISIT_PATH_DEDUPE_SECONDS = 300
 
 def normalize_visit_path(raw: Optional[str]) -> Optional[str]:
     """Normalize an in-app route path (no query/hash/origin), or None if invalid."""
-    if not isinstance(raw, str):
+    if not isinstance(raw, str) or "\x00" in raw:
         return None
     cleaned = raw.strip().split("?", 1)[0].split("#", 1)[0].strip()
     if not cleaned.startswith("/") or cleaned.startswith("//") or cleaned.startswith("/\\"):
         return None
-    if any(ch.isspace() for ch in cleaned):
+    if not cleaned.isascii() or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
         return None
     cleaned = re.sub(r"/{2,}", "/", cleaned)
     if len(cleaned) > 1 and cleaned.endswith("/"):
@@ -502,142 +502,137 @@ class UserRepository(BaseRepository):
 
         normalized_actor_email = " ".join((actor_email or "").strip().split()).lower() or "unknown"
 
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
+            async with db.execute(
+                "SELECT id, email, is_admin, admin_role FROM users WHERE email = ?",
+                (normalized_target_email,),
+            ) as cursor:
+                row = await cursor.fetchone()
+
+            if not row:
+                raise ValueError("Target user not found")
+
+            target_user_id = int(row["id"])
+            target_user_email = row["email"] or normalized_target_email
+            previous_is_admin = bool(row["is_admin"])
+
             try:
+                previous_role = _normalize_admin_role(row["admin_role"])
+            except ValueError:
+                logger.warning(
+                    "Invalid existing admin_role while changing role for user_id=%s email=%s",
+                    target_user_id,
+                    target_user_email,
+                )
+                previous_role = None
+
+            if expected_current_is_admin is not None and previous_is_admin != expected_current_is_admin:
+                raise AdminRoleConflictError("Expected current is_admin does not match target user state")
+            if expected_current_role is not None and previous_role != normalized_expected_role:
+                raise AdminRoleConflictError("Expected current role does not match target user state")
+
+            new_is_admin = bool(set_admin)
+            if previous_role == ADMIN_ROLE_SUPER_ADMIN and (not new_is_admin or normalized_role != ADMIN_ROLE_SUPER_ADMIN):
                 async with db.execute(
-                    "SELECT id, email, is_admin, admin_role FROM users WHERE email = ?",
-                    (normalized_target_email,),
-                ) as cursor:
-                    row = await cursor.fetchone()
+                    """
+                    SELECT COUNT(*)
+                    FROM users
+                    WHERE is_admin = 1
+                      AND admin_role = ?
+                    """,
+                    (ADMIN_ROLE_SUPER_ADMIN,),
+                ) as count_cursor:
+                    count_row = await count_cursor.fetchone()
+                super_admin_count = int(count_row[0]) if count_row else 0
+                if super_admin_count <= 1:
+                    raise LastSuperAdminError("At least one super_admin must remain")
 
-                if not row:
-                    raise ValueError("Target user not found")
-
-                target_user_id = int(row["id"])
-                target_user_email = row["email"] or normalized_target_email
-                previous_is_admin = bool(row["is_admin"])
-
-                try:
-                    previous_role = _normalize_admin_role(row["admin_role"])
-                except ValueError:
-                    logger.warning(
-                        "Invalid existing admin_role while changing role for user_id=%s email=%s",
-                        target_user_id,
-                        target_user_email,
-                    )
-                    previous_role = None
-
-                if expected_current_is_admin is not None and previous_is_admin != expected_current_is_admin:
-                    raise AdminRoleConflictError("Expected current is_admin does not match target user state")
-                if expected_current_role is not None and previous_role != normalized_expected_role:
-                    raise AdminRoleConflictError("Expected current role does not match target user state")
-
-                new_is_admin = bool(set_admin)
-                if previous_role == ADMIN_ROLE_SUPER_ADMIN and (not new_is_admin or normalized_role != ADMIN_ROLE_SUPER_ADMIN):
-                    async with db.execute(
-                        """
-                        SELECT COUNT(*)
-                        FROM users
-                        WHERE is_admin = 1
-                          AND admin_role = ?
-                        """,
-                        (ADMIN_ROLE_SUPER_ADMIN,),
-                    ) as count_cursor:
-                        count_row = await count_cursor.fetchone()
-                    super_admin_count = int(count_row[0]) if count_row else 0
-                    if super_admin_count <= 1:
-                        raise LastSuperAdminError("At least one super_admin must remain")
-
-                changed = (previous_is_admin != new_is_admin) or (previous_role != normalized_role)
-                result: Dict[str, Any] = {
-                    "changed": changed,
+            changed = (previous_is_admin != new_is_admin) or (previous_role != normalized_role)
+            result: Dict[str, Any] = {
+                "changed": changed,
+                "previous_role": previous_role,
+                "new_role": normalized_role,
+                "previous_is_admin": previous_is_admin,
+                "new_is_admin": new_is_admin,
+                "target_user": {
+                    "id": target_user_id,
+                    "email": target_user_email,
                     "previous_role": previous_role,
                     "new_role": normalized_role,
                     "previous_is_admin": previous_is_admin,
                     "new_is_admin": new_is_admin,
-                    "target_user": {
-                        "id": target_user_id,
-                        "email": target_user_email,
-                        "previous_role": previous_role,
-                        "new_role": normalized_role,
-                        "previous_is_admin": previous_is_admin,
-                        "new_is_admin": new_is_admin,
-                    },
-                    "audit_id": None,
-                }
+                },
+                "audit_id": None,
+            }
 
-                if not changed:
-                    return result
-
-                if new_is_admin:
-                    await db.execute(
-                        "UPDATE users SET is_admin = 1, admin_role = ? WHERE id = ?",
-                        (normalized_role, target_user_id),
-                    )
-                else:
-                    await db.execute(
-                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE id = ?",
-                        (target_user_id,),
-                    )
-
-                from_display = previous_role if previous_role is not None else "null"
-                to_display = normalized_role if normalized_role is not None else "null"
-                if new_is_admin:
-                    summary = f"Role changed for {target_user_email}: {from_display} -> {to_display}"
-                else:
-                    summary = f"Admin access removed for {target_user_email}: {from_display} -> null"
-
-                changed_fields: List[str] = []
-                if previous_is_admin != new_is_admin:
-                    changed_fields.append("is_admin")
-                if previous_role != normalized_role:
-                    changed_fields.append("admin_role")
-
-                metadata = {
-                    "target_user_id": target_user_id,
-                    "target_email": target_user_email,
-                    "from_role": previous_role,
-                    "to_role": normalized_role,
-                    "from_is_admin": previous_is_admin,
-                    "to_is_admin": new_is_admin,
-                    "source": source,
-                    "actor_verified": bool(actor_verified),
-                }
-                if restored_from_audit_id is not None:
-                    metadata["restored_from_audit_id"] = int(restored_from_audit_id)
-                if expected_current_role is not None:
-                    metadata["restore_expected_to_role"] = normalized_expected_role
-                if expected_current_is_admin is not None:
-                    metadata["restore_expected_to_is_admin"] = bool(expected_current_is_admin)
-                audit_cursor = await db.execute(
-                    """
-                    INSERT INTO admin_audit_logs
-                    (
-                        domain, action, entity_type, entity_id,
-                        actor_user_id, actor_email, summary,
-                        changed_fields_json, metadata_json
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        "bank",
-                        "role_change",
-                        "admin_user",
-                        target_user_id,
-                        actor_user_id,
-                        normalized_actor_email,
-                        summary,
-                        json.dumps(changed_fields, ensure_ascii=False),
-                        json.dumps(metadata, ensure_ascii=False),
-                    ),
-                )
-                result["audit_id"] = int(audit_cursor.lastrowid)
-                await db.commit()
+            if not changed:
                 return result
-            except Exception:
-                await db.rollback()
-                raise
+
+            if new_is_admin:
+                await db.execute(
+                    "UPDATE users SET is_admin = 1, admin_role = ? WHERE id = ?",
+                    (normalized_role, target_user_id),
+                )
+            else:
+                await db.execute(
+                    "UPDATE users SET is_admin = 0, admin_role = NULL WHERE id = ?",
+                    (target_user_id,),
+                )
+
+            from_display = previous_role if previous_role is not None else "null"
+            to_display = normalized_role if normalized_role is not None else "null"
+            if new_is_admin:
+                summary = f"Role changed for {target_user_email}: {from_display} -> {to_display}"
+            else:
+                summary = f"Admin access removed for {target_user_email}: {from_display} -> null"
+
+            changed_fields: List[str] = []
+            if previous_is_admin != new_is_admin:
+                changed_fields.append("is_admin")
+            if previous_role != normalized_role:
+                changed_fields.append("admin_role")
+
+            metadata = {
+                "target_user_id": target_user_id,
+                "target_email": target_user_email,
+                "from_role": previous_role,
+                "to_role": normalized_role,
+                "from_is_admin": previous_is_admin,
+                "to_is_admin": new_is_admin,
+                "source": source,
+                "actor_verified": bool(actor_verified),
+            }
+            if restored_from_audit_id is not None:
+                metadata["restored_from_audit_id"] = int(restored_from_audit_id)
+            if expected_current_role is not None:
+                metadata["restore_expected_to_role"] = normalized_expected_role
+            if expected_current_is_admin is not None:
+                metadata["restore_expected_to_is_admin"] = bool(expected_current_is_admin)
+            audit_cursor = await db.execute(
+                """
+                INSERT INTO admin_audit_logs
+                (
+                    domain, action, entity_type, entity_id,
+                    actor_user_id, actor_email, summary,
+                    changed_fields_json, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "bank",
+                    "role_change",
+                    "admin_user",
+                    target_user_id,
+                    actor_user_id,
+                    normalized_actor_email,
+                    summary,
+                    json.dumps(changed_fields, ensure_ascii=False),
+                    json.dumps(metadata, ensure_ascii=False),
+                ),
+            )
+            result["audit_id"] = int(audit_cursor.lastrowid)
+            return result
 
     async def record_task_completion_once(
         self,

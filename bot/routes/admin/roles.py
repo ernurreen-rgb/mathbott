@@ -5,7 +5,8 @@ from .common import *  # noqa: F401,F403
 
 
 def _legacy_role_bootstrap_enabled() -> bool:
-    return not get_settings().is_production
+    settings = get_settings()
+    return (not settings.is_production) and settings.allow_legacy_admin_bootstrap
 
 
 def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -142,12 +143,16 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=400, detail="target_email is required")
         if not isinstance(remove_admin, bool):
             raise HTTPException(status_code=400, detail="remove_admin must be boolean")
+        actor_email_norm = str(admin_user.get("email") or "").strip().lower()
+        target_email_norm = target_email.strip().lower()
         if remove_admin:
-            if target_email.strip().lower() == str(admin_user.get("email") or "").strip().lower():
+            if target_email_norm == actor_email_norm:
                 raise HTTPException(status_code=400, detail="Cannot remove your own admin access")
         else:
             if not isinstance(role, str) or not role.strip():
                 raise HTTPException(status_code=400, detail="role is required")
+            if target_email_norm == actor_email_norm and role.strip().lower() != ADMIN_ROLE_SUPER_ADMIN:
+                raise HTTPException(status_code=400, detail="Cannot demote your own super_admin access")
 
         role_result = await _change_admin_role_common(
             target_email=target_email,
@@ -292,6 +297,15 @@ def register_roles_routes(app: FastAPI, db: Database, limiter: Limiter):
                     "code": "ROLE_RESTORE_INVALID_EVENT",
                     "message": "Audit event metadata is invalid",
                 },
+            )
+
+        actor_email_norm = str(admin_user.get("email") or "").strip().lower()
+        if target_email.strip().lower() == actor_email_norm and (
+            not from_is_admin or (from_role or "").strip().lower() != ADMIN_ROLE_SUPER_ADMIN
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot remove or demote your own super_admin access via restore",
             )
 
         try:

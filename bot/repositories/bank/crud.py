@@ -439,7 +439,11 @@ class BankTaskCrudMixin:
             next_subquestions_raw = existing.get("subquestions") if subquestions is None else (
                 json.dumps(subquestions, ensure_ascii=False) if subquestions else None
             )
-            next_image_filename = existing.get("image_filename") if image_filename is None else image_filename
+            next_image_filename = (
+                existing.get("image_filename")
+                if image_filename is None
+                else (image_filename or None)
+            )
             next_solution_filename = (
                 existing.get("solution_filename") if solution_filename is None else solution_filename
             )
@@ -612,37 +616,43 @@ class BankTaskCrudMixin:
         actor_user_id: Optional[int] = None,
         actor_email: Optional[str] = None,
     ) -> bool:
-        """Delete trashed content, retaining media shared with historical snapshots."""
-        async with self._connection() as db:
-            db.row_factory = db_driver.Row
-            existing = await self._fetch_task_row(db, task_id)
-            if not existing:
-                return False
+        """Delete trashed content atomically without corrupting active placements."""
+        class _HardDeleteAborted(Exception):
+            pass
 
-            existing_topics = await self._fetch_topics_for_task(db, task_id)
-            twins_trashed = await self._trash_twins_of(db, [task_id]) if existing.get("deleted_at") else 0
-            module_update_cursor = await db.execute(
-                """
-                UPDATE tasks
-                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
-                WHERE bank_task_id = ? AND deleted_at IS NULL
-                """,
-                (task_id,),
-            )
-            trial_update_cursor = await db.execute(
-                """
-                UPDATE trial_test_tasks
-                SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
-                WHERE bank_task_id = ? AND deleted_at IS NULL
-                """,
-                (task_id,),
-            )
-            delete_cursor = await db.execute(
-                "DELETE FROM bank_tasks WHERE id = ? AND deleted_at IS NOT NULL",
-                (task_id,),
-            )
-            deleted = (delete_cursor.rowcount or 0) > 0
-            if deleted:
+        try:
+            async with self._write_transaction() as db:
+                db.row_factory = db_driver.Row
+                existing = await self._fetch_task_row(db, task_id)
+                if not existing or not existing.get("deleted_at"):
+                    return False
+
+                existing_topics = await self._fetch_topics_for_task(db, task_id)
+                twins_trashed = await self._trash_twins_of(db, [task_id])
+                module_update_cursor = await db.execute(
+                    """
+                    UPDATE tasks
+                    SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
+                    WHERE bank_task_id = ? AND deleted_at IS NULL
+                    """,
+                    (task_id,),
+                )
+                trial_update_cursor = await db.execute(
+                    """
+                    UPDATE trial_test_tasks
+                    SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
+                    WHERE bank_task_id = ? AND deleted_at IS NULL
+                    """,
+                    (task_id,),
+                )
+                delete_cursor = await db.execute(
+                    "DELETE FROM bank_tasks WHERE id = ? AND deleted_at IS NOT NULL",
+                    (task_id,),
+                )
+                deleted = (delete_cursor.rowcount or 0) > 0
+                if not deleted:
+                    raise _HardDeleteAborted()
+
                 await self._record_admin_audit_event(
                     db,
                     action=self.AUDIT_ACTION_HARD_DELETE,
@@ -674,8 +684,9 @@ class BankTaskCrudMixin:
                     )
                     """
                 )
-            await db.commit()
-        return deleted
+        except _HardDeleteAborted:
+            return False
+        return True
 
     async def cleanup_old_deleted_tasks(self, days: int = 30) -> int:
         """Delete expired trash while retaining committed media for historical references.

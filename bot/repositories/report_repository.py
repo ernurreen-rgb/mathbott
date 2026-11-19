@@ -38,7 +38,7 @@ class ReportRepository(BaseRepository):
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
-                """SELECT r.*, bt.text as task_text, bt.answer as task_answer, bt.question_type as task_question_type
+                """SELECT r.*, bt.text as task_text, bt.question_type as task_question_type
                    FROM reports r
                    LEFT JOIN tasks t ON r.task_id = t.id
                    LEFT JOIN bank_tasks bt ON bt.id = t.bank_task_id
@@ -56,6 +56,9 @@ class ReportRepository(BaseRepository):
                 SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                        bt.text as task_text, bt.answer as task_answer,
                        bt.question_type as task_question_type,
+                       bt.options as task_options,
+                       bt.subquestions as task_subquestions,
+                       bt.text_scale as task_text_scale,
                        ml.title as mini_lesson_title,
                        l.title as lesson_title,
                        s.name as section_name, s.description as section_description,

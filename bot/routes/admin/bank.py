@@ -393,6 +393,14 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                         "message": "Cannot permanently delete the last remaining version.",
                     },
                 )
+            if str(exc) == "CURRENT_VERSION":
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "CURRENT_VERSION_DELETE_FORBIDDEN",
+                        "message": "Cannot permanently delete the active current version. Roll back to another version first.",
+                    },
+                )
             raise
 
         if not deleted:
@@ -530,15 +538,19 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
         if mode == "dry_run":
             conflicts = await _collect_import_dedup_conflicts(db, normalized_tasks) if normalized_tasks else []
-            token, exp_ts = _issue_import_preview_token(email_norm=email_norm, payload_hash=payload_hash)
             invalid_count = len(errors)
             total_tasks = len(task_payloads)
             valid_count = total_tasks - invalid_count
             duplicate_count = len(conflicts)
+            token: Optional[str] = None
+            expires_at: Optional[str] = None
+            if invalid_count == 0:
+                token, exp_ts = _issue_import_preview_token(email_norm=email_norm, payload_hash=payload_hash)
+                expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc).isoformat()
             return {
                 "mode": "dry_run",
                 "preview_token": token,
-                "expires_at": datetime.fromtimestamp(exp_ts, tz=timezone.utc).isoformat(),
+                "expires_at": expires_at,
                 "summary": {
                     "total_tasks": total_tasks,
                     "valid_count": valid_count,
@@ -572,6 +584,8 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         dedup_flag = _parse_bool_flag(payload.get("dedup_confirmed"))
         if conflicts and not dedup_flag:
             raise HTTPException(status_code=409, detail=_build_import_similar_conflict_detail(conflicts))
+
+        _consume_import_preview_token_jti(token_payload.get("jti"), int(token_payload["exp"]))
 
         created_items = await db.bank_tasks.create_tasks_bulk_atomic(
             tasks=normalized_tasks,
@@ -827,7 +841,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         email: str = Query(...),
         db: Database = Depends(get_db),
     ):
-        admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
+        admin_user = await require_admin_super_critical(email=email, db=db)
         existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Bank task not found")

@@ -357,6 +357,17 @@ class ModuleReviewRepository(BaseRepository):
     async def submit_answer(
         self, user_id: int, mini_lesson_id: int, task_id: int, bank_task_id: int, answer: str,
     ) -> Dict[str, Any]:
+        # Pre-grade outside the write transaction so CPU-bound math grading cannot hold the write lock.
+        async with self._connection() as read_db:
+            preloaded_task = await self._bank_row(read_db, bank_task_id)
+        prechecked_correct = (
+            is_task_answer_correct(preloaded_task, answer)
+            if preloaded_task is not None
+            else None
+        )
+        preloaded_version = preloaded_task.get("current_version") if preloaded_task else None
+        preloaded_updated_at = preloaded_task.get("updated_at") if preloaded_task else None
+
         async with self._write_transaction() as db:
             await self._lesson_id(db, mini_lesson_id)
             items = await self._items(db, user_id, [mini_lesson_id])
@@ -371,7 +382,14 @@ class ModuleReviewRepository(BaseRepository):
             task = await self._bank_row(db, bank_task_id)
             if not task:
                 raise ModuleReviewError("conflict", "Тапсырма жаңартылды. Бетті қайта жүктеңіз.")
-            correct = is_task_answer_correct(task, answer)
+            if (
+                prechecked_correct is not None
+                and task.get("current_version") == preloaded_version
+                and task.get("updated_at") == preloaded_updated_at
+            ):
+                correct = prechecked_correct
+            else:
+                correct = is_task_answer_correct(task, answer)
             await db.execute(
                 "INSERT INTO module_review_attempts (user_id, task_id, bank_task_id, answer, is_correct) VALUES (?, ?, ?, ?, ?)",
                 (user_id, task_id, bank_task_id, answer, correct),

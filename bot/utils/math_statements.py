@@ -230,32 +230,35 @@ def _canonicalize_polynomial_comparison(left: str, right: str, operator: str) ->
     if left_denominator in {None, Fraction(0)} or right_denominator in {None, Fraction(0)}:
         return None
 
-    difference = _add_polynomials(
-        {
-            monomial: _ensure_number_size(coefficient * right_denominator)
-            for monomial, coefficient in left_value.numerator.items()
-        },
-        {
-            monomial: _ensure_number_size(-coefficient * left_denominator)
-            for monomial, coefficient in right_value.numerator.items()
-        },
-    )
-    denominator_product = left_denominator * right_denominator
-    if denominator_product < 0:
-        difference = _negate_polynomial(difference)
-
-    if difference:
-        first_coefficient = difference[min(difference)]
-        if operator in {"=", "≠"}:
-            scale = Fraction(1) / first_coefficient
-        else:
-            scale = Fraction(1) / abs(first_coefficient)
-        difference = _clean_polynomial(
+    try:
+        difference = _add_polynomials(
             {
-                monomial: _ensure_number_size(coefficient * scale)
-                for monomial, coefficient in difference.items()
-            }
+                monomial: _ensure_number_size(coefficient * right_denominator)
+                for monomial, coefficient in left_value.numerator.items()
+            },
+            {
+                monomial: _ensure_number_size(-coefficient * left_denominator)
+                for monomial, coefficient in right_value.numerator.items()
+            },
         )
+        denominator_product = left_denominator * right_denominator
+        if denominator_product < 0:
+            difference = _negate_polynomial(difference)
+
+        if difference:
+            first_coefficient = difference[min(difference)]
+            if operator in {"=", "≠"}:
+                scale = Fraction(1) / first_coefficient
+            else:
+                scale = Fraction(1) / abs(first_coefficient)
+            difference = _clean_polynomial(
+                {
+                    monomial: _ensure_number_size(coefficient * scale)
+                    for monomial, coefficient in difference.items()
+                }
+            )
+    except (ValueError, ZeroDivisionError, OverflowError, ArithmeticError, MemoryError):
+        return None
     return f"polynomial:{operator}:{_serialize_polynomial(difference)}"
 
 

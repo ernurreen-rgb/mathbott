@@ -2,11 +2,10 @@
 from .common import (
     Any,
     Body,
-    CAPABILITY_REVIEW_MANAGE,
-    CAPABILITY_SUPER_CRITICAL,
     Database,
     Depends,
     Dict,
+    File,
     Form,
     HTTPException,
     MCQ_QUESTION_TYPES,
@@ -19,6 +18,7 @@ from .common import (
     _normalize_text_scale,
     _normalize_trial_like_answer_or_raise,
     _parse_bank_topics_json,
+    _parse_bool_flag,
     _parse_options_json,
     _parse_subquestions_json,
     _validate_bank_difficulty,
@@ -30,6 +30,8 @@ from .common import (
     logger,
     require_admin,
     require_admin_any_admin,
+    require_admin_review_manage,
+    require_admin_super_critical,
     sanitize_html,
     save_image_upload,
     validate_email,
@@ -206,7 +208,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         email: str,
         db: Database,
     ) -> Dict[str, Any]:
-        admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+        admin_user = await require_admin_review_manage(email=email, db=db)
 
         task = await db.tasks.get_task_by_id(task_id)
         if not task:
@@ -282,6 +284,8 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         email_query: Optional[str] = Query(None, alias="email"),
         task_type: Optional[str] = Form(None),
         sort_order: Optional[int] = Form(None),
+        image: Optional[UploadFile] = File(None),
+        remove_image: Optional[str] = Form(None),
         db: Database = Depends(get_db)
     ):
         """Update task via web interface"""
@@ -339,11 +343,19 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             if accepted_answers is not None
             else None
         )
+        if effective_question_type not in {*MCQ_QUESTION_TYPES, "select"}:
+            options_list = []
+        if effective_question_type != "select":
+            subquestions_list = []
         effective_options = options_list if options_list is not None else task.get("options")
-        effective_subquestions = subquestions_list if subquestions_list is not None else task.get("subquestions")
+        effective_subquestions = (
+            (subquestions_list if subquestions_list is not None else task.get("subquestions"))
+            if effective_question_type == "select"
+            else None
+        )
         _validate_trial_like_payload(
             effective_question_type,
-            effective_options,
+            effective_options if effective_options else None,
             effective_subquestions,
         )
         effective_answer = answer if answer is not None else task.get("answer", "")
@@ -358,6 +370,12 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale_value = _normalize_text_scale(text_scale) if text_scale is not None else None
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
         topics_value = _parse_bank_topics_json(bank_topics, default_when_missing=None)
+
+        image_filename_value: Optional[str] = None
+        if image is not None:
+            image_filename_value = await save_image_upload(image)
+        elif _parse_bool_flag(remove_image):
+            image_filename_value = ""
 
         await db.tasks.update_task(
             task_id=task_id,
@@ -380,6 +398,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 subquestions=subquestions_list if subquestions is not None else None,
                 difficulty=difficulty_value,
                 topics=topics_value,
+                image_filename=image_filename_value,
                 actor_user_id=admin_user["id"],
                 source="admin_module_task_update",
             )
@@ -413,6 +432,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 raise HTTPException(status_code=500, detail="Internal server error")
 
             return {"success": True, "message": "Task moved to trash"}
+        except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error deleting task {task_id}: {e}", exc_info=True)
@@ -475,7 +495,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Empty trash - permanently delete all tasks in trash for current user"""
         try:
-            admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
+            admin_user = await require_admin_super_critical(email=email, db=db)
 
             deleted_count = await db.tasks.empty_trash(creator_id=admin_user["id"])
             id_reset = await db.tasks.reset_task_id_counter()
@@ -505,7 +525,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Reset task ID counter (only works if all tasks are deleted)"""
         try:
-            await require_admin(email=email, db=db, capability=CAPABILITY_SUPER_CRITICAL)
+            await require_admin_super_critical(email=email, db=db)
 
             async with db_driver.connect(db.database_url) as db_conn:
                 async with db_conn.execute("SELECT COUNT(*) as count FROM tasks") as cursor:

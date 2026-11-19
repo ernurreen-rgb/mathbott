@@ -17,6 +17,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
+NON_PRODUCTION_ENVIRONMENTS = {"development", "dev", "test", "local"}
 
 DEFAULT_ADMIN_SECRET = "change-me-in-production"
 DEFAULT_MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -169,7 +170,7 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        return self.environment == "production"
+        return self.environment not in NON_PRODUCTION_ENVIRONMENTS
 
     @property
     def run_background_tasks(self) -> bool:
@@ -197,7 +198,7 @@ class Settings(BaseSettings):
 
     def cors_origins(self) -> list[str]:
         origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
-        if self.environment == "development" and self.cors_allow_all:
+        if not self.is_production and self.cors_allow_all:
             return ["*"]
         if not origins:
             return ["http://localhost:3000", "http://127.0.0.1:3000"]

@@ -141,9 +141,33 @@ export default function InlineTaskDialog({
                 </div>
               )}
               {slotForm.question_type === "select" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <MathFieldInput readOnly={busy} value={slotForm.subQuestion1} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion1: v }))} placeholder="1-қосымша сұрақ" />
-                  <MathFieldInput readOnly={busy} value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center">
+                    <MathFieldInput readOnly={busy} ariaLabel="1-қосымша сұрақ" value={slotForm.subQuestion1} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion1: v }))} placeholder="1-қосымша сұрақ" />
+                    <select
+                      aria-label="1-қосымша сұрақтың дұрыс жауабы"
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      value={slotForm.correctSub1}
+                      onChange={(e) => setSlotForm((p) => ({ ...p, correctSub1: e.target.value as "A" | "B" | "C" | "D" }))}
+                    >
+                      {(["A", "B", "C", "D"] as const).map((label) => (
+                        <option key={label} value={label}>1-жауап: {label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center">
+                    <MathFieldInput readOnly={busy} ariaLabel="2-қосымша сұрақ" value={slotForm.subQuestion2} onChange={(v) => setSlotForm((p) => ({ ...p, subQuestion2: v }))} placeholder="2-қосымша сұрақ" />
+                    <select
+                      aria-label="2-қосымша сұрақтың дұрыс жауабы"
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      value={slotForm.correctSub2}
+                      onChange={(e) => setSlotForm((p) => ({ ...p, correctSub2: e.target.value as "A" | "B" | "C" | "D" }))}
+                    >
+                      {(["A", "B", "C", "D"] as const).map((label) => (
+                        <option key={label} value={label}>2-жауап: {label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               <StudentTaskPreview

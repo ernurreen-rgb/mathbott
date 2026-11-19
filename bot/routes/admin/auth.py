@@ -5,7 +5,8 @@ from .common import *  # noqa: F401,F403
 
 
 def _legacy_admin_bootstrap_enabled() -> bool:
-    return not get_settings().is_production
+    settings = get_settings()
+    return (not settings.is_production) and settings.allow_legacy_admin_bootstrap
 
 
 def register_auth_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -22,10 +23,9 @@ def register_auth_routes(app: FastAPI, db: Database, limiter: Limiter):
             role_raw = await db.users.get_admin_role(email=email)
             if role_raw and role_raw in ADMIN_ROLES:
                 role = role_raw
-            elif role_raw:
-                logger.warning("Invalid admin role '%s' for user %s", role_raw, email)
             else:
-                role = ADMIN_ROLE_SUPER_ADMIN
+                logger.warning("Missing or invalid admin role '%s' for user %s", role_raw, email)
+                is_admin = False
         return {
             "is_admin": is_admin,
             "role": role,

@@ -2,6 +2,7 @@
 Base repository with common database connection methods
 """
 import asyncio
+import re
 import storage as db_driver
 import logging
 from typing import Optional, Dict
@@ -9,7 +10,14 @@ from contextlib import asynccontextmanager
 from weakref import WeakKeyDictionary
 
 logger = logging.getLogger(__name__)
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _process_write_locks: "WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = WeakKeyDictionary()
+
+
+def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
+    if not isinstance(name, str) or not _SQL_IDENTIFIER_RE.fullmatch(name):
+        raise ValueError(f"Invalid SQL {kind}: {name!r}")
+    return name
 
 
 def _get_process_write_lock() -> asyncio.Lock:
@@ -109,22 +117,26 @@ class BaseRepository:
         """
         if not values:
             return
-        
+        safe_table = _validate_sql_identifier(table, "table")
+        safe_columns = [_validate_sql_identifier(col, "column") for col in columns]
+        if not safe_columns:
+            raise ValueError("columns must not be empty")
+
         use_external_conn = conn is not None
         if not use_external_conn:
             conn = await self._get_connection()
-        
+
         try:
-            placeholders = ','.join(['?' for _ in columns])
-            columns_str = ','.join(columns)
-            query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
-            
+            placeholders = ",".join(["?" for _ in safe_columns])
+            columns_str = ",".join(safe_columns)
+            query = f"INSERT INTO {safe_table} ({columns_str}) VALUES ({placeholders})"
+
             await conn.executemany(query, values)
             await conn.commit()
         finally:
             if not use_external_conn:
                 await self._release_connection(conn)
-    
+
     async def batch_update(
         self,
         table: str,
@@ -153,28 +165,33 @@ class BaseRepository:
         """
         if not updates:
             return
-        
+        safe_table = _validate_sql_identifier(table, "table")
+        safe_where = _validate_sql_identifier(where_column, "column")
+
         use_external_conn = conn is not None
         if not use_external_conn:
             conn = await self._get_connection()
-        
+
         try:
             for update_dict in updates:
                 for where_value, set_values in update_dict.items():
                     if not set_values:
                         continue
-                    # Use cached statement pattern
-                    columns_key = ','.join(sorted(set_values.keys()))
-                    cache_key = f"UPDATE:{table}:{columns_key}:{where_column}"
-                    
+                    sorted_cols = tuple(
+                        _validate_sql_identifier(col, "column")
+                        for col in sorted(set_values.keys())
+                    )
+                    columns_key = ",".join(sorted_cols)
+                    cache_key = f"UPDATE:{safe_table}:{columns_key}:{safe_where}"
+
                     if cache_key not in self._statement_cache:
-                        set_clause = ','.join([f"{col} = ?" for col in set_values.keys()])
-                        query = f"UPDATE {table} SET {set_clause} WHERE {where_column} = ?"
+                        set_clause = ",".join([f"{col} = ?" for col in sorted_cols])
+                        query = f"UPDATE {safe_table} SET {set_clause} WHERE {safe_where} = ?"
                         self._statement_cache[cache_key] = query
                     else:
                         query = self._statement_cache[cache_key]
-                    
-                    params = list(set_values.values()) + [where_value]
+
+                    params = [set_values[col] for col in sorted_cols] + [where_value]
                     await conn.execute(query, params)
             await conn.commit()
         finally:

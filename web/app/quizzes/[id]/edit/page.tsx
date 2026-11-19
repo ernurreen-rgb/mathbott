@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
+import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import Icon from "@/components/ui/Icon";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import QuizEditor from "../../_components/QuizEditor";
 import { getQuiz, getQuizQuestions, forkQuiz } from "@/lib/api/quizzes";
+import { useRequireAuth } from "@/lib/use-require-auth";
 import { Quiz, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
 
@@ -19,11 +20,12 @@ interface EditQuizPageProps {
 export default function EditQuizPage({ params }: EditQuizPageProps) {
   const router = useRouter();
   const routeParams = useParams();
-  const { data: session } = useSession();
+  const { data: session, status } = useRequireAuth();
 
   const [quizId, setQuizId] = useState<number | null>(() => {
     if (routeParams?.id) {
-      return parseInt(routeParams.id as string, 10);
+      const parsed = Number(routeParams.id);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : -1;
     }
     return null;
   });
@@ -37,18 +39,27 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
 
   useEffect(() => {
     if (routeParams?.id) {
-      setQuizId(parseInt(routeParams.id as string, 10));
+      const parsed = Number(routeParams.id);
+      setQuizId(Number.isInteger(parsed) && parsed > 0 ? parsed : -1);
     } else if (params) {
       Promise.resolve(params).then((resolved) => {
         if (resolved?.id) {
-          setQuizId(parseInt(resolved.id, 10));
+          const parsed = Number(resolved.id);
+          setQuizId(Number.isInteger(parsed) && parsed > 0 ? parsed : -1);
         }
       });
     }
   }, [routeParams, params]);
 
   useEffect(() => {
-    if (!quizId) return;
+    if (status === "loading") return;
+    if (!session?.user?.email) return;
+    if (quizId === null) return;
+    if (quizId <= 0) {
+      setError("Жарамсыз квиз идентификаторы");
+      setLoading(false);
+      return;
+    }
 
     let isMounted = true;
     const fetchData = async () => {
@@ -87,7 +98,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
     return () => {
       isMounted = false;
     };
-  }, [quizId, session?.user?.email, loadAttempt]);
+  }, [quizId, status, session?.user?.email, loadAttempt]);
 
   const handleForkAndEdit = async () => {
     if (!quizId) return;
@@ -111,6 +122,10 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
       setForking(false);
     }
   };
+
+  if (status === "loading" || !session) {
+    return <AuthRedirectScreen loading={status === "loading"} />;
+  }
 
   if (loading) {
     return (

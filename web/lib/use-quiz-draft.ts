@@ -6,11 +6,19 @@ export function quizDraftKey(email: string, quizId?: number) {
   return `quiz_draft_v1:${encodeURIComponent(email.trim().toLowerCase())}:${quizId ?? "new"}`;
 }
 
-export function useQuizDraft<T>(key: string | null, value: T, restore: (draft: T) => void, validate: (value: unknown) => value is T) {
+export function useQuizDraft<T>(
+  key: string | null,
+  value: T,
+  restore: (draft: T) => void,
+  validate: (value: unknown) => value is T,
+  baseUpdatedAt?: string | null,
+) {
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [restored, setRestored] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const initial = useRef(value);
+  const baseUpdatedAtRef = useRef(baseUpdatedAt ?? null);
+  baseUpdatedAtRef.current = baseUpdatedAt ?? null;
   const restoreRef = useRef(restore);
   const validateRef = useRef(validate);
   restoreRef.current = restore;
@@ -25,25 +33,41 @@ export function useQuizDraft<T>(key: string | null, value: T, restore: (draft: T
 
   useEffect(() => {
     if (!key) return;
+    const isInitialHydration = hydratedKey.current === null;
     complete.current = false;
     hydratedKey.current = key;
-    lastSaved.current = JSON.stringify(initial.current);
+    const baseline = isInitialHydration ? latest.current.value : initial.current;
+    lastSaved.current = JSON.stringify(baseline);
     skip.current = true;
     setRestored(false);
     setSavedAt(null);
     setStatus("idle");
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
-      if (saved?.version === 1 && validateRef.current(saved.value)) {
+      const currentBase = baseUpdatedAtRef.current;
+      const serverUpdatedMs = currentBase ? Date.parse(currentBase) : Number.NaN;
+      const draftSavedMs = typeof saved?.savedAt === "number" && Number.isFinite(saved.savedAt) ? saved.savedAt : null;
+      const isStaleAgainstServer = Boolean(
+        currentBase &&
+          ((saved?.baseUpdatedAt && saved.baseUpdatedAt !== currentBase) ||
+            (Number.isFinite(serverUpdatedMs) && (draftSavedMs === null || serverUpdatedMs > draftSavedMs)))
+      );
+
+      if (saved?.version === 1 && !isStaleAgainstServer && validateRef.current(saved.value)) {
         lastSaved.current = JSON.stringify(saved.value);
         pendingRestore.current = JSON.stringify(latest.current.value) === lastSaved.current ? null : lastSaved.current;
         restoreRef.current(saved.value);
         setRestored(true);
-        setSavedAt(typeof saved.savedAt === "number" && Number.isFinite(saved.savedAt) ? saved.savedAt : null);
+        setSavedAt(draftSavedMs);
         setStatus("saved");
       } else {
-        pendingRestore.current = JSON.stringify(latest.current.value) === lastSaved.current ? null : lastSaved.current;
-        restoreRef.current(initial.current);
+        if (isStaleAgainstServer) {
+          localStorage.removeItem(key);
+        }
+        pendingRestore.current = null;
+        if (!isInitialHydration) {
+          restoreRef.current(initial.current);
+        }
       }
     } catch { setStatus("error"); }
   }, [key]);
@@ -56,7 +80,15 @@ export function useQuizDraft<T>(key: string | null, value: T, restore: (draft: T
     if (serialized === lastSaved.current) return;
     try {
       const now = Date.now();
-      localStorage.setItem(snapshot.key, JSON.stringify({ version: 1, value: snapshot.value, savedAt: now }));
+      localStorage.setItem(
+        snapshot.key,
+        JSON.stringify({
+          version: 1,
+          value: snapshot.value,
+          savedAt: now,
+          baseUpdatedAt: baseUpdatedAtRef.current,
+        })
+      );
       lastSaved.current = serialized;
       setSavedAt(now);
       setStatus("saved");

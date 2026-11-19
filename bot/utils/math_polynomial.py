@@ -26,13 +26,17 @@ _MAX_VARIABLES = 8
 _MAX_POWER = 20
 
 
+_MAX_TOTAL_DEGREE = 64
+
+
 _MAX_ROOT_DEGREE = 20
 
 
 _MAX_NUMBER_BITS = 4096
 
 
-_NUMBER_RE = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+# Do not match scientific notation with 'e'/'E': in school math '2e+3' is Euler's constant/variable e.
+_NUMBER_RE = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)")
 
 
 _NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
@@ -69,10 +73,17 @@ class _RationalPolynomial:
     denominator: Polynomial
 
 
+def _monomial_degree(monomial: Monomial) -> int:
+    return sum(exponent for _, exponent in monomial)
+
+
 def _clean_polynomial(value: Polynomial) -> Polynomial:
     cleaned = {monomial: coefficient for monomial, coefficient in value.items() if coefficient}
     if len(cleaned) > _MAX_POLYNOMIAL_TERMS:
         raise ValueError("too many polynomial terms")
+    for monomial in cleaned:
+        if _monomial_degree(monomial) > _MAX_TOTAL_DEGREE:
+            raise ValueError("polynomial degree is too large")
     return cleaned
 
 
@@ -99,6 +110,9 @@ def _multiply_monomials(left: Monomial, right: Monomial) -> Monomial:
     powers: Dict[str, int] = dict(left)
     for variable, exponent in right:
         powers[variable] = powers.get(variable, 0) + exponent
+    total_degree = sum(exponent for exponent in powers.values() if exponent > 0)
+    if total_degree > _MAX_TOTAL_DEGREE:
+        raise ValueError("polynomial degree is too large")
     return tuple(sorted((variable, exponent) for variable, exponent in powers.items() if exponent))
 
 
@@ -117,6 +131,10 @@ def _multiply_polynomials(left: Polynomial, right: Polynomial) -> Polynomial:
 
 
 def _power_polynomial(value: Polynomial, exponent: int) -> Polynomial:
+    if value and exponent > 0:
+        max_degree = max((_monomial_degree(monomial) for monomial in value), default=0)
+        if max_degree * exponent > _MAX_TOTAL_DEGREE:
+            raise ValueError("polynomial degree is too large")
     result = _constant_polynomial(Fraction(1))
     base = value
     remaining = exponent

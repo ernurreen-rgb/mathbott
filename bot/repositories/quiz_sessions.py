@@ -378,7 +378,22 @@ class QuizSessionsMixin:
             return await self._progress(db, session_id, participant, now)
 
     async def record_answer(self, session_id, participant_id, question_id, user_answer, participant_token):
-        """Authorize, check clock/state, grade and persist exactly once in one write transaction."""
+        """Authorize, check clock/state, grade outside write lock, and persist once atomically."""
+        preloaded_question = None
+        async with self._connection() as read_db:
+            preloaded_row = await self._row(
+                read_db,
+                'SELECT snapshot_json FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
+                (session_id, question_id),
+            )
+            if preloaded_row:
+                preloaded_question = json.loads(preloaded_row['snapshot_json'])
+        prechecked_correct = (
+            check_question_answer(preloaded_question, user_answer)
+            if preloaded_question is not None
+            else None
+        )
+
         async with self._write_transaction() as db:
             participant = await self._token_participant(db, session_id, participant_token, participant_id)
             question_row = await self._row(db, 'SELECT snapshot_json, position FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
@@ -419,7 +434,12 @@ class QuizSessionsMixin:
                     raise QuizError('conflict', 'Question has not been activated')
 
             elapsed = max(0.0, time.time() - participant['question_started_at'])
-            is_correct = elapsed < question['time_limit_seconds'] and check_question_answer(question, user_answer)
+            answer_matches = (
+                prechecked_correct
+                if prechecked_correct is not None and question == preloaded_question
+                else check_question_answer(question, user_answer)
+            )
+            is_correct = elapsed < question['time_limit_seconds'] and answer_matches
             points = calculate_speed_points(question['points'], question['time_limit_seconds'], elapsed, participant['streak'] + 1) if is_correct else 0
             await db.execute('''INSERT INTO quiz_answers
                 (session_id, participant_id, question_id, user_answer, is_correct, time_taken_seconds, points_awarded)

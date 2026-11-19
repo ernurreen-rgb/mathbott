@@ -259,11 +259,11 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     raw_solution_filename = raw_task.get("solution_filename")
     if raw_solution_filename is not None and not isinstance(raw_solution_filename, str):
         raise ImportTaskValidationError("solution_filename", "solution_filename must be a string or null")
-    solution_filename = (
-        raw_solution_filename
-        if (isinstance(raw_solution_filename, str) and raw_solution_filename.strip())
-        else None
-    )
+    solution_filename = None
+    if isinstance(raw_solution_filename, str) and raw_solution_filename.strip():
+        solution_filename = normalize_stored_image_filename(raw_solution_filename)
+        if solution_filename is None:
+            raise ImportTaskValidationError("solution_filename", "solution_filename is not a safe stored image filename")
 
     raw_text_scale = raw_task.get("text_scale", "md")
     if raw_text_scale is None:

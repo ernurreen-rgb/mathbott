@@ -17,7 +17,7 @@ async def _update_task_from_report_common(
     email: str,
     db: Database,
 ) -> Dict[str, Any]:
-    admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+    admin_user = await require_admin_review_manage(email=email, db=db)
 
     task = await db.tasks.get_task_by_id(task_id)
     if not task:
@@ -86,7 +86,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all reports (admin only)"""
         try:
-            await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            await require_admin_review_manage(email=email, db=db)
             reports = await db.reports.get_all_reports(status_filter=status, limit=limit)
             return reports
         except HTTPException:
@@ -104,7 +104,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all trial test reports (admin only)"""
         try:
-            await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            await require_admin_review_manage(email=email, db=db)
             reports = await db.trial_test_reports.get_all_trial_test_reports(status_filter=status, limit=limit)
             return reports
         except HTTPException:
@@ -122,7 +122,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update report status (admin only)"""
         try:
-            admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            admin_user = await require_admin_review_manage(email=email, db=db)
             
             report = await db.reports.get_report_by_id(report_id)
             if not report:
@@ -151,7 +151,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Update trial test report status (admin only)"""
         try:
-            admin_user = await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            admin_user = await require_admin_review_manage(email=email, db=db)
 
             report = await db.trial_test_reports.get_trial_test_report_by_id(report_id)
             if not report:
@@ -179,7 +179,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Delete trial test report (admin only)"""
         try:
-            await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            await require_admin_review_manage(email=email, db=db)
             success = await db.trial_test_reports.delete_trial_test_report(report_id)
             if success:
                 return {"success": True}
@@ -231,7 +231,7 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Delete a report (admin only)"""
         try:
-            await require_admin(email=email, db=db, capability=CAPABILITY_REVIEW_MANAGE)
+            await require_admin_review_manage(email=email, db=db)
             
             report = await db.reports.get_report_by_id(report_id)
             if not report:

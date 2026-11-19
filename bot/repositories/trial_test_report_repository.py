@@ -31,7 +31,7 @@ class TrialTestReportRepository(BaseRepository):
             async with db.execute(
                 """SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                           tt.title as trial_test_title,
-                          bt.text as task_text, bt.answer as task_answer,
+                          bt.text as task_text,
                           bt.question_type as task_question_type,
                           r.trial_test_task_id as task_id
                    FROM trial_test_reports r
@@ -50,7 +50,7 @@ class TrialTestReportRepository(BaseRepository):
             db.row_factory = db_driver.Row
             async with db.execute(
                 """SELECT r.*, tt.title as trial_test_title,
-                          bt.text as task_text, bt.answer as task_answer,
+                          bt.text as task_text,
                           bt.question_type as task_question_type,
                           r.trial_test_task_id as task_id
                    FROM trial_test_reports r
