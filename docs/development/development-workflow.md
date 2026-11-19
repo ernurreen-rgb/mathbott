@@ -67,7 +67,7 @@ Triggered on `push` and `pull_request` to `main` or `develop`:
    - Runs `python -m compileall -q .`, `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`, `python -m pytest tests`, and `pip-audit --desc -r requirements.txt`.
 2. **`frontend-checks`** (Node.js `24` from `.nvmrc`):
    - Runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (Vitest unit tests in [`web/tests/`](../../web/tests/): lesson flow, answer completeness, the student keyboard, review navigation and the service worker), `npm run build`, and `npm run audit:ci` in `web/`. The last one is `npm audit` failing on any moderate-or-worse advisory except those in [`web/audit-allowlist.json`](../../web/audit-allowlist.json): each entry names the advisory, the reason it cannot be fixed yet and an `until` date after which it fails again ([`web/scripts/audit.mjs`](../../web/scripts/audit.mjs)).
-3. **`e2e`** (Python `3.11`, Node.js `24`, a `postgres:17` service): Playwright browser tests of the student path in [`web/e2e/`](../../web/e2e/), run with `npm run test:e2e`. See [section 3.3](#33-browser-tests-webe2e). On failure the HTML report, screenshots and traces are uploaded as the `playwright-report` artifact.
+3. **`e2e`** (Python `3.11`, Node.js `24`, a `postgres:17` service): Playwright browser tests of the student path in [`web/e2e/`](../../web/e2e/), run with `npm run test:e2e` in the Google Chrome preinstalled on the runner (`E2E_BROWSER_CHANNEL=chrome`), so no browser or system packages are installed. See [section 3.3](#33-browser-tests-webe2e). On failure the HTML report, screenshots and traces are uploaded as the `playwright-report` artifact.
 
 ### 3.3 Browser Tests (`web/e2e/`)
 [`web/playwright.config.ts`](../../web/playwright.config.ts) starts everything the tests need:
@@ -86,6 +86,7 @@ npm run test:e2e
 ```
 - `E2E_WEB_COMMAND="npx next start -p 3031"` reuses the last build when only the tests changed.
 - `E2E_API_PORT` and `E2E_WEB_PORT` move the servers off `8031` and `3031`.
+- `E2E_BROWSER_CHANNEL=chrome` runs the tests in an installed Google Chrome instead of Playwright's Chromium, as CI does.
 - Do not build in a `web/` folder whose dev server is running: both use `.next/`. Use a separate worktree instead.
 
 ### 3.4 Weekly Security Audit ([`.github/workflows/security-audit.yml`](../../.github/workflows/security-audit.yml))

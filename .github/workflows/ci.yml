@@ -115,11 +115,14 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./web
         run: npm ci
-      - name: Install the Playwright browser
-        working-directory: ./web
-        run: npx playwright install --with-deps chromium
+      # No browser install: `playwright install --with-deps` spent six minutes fetching fonts from a slow
+      # apt mirror. The runner image already has Google Chrome and the libraries it needs.
+      - name: Show the preinstalled Chrome
+        run: google-chrome --version
       - name: Run browser tests (Playwright)
         working-directory: ./web
+        env:
+          E2E_BROWSER_CHANNEL: chrome
         run: npm run test:e2e
       - name: Upload the Playwright report
         if: failure()

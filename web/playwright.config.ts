@@ -25,7 +25,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // CI sets "chrome" to use the Google Chrome already on the runner instead of installing
+        // Playwright's Chromium with its system packages. Locally it is unset: Playwright's Chromium.
+        channel: process.env.E2E_BROWSER_CHANNEL || undefined,
+      },
+    },
+  ],
   webServer: [
     {
       command: `"${python}" scripts/seed_e2e.py && "${python}" -m uvicorn main:app --host 127.0.0.1 --port ${E2E_PORTS.api}`,
