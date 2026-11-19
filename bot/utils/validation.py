@@ -575,6 +575,200 @@ def normalize_task_answer_for_compare(task: dict, user_answer: Any) -> str:
     return _normalize_written_math_answer(ans)
 
 
+def is_six_option_mcq(task: dict) -> bool:
+    """True for six-option multi-select questions (question_type='mcq6' or legacy 6-option 'mcq')."""
+    qt = (task.get("question_type") or "input").strip().lower()
+    if qt == "mcq6":
+        return True
+    return qt == "mcq" and len(_parse_task_options(task)) == 6
+
+
+def get_task_max_score(task: dict) -> int:
+    """Maximum ENT/UBT score for a task (2 for 6-option MCQ and 2-part matching; 1 otherwise)."""
+    qt = (task.get("question_type") or "input").strip().lower()
+    if is_six_option_mcq(task) or qt == "select":
+        return 2
+    return 1
+
+
+def _parse_select_answer_slots(raw_answer: Any) -> List[str]:
+    if isinstance(raw_answer, list):
+        return [str(item or "").strip() for item in raw_answer[:2]]
+    text = "" if raw_answer is None else str(raw_answer).strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return [str(item or "").strip() for item in parsed[:2]]
+    except Exception:
+        pass
+    if re.search(r"[,;|]", text):
+        return [item.strip() for item in re.split(r"[,;|]", text)[:2]]
+    return [text]
+
+
+def _extract_mcq6_user_counts(task: dict, user_answer: Any, expected_labels: List[str]) -> Optional[tuple[int, int]]:
+    """Return (right_count, wrong_count) for an mcq6 attempt against expected_labels."""
+    mode = (task.get("answer_mode") or "").strip().lower() or "choices"
+    if mode != "written":
+        user_labels = [label for label in parse_mcq_answer_labels(user_answer) if label in MCQ_ANSWER_LABELS]
+        if not user_labels or len(user_labels) > MAX_MCQ_CORRECT_OPTIONS:
+            return None
+        user_set = set(user_labels)
+        expected_set = set(expected_labels)
+        return len(user_set & expected_set), len(user_set - expected_set)
+
+    slots = [slot for slot in _parse_written_answer_slots(user_answer) if slot.strip()]
+    if not slots:
+        return None
+    if len(slots) > MAX_MCQ_CORRECT_OPTIONS:
+        return None
+
+    option_values: dict[str, str] = {}
+    option_texts: dict[str, str] = {}
+    for option in _parse_task_options(task):
+        label = str(option.get("label") or "").strip().upper()
+        text = str(option.get("text") or "").strip()
+        if label in MCQ_ANSWER_LABELS and text:
+            option_values[label] = _normalize_written_math_answer(text)
+            option_texts[label] = text
+
+    if option_values:
+        used_labels: set[str] = set()
+        right_count = 0
+        wrong_count = 0
+        unmatched_slots = 0
+
+        for slot in slots:
+            normalized_slot = _normalize_written_math_answer(slot)
+
+            def matches_option(label: str) -> bool:
+                return option_values.get(label) == normalized_slot and _same_written_form(slot, option_texts[label])
+
+            matched_correct = next(
+                (label for label in expected_labels if label not in used_labels and matches_option(label)),
+                None,
+            )
+            if matched_correct is not None:
+                used_labels.add(matched_correct)
+                right_count += 1
+                continue
+
+            matched_wrong = next(
+                (label for label in option_values if label not in used_labels and matches_option(label)),
+                None,
+            )
+            if matched_wrong is not None:
+                used_labels.add(matched_wrong)
+                wrong_count += 1
+                continue
+
+            unmatched_slots += 1
+
+        if right_count > 0 or wrong_count > 0 or not all(
+            slot.strip().upper() in MCQ_ANSWER_LABELS for slot in slots
+        ):
+            return right_count, wrong_count + unmatched_slots
+
+    user_labels = [label for label in parse_mcq_answer_labels(user_answer) if label in MCQ_ANSWER_LABELS]
+    if not user_labels or len(user_labels) > MAX_MCQ_CORRECT_OPTIONS:
+        return None
+    user_set = set(user_labels)
+    expected_set = set(expected_labels)
+    return len(user_set & expected_set), len(user_set - expected_set)
+
+
+def _grade_mcq6_against_expected(task: dict, user_answer: Any, expected: Any) -> int:
+    expected_labels = [
+        label for label in parse_mcq_answer_labels(expected) if label in MCQ_ANSWER_LABELS
+    ]
+    if not expected_labels:
+        return 0
+    counts = _extract_mcq6_user_counts(task, user_answer, expected_labels)
+    if counts is None:
+        return 0
+    right_count, wrong_count = counts
+    expected_count = len(set(expected_labels))
+    if right_count == expected_count and wrong_count == 0:
+        return 2
+    if right_count >= 1 and right_count >= expected_count - 1 and wrong_count <= 1:
+        return 1
+    return 0
+
+
+def _grade_select_against_expected(task: dict, user_answer: Any, expected: Any) -> int:
+    user_slots = _parse_select_answer_slots(user_answer)
+    expected_slots = _parse_select_answer_slots(expected)
+    if len(expected_slots) < 2 or not user_slots:
+        return 0
+
+    mode = (task.get("answer_mode") or "").strip().lower() or "choices"
+    option_values: dict[str, str] = {}
+    option_texts: dict[str, str] = {}
+    if mode == "written":
+        for option in _parse_task_options(task):
+            label = str(option.get("label") or "").strip().upper()
+            text = str(option.get("text") or "").strip()
+            if label in MCQ_ANSWER_LABELS and text:
+                option_values[label] = _normalize_written_math_answer(text)
+                option_texts[label] = text
+
+    score = 0
+    for idx in range(2):
+        user_slot = user_slots[idx] if idx < len(user_slots) else ""
+        expected_label = expected_slots[idx].strip().upper()
+        if not user_slot or not expected_label:
+            continue
+        if mode != "written":
+            if user_slot.upper() == expected_label:
+                score += 1
+            continue
+
+        if expected_label in option_values:
+            normalized_user = _normalize_written_math_answer(user_slot)
+            if option_values[expected_label] == normalized_user and _same_written_form(
+                user_slot, option_texts[expected_label]
+            ):
+                score += 1
+                continue
+        if user_slot.upper() == expected_label and user_slot.upper() in MCQ_ANSWER_LABELS:
+            score += 1
+    return score
+
+
+def grade_task_answer(task: dict, user_answer: Any) -> tuple[int, int]:
+    """Score a task answer under ENT/UBT rules: returns (earned_score, max_score)."""
+    max_score = get_task_max_score(task)
+    if is_task_answer_correct(task, user_answer):
+        return max_score, max_score
+
+    qt = (task.get("question_type") or "input").strip().lower()
+    if not is_six_option_mcq(task) and qt != "select":
+        return 0, max_score
+
+    try:
+        alternatives = normalize_accepted_answers(task.get("accepted_answers"))
+    except ValueError:
+        alternatives = []
+    expected_answers = [task.get("answer"), *alternatives]
+
+    best = 0
+    for expected in expected_answers:
+        if expected is None:
+            continue
+        if is_six_option_mcq(task):
+            earned = _grade_mcq6_against_expected(task, user_answer, expected)
+        else:
+            earned = _grade_select_against_expected(task, user_answer, expected)
+        if earned > best:
+            best = earned
+        if best >= max_score - 1:
+            break
+    # Only exact full answers accepted by is_task_answer_correct may earn full points.
+    return min(best, max_score - 1), max_score
+
+
 def is_task_answer_correct(task: dict, user_answer: Any) -> bool:
     """Compare an answer against the primary answer and all accepted aliases."""
     user_normalized = normalize_task_answer_for_compare(task, user_answer)

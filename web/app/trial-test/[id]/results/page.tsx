@@ -18,6 +18,7 @@ import styles from "../TrialTestWorkspace.module.css";
 
 const STATUS_LABEL: Record<ReviewStatus, string> = {
   correct: "Дұрыс",
+  partial: "Ішінара дұрыс",
   wrong: "Қате",
   skipped: "Жауап берілмеді",
 };
@@ -35,6 +36,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
   const counts = useMemo(
     () => ({
       correct: statuses.filter((status) => status === "correct").length,
+      partial: statuses.filter((status) => status === "partial").length,
       wrong: statuses.filter((status) => status === "wrong").length,
       skipped: statuses.filter((status) => status === "skipped").length,
     }),
@@ -58,12 +60,18 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
 
   const task = tasks[current];
   const status = statuses[current];
+  const currentAnswer = result.answers[task.id];
+  const scoreBadgeText =
+    typeof currentAnswer?.score === "number" && typeof currentAnswer?.max_score === "number"
+      ? `${STATUS_LABEL[status]} · ${currentAnswer.score}/${currentAnswer.max_score} балл`
+      : STATUS_LABEL[status];
 
   return (
     <>
       <section className={styles.resultStrip} aria-label="Тапсырма нөмірлері">
         <div className={styles.legend}>
           <span><i data-status="correct" />Дұрыс: {counts.correct}</span>
+          {counts.partial > 0 && <span><i data-status="partial" />Ішінара: {counts.partial}</span>}
           <span><i data-status="wrong" />Қате: {counts.wrong}</span>
           <span><i data-status="skipped" />Жауапсыз: {counts.skipped}</span>
         </div>
@@ -87,7 +95,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
       <article key={`${task.id}-${current}`} className={`${styles.taskCard} ${styles.reviewCard}`} aria-label={`Тапсырма ${current + 1}`}>
         <div className={styles.reviewHeader}>
           <span>Тапсырма <strong>{current + 1} / {tasks.length}</strong></span>
-          <span className={styles.statusPill} data-status={status}>{STATUS_LABEL[status]}</span>
+          <span className={styles.statusPill} data-status={status}>{scoreBadgeText}</span>
         </div>
         <div className={styles.taskBody}>
           <TaskStatement task={task} />

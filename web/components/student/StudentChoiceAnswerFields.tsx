@@ -3,7 +3,7 @@
 import MathRender from "@/components/ui/MathRender";
 import Icon from "@/components/ui/Icon";
 import {
-  getTaskMcqCorrectCount,
+  getMcqSelectableCount,
   parseMcqAnswerLabels,
   toggleMcqAnswerLabel,
   type McqOptionLabel,
@@ -140,7 +140,7 @@ export default function StudentChoiceAnswerFields({
     );
   }
 
-  const requiredCount = getTaskMcqCorrectCount(task);
+  const maxSelectableCount = getMcqSelectableCount(task);
   const effectiveSelected = value || selectedAnswer || "";
   const selectedLabels = parseMcqAnswerLabels(effectiveSelected);
   const effectiveCorrect =
@@ -179,7 +179,7 @@ export default function StudentChoiceAnswerFields({
               aria-pressed={isSelected}
               onClick={() => {
                 if (isAnswered) return;
-                onChange(toggleMcqAnswerLabel(value, label, requiredCount));
+                onChange(toggleMcqAnswerLabel(value, label, maxSelectableCount));
               }}
               className={`min-h-[52px] rounded-xl border px-4 py-3 text-base text-left transition-colors flex items-center justify-between ${
                 disabled || isAnswered ? "cursor-default" : ""

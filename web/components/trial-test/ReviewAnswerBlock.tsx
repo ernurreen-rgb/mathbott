@@ -76,10 +76,23 @@ export function ReviewAnswerBlock({
       const options = task.options || [];
       const isWrittenAnswer = getTaskAnswerMode(task) === "written";
       const writtenAnswers = parseWrittenAnswerSlots(userAnswerRaw, getTaskMcqCorrectCount(task));
+      const isPartial =
+        typeof resultAnswer?.score === "number" &&
+        typeof resultAnswer?.max_score === "number" &&
+        resultAnswer.score > 0 &&
+        resultAnswer.score < resultAnswer.max_score;
       return (
         <div className="mt-2 space-y-3">
           {isWrittenAnswer && (
-            <div className={`rounded-lg border-2 p-3 ${isCorrect ? "border-green-500 bg-green-100" : "border-red-500 bg-red-100"}`}>
+            <div
+              className={`rounded-lg border-2 p-3 ${
+                isCorrect
+                  ? "border-green-500 bg-green-100"
+                  : isPartial
+                    ? "border-amber-400 bg-amber-50"
+                    : "border-red-500 bg-red-100"
+              }`}
+            >
               <div className="mb-1 text-sm font-semibold text-gray-700">Жауабыңыз</div>
               <div className="flex flex-wrap gap-3">
                 {writtenAnswers.map((answer, index) => (
@@ -94,9 +107,9 @@ export function ReviewAnswerBlock({
             const isUserChoice = !isWrittenAnswer && userMcqLabels.includes(labelUpper as any);
             const isCorrectOption = correctMcqLabels.includes(labelUpper as any);
             let style = "bg-gray-50 border-gray-200";
-            if (isUserChoice && isCorrect) style = "bg-green-100 border-green-500";
-            else if (isUserChoice && !isCorrect) style = "bg-red-100 border-red-500";
-            else if (!isCorrect && isCorrectOption) style = "bg-green-100 border-green-400";
+            if (isUserChoice && (isCorrect || isCorrectOption)) style = "bg-green-100 border-green-500";
+            else if (isUserChoice && !isCorrectOption) style = "bg-red-100 border-red-500";
+            else if (!isUserChoice && isCorrectOption) style = "bg-green-50 border-green-400";
 
               return (
                 <div key={option.label} className={`border-2 rounded-lg p-3 text-left ${style}`}>

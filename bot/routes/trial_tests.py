@@ -14,7 +14,7 @@ from database import Database
 from utils.cache import cache
 from utils.public_payload import public_options, public_review_answers, public_subquestions, task_review_snapshot
 from utils.learning_progress import build_completion_identity
-from utils.validation import get_mcq_answer_count, is_task_answer_correct, normalize_answer_mode
+from utils.validation import get_mcq_answer_count, grade_task_answer, is_task_answer_correct, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
 _trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
@@ -216,7 +216,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             async with _get_trial_test_write_lock(user["id"], test_id):
                 results = {}
                 score = 0
-                total = len(tasks)
+                total = 0
                 had_any_correct = False
 
                 for task in tasks:
@@ -225,15 +225,19 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                         answers.get(str(task_id), answers.get(int(task_id), ""))
                     ).strip()
 
-                    is_correct = is_task_answer_correct(task, user_answer)
+                    earned_score, max_score = grade_task_answer(task, user_answer)
+                    is_correct = earned_score >= max_score and max_score > 0
 
-                    if is_correct:
-                        score += 1
+                    score += earned_score
+                    total += max_score
+                    if earned_score > 0:
                         had_any_correct = True
 
                     results[int(task_id)] = {
                         "answer": user_answer,
                         "correct": is_correct,
+                        "score": earned_score,
+                        "max_score": max_score,
                         "correct_answer": task.get("answer"),
                         "task": task_review_snapshot(task)
                     }

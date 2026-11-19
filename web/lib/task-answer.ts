@@ -23,10 +23,9 @@ export const isTaskAnswerComplete = (task: LessonTask, value?: string): boolean 
       : isSelectAnswerComplete(value);
   }
   if (task.question_type === "mcq" || task.question_type === "mcq6") {
-    const requiredCount = getTaskMcqCorrectCount(task);
     return getTaskAnswerMode(task) === "written"
-      ? isWrittenAnswerComplete(value, requiredCount)
-      : isMcqAnswerComplete(value, requiredCount);
+      ? isWrittenAnswerComplete(value, getTaskMcqCorrectCount(task))
+      : isMcqAnswerComplete(value, 1);
   }
   return typeof value === "string" && value.trim().length > 0;
 };

@@ -58,10 +58,12 @@
 .resultNumbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px; }
 .resultNumber { min-height: 40px; border: 2px solid transparent; border-radius: 8px; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color 150ms, border-color 150ms, color 150ms; }
 .resultNumber[data-status="correct"], .legend i[data-status="correct"] { border-color: #86d4a3; background: #dcfce7; color: #15803d; }
+.resultNumber[data-status="partial"], .legend i[data-status="partial"] { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
 .resultNumber[data-status="wrong"], .legend i[data-status="wrong"] { border-color: #f1a5a5; background: #fee2e2; color: #b91c1c; }
 .resultNumber[data-status="skipped"], .legend i[data-status="skipped"] { border-color: #d0d5dd; background: #f2f4f7; color: #667085; }
 .legend i { border-width: 2px; border-style: solid; }
 .resultNumber[aria-current="step"][data-status="correct"] { border-color: #15803d; background: #16a34a; color: #fff; }
+.resultNumber[aria-current="step"][data-status="partial"] { border-color: #b45309; background: #d97706; color: #fff; }
 .resultNumber[aria-current="step"][data-status="wrong"] { border-color: #b91c1c; background: #dc2626; color: #fff; }
 .resultNumber[aria-current="step"][data-status="skipped"] { border-color: #475467; background: #667085; color: #fff; }
 .resultNumber:not([aria-current="step"]):hover { filter: brightness(0.96); }
@@ -70,6 +72,7 @@
 .reviewHeader strong { color: #172033; font-size: 15px; font-variant-numeric: tabular-nums; }
 .statusPill { padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
 .statusPill[data-status="correct"] { background: #dcfce7; color: #15803d; }
+.statusPill[data-status="partial"] { background: #fef3c7; color: #b45309; }
 .statusPill[data-status="wrong"] { background: #fee2e2; color: #b91c1c; }
 .statusPill[data-status="skipped"] { background: #f2f4f7; color: #667085; }
 .reviewFooter { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid #edf0f4; background: #fcfcfd; }

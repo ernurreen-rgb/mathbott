@@ -34,7 +34,10 @@ export interface TrialTestResult {
   score: number;
   total: number;
   percentage: number;
-  answers: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
+  answers: Record<
+    number,
+    { answer: string; correct: boolean; score?: number; max_score?: number; correct_answer?: string; task?: LessonTask }
+  >;
   completed_at: string;
 }
 
@@ -50,7 +53,10 @@ export interface TrialTestSubmitResponse {
   score: number;
   total: number;
   percentage: number;
-  results: Record<number, { answer: string; correct: boolean; correct_answer?: string; task?: LessonTask }>;
+  results: Record<
+    number,
+    { answer: string; correct: boolean; score?: number; max_score?: number; correct_answer?: string; task?: LessonTask }
+  >;
 }
 
 

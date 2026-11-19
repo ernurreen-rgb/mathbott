@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import {
+  getMcqSelectableCount,
   getTaskMcqCorrectCount,
   isMcqAnswerComplete,
   parseMcqAnswerLabels,
   serializeMcqAnswerLabels,
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
+import { getReviewStatus } from "@/lib/trial-test-review";
 import { isSelectAnswerComplete, isTaskAnswerComplete } from "@/lib/task-answer";
 import {
   collectTrialTestAnswers,
@@ -82,10 +84,37 @@ describe("isTaskAnswerComplete (enables «Тексеру»)", () => {
     expect(isTaskAnswerComplete(makeTask({ question_type: "tf" }), "true")).toBe(true);
   });
 
-  it("needs every correct choice for multi-answer tasks", () => {
-    const task = makeTask({ question_type: "mcq", answer: "A,C" });
-    expect(isTaskAnswerComplete(task, "A")).toBe(false);
+  it("allows selecting up to 3 choices on 6-option tasks regardless of correct_count", () => {
+    const oneRight = makeTask({ question_type: "mcq6", correct_count: 1 });
+    const twoRight = makeTask({ question_type: "mcq6", correct_count: 2 });
+    const legacySix = makeTask({
+      question_type: "mcq",
+      options: ["A", "B", "C", "D", "E", "F"].map((label) => ({ label, text: label })),
+    });
+    const fourOption = makeTask({ question_type: "mcq", correct_count: 1 });
+
+    expect(getMcqSelectableCount(oneRight)).toBe(3);
+    expect(getMcqSelectableCount(twoRight)).toBe(3);
+    expect(getMcqSelectableCount(legacySix)).toBe(3);
+    expect(getMcqSelectableCount(fourOption)).toBe(1);
+
+    let selected = toggleMcqAnswerLabel("", "A", getMcqSelectableCount(oneRight));
+    selected = toggleMcqAnswerLabel(selected, "B", getMcqSelectableCount(oneRight));
+    selected = toggleMcqAnswerLabel(selected, "C", getMcqSelectableCount(oneRight));
+    expect(selected).toBe('["A","B","C"]');
+    expect(toggleMcqAnswerLabel(selected, "D", getMcqSelectableCount(oneRight))).toBe('["A","B","C"]');
+    expect(toggleMcqAnswerLabel(selected, "B", getMcqSelectableCount(oneRight))).toBe('["A","C"]');
+  });
+
+  it("enables checking once at least 1 choice is picked, without leaking correct_count", () => {
+    const task = makeTask({ question_type: "mcq6", answer: "A,C", correct_count: 2 });
+    expect(isTaskAnswerComplete(task, "")).toBe(false);
+    expect(isTaskAnswerComplete(task, "A")).toBe(true);
     expect(isTaskAnswerComplete(task, '["A","C"]')).toBe(true);
+
+    const written = makeTask({ question_type: "mcq6", answer_mode: "written", answer: "A,C", correct_count: 2 });
+    expect(isTaskAnswerComplete(written, "1")).toBe(false);
+    expect(isTaskAnswerComplete(written, '["1","-0.5"]')).toBe(true);
   });
 
   it("needs both rows of a matching task, chosen or written", () => {
@@ -118,5 +147,15 @@ describe("trial test answers (partial answers count and are submitted)", () => {
     expect(getAnsweredTrialTaskCount(tasks, answers)).toBe(3);
     expect(getTrialTaskAnswerProgress(tasks, answers)).toBe(75);
     expect(getTrialTaskAnswerProgress([], {})).toBe(0);
+  });
+
+  it("classifies review statuses including partial ENT points and legacy attempts", () => {
+    const task = makeTask({ id: 10, question_type: "mcq6" });
+    expect(getReviewStatus(task, { answer: '["C","D"]', correct: true, score: 2, max_score: 2 })).toBe("correct");
+    expect(getReviewStatus(task, { answer: '["C","E"]', correct: false, score: 1, max_score: 2 })).toBe("partial");
+    expect(getReviewStatus(task, { answer: "E", correct: false, score: 0, max_score: 2 })).toBe("wrong");
+    expect(getReviewStatus(task, { answer: "", correct: false, score: 0, max_score: 2 })).toBe("skipped");
+    // Legacy saved results have no score/max_score fields.
+    expect(getReviewStatus(task, { answer: "E", correct: false })).toBe("wrong");
   });
 });

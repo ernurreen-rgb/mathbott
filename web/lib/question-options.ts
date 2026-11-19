@@ -23,6 +23,16 @@ export function getMcqEditorQuestionType<T extends string>(questionType: T, opti
 export const isMcqQuestionType = (questionType?: string | null): boolean =>
   questionType === "mcq" || questionType === "mcq6";
 
+/** Six-option tasks always let students select up to 3 choices without revealing key count. */
+export function getMcqSelectableCount(task: {
+  question_type?: string | null;
+  options?: readonly unknown[] | null;
+}): number {
+  return getMcqEditorQuestionType(task.question_type || "input", task.options) === "mcq6"
+    ? MAX_MCQ_CORRECT_OPTIONS
+    : 1;
+}
+
 const isMcqOptionLabel = (value: string): value is McqOptionLabel =>
   (MCQ_OPTION_LABELS as readonly string[]).includes(value);
 
