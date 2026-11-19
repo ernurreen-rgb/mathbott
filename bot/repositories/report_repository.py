@@ -122,6 +122,14 @@ class ReportRepository(BaseRepository):
                     await db.commit()
                     return cursor.rowcount > 0
 
+    async def has_report_for_task(self, task_id: int) -> bool:
+        async with self._connection() as db:
+            async with db.execute(
+                "SELECT 1 FROM reports WHERE task_id = ? LIMIT 1",
+                (task_id,),
+            ) as cursor:
+                return (await cursor.fetchone()) is not None
+
     async def delete_report(self, report_id: int) -> bool:
         """Delete a report by ID"""
         async with self._connection() as db:

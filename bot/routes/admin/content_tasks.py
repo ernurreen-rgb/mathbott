@@ -1,10 +1,8 @@
 """CMS routes: tasks."""
 from .common import (
-    Any,
     Body,
     Database,
     Depends,
-    Dict,
     File,
     Form,
     HTTPException,
@@ -30,7 +28,6 @@ from .common import (
     logger,
     require_admin,
     require_admin_any_admin,
-    require_admin_review_manage,
     require_admin_super_critical,
     sanitize_html,
     save_image_upload,
@@ -39,6 +36,7 @@ from .common import (
     FastAPI,
     Limiter,
 )
+from .reports import _update_task_from_report_common
 
 
 def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -194,78 +192,6 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             "text": task["text"],
             "answer": task["answer"]
         }
-
-    async def _update_task_from_report_common(
-        *,
-        task_id: int,
-        text: str,
-        answer: str,
-        question_type: str,
-        text_scale: str,
-        options: Optional[str],
-        subquestions: Optional[str],
-        image: Optional[UploadFile],
-        email: str,
-        db: Database,
-    ) -> Dict[str, Any]:
-        admin_user = await require_admin_review_manage(email=email, db=db)
-
-        task = await db.tasks.get_task_by_id(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        logger.info(
-            "Update task from report: question_type=%s, has_options=%s, has_subquestions=%s, has_image=%s",
-            question_type,
-            bool(options),
-            bool(subquestions),
-            bool(image),
-        )
-
-        options_list = None
-        if options and options.strip():
-            try:
-                options_list = json.loads(options)
-                if not isinstance(options_list, list):
-                    raise ValueError("Options must be a JSON array")
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid options JSON: {str(e)}")
-
-        subquestions_list = None
-        if subquestions and subquestions.strip():
-            try:
-                subquestions_list = json.loads(subquestions)
-                if not isinstance(subquestions_list, list) or len(subquestions_list) != 2:
-                    raise ValueError("Subquestions must be a JSON array of length 2")
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid subquestions JSON: {str(e)}")
-
-        _validate_trial_like_payload(question_type, options_list, subquestions_list)
-        answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
-        text_scale_value = _normalize_text_scale(text_scale)
-
-        image_filename = await save_image_upload(image) if image else None
-
-        await db.tasks.update_task(task_id=task_id, text_scale=text_scale_value)
-
-        linked_bank_task_id = task.get("bank_task_id")
-        if isinstance(linked_bank_task_id, int) and linked_bank_task_id > 0:
-            await db.bank_tasks.update_task(
-                task_id=linked_bank_task_id,
-                text=text.strip() if text.strip() else None,
-                answer=answer.strip() if answer.strip() else None,
-                question_type=question_type,
-                text_scale=text_scale_value,
-                options=options_list if options is not None else None,
-                subquestions=subquestions_list if subquestions is not None else None,
-                image_filename=image_filename,
-                solution_filename=None,
-                actor_user_id=admin_user["id"],
-                source="admin_report_task_update",
-            )
-
-        logger.info("Task %s updated from report by admin %s", task_id, email)
-        return {"success": True, "message": "Task updated successfully"}
 
     @app.put("/api/admin/tasks/{task_id}")
     async def update_task_web(

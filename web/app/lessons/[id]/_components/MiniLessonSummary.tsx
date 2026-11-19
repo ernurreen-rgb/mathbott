@@ -4,7 +4,7 @@ import Icon from "@/components/ui/Icon";
 
 import StreakReminderPrompt from "./StreakReminderPrompt";
 
-type Action = { label: string; onClick: () => void };
+type Action = { label: string; onClick: () => void; disabled?: boolean };
 
 type Props = {
   miniIndex: number;
@@ -78,7 +78,8 @@ export default function MiniLessonSummary({
         <button
           type="button"
           onClick={primary.onClick}
-          className="h-12 w-full rounded-xl bg-purple-600 font-bold text-white hover:bg-purple-700 inline-flex items-center justify-center gap-1.5 transition-colors"
+          disabled={primary.disabled}
+          className="h-12 w-full rounded-xl bg-purple-600 font-bold text-white hover:bg-purple-700 disabled:bg-gray-300 inline-flex items-center justify-center gap-1.5 transition-colors"
         >
           {primary.label} <Icon name="arrowRight" />
         </button>

@@ -180,27 +180,34 @@ export function useQuizPlayer(sessionId: number) {
 
   const updateAvatar = useCallback(async (avatarColor: string) => {
     if (!credentials) return false;
-    const nextCreds = { ...credentials, avatarColor };
-    setCredentials(nextCreds);
-    saveQuizPlayer(nextCreds);
-    setProgress((prev) =>
-      prev ? { ...prev, participant: { ...prev.participant, avatar_color: avatarColor } } : prev
-    );
-    setSessionData((prev) =>
-      prev
-        ? {
-            ...prev,
-            participants: prev.participants?.map((p) =>
-              p.id === credentials.participantId ? { ...p, avatar_color: avatarColor } : p
-            ),
-          }
-        : prev
-    );
+    const previousAvatarColor = credentials.avatarColor;
+    const applyAvatarState = (color: string) => {
+      const creds = { ...credentials, avatarColor: color };
+      setCredentials(creds);
+      saveQuizPlayer(creds);
+      setProgress((prev) =>
+        prev ? { ...prev, participant: { ...prev.participant, avatar_color: color } } : prev
+      );
+      setSessionData((prev) =>
+        prev
+          ? {
+              ...prev,
+              participants: prev.participants?.map((p) =>
+                p.id === credentials.participantId ? { ...p, avatar_color: color } : p
+              ),
+            }
+          : prev
+      );
+    };
+    applyAvatarState(avatarColor);
     const res = await updateQuizParticipantAvatar(sessionId, avatarColor, {
       participantToken: credentials.token,
     });
     if (res.data) {
       return true;
+    }
+    if (live.current && activeSession.current === sessionId) {
+      applyAvatarState(previousAvatarColor);
     }
     return false;
   }, [credentials, sessionId]);

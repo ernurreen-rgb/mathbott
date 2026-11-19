@@ -28,6 +28,7 @@ function JoinForm() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const pinRef = useRef<HTMLInputElement>(null);
   const nicknameRef = useRef<HTMLInputElement>(null);
+  const nicknamePrefilledRef = useRef(false);
   const [selectedAvatar, setSelectedAvatar] = useState(() =>
     encodeQuizAvatar(QUIZ_AVATAR_COLORS[0].hex, QUIZ_AVATAR_CHARACTERS[0].id)
   );
@@ -36,12 +37,18 @@ function JoinForm() {
   useEffect(() => {
     const pinParam = searchParams.get("pin");
     if (pinParam) {
-      setPinCode(pinParam.trim());
+      setPinCode(pinParam.trim().replace(/[^0-9]/g, "").slice(0, 6));
     }
-    if (session?.user?.name) {
-      setNickname(session.user.name);
+  }, [searchParams]);
+
+  const sessionName = session?.user?.name || "";
+
+  useEffect(() => {
+    if (!nicknamePrefilledRef.current && sessionName) {
+      nicknamePrefilledRef.current = true;
+      setNickname((prev) => (prev.trim() ? prev : sessionName));
     }
-  }, [searchParams, session]);
+  }, [sessionName]);
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
@@ -98,12 +105,14 @@ function JoinForm() {
 
       // Preserve guest access after closing the tab and signing up later.
       if (typeof window !== "undefined") {
+        const normalizedEmail = email?.trim().toLowerCase() || undefined;
         const persisted = saveQuizPlayer({
           sessionId: data.session.id,
           participantId: data.participant.id,
           token: data.participant_token,
           nickname: data.participant.nickname,
           avatarColor: data.participant.avatar_color,
+          ...(normalizedEmail ? { accountEmail: normalizedEmail } : {}),
         });
         if (!persisted) toast.error("Браузер сақтау орнын бұғаттады. Нәтижені жоғалтпау үшін осы вкладканы жаппаңыз.");
       }

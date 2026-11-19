@@ -1,9 +1,12 @@
 """
 Connection pool for PostgreSQL connections
 """
-import storage as db_driver
 import asyncio
 import logging
+import time
+from collections import deque
+
+import storage as db_driver
 
 logger = logging.getLogger(__name__)
 
@@ -32,114 +35,171 @@ class ConnectionPool:
         self.max_size = max_size
         self.timeout = timeout
 
-        self._pool: asyncio.Queue[db_driver.Connection] = asyncio.Queue(maxsize=max_size)
+        self._idle: deque[db_driver.Connection] = deque()
         self._created = 0
-        self._lock = asyncio.Lock()
+        self._cond = asyncio.Condition()
         self._closed = False
 
-    async def _create_connection(self) -> db_driver.Connection:
-        """Create a new database connection"""
-        conn = await db_driver.connect(self.database_url, timeout=self.timeout)
-        self._created += 1
-        logger.debug(f"Created new connection (total: {self._created})")
-        return conn
+    @staticmethod
+    def _is_alive(conn: db_driver.Connection) -> bool:
+        return not bool(getattr(conn, "closed", False))
+
+    @staticmethod
+    def _reset_connection_state(conn: db_driver.Connection) -> None:
+        conn.row_factory = None
+        if hasattr(conn, "_lastrowid"):
+            conn._lastrowid = None
+
+    async def _close_quietly(self, conn: db_driver.Connection) -> None:
+        try:
+            await conn.close()
+        except Exception:
+            pass
 
     async def acquire(self) -> db_driver.Connection:
-        """
-        Acquire a connection from the pool
-        
-        Returns:
-            db_driver.Connection: Database connection
-        """
-        if self._closed:
-            raise RuntimeError("Connection pool is closed")
+        """Acquire a live connection from the pool."""
+        deadline = time.monotonic() + self.timeout
 
-        try:
-            conn = self._pool.get_nowait()
-        except asyncio.QueueEmpty:
-            conn = None
-        if conn is not None:
-            if self._closed:
-                await conn.close()
-                raise RuntimeError("Connection pool is closed")
-            return conn
-        
-        async with self._lock:
-            # Create new connection if under max_size
-            if self._closed:
-                raise RuntimeError("Connection pool is closed")
-            if self._created < self.max_size:
-                return await self._create_connection()
+        while True:
+            need_create = False
+            async with self._cond:
+                while True:
+                    if self._closed:
+                        raise RuntimeError("Connection pool is closed")
 
-        try:
-            conn = await asyncio.wait_for(self._pool.get(), timeout=self.timeout)
-        except asyncio.TimeoutError as exc:
-            raise TimeoutError("Timed out waiting for a database connection") from exc
-        if self._closed:
-            await conn.close()
-            raise RuntimeError("Connection pool is closed")
-        return conn
-    
+                    while self._idle:
+                        conn = self._idle.popleft()
+                        if self._is_alive(conn):
+                            self._reset_connection_state(conn)
+                            return conn
+                        # Discard broken idle connection and free its slot.
+                        self._created = max(0, self._created - 1)
+                        await self._close_quietly(conn)
+
+                    if self._created < self.max_size:
+                        # Reserve the slot before opening outside the lock.
+                        self._created += 1
+                        need_create = True
+                        break
+
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("Timed out waiting for a database connection")
+                    try:
+                        await asyncio.wait_for(self._cond.wait(), timeout=remaining)
+                    except asyncio.TimeoutError as exc:
+                        raise TimeoutError("Timed out waiting for a database connection") from exc
+
+            if need_create:
+                try:
+                    conn = await db_driver.connect(self.database_url, timeout=self.timeout)
+                except Exception:
+                    async with self._cond:
+                        self._created = max(0, self._created - 1)
+                        self._cond.notify()
+                    raise
+
+                if self._closed:
+                    await self._close_quietly(conn)
+                    async with self._cond:
+                        self._created = max(0, self._created - 1)
+                        self._cond.notify_all()
+                    raise RuntimeError("Connection pool is closed")
+
+                logger.debug("Created new connection (total: %s)", self._created)
+                self._reset_connection_state(conn)
+                return conn
+
     async def release(self, conn: db_driver.Connection) -> None:
-        """
-        Release a connection back to the pool
-        
-        Args:
-            conn: Connection to release
-        """
+        """Release a connection back to the pool, waking any waiting acquirer."""
         if self._closed:
-            await conn.close()
+            await self._close_quietly(conn)
+            async with self._cond:
+                self._created = max(0, self._created - 1)
+                self._cond.notify_all()
             return
 
         # Roll back any transaction left open by a handler that errored before
         # commit, so the connection is not reused with uncommitted state.
-        try:
-            await conn.rollback()
-        except Exception:
+        healthy = self._is_alive(conn)
+        if healthy:
             try:
-                await conn.close()
-            finally:
+                await conn.rollback()
+                self._reset_connection_state(conn)
+            except Exception:
+                healthy = False
+
+        if not healthy:
+            await self._close_quietly(conn)
+            async with self._cond:
                 self._created = max(0, self._created - 1)
+                # Immediately wake a waiter so it can open a fresh connection
+                # instead of waiting until timeout.
+                self._cond.notify()
             return
 
-        try:
-            self._pool.put_nowait(conn)
-        except asyncio.QueueFull:
-            try:
-                await conn.close()
-            finally:
+        async with self._cond:
+            if self._closed or len(self._idle) >= self.max_size:
                 self._created = max(0, self._created - 1)
-    
+                self._cond.notify_all()
+                should_close = True
+            else:
+                self._idle.append(conn)
+                self._cond.notify()
+                should_close = False
+
+        if should_close:
+            await self._close_quietly(conn)
+
     async def initialize(self) -> None:
         """Initialize pool with minimum connections"""
-        async with self._lock:
-            while self._pool.qsize() < self.min_size and self._created < self.max_size:
-                conn = await self._create_connection()
-                self._pool.put_nowait(conn)
-        logger.info(f"Connection pool initialized with {self._pool.qsize()} connections")
-    
+        to_create = 0
+        async with self._cond:
+            if self._closed:
+                return
+            target = min(self.min_size, self.max_size)
+            while self._created < target:
+                self._created += 1
+                to_create += 1
+
+        for _ in range(to_create):
+            try:
+                conn = await db_driver.connect(self.database_url, timeout=self.timeout)
+            except Exception:
+                async with self._cond:
+                    self._created = max(0, self._created - 1)
+                    self._cond.notify_all()
+                raise
+            async with self._cond:
+                if self._closed:
+                    self._created = max(0, self._created - 1)
+                    await self._close_quietly(conn)
+                else:
+                    self._reset_connection_state(conn)
+                    self._idle.append(conn)
+                    self._cond.notify()
+
+        logger.info("Connection pool initialized with %s connections", len(self._idle))
+
     async def close(self) -> None:
         """Close all connections in the pool"""
-        async with self._lock:
+        async with self._cond:
             self._closed = True
-            while True:
-                try:
-                    conn = self._pool.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-                try:
-                    await conn.close()
-                except Exception:
-                    pass
+            idle = list(self._idle)
+            self._idle.clear()
             self._created = 0
+            self._cond.notify_all()
+
+        for conn in idle:
+            await self._close_quietly(conn)
         logger.info("Connection pool closed")
 
     def get_stats(self) -> dict:
         """Get pool statistics"""
         return {
-            "pool_size": self._pool.qsize(),
+            "pool_size": len(self._idle),
             "created": self._created,
             "max_size": self.max_size,
             "min_size": self.min_size,
-            "closed": self._closed
+            "closed": self._closed,
         }

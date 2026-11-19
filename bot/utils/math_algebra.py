@@ -106,6 +106,14 @@ def _replace_superscripts(value: str) -> str:
     return re.sub(r"⁻?[⁰¹²³⁴⁵⁶⁷⁸⁹]+", replacement, value)
 
 
+_RESERVED_MATH_WORDS = {
+    "abs", "and", "arccos", "arcctg", "arcsin", "arctan", "arctg", "cbrt", "cos", "cosh",
+    "cot", "csc", "ctg", "deg", "det", "exp", "false", "gcd", "inf", "infty", "lcm", "lg",
+    "lim", "ln", "log", "max", "min", "mod", "nan", "no", "none", "not", "null", "or",
+    "root", "sec", "sin", "sinh", "sqrt", "tan", "tanh", "tg", "true", "yes",
+}
+
+
 def _tokenize_with_implicit_multiplication(value: str) -> Optional[str]:
     tokens: list[tuple[str, str]] = []
     cursor = 0
@@ -117,7 +125,19 @@ def _tokenize_with_implicit_multiplication(value: str) -> Optional[str]:
             continue
         name = _NAME_RE.match(value, cursor)
         if name:
-            tokens.append(("name", name.group(0)))
+            token = name.group(0)
+            lowered = token.lower()
+            if (
+                len(token) >= 2
+                and len(token) <= 4
+                and token.isalpha()
+                and lowered not in _ALLOWED_LONG_NAMES
+                and lowered not in _RESERVED_MATH_WORDS
+            ):
+                for ch in token:
+                    tokens.append(("name", ch))
+            else:
+                tokens.append(("name", token))
             cursor = name.end()
             continue
         if value.startswith("**", cursor):
@@ -424,7 +444,12 @@ def algebraic_python_expression(value: str) -> Optional[str]:
     expression = expression.replace("×", "*").replace("·", "*").replace("÷", "/")
     expression = re.sub(r"(?<=\d),(?=\d)", ".", expression)
     expression = re.sub(r"([A-Za-z]+)_\{([A-Za-z0-9]+)\}", r"\1_\2", expression)
-    expression = _LATEX_VARIABLE_RE.sub(lambda match: match.group(1), expression)
+    expression = re.sub(
+        r"\\(alpha|beta|delta|gamma|lambda|mu|omega|phi|pi|rho|sigma|theta|varphi)_([A-Za-z0-9]+)(?![A-Za-z0-9_])",
+        r"(\1_\2)",
+        expression,
+    )
+    expression = _LATEX_VARIABLE_RE.sub(lambda match: f"({match.group(1)})", expression)
     expression = _replace_latex_fractions(expression)
     if expression is None:
         return None

@@ -31,7 +31,7 @@ const formatDateTime = (value: string): string => {
 export default function AdminBankAuditPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
-  const { loading: accessLoading, access } = useAdminPageAccess("review", status, email);
+  const { loading: accessLoading, access, allowed } = useAdminPageAccess("review", status, email);
 
   const [items, setItems] = useState<BankAuditLogItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -77,9 +77,9 @@ export default function AdminBankAuditPage() {
   }, [email, appliedAction, appliedTaskId, appliedActorEmail, offset]);
 
   useEffect(() => {
-    if (!email) return;
+    if (!email || !allowed) return;
     void fetchAudit();
-  }, [email, fetchAudit]);
+  }, [email, allowed, fetchAudit]);
 
   const applyFilters = () => {
     let taskIdValue: number | undefined;
@@ -156,10 +156,10 @@ export default function AdminBankAuditPage() {
     );
   }
 
-  if (!session) {
+  if (!session || !allowed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Әкімші панеліне кіру үшін аккаунтқа кіріңіз</div>
+        <div className="text-xl">{!session ? "Әкімші панеліне кіру үшін аккаунтқа кіріңіз" : "Қолжетім жоқ"}</div>
       </div>
     );
   }
@@ -206,7 +206,9 @@ export default function AdminBankAuditPage() {
                   <option value="version_delete">{ACTION_LABELS.version_delete}</option>
                   <option value="rollback">{ACTION_LABELS.rollback}</option>
                   <option value="hard_delete">{ACTION_LABELS.hard_delete}</option>
-                  <option value="role_change">{ACTION_LABELS.role_change}</option>
+                  {access?.role === "super_admin" && (
+                    <option value="role_change">{ACTION_LABELS.role_change}</option>
+                  )}
                 </select>
 
                 <input

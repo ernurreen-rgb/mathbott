@@ -92,9 +92,14 @@ function TrialTestListPageContent() {
   }, [session?.user?.email]);
 
   useEffect(() => {
-    fetchTests();
-    fetchDraftIds();
-  }, [fetchTests, fetchDraftIds]);
+    if (status !== "authenticated") return;
+    void fetchTests();
+  }, [status, fetchTests]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.email) return;
+    void fetchDraftIds();
+  }, [status, session?.user?.email, fetchDraftIds]);
 
   const folders = useMemo(() => folderTree.filter((f) => f.parent_id === selectedFolder).sort(sortFolders), [folderTree, selectedFolder]);
   const currentFolder = folderTree.find((f) => f.id === selectedFolder);

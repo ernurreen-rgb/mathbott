@@ -30,7 +30,7 @@ class TrialFolderMixin:
     @staticmethod
     def _root_name(folders, folder_id):
         seen = set()
-        while folder_id in folders and folder_id not in seen:
+        while folder_id in folders and folder_id not in seen and len(seen) < 32:
             seen.add(folder_id)
             folder = folders[folder_id]
             if folder["parent_id"] is None:
@@ -83,14 +83,16 @@ class TrialFolderMixin:
                 raise TrialFolderError("Ата-ана папка табылмады.", 404)
             if any(f["parent_id"] == parent_id and f["name"] == name for f in folders.values()):
                 raise TrialFolderError("Бұл жерде осындай атаулы папка бар.")
-            async with db.execute("SELECT COUNT(*) FROM trial_tests WHERE folder_id = ?", (parent_id,)) as cursor:
-                count = (await cursor.fetchone())[0]
+            count = 0
+            if parent_id is not None:
+                async with db.execute("SELECT COUNT(*) FROM trial_tests WHERE folder_id = ?", (parent_id,)) as cursor:
+                    count = (await cursor.fetchone())[0]
             if count and not move_existing_tests:
                 raise TrialFolderError("Қазіргі тесттерді жаңа ішкі папкаға көшіруді растаңыз.")
             cursor = await db.execute("INSERT INTO trial_test_folders (name, parent_id, sort_order) VALUES (?, ?, ?)",
                                       (name, parent_id, sort_order))
             folder_id = int(cursor.lastrowid)
-            if count:
+            if count and parent_id is not None:
                 await db.execute("UPDATE trial_tests SET folder_id = ?, updated_at = mathbot_datetime('now') WHERE folder_id = ?",
                                  (folder_id, parent_id))
         return {"id": folder_id, "parent_id": parent_id, "name": name, "sort_order": sort_order}
@@ -108,10 +110,15 @@ class TrialFolderMixin:
             if new_parent is not None and new_parent not in folders:
                 raise TrialFolderError("Ата-ана папка табылмады.", 404)
             current = new_parent
+            visited = set()
             while current is not None:
                 if current == folder_id:
                     raise TrialFolderError("Папканы өзінің ішіне немесе ішкі папкасына көшіруге болмайды.")
-                current = folders[current]["parent_id"]
+                if current in visited or len(visited) >= 32:
+                    raise TrialFolderError("Папка құрылымында цикл анықталды.")
+                visited.add(current)
+                parent_row = folders.get(current)
+                current = parent_row["parent_id"] if parent_row else None
             if any(f["id"] != folder_id and f["parent_id"] == new_parent and f["name"] == new_name for f in folders.values()):
                 raise TrialFolderError("Бұл жерде осындай атаулы папка бар.")
             if move and new_parent is not None:

@@ -189,15 +189,20 @@ export function formatVisitPath(path: string | null | undefined): string | null 
   return clean;
 }
 
+/** Escape a single CSV cell against spreadsheet formula injection and quoting. */
+export function formatCsvCell(value: string | number | null | undefined): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  const trimmedStart = text.replace(/^[\s\u0000-\u001F]+/, "");
+  const isFormula =
+    typeof value === "string" &&
+    (/^[=+\-@\t\r\n]/.test(text) || /^[=+\-@]/.test(trimmedStart));
+  const safe = isFormula ? `'${text}` : text;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
 /** Opens a CSV in Excel with Cyrillic intact (UTF-8 BOM, semicolon-free quoting). */
 export function downloadCsv(filename: string, header: string[], rows: Array<Array<string | number | null | undefined>>): void {
-  const cell = (value: string | number | null | undefined) => {
-    const text = value === null || value === undefined ? "" : String(value);
-    // A leading formula character would be executed by spreadsheet apps.
-    const safe = /^[=+\-@\t\r]/.test(text) && typeof value === "string" ? `'${text}` : text;
-    return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-  };
-  const content = [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n");
+  const content = [header, ...rows].map((row) => row.map(formatCsvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;

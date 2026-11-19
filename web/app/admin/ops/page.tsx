@@ -58,7 +58,7 @@ export default function AdminOpsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const email = session?.user?.email || "";
-  const { loading: accessLoading } = useAdminPageAccess("review", status, email || null);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("review", status, email || null);
 
   const [range, setRange] = useState<OpsTimeseriesRange>("24h");
   const [incidentStatus, setIncidentStatus] = useState<"open" | "resolved" | "all">("open");
@@ -112,18 +112,18 @@ export default function AdminOpsPage() {
       router.push("/");
       return;
     }
-    if (status === "authenticated" && email) {
+    if (allowed && email) {
       void load(false);
     }
-  }, [status, email, load, router, accessLoading]);
+  }, [status, email, load, router, accessLoading, allowed]);
 
   useEffect(() => {
-    if (!email) return;
+    if (!allowed || !email) return;
     const id = setInterval(() => {
       void load(true);
     }, 30_000);
     return () => clearInterval(id);
-  }, [email, load]);
+  }, [allowed, email, load]);
 
   const statusBadgeClass = useMemo(() => {
     switch (summary?.service_status) {
@@ -138,7 +138,7 @@ export default function AdminOpsPage() {
     }
   }, [summary?.service_status]);
 
-  if (status === "loading" || accessLoading || loading) {
+  if (status === "loading" || accessLoading || (allowed && loading)) {
     return (
       <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0">
         <DesktopNav />
@@ -148,6 +148,14 @@ export default function AdminOpsPage() {
           <SkeletonLoader variant="card" className="mb-4" />
           <SkeletonLoader variant="card" className="mb-4" />
         </div>
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Қолжетім жоқ</div>
       </div>
     );
   }

@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 import aiohttp
 
 from settings import get_settings
+from utils.timezone import today_almaty
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +49,53 @@ ALLOWED_PUSH_HOST_SUFFIXES = (
 Sender = Callable[..., Awaitable[str]]
 
 
+class _NoRedirectSession:
+    """Thin wrapper around aiohttp.ClientSession that disables HTTP redirects."""
+
+    def __init__(self) -> None:
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def __aenter__(self) -> "_NoRedirectSession":
+        self._session = aiohttp.ClientSession()
+        await self._session.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._session is not None:
+            await self._session.__aexit__(exc_type, exc, tb)
+            self._session = None
+
+    def post(self, url: Any, **kwargs: Any):
+        assert self._session is not None
+        kwargs["allow_redirects"] = False
+        return self._session.post(url, **kwargs)
+
+    def request(self, method: str, url: Any, **kwargs: Any):
+        assert self._session is not None
+        kwargs["allow_redirects"] = False
+        return self._session.request(method, url, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        assert self._session is not None
+        return getattr(self._session, name)
+
+
 def is_allowed_push_endpoint(endpoint: str) -> bool:
+    if not isinstance(endpoint, str) or not endpoint or endpoint != endpoint.strip():
+        return False
+    if any(ord(ch) < 32 or ord(ch) == 127 or ch.isspace() for ch in endpoint):
+        return False
     try:
         parts = urlsplit(endpoint)
+        port = parts.port
     except ValueError:
         return False
     host = (parts.hostname or "").lower()
     if parts.scheme != "https" or not host:
+        return False
+    if parts.username is not None or parts.password is not None:
+        return False
+    if port not in (None, 443):
         return False
     return any(host == suffix or host.endswith(f".{suffix}") for suffix in ALLOWED_PUSH_HOST_SUFFIXES)
 
@@ -113,10 +154,15 @@ async def send_push(
     """Send one notification; returns "sent", "gone" (forget the device) or "failed"."""
     from pywebpush import WebPushException, webpush_async
 
+    endpoint = subscription.get("endpoint") or ""
+    if not is_allowed_push_endpoint(endpoint):
+        logger.warning("Refused push delivery to disallowed endpoint host")
+        return "failed"
+
     try:
         await webpush_async(
             subscription_info={
-                "endpoint": subscription["endpoint"],
+                "endpoint": endpoint,
                 "keys": {"p256dh": subscription["p256dh"], "auth": subscription["auth"]},
             },
             data=json.dumps(payload, ensure_ascii=False),
@@ -144,7 +190,7 @@ async def send_push(
 async def send_confirmation(subscription: Dict[str, Any], sender: Optional[Sender] = None) -> str:
     """Show a notification right away, so the student sees that reminders work on this device."""
     sender = sender or send_push
-    async with aiohttp.ClientSession() as session:
+    async with _NoRedirectSession() as session:
         return await sender(
             subscription, build_confirmation(), session=session, vapid=_vapid_key(), ttl=CONFIRMATION_TTL_SECONDS,
         )
@@ -161,8 +207,8 @@ async def send_streak_reminders(
     if not push_enabled():
         return {"enabled": False, "sent": 0, "gone": 0, "failed": 0}
 
-    # The streak counts days by the server date (UTC on Vercel), and so do the reminders.
-    today = today or date.today()
+    # Streaks and daily reminders both follow Kazakhstan time (Asia/Almaty, UTC+5).
+    today = today or today_almaty()
     sender = sender or send_push
     vapid = _vapid_key()
     counts = {"sent": 0, "gone": 0, "failed": 0}
@@ -170,7 +216,7 @@ async def send_streak_reminders(
     started = time.monotonic()
     limit = asyncio.Semaphore(CONCURRENCY)
 
-    async with aiohttp.ClientSession() as session:
+    async with _NoRedirectSession() as session:
         async def deliver(device: Dict[str, Any]) -> None:
             payload = build_reminder(device["streak"], device["last_streak_date"], today)
             async with limit:

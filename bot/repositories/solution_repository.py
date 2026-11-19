@@ -19,6 +19,7 @@ class SolutionRepository(BaseRepository):
             raise ValueError("Task not found")
         completion = build_completion_identity(task, surface="module")
         recorded = False
+        streak_changed = False
         async with self._write_transaction() as db:
             await db.execute(
                 "INSERT INTO solutions (user_id, task_id, answer, is_correct) VALUES (?, ?, ?, ?)",
@@ -48,14 +49,16 @@ class SolutionRepository(BaseRepository):
                 ) as cursor:
                     user = await cursor.fetchone()
                 if user:
-                    streak, streak_date = calculate_next_streak(int(user[0] or 0), user[1])
+                    previous_streak = int(user[0] or 0)
+                    streak, streak_date = calculate_next_streak(previous_streak, user[1])
+                    streak_changed = streak != previous_streak
                     await db.execute(
                         "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
                         (streak, streak_date, user_id),
                     )
 
         # Optional effects run only after durable progress has committed.
-        if recorded:
+        if recorded or streak_changed:
             try:
                 await achievement_repo.check_and_unlock_achievements(user_id, user_repo)
             except Exception:

@@ -42,7 +42,7 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     trial_tests.setup_trial_tests_routes(app, db, limiter)
     questions.setup_questions_routes(app, db, limiter)
     reports.setup_reports_routes(app, db, limiter)
-    export.setup_export_routes(app, db)
+    export.setup_export_routes(app, db, limiter)
     presence.setup_presence_routes(app, db, limiter)
     quizzes.setup_quizzes_routes(app, db, limiter)
     quiz_game.setup_quiz_game_routes(app, db, limiter)

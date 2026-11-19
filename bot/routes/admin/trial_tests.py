@@ -506,8 +506,16 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         logger.info("Parsed subquestions (trial test %s): %s", source_label, subquestions_list)
 
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
-        answer_mode_value = _normalize_answer_mode_or_raise(answer_mode, question_type)
-        accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
+        answer_mode_value = (
+            _normalize_answer_mode_or_raise(answer_mode, question_type)
+            if answer_mode is not None
+            else None
+        )
+        accepted_answers_value = (
+            _normalize_accepted_answers_or_raise(accepted_answers)
+            if accepted_answers is not None
+            else None
+        )
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None

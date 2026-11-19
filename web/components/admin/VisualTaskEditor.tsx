@@ -270,8 +270,8 @@ export default function VisualTaskEditor({
   const handleDelete = async (taskId: number) => {
     if (!confirm("Тапсырманы жойғыңыз келе ме?")) return;
     try {
-      await onDelete(taskId);
-      if (currentTaskIndex >= tasks.length - 1) {
+      const deleted = await onDelete(taskId);
+      if (deleted !== false && currentTaskIndex >= tasks.length - 1) {
         setCurrentTaskIndex(Math.max(0, tasks.length - 2));
       }
     } catch (error) {

@@ -191,6 +191,8 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     signature_v2 = (request.headers.get(PROXY_SIGNATURE_V2_HEADER) or "").strip()
     body_sha256_header = (request.headers.get(PROXY_BODY_SHA256_HEADER) or "").strip().lower()
     signed_content_type = (request.headers.get(PROXY_CONTENT_TYPE_HEADER) or "").strip().lower()
+    if bool(nonce) != bool(signature_v2):
+        return False, None, "incomplete_v2_headers"
     signature = signature_v2 if nonce and signature_v2 else legacy_signature
     payload_nonce = nonce if nonce and signature_v2 else None
     payload_body_sha256 = body_sha256_header if payload_nonce and body_sha256_header else None
@@ -221,10 +223,10 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
         return False, None, "timestamp_out_of_range"
 
     settings = get_settings()
-    if settings.is_production and _is_mutating_method(request.method):
+    if settings.is_production:
         if not payload_nonce or not signature_v2:
             return False, None, "v2_signature_required"
-        if not payload_body_sha256:
+        if _is_mutating_method(request.method) and not payload_body_sha256:
             return False, None, "body_hash_required"
 
     actual_body_sha256 = getattr(request.state, "_trusted_proxy_body_sha256", None)

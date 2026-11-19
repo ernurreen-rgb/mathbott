@@ -12,6 +12,7 @@ None, and the caller keeps the value comparison alone for them.
 from __future__ import annotations
 
 import ast
+import re
 from fractions import Fraction
 from math import gcd
 from typing import Any, Optional
@@ -82,6 +83,23 @@ def _product_factors(node: ast.AST, source: str) -> tuple[int, list]:
         sign, factors = _product_factors(node.left, source)
         divisor_sign, divisor = _term(node.right, source)
         if divisor[0] == "n" and divisor[1] != 0:
+            # Combine a single coprime integer coefficient with an integer denominator
+            # so \frac{2x}{3} and \frac{2}{3}x (or \frac{2\pi}{3} and \frac{2}{3}\pi) match,
+            # while unreduced forms like \frac{4x}{6}, \frac{6x}{3}, or \frac{2x}{1} stay distinct.
+            divisor_val = divisor[1]
+            if isinstance(divisor_val, Fraction) and divisor_val.denominator == 1 and divisor_val.numerator > 1:
+                num_indices = [idx for idx, factor in enumerate(factors) if factor[0] == "n"]
+                if len(num_indices) == 1:
+                    coeff = factors[num_indices[0]][1]
+                    if (
+                        isinstance(coeff, Fraction)
+                        and coeff.denominator == 1
+                        and coeff.numerator > 0
+                        and gcd(coeff.numerator, divisor_val.numerator) == 1
+                    ):
+                        combined = list(factors)
+                        combined[num_indices[0]] = ("n", Fraction(coeff.numerator, divisor_val.numerator))
+                        return sign * divisor_sign, combined
             # x/2 is the same answer as ½x or 0,5x.
             return sign * divisor_sign, factors + [("n", 1 / divisor[1])]
         return sign * divisor_sign, factors + [("inv", divisor)]
@@ -182,6 +200,10 @@ def _statement_form(value: str) -> Optional[Any]:
             left, right, operator = right, left, "<"
         elif operator == "≥":
             left, right, operator = right, left, "≤"
+        if operator == "∈" and len(parts) == 1 and re.fullmatch(r"[A-Za-z](?:_\{?[A-Za-z0-9]+\}?)?", left):
+            interval_form = _interval_set_form(right)
+            if interval_form is not None:
+                return interval_form
         left_form = _expression_form(left)
         right_form = _interval_set_form(right) if operator in {"∈", "∉"} else _expression_form(right)
         if left_form is None or right_form is None:

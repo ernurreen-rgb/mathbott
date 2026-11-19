@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Form, Request, Depends
 from slowapi import Limiter
 
-from dependencies import get_db
+from dependencies import get_db, require_internal_identity
 from database import Database
 from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from utils.cache import cache
@@ -58,12 +58,15 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Check answer for a specific question in a task"""
         try:
-            logger.info(f"Received question check request: task_id={task_id}, question_index={question_index}, email={email}, answer_length={len(answer)}")
-            
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                logger.warning(f"User not found: {email}")
-                raise HTTPException(status_code=404, detail="User not found")
+            user = await require_internal_identity(request=request, email=email, db=db)
+            user_email = user["email"]
+            logger.info(
+                "Received question check request: task_id=%s, question_index=%s, user_id=%s, answer_length=%s",
+                task_id,
+                question_index,
+                user["id"],
+                len(answer),
+            )
             
             task = await db.tasks.get_task_by_id(task_id)
             if not task or task.get("deleted_at"):
@@ -101,8 +104,8 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                     source="module",
                     source_ref_id=task_id,
                 )
-                cache.invalidate_pattern(f"user:stats:{email}")
-                cache.invalidate_pattern(f"modules:map:{email}")
+                cache.invalidate_pattern(f"user:stats:{user_email}")
+                cache.invalidate_pattern(f"modules:map:{user_email}")
                 if completion_result.get("recorded"):
                     try:
                         await db.users.update_streak(user["id"])

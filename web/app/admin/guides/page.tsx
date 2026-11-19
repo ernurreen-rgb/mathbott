@@ -25,7 +25,7 @@ interface Module {
 export default function SectionGuidesPage() {
   const { data: session, status } = useSession();
   const sessionEmail = session?.user?.email || null;
-  const { loading: accessLoading } = useAdminPageAccess("content", status, sessionEmail);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("content", status, sessionEmail);
   const [modules, setModules] = useState<Module[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedModule, setSelectedModule] = useState<number | null>(null);
@@ -79,20 +79,20 @@ export default function SectionGuidesPage() {
   }, [sessionEmail]);
 
   useEffect(() => {
-    if (sessionEmail) {
+    if (allowed && sessionEmail) {
       void fetchModules();
     }
-  }, [sessionEmail, fetchModules]);
+  }, [allowed, sessionEmail, fetchModules]);
 
   useEffect(() => {
-    if (selectedModule && sessionEmail) {
+    if (allowed && selectedModule && sessionEmail) {
       void fetchSections(selectedModule);
     } else {
       setSections([]);
       setSelectedSection(null);
       setGuideText("");
     }
-  }, [selectedModule, sessionEmail, fetchSections]);
+  }, [allowed, selectedModule, sessionEmail, fetchSections]);
 
   const saveGuide = async () => {
     if (!sessionEmail || !selectedSection) return;
@@ -130,10 +130,10 @@ export default function SectionGuidesPage() {
     );
   }
 
-  if (!session) {
+  if (!session || !allowed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Әкімші бетіне кіру үшін авторизация керек</div>
+        <div className="text-xl">{!session ? "Әкімші бетіне кіру үшін авторизация керек" : "Қолжетім жоқ"}</div>
       </div>
     );
   }

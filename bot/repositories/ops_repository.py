@@ -168,119 +168,74 @@ class OpsRepository(BaseRepository):
         message: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        async def operation() -> Dict[str, Any]:
-            async with self._connection() as db:
-                db.row_factory = db_driver.Row
-                async with db.execute(
+        async with self._write_transaction() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                """
+                SELECT id, occurrences
+                FROM ops_incidents
+                WHERE fingerprint = ? AND status = 'open'
+                LIMIT 1
+                """,
+                (fingerprint,),
+            ) as cursor:
+                existing = await cursor.fetchone()
+
+            if existing:
+                incident_id = int(existing["id"])
+                await db.execute(
                     """
-                    SELECT id, occurrences
-                    FROM ops_incidents
-                    WHERE fingerprint = ? AND status = 'open'
-                    LIMIT 1
+                    UPDATE ops_incidents
+                    SET kind = ?,
+                        severity = ?,
+                        title = ?,
+                        message = ?,
+                        metadata_json = ?,
+                        occurrences = COALESCE(occurrences, 0) + 1,
+                        last_seen_at = mathbot_datetime('now')
+                    WHERE id = ?
                     """,
-                    (fingerprint,),
-                ) as cursor:
-                    existing = await cursor.fetchone()
-
-                if existing:
-                    incident_id = int(existing["id"])
-                    await db.execute(
-                        """
-                        UPDATE ops_incidents
-                        SET kind = ?,
-                            severity = ?,
-                            title = ?,
-                            message = ?,
-                            metadata_json = ?,
-                            occurrences = COALESCE(occurrences, 0) + 1,
-                            last_seen_at = mathbot_datetime('now')
-                        WHERE id = ?
-                        """,
-                        (
-                            kind,
-                            severity,
-                            title,
-                            message,
-                            json.dumps(metadata or {}, ensure_ascii=False),
-                            incident_id,
-                        ),
+                    (
+                        kind,
+                        severity,
+                        title,
+                        message,
+                        json.dumps(metadata or {}, ensure_ascii=False),
+                        incident_id,
+                    ),
+                )
+                is_new = False
+            else:
+                cursor = await db.execute(
+                    """
+                    INSERT INTO ops_incidents
+                    (
+                        kind, severity, fingerprint, title, message,
+                        status, metadata_json
                     )
-                    is_new = False
-                else:
-                    async with db.execute(
-                        """
-                        SELECT id, occurrences
-                        FROM ops_incidents
-                        WHERE fingerprint = ? AND status = 'resolved'
-                        ORDER BY last_seen_at DESC, id DESC
-                        LIMIT 1
-                        """,
-                        (fingerprint,),
-                    ) as resolved_cursor:
-                        resolved_row = await resolved_cursor.fetchone()
+                    VALUES (?, ?, ?, ?, ?, 'open', ?)
+                    """,
+                    (
+                        kind,
+                        severity,
+                        fingerprint,
+                        title,
+                        message,
+                        json.dumps(metadata or {}, ensure_ascii=False),
+                    ),
+                )
+                incident_id = int(cursor.lastrowid)
+                is_new = True
 
-                    if resolved_row:
-                        incident_id = int(resolved_row["id"])
-                        await db.execute(
-                            """
-                            UPDATE ops_incidents
-                            SET kind = ?,
-                                severity = ?,
-                                title = ?,
-                                message = ?,
-                                status = 'open',
-                                metadata_json = ?,
-                                occurrences = COALESCE(occurrences, 0) + 1,
-                                first_seen_at = mathbot_datetime('now'),
-                                last_seen_at = mathbot_datetime('now'),
-                                resolved_at = NULL
-                            WHERE id = ?
-                            """,
-                            (
-                                kind,
-                                severity,
-                                title,
-                                message,
-                                json.dumps(metadata or {}, ensure_ascii=False),
-                                incident_id,
-                            ),
-                        )
-                        is_new = True
-                    else:
-                        cursor = await db.execute(
-                            """
-                            INSERT INTO ops_incidents
-                            (
-                                kind, severity, fingerprint, title, message,
-                                status, metadata_json
-                            )
-                            VALUES (?, ?, ?, ?, ?, 'open', ?)
-                            """,
-                            (
-                                kind,
-                                severity,
-                                fingerprint,
-                                title,
-                                message,
-                                json.dumps(metadata or {}, ensure_ascii=False),
-                            ),
-                        )
-                        incident_id = int(cursor.lastrowid)
-                        is_new = True
-
-                await db.commit()
-
-                async with db.execute(
-                    "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
-                    (incident_id,),
-                ) as cursor:
-                    row = await cursor.fetchone()
-                item = dict(row) if row else {"id": incident_id}
-                item["metadata"] = self._parse_json(item.pop("metadata_json", None))
-                item["is_new"] = is_new
-                return item
-
-        return await self._run_with_write_lock(operation)
+            async with db.execute(
+                "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
+                (incident_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+            item = dict(row) if row else {"id": incident_id}
+            item["metadata"] = self._parse_json(item.pop("metadata_json", None))
+            item["is_new"] = is_new
+            return item
 
     async def resolve_incident(
         self,
@@ -288,50 +243,46 @@ class OpsRepository(BaseRepository):
         fingerprint: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        async def operation() -> Optional[Dict[str, Any]]:
-            async with self._connection() as db:
-                db.row_factory = db_driver.Row
-                async with db.execute(
-                    """
-                    SELECT *
-                    FROM ops_incidents
-                    WHERE fingerprint = ? AND status = 'open'
-                    LIMIT 1
-                    """,
-                    (fingerprint,),
-                ) as cursor:
-                    existing = await cursor.fetchone()
-                if not existing:
-                    return None
+        async with self._write_transaction() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                """
+                SELECT *
+                FROM ops_incidents
+                WHERE fingerprint = ? AND status = 'open'
+                LIMIT 1
+                """,
+                (fingerprint,),
+            ) as cursor:
+                existing = await cursor.fetchone()
+            if not existing:
+                return None
 
-                incident_id = int(existing["id"])
-                merged_metadata = self._parse_json(existing["metadata_json"])
-                if metadata:
-                    merged_metadata.update(metadata)
+            incident_id = int(existing["id"])
+            merged_metadata = self._parse_json(existing["metadata_json"])
+            if metadata:
+                merged_metadata.update(metadata)
 
-                await db.execute(
-                    """
-                    UPDATE ops_incidents
-                    SET status = 'resolved',
-                        last_seen_at = mathbot_datetime('now'),
-                        resolved_at = mathbot_datetime('now'),
-                        metadata_json = ?
-                    WHERE id = ?
-                    """,
-                    (json.dumps(merged_metadata, ensure_ascii=False), incident_id),
-                )
-                await db.commit()
+            await db.execute(
+                """
+                UPDATE ops_incidents
+                SET status = 'resolved',
+                    last_seen_at = mathbot_datetime('now'),
+                    resolved_at = mathbot_datetime('now'),
+                    metadata_json = ?
+                WHERE id = ?
+                """,
+                (json.dumps(merged_metadata, ensure_ascii=False), incident_id),
+            )
 
-                async with db.execute(
-                    "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
-                    (incident_id,),
-                ) as cursor:
-                    row = await cursor.fetchone()
-                item = dict(row) if row else {"id": incident_id}
-                item["metadata"] = self._parse_json(item.pop("metadata_json", None))
-                return item
-
-        return await self._run_with_write_lock(operation)
+            async with db.execute(
+                "SELECT * FROM ops_incidents WHERE id = ? LIMIT 1",
+                (incident_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+            item = dict(row) if row else {"id": incident_id}
+            item["metadata"] = self._parse_json(item.pop("metadata_json", None))
+            return item
 
     async def list_incidents(
         self,

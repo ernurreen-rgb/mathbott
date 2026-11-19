@@ -202,10 +202,15 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         if offset < 0:
             raise HTTPException(status_code=400, detail="offset must be >= 0")
 
+        is_super_admin = bool(admin_user.get("is_super_admin"))
+        if action == "role_change" and not is_super_admin:
+            raise HTTPException(status_code=403, detail="Access denied. Super admin rights required.")
+
         return await db.bank_tasks.list_admin_audit_logs(
             action=action,
             task_id=task_id,
             actor_email=actor_email,
+            include_role_changes=is_super_admin,
             limit=limit,
             offset=offset,
         )
@@ -249,27 +254,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             except Exception:
                 raise HTTPException(status_code=400, detail="expected_current_version must be an integer")
 
-        existing = await db.bank_tasks.get_task_by_id(task_id, include_deleted=False)
-        if not existing:
-            raise HTTPException(status_code=404, detail="Bank task not found")
-        if normalize_answer_mode(existing.get("answer_mode"), existing.get("question_type")) != "written":
-            raise HTTPException(status_code=400, detail="Only written-answer tasks can accept response aliases")
-
-        if is_task_answer_correct(existing, answer):
-            return {"task": existing, "added": False}
-
-        accepted_answers = normalize_accepted_answers(existing.get("accepted_answers"))
-        if len(accepted_answers) >= MAX_ACCEPTED_ANSWERS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"accepted_answers must contain at most {MAX_ACCEPTED_ANSWERS} items",
-            )
-        accepted_answers.append(answer)
-
         try:
-            updated = await db.bank_tasks.update_task(
+            updated, added = await db.bank_tasks.add_accepted_answer(
                 task_id=task_id,
-                accepted_answers=accepted_answers,
+                answer=answer,
+                max_accepted_answers=MAX_ACCEPTED_ANSWERS,
                 actor_user_id=admin_user["id"],
                 source="admin_unrecognized_answer_accept",
                 reason="Accepted from repeated student answers",
@@ -277,9 +266,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
         except BankTaskVersionConflictError as exc:
             raise _raise_version_conflict_from_exception(exc)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         if not updated:
             raise HTTPException(status_code=404, detail="Bank task not found")
-        return {"task": updated, "added": True}
+        return {"task": updated, "added": added}
 
     @app.post("/api/admin/bank/tasks/similar")
     async def find_similar_bank_tasks(

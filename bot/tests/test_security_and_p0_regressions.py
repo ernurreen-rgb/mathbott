@@ -6,18 +6,25 @@ Runs purely in-memory without requiring a PostgreSQL database:
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
+import hashlib
+import hmac
 import json
 import os
 import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app import create_app
 from config import validate_configuration
 from dependencies import require_admin, require_admin_review_manage
+from middleware.cache_headers_middleware import CacheHeadersMiddleware
+from middleware.trusted_proxy_identity import _private_email_from_path
 from repositories.base import BaseRepository
 from repositories.statistics_repository import parse_visit_route
 from repositories.user_repository import normalize_visit_path
@@ -30,9 +37,26 @@ from routes.admin.import_tokens import (
     _issue_import_preview_token,
     _verify_import_preview_token,
 )
+from routes.admin.reports import _mask_email, _update_task_from_report_common
 from routes.admin.roles import _legacy_role_bootstrap_enabled
+from routes.export import _safe_csv_value, _safe_export_filename_stem
+from routes.quiz_game import QuizConnectionManager
 from routes.reports import _strip_report_answers
+from services.streak_reminders import is_allowed_push_endpoint
 from settings import DEFAULT_ADMIN_SECRET, get_settings
+from utils.cache import SimpleCache
+from utils.connection_pool import ConnectionPool
+from utils.internal_proxy_auth import (
+    PROXY_EMAIL_HEADER,
+    PROXY_NONCE_HEADER,
+    PROXY_SIGNATURE_HEADER,
+    PROXY_SIGNATURE_V2_HEADER,
+    PROXY_TS_HEADER,
+    build_canonical_proxy_payload,
+    verify_proxy_signature,
+)
+from utils.learning_progress import calculate_next_streak
+from utils.timezone import today_almaty
 from utils.validation import grade_task_answer, is_task_answer_correct
 
 
@@ -294,6 +318,55 @@ class MathEngineP0RegressionTests(unittest.TestCase):
         self.assertEqual(grade_task_answer(written_select, ["C", "A"]), (0, 2))
         self.assertEqual(grade_task_answer(written_select, ["30", "10"]), (2, 2))
 
+    def test_h18_h19_math_false_negatives_and_written_interval_slots(self):
+        # x \in (0; 1) vs (0; 1)
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"(0; 1)"}, r"x \in (0; 1)"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"x \in (0; 1)"}, r"(0; 1)"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": r"(0; 2)"}, r"x \in (0; 1+1)"))
+
+        # \frac{2x}{3} vs \frac{2}{3}x and \frac{2\pi}{3} vs \frac{2}{3}\pi (while rejecting unreduced \frac{4x}{6})
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"\frac{2}{3}x"}, r"\frac{2x}{3}"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"\frac{2x}{3}"}, r"\frac{2}{3}x"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"\frac{2}{3}\pi"}, r"\frac{2\pi}{3}"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": r"\frac{2}{3}x"}, r"\frac{4x}{6}"))
+
+        # 2\pi r vs 2r\pi and \pi r^2 vs r^2\pi
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"2\pi r"}, r"2r\pi"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": r"\pi r^2"}, r"r^2\pi"))
+
+        # xy vs yx and x \cdot y (without corrupting sin(x) into s*i*n*x)
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": "xy"}, "yx"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": "xy"}, r"x\cdot y"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": "sin(x)"}, "nis(x)"))
+
+        # H-19: closed interval [1, 2] on 1-slot written MCQ and zero slot [0, 5]
+        written_interval_mcq = {
+            "question_type": "mcq",
+            "answer_mode": "written",
+            "answer": "A",
+            "options": json.dumps([
+                {"label": "A", "text": "[1, 2]"},
+                {"label": "B", "text": "(1, 2)"},
+                {"label": "C", "text": "[0, 1]"},
+                {"label": "D", "text": "[2, 3]"},
+            ]),
+        }
+        self.assertTrue(is_task_answer_correct(written_interval_mcq, "[1, 2]"))
+        written_zero_mcq = {
+            "question_type": "mcq6",
+            "answer_mode": "written",
+            "answer": '["A", "B"]',
+            "options": json.dumps([
+                {"label": "A", "text": "0"},
+                {"label": "B", "text": "5"},
+                {"label": "C", "text": "1"},
+                {"label": "D", "text": "2"},
+                {"label": "E", "text": "3"},
+                {"label": "F", "text": "4"},
+            ]),
+        }
+        self.assertTrue(is_task_answer_correct(written_zero_mcq, [0, 5]))
+
 
 class RepositorySafetyRegressionTests(unittest.TestCase):
     def test_c11_visit_path_and_route_reject_unicode_digits_overflow_and_nul(self):
@@ -349,6 +422,333 @@ class RepositorySafetyRegressionTests(unittest.TestCase):
             asyncio.run(repo.batch_insert("users; DROP TABLE users", ["a"], [(1,)], conn=conn))
         with self.assertRaises(ValueError):
             asyncio.run(repo.batch_update("users", [{1: {"a = 1; --": 2}}], "id", conn=conn))
+
+
+class Sprint2RegressionTests(unittest.TestCase):
+    @staticmethod
+    def _make_request(
+        method: str,
+        path: str,
+        headers: dict[str, str],
+        query_string: bytes = b"",
+    ) -> Request:
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": method.upper(),
+            "scheme": "http",
+            "path": path,
+            "raw_path": path.encode("utf-8"),
+            "query_string": query_string,
+            "headers": [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+        }
+        return Request(scope)
+
+    def test_h03_proxy_v2_downgrade_blocked_and_required_for_get_in_prod(self):
+        secret = "s" * 48
+        ts = str(int(time.time()))
+        email = "user@example.com"
+        payload_v1 = build_canonical_proxy_payload(
+            method="GET",
+            path="/api/user/web/user@example.com",
+            raw_query="",
+            user_email=email,
+            timestamp=ts,
+        )
+        sig_v1 = hmac.new(secret.encode("utf-8"), payload_v1, hashlib.sha256).hexdigest()
+
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "INTERNAL_PROXY_SHARED_SECRET": secret,
+            },
+            clear=False,
+        ):
+            # Nonce present without V2 signature -> must reject as incomplete_v2_headers (no downgrade)
+            req_nonce_only = self._make_request(
+                "GET",
+                "/api/user/web/user@example.com",
+                {
+                    PROXY_TS_HEADER: ts,
+                    PROXY_NONCE_HEADER: "nonce-123",
+                    PROXY_SIGNATURE_HEADER: sig_v1,
+                    PROXY_EMAIL_HEADER: email,
+                },
+            )
+            ok, _, err = verify_proxy_signature(req_nonce_only)
+            self.assertFalse(ok)
+            self.assertEqual(err, "incomplete_v2_headers")
+
+            # V2 signature present without nonce -> must reject as incomplete_v2_headers
+            req_sig_v2_only = self._make_request(
+                "GET",
+                "/api/user/web/user@example.com",
+                {
+                    PROXY_TS_HEADER: ts,
+                    PROXY_SIGNATURE_V2_HEADER: sig_v1,
+                    PROXY_EMAIL_HEADER: email,
+                },
+            )
+            ok, _, err = verify_proxy_signature(req_sig_v2_only)
+            self.assertFalse(ok)
+            self.assertEqual(err, "incomplete_v2_headers")
+
+            # Legacy V1 GET in production -> must reject with v2_signature_required
+            req_v1_prod = self._make_request(
+                "GET",
+                "/api/user/web/user@example.com",
+                {
+                    PROXY_TS_HEADER: ts,
+                    PROXY_SIGNATURE_HEADER: sig_v1,
+                    PROXY_EMAIL_HEADER: email,
+                },
+            )
+            ok, _, err = verify_proxy_signature(req_v1_prod)
+            self.assertFalse(ok)
+            self.assertEqual(err, "v2_signature_required")
+
+            # Proper V2 GET in production -> accepted once, replay rejected
+            nonce = f"n-{time.time_ns()}"
+            payload_v2 = build_canonical_proxy_payload(
+                method="GET",
+                path="/api/user/web/user@example.com",
+                raw_query="",
+                user_email=email,
+                timestamp=ts,
+                nonce=nonce,
+            )
+            sig_v2 = hmac.new(secret.encode("utf-8"), payload_v2, hashlib.sha256).hexdigest()
+            v2_headers = {
+                PROXY_TS_HEADER: ts,
+                PROXY_NONCE_HEADER: nonce,
+                PROXY_SIGNATURE_V2_HEADER: sig_v2,
+                PROXY_EMAIL_HEADER: email,
+            }
+            ok, verified_email, err = verify_proxy_signature(
+                self._make_request("GET", "/api/user/web/user@example.com", v2_headers)
+            )
+            self.assertTrue(ok)
+            self.assertEqual(verified_email, email)
+            self.assertIsNone(err)
+
+            ok_replay, _, err_replay = verify_proxy_signature(
+                self._make_request("GET", "/api/user/web/user@example.com", v2_headers)
+            )
+            self.assertFalse(ok_replay)
+            self.assertEqual(err_replay, "replayed_signature")
+
+    def test_h04_private_email_from_path_handles_non_email_and_nickname(self):
+        self.assertEqual(_private_email_from_path("/api/user/web/victim", "GET"), "victim")
+        self.assertEqual(_private_email_from_path("/api/user/web/Student@Example.COM", "GET"), "student@example.com")
+        self.assertEqual(_private_email_from_path("/api/export/user/victim", "GET"), "victim")
+        self.assertIsNone(_private_email_from_path("/api/user/web/nickname", "POST"))
+        self.assertEqual(_private_email_from_path("/api/user/web/nickname", "GET"), "nickname")
+
+    def test_h12_report_email_masking_and_unreported_task_edit_denied(self):
+        self.assertEqual(_mask_email("student@example.com"), "st***@example.com")
+        self.assertEqual(_mask_email("ab@example.com"), "a***@example.com")
+        self.assertEqual(_mask_email("plain-no-at"), "plain-no-at")
+
+        fake_db = MagicMock()
+        fake_db.users.is_admin = AsyncMock(return_value=True)
+        fake_db.users.get_user_by_email = AsyncMock(
+            return_value={"id": 11, "email": "reviewer@example.com", "is_admin": 1, "admin_role": "reviewer"}
+        )
+        fake_db.tasks.get_task_by_id = AsyncMock(return_value={"id": 99, "bank_task_id": 500})
+        fake_db.reports.has_report_for_task = AsyncMock(return_value=False)
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(
+                    _update_task_from_report_common(
+                        task_id=99,
+                        text="Updated",
+                        answer="4",
+                        question_type="input",
+                        text_scale="md",
+                        options=None,
+                        subquestions=None,
+                        image=None,
+                        email="reviewer@example.com",
+                        db=fake_db,
+                    )
+                )
+        self.assertEqual(ctx.exception.status_code, 403)
+        fake_db.reports.has_report_for_task.assert_awaited_once_with(99)
+
+    def test_h21_connection_pool_wakes_waiter_immediately_on_broken_release(self):
+        async def _scenario():
+            created: list[object] = []
+
+            class FakeConn:
+                def __init__(self, idx: int, fail_rollback: bool = False):
+                    self.idx = idx
+                    self.fail_rollback = fail_rollback
+                    self.closed = False
+                    self.row_factory = "dirty"
+                    self._lastrowid = 999
+
+                async def rollback(self):
+                    if self.fail_rollback:
+                        raise RuntimeError("connection dropped")
+
+                async def close(self):
+                    self.closed = True
+
+            async def fake_connect(_url: str, timeout: int = 30):
+                idx = len(created) + 1
+                conn = FakeConn(idx, fail_rollback=(idx == 1))
+                created.append(conn)
+                return conn
+
+            pool = ConnectionPool("postgresql://u:p@localhost/db", max_size=1, timeout=5)
+            with patch("utils.connection_pool.db_driver.connect", side_effect=fake_connect):
+                c1 = await pool.acquire()
+                self.assertEqual(c1.idx, 1)
+                self.assertIsNone(c1.row_factory)
+                self.assertIsNone(c1._lastrowid)
+
+                waiter_task = asyncio.create_task(pool.acquire())
+                await asyncio.sleep(0.02)
+                started = time.perf_counter()
+                await pool.release(c1)
+                c2 = await asyncio.wait_for(waiter_task, timeout=1.0)
+                elapsed = time.perf_counter() - started
+
+                self.assertTrue(c1.closed)
+                self.assertEqual(c2.idx, 2)
+                self.assertIsNone(c2.row_factory)
+                self.assertIsNone(c2._lastrowid)
+                self.assertLess(elapsed, 0.5)
+
+                await pool.release(c2)
+                await pool.close()
+
+        asyncio.run(_scenario())
+
+    def test_h22_cache_headers_preserve_explicit_and_fail_safe_no_store(self):
+        app = FastAPI()
+        app.add_middleware(CacheHeadersMiddleware, default_max_age=300)
+
+        @app.get("/api/images/test.png")
+        async def _img():
+            return Response(
+                content=b"png",
+                media_type="image/png",
+                headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            )
+
+        @app.get("/api/modules")
+        async def _modules():
+            return {"modules": []}
+
+        @app.get("/api/maintenance")
+        async def _maint():
+            return {"active": False}
+
+        @app.get("/api/push/status")
+        async def _push():
+            return {"enabled": False}
+
+        @app.get("/api/unknown-private")
+        async def _unknown():
+            return {"secret": True}
+
+        client = TestClient(app)
+        self.assertEqual(
+            client.get("/api/images/test.png").headers.get("cache-control"),
+            "public, max-age=31536000, immutable",
+        )
+        self.assertEqual(
+            client.get("/api/modules").headers.get("cache-control"),
+            "public, max-age=300",
+        )
+        for no_store_path in ("/api/maintenance", "/api/push/status", "/api/unknown-private"):
+            cc = client.get(no_store_path).headers.get("cache-control", "")
+            self.assertIn("no-store", cc, f"{no_store_path} must return no-store")
+
+    def test_h23_almaty_streak_preserves_on_negative_days_diff(self):
+        today = today_almaty()
+        future_date = (today + timedelta(days=1)).isoformat()
+        streak, stored_date = calculate_next_streak(5, future_date)
+        self.assertEqual(streak, 5)
+        self.assertEqual(stored_date, future_date)
+
+        yesterday = (today - timedelta(days=1)).isoformat()
+        streak_inc, stored_today = calculate_next_streak(5, yesterday)
+        self.assertEqual(streak_inc, 6)
+        self.assertEqual(stored_today, today.isoformat())
+
+    def test_h27_h28_export_csv_sanitization_and_push_endpoint_ssrf(self):
+        self.assertTrue(_safe_csv_value(" =cmd|' /C calc'!A0").startswith("'"))
+        self.assertTrue(_safe_csv_value("\t+1+1").startswith("'"))
+        self.assertTrue(_safe_csv_value("\n-2").startswith("'"))
+        self.assertEqual(_safe_csv_value("normal text"), "normal text")
+
+        stem = _safe_export_filename_stem('a"b/../c\r\n@d.com')
+        self.assertNotIn('"', stem)
+        self.assertNotIn("/", stem)
+        self.assertNotIn("\r", stem)
+        self.assertNotIn("\n", stem)
+
+        self.assertTrue(is_allowed_push_endpoint("https://fcm.googleapis.com/fcm/send/abc"))
+        self.assertTrue(is_allowed_push_endpoint("https://fcm.googleapis.com:443/fcm/send/abc"))
+        self.assertFalse(is_allowed_push_endpoint("https://evil@fcm.googleapis.com/x"))
+        self.assertFalse(is_allowed_push_endpoint("https://fcm.googleapis.com:8443/x"))
+        self.assertFalse(is_allowed_push_endpoint("https://fcm.googleapis.com/x\r\n"))
+        self.assertFalse(is_allowed_push_endpoint("http://fcm.googleapis.com/x"))
+        self.assertFalse(is_allowed_push_endpoint("https://evilfcm.googleapis.com/x"))
+
+    def test_h36_h37_ws_broadcast_timeout_and_bounded_lru_cache(self):
+        async def _ws_scenario():
+            mgr = QuizConnectionManager()
+            mgr.WS_SEND_TIMEOUT_SECONDS = 0.05
+
+            received: list[str] = []
+
+            class FastWS:
+                async def accept(self):
+                    return None
+
+                async def send_text(self, text: str):
+                    received.append(text)
+
+            class HangingWS:
+                async def accept(self):
+                    return None
+
+                async def send_text(self, _text: str):
+                    await asyncio.sleep(5)
+
+            await mgr.connect(1, "fast", FastWS())
+            await mgr.connect(1, "hang", HangingWS())
+
+            started = time.perf_counter()
+            await mgr.broadcast(1, {"type": "ping"})
+            elapsed = time.perf_counter() - started
+
+            self.assertLess(elapsed, 0.5)
+            self.assertEqual(len(received), 1)
+            self.assertIn("fast", mgr.sessions.get(1, {}))
+            self.assertNotIn("hang", mgr.sessions.get(1, {}))
+
+        asyncio.run(_ws_scenario())
+
+        lru = SimpleCache(default_ttl=60, maxsize=3)
+        lru.set("a", 1)
+        lru.set("b", 2)
+        lru.set("c", 3)
+        # Touch 'a' so 'b' becomes least-recently used
+        self.assertEqual(lru.get("a"), 1)
+        lru.set("d", 4)
+        self.assertIsNone(lru.get("b"))
+        self.assertEqual(lru.get("a"), 1)
+        self.assertEqual(lru.get("c"), 3)
+        self.assertEqual(lru.get("d"), 4)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,10 @@ class LastSuperAdminError(Exception):
     """Raised when operation would remove or demote the last super admin."""
 
 
+def _normalize_email(email: Optional[str]) -> str:
+    return (email or "").strip().lower()
+
+
 def _normalize_admin_role(role: Optional[str]) -> Optional[str]:
     if role is None:
         return None
@@ -146,10 +150,13 @@ class UserRepository(BaseRepository):
 
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
+        normalized_email = _normalize_email(email)
+        if not normalized_email:
+            return None
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
-                "SELECT * FROM users WHERE email = ?", (email,)
+                "SELECT * FROM users WHERE LOWER(email) = ?", (normalized_email,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
@@ -166,11 +173,14 @@ class UserRepository(BaseRepository):
 
     async def create_user_by_email(self, email: str, check_admin_email: Optional[str] = None) -> Dict[str, Any]:
         """Atomically get or create a web user without overwriting existing state."""
+        normalized_email = _normalize_email(email)
+        if not normalized_email:
+            raise ValueError("email is required")
         async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             # Check if user already exists
             async with db.execute(
-                "SELECT * FROM users WHERE email = ?", (email,)
+                "SELECT * FROM users WHERE LOWER(email) = ?", (normalized_email,)
             ) as cursor:
                 existing = await cursor.fetchone()
                 if existing:
@@ -179,7 +189,7 @@ class UserRepository(BaseRepository):
             # Check if this email should be admin
             is_admin = False
             admin_role = None
-            if check_admin_email and email.lower() == check_admin_email.lower():
+            if check_admin_email and normalized_email == _normalize_email(check_admin_email):
                 is_admin = True
                 admin_role = ADMIN_ROLE_SUPER_ADMIN
             
@@ -189,12 +199,12 @@ class UserRepository(BaseRepository):
                     await db.execute(
                         """INSERT INTO users (telegram_id, email, is_admin, admin_role)
                            VALUES (?, ?, ?, ?) ON CONFLICT(email) DO NOTHING""",
-                        (dummy_telegram_id, email, 1 if is_admin else 0, admin_role),
+                        (dummy_telegram_id, normalized_email, 1 if is_admin else 0, admin_role),
                     )
                 except db_driver.IntegrityError:
                     # An independent writer may have created the email, or the
                     # synthetic ID may already belong to a different user.
-                    async with db.execute("SELECT * FROM users WHERE email = ?", (email,)) as cursor:
+                    async with db.execute("SELECT * FROM users WHERE LOWER(email) = ?", (normalized_email,)) as cursor:
                         existing = await cursor.fetchone()
                     if existing:
                         return dict(existing)
@@ -204,7 +214,7 @@ class UserRepository(BaseRepository):
                         raise
                     continue
 
-                async with db.execute("SELECT * FROM users WHERE email = ?", (email,)) as cursor:
+                async with db.execute("SELECT * FROM users WHERE LOWER(email) = ?", (normalized_email,)) as cursor:
                     row = await cursor.fetchone()
                 if row is None:
                     raise RuntimeError("User creation did not return a user")
@@ -213,10 +223,13 @@ class UserRepository(BaseRepository):
 
     async def update_user_nickname(self, email: str, nickname: str):
         """Update user nickname"""
+        normalized_email = _normalize_email(email)
+        if not normalized_email:
+            return
         async with self._connection() as db:
             await db.execute(
-                "UPDATE users SET nickname = ? WHERE email = ?",
-                (nickname, email)
+                "UPDATE users SET nickname = ? WHERE LOWER(email) = ?",
+                (nickname, normalized_email)
             )
             await db.commit()
 
@@ -359,8 +372,11 @@ class UserRepository(BaseRepository):
                     row = await cursor.fetchone()
                     return bool(row[0]) if row else False
             elif email:
+                normalized_email = _normalize_email(email)
+                if not normalized_email:
+                    return False
                 async with db.execute(
-                    "SELECT is_admin FROM users WHERE email = ?", (email,)
+                    "SELECT is_admin FROM users WHERE LOWER(email) = ?", (normalized_email,)
                 ) as cursor:
                     row = await cursor.fetchone()
                     return bool(row[0]) if row else False
@@ -386,20 +402,23 @@ class UserRepository(BaseRepository):
                         (user_id,),
                     )
             elif email:
+                normalized_email = _normalize_email(email)
+                if not normalized_email:
+                    return
                 if is_admin:
                     await db.execute(
                         """
                         UPDATE users
                         SET is_admin = 1,
                             admin_role = COALESCE(NULLIF(TRIM(admin_role), ''), ?)
-                        WHERE email = ?
+                        WHERE LOWER(email) = ?
                         """,
-                        (ADMIN_ROLE_SUPER_ADMIN, email),
+                        (ADMIN_ROLE_SUPER_ADMIN, normalized_email),
                     )
                 else:
                     await db.execute(
-                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE email = ?",
-                        (email,),
+                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE LOWER(email) = ?",
+                        (normalized_email,),
                     )
             await db.commit()
 
@@ -414,9 +433,12 @@ class UserRepository(BaseRepository):
                 ) as cursor:
                     row = await cursor.fetchone()
             elif email:
+                normalized_email = _normalize_email(email)
+                if not normalized_email:
+                    return None
                 async with db.execute(
-                    "SELECT admin_role FROM users WHERE email = ?",
-                    (email,),
+                    "SELECT admin_role FROM users WHERE LOWER(email) = ?",
+                    (normalized_email,),
                 ) as cursor:
                     row = await cursor.fetchone()
             if not row:
@@ -444,9 +466,12 @@ class UserRepository(BaseRepository):
                     (is_admin_value, normalized_role, user_id),
                 )
             elif email:
+                normalized_email = _normalize_email(email)
+                if not normalized_email:
+                    return
                 await db.execute(
-                    "UPDATE users SET is_admin = ?, admin_role = ? WHERE email = ?",
-                    (is_admin_value, normalized_role, email),
+                    "UPDATE users SET is_admin = ?, admin_role = ? WHERE LOWER(email) = ?",
+                    (is_admin_value, normalized_role, normalized_email),
                 )
             await db.commit()
 
@@ -659,57 +684,22 @@ class UserRepository(BaseRepository):
 
     async def update_streak(self, user_id: int):
         """Update user streak - increment if solved today or yesterday, reset if longer gap"""
+        from utils.learning_progress import calculate_next_streak
         try:
-            async def operation():
-                async with self._connection() as db:
-                    async with db.execute(
-                        "SELECT streak, last_streak_date FROM users WHERE id = ?", (user_id,)
-                    ) as cursor:
-                        row = await cursor.fetchone()
-                        if not row:
-                            return None
+            async with self._write_transaction() as db:
+                async with db.execute(
+                    "SELECT streak, last_streak_date FROM users WHERE id = ?", (user_id,)
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    if not row:
+                        return None
 
-                        current_streak = row[0] or 0
-                        last_streak_date_str = row[1]
-
-                        from datetime import date, datetime
-                        today = date.today()
-
-                        if last_streak_date_str:
-                            try:
-                                if isinstance(last_streak_date_str, str):
-                                    if ' ' in last_streak_date_str:
-                                        last_streak_date = datetime.strptime(last_streak_date_str.split()[0], "%Y-%m-%d").date()
-                                    else:
-                                        last_streak_date = datetime.strptime(last_streak_date_str, "%Y-%m-%d").date()
-                                else:
-                                    last_streak_date = last_streak_date_str
-
-                                days_diff = (today - last_streak_date).days
-
-                                if days_diff == 0:
-                                    new_streak = current_streak
-                                elif days_diff == 1:
-                                    new_streak = current_streak + 1
-                                else:
-                                    new_streak = 1
-                            except Exception as e:
-                                import logging
-                                logger = logging.getLogger(__name__)
-                                logger.error(f"Error parsing streak date: {e}, value: {last_streak_date_str}")
-                                new_streak = 1
-                        else:
-                            new_streak = 1
-
-                        await db.execute(
-                            """UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?""",
-                            (new_streak, today.isoformat(), user_id)
-                        )
-                        await db.commit()
-                        return current_streak, new_streak
-
-            await self._run_with_write_lock(operation)
+                current_streak = int(row[0] or 0)
+                new_streak, streak_date = calculate_next_streak(current_streak, row[1])
+                await db.execute(
+                    "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
+                    (new_streak, streak_date, user_id),
+                )
+                return current_streak, new_streak
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error updating streak for user {user_id}: {e}", exc_info=True)

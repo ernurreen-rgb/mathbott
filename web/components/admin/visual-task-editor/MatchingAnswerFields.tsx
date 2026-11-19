@@ -12,6 +12,19 @@ type Props = {
   setEditingField: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
+const buildDenseSubquestions = (
+  current: LessonTask["subquestions"] | undefined,
+  idx: number,
+  nextItem: { text: string; correct: string }
+): Array<{ text: string; correct: string }> => {
+  const dense: Array<{ text: string; correct: string }> = [
+    { text: current?.[0]?.text || "", correct: current?.[0]?.correct || "A" },
+    { text: current?.[1]?.text || "", correct: current?.[1]?.correct || "A" },
+  ];
+  dense[idx] = nextItem;
+  return dense;
+};
+
 export default function MatchingAnswerFields({ qt, taskData, isEditing, editingField, updateTempTask, setEditingField }: Props) {
   return (
     <>
@@ -85,9 +98,12 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                       <MathFieldInput
                         value={subText}
                         onChange={(value) => {
-                          const newSubquestions = [...(taskData.subquestions || [])];
-                          newSubquestions[idx] = { text: value, correct: correctAnswer };
-                          updateTempTask({ subquestions: newSubquestions });
+                          updateTempTask({
+                            subquestions: buildDenseSubquestions(taskData.subquestions, idx, {
+                              text: value,
+                              correct: correctAnswer,
+                            }),
+                          });
                         }}
                         onBlur={() => setEditingField(null)}
                         className="w-full border-2 border-purple-500 rounded-lg px-3 py-2"
@@ -97,9 +113,12 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                       <select
                         value={correctAnswer}
                         onChange={(e) => {
-                          const newSubquestions = [...(taskData.subquestions || [])];
-                          newSubquestions[idx] = { text: subText, correct: e.target.value };
-                          updateTempTask({ subquestions: newSubquestions });
+                          updateTempTask({
+                            subquestions: buildDenseSubquestions(taskData.subquestions, idx, {
+                              text: subText,
+                              correct: e.target.value,
+                            }),
+                          });
                         }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2"
                       >
@@ -130,9 +149,12 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                         value={correctAnswer}
                         onChange={(e) => {
                           if (isEditing) {
-                            const newSubquestions = [...(taskData.subquestions || [])];
-                            newSubquestions[idx] = { text: subText, correct: e.target.value };
-                            updateTempTask({ subquestions: newSubquestions });
+                            updateTempTask({
+                              subquestions: buildDenseSubquestions(taskData.subquestions, idx, {
+                                text: subText,
+                                correct: e.target.value,
+                              }),
+                            });
                           }
                         }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 bg-white"

@@ -4,6 +4,28 @@ Admin reports moderation routes.
 from .common import *  # noqa: F401,F403
 
 
+def _mask_email(email: Optional[str]) -> Optional[str]:
+    if not isinstance(email, str) or "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if not local:
+        return f"***@{domain}"
+    prefix = local[:2] if len(local) > 2 else local[:1]
+    return f"{prefix}***@{domain}"
+
+
+def _mask_report_emails(reports: List[Dict[str, Any]], admin_user: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if admin_user.get("is_super_admin"):
+        return reports
+    masked: List[Dict[str, Any]] = []
+    for report in reports:
+        item = dict(report)
+        if "user_email" in item and item["user_email"]:
+            item["user_email"] = _mask_email(item["user_email"])
+        masked.append(item)
+    return masked
+
+
 async def _update_task_from_report_common(
     *,
     task_id: int,
@@ -22,6 +44,13 @@ async def _update_task_from_report_common(
     task = await db.tasks.get_task_by_id(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if not has_admin_capability(admin_user.get("admin_role"), CAPABILITY_CONTENT_MANAGE):
+        if not await db.reports.has_report_for_task(task_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Only reported tasks can be edited from the reports workflow",
+            )
 
     logger.info(
         "Update task from report: question_type=%s, has_options=%s, has_subquestions=%s, has_image=%s",
@@ -86,9 +115,9 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all reports (admin only)"""
         try:
-            await require_admin_review_manage(email=email, db=db)
+            admin_user = await require_admin_review_manage(email=email, db=db)
             reports = await db.reports.get_all_reports(status_filter=status, limit=limit)
-            return reports
+            return _mask_report_emails(reports, admin_user)
         except HTTPException:
             raise
         except Exception as e:
@@ -104,9 +133,9 @@ def register_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Get all trial test reports (admin only)"""
         try:
-            await require_admin_review_manage(email=email, db=db)
+            admin_user = await require_admin_review_manage(email=email, db=db)
             reports = await db.trial_test_reports.get_all_trial_test_reports(status_filter=status, limit=limit)
-            return reports
+            return _mask_report_emails(reports, admin_user)
         except HTTPException:
             raise
         except Exception as e:

@@ -1,6 +1,7 @@
 """Shared completion identities and learning streak rules."""
 from typing import Any, Dict
-from datetime import date, datetime
+from datetime import datetime
+from utils.timezone import today_almaty
 
 
 async def insert_task_completion(db, *, user_id: int, completion_key: str, bank_task_id: int | None,
@@ -37,7 +38,7 @@ def build_completion_identity(task: Dict[str, Any], *, surface: str) -> Dict[str
 
 def calculate_next_streak(current_streak: int, last_streak_date_value: Any) -> tuple[int, str]:
     """Match the user streak rules while staying inside one submit transaction."""
-    today = date.today()
+    today = today_almaty()
     last_streak_date = None
     if last_streak_date_value:
         try:
@@ -53,10 +54,13 @@ def calculate_next_streak(current_streak: int, last_streak_date_value: Any) -> t
     if last_streak_date is None:
         return 1, today.isoformat()
     days_diff = (today - last_streak_date).days
+    if days_diff < 0:
+        # Preserve stored streak & date when clock/timezone shifts slightly backwards.
+        return max(1, int(current_streak or 0)), last_streak_date.isoformat()
     if days_diff == 0:
-        new_streak = current_streak
+        new_streak = max(1, int(current_streak or 0))
     elif days_diff == 1:
-        new_streak = current_streak + 1
+        new_streak = int(current_streak or 0) + 1
     else:
         new_streak = 1
     return new_streak, today.isoformat()

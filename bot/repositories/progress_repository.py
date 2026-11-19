@@ -14,29 +14,23 @@ class ProgressRepository(BaseRepository):
     """Repository for user progress operations"""
     
     async def update_task_progress(self, user_id: int, task_id: int, status: str = "completed"):
-        """Update or create user progress for a task"""
-        async with self._connection() as db:
-            async with db.execute(
-                "SELECT id FROM user_progress WHERE user_id = ? AND task_id = ?",
-                (user_id, task_id)
-            ) as cursor:
-                existing = await cursor.fetchone()
-                    
-            if existing:
-                await db.execute(
-                    """UPDATE user_progress 
-                       SET status = ?, completed_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
-                       WHERE user_id = ? AND task_id = ?""",
-                    (status, user_id, task_id)
-                )
-            else:
-                completed_at = "mathbot_datetime('now')" if status == "completed" else "NULL"
-                await db.execute(
-                    f"""INSERT INTO user_progress (user_id, task_id, status, completed_at)
-                       VALUES (?, ?, ?, {completed_at})""",
-                    (user_id, task_id, status)
-                )
-            await db.commit()
+        """Atomically update or create user progress for a task, preserving initial completed_at."""
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO user_progress (user_id, task_id, status, completed_at)
+                VALUES (?, ?, ?, CASE WHEN ? = 'completed' THEN mathbot_datetime('now') ELSE NULL END)
+                ON CONFLICT(user_id, task_id) DO UPDATE SET
+                    status = excluded.status,
+                    completed_at = CASE
+                        WHEN excluded.status = 'completed'
+                            THEN COALESCE(user_progress.completed_at, mathbot_datetime('now'))
+                        ELSE user_progress.completed_at
+                    END,
+                    updated_at = mathbot_datetime('now')
+                """,
+                (user_id, task_id, status, status),
+            )
 
     async def get_user_progress_for_mini_lesson(self, user_id: int, mini_lesson_id: int) -> Dict[int, str]:
         """Get progress for all tasks in a mini-lesson (task_id -> status)."""
@@ -361,29 +355,18 @@ class ProgressRepository(BaseRepository):
         return correct_answer == user_answer_clean
 
     async def record_task_question_progress(self, user_id: int, task_id: int, question_index: int, is_correct: bool):
-        """Record user progress for a question in a task"""
-        async with self._connection() as db:
-            async with db.execute(
-                """SELECT id FROM user_task_question_progress 
-                   WHERE user_id = ? AND task_id = ? AND question_index = ?""",
-                (user_id, task_id, question_index)
-            ) as cursor:
-                existing = await cursor.fetchone()
-            
-            if existing:
-                await db.execute(
-                    """UPDATE user_task_question_progress 
-                       SET is_correct = ?, completed_at = mathbot_datetime('now')
-                       WHERE user_id = ? AND task_id = ? AND question_index = ?""",
-                    (1 if is_correct else 0, user_id, task_id, question_index)
-                )
-            else:
-                await db.execute(
-                    """INSERT INTO user_task_question_progress (user_id, task_id, question_index, is_correct)
-                       VALUES (?, ?, ?, ?)""",
-                    (user_id, task_id, question_index, 1 if is_correct else 0)
-                )
-            await db.commit()
+        """Atomically record user progress for a question in a task."""
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO user_task_question_progress (user_id, task_id, question_index, is_correct)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, task_id, question_index) DO UPDATE SET
+                    is_correct = excluded.is_correct,
+                    completed_at = mathbot_datetime('now')
+                """,
+                (user_id, task_id, question_index, 1 if is_correct else 0),
+            )
 
     async def get_user_task_question_progress(self, user_id: int, task_id: int) -> Dict[int, bool]:
         """Get user progress for all questions in a task (returns dict: question_index -> is_correct)"""

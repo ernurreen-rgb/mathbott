@@ -153,16 +153,22 @@ export function createTaskActions({
     }
   };
 
-  const deleteMiniLessonTask = async (taskId: number) => {
-    if (!session?.user?.email || !confirm("Есепті жою керек пе?")) return;
+  const deleteMiniLessonTask = async (
+    taskId: number,
+    options?: { skipConfirm?: boolean }
+  ): Promise<boolean> => {
+    if (!session?.user?.email) return false;
+    if (!options?.skipConfirm && !confirm("Есепті жою керек пе?")) return false;
     try {
       const response = await fetch(`${apiPath(`admin/tasks/${taskId}`)}?email=${encodeURIComponent(session.user.email)}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Тапсырманы жою мүмкін болмады");
       if (selectedMiniLesson) await fetchMiniTasks(selectedMiniLesson);
+      return true;
     } catch (err: any) {
       setError(err.message);
+      return false;
     }
   };
   return { createMiniLessonTask, deleteMiniLessonTask };

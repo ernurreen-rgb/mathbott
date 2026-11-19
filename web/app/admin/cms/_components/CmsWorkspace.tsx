@@ -612,7 +612,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                           }}
                           onAdd={() => {}}
                           onDelete={async (taskId) => {
-                            await deleteMiniLessonTask(taskId);
+                            return await deleteMiniLessonTask(taskId, { skipConfirm: true });
                           }}
                           onReorder={async (reorderedTasks) => {
                             if (!session?.user?.email || !selectedMiniLesson) return;

@@ -53,6 +53,7 @@ class BankTaskAuditMixin:
         action: Optional[str] = None,
         task_id: Optional[int] = None,
         actor_email: Optional[str] = None,
+        include_role_changes: bool = True,
         limit: int = 20,
         offset: int = 0,
     ) -> Dict[str, Any]:
@@ -60,6 +61,12 @@ class BankTaskAuditMixin:
             db.row_factory = db_driver.Row
             where = ["domain = ?"]
             params: List[Any] = [self.AUDIT_DOMAIN_BANK]
+
+            if not include_role_changes:
+                where.append("action <> ?")
+                params.append("role_change")
+                where.append("entity_type <> ?")
+                params.append("admin_user")
 
             if action:
                 where.append("action = ?")

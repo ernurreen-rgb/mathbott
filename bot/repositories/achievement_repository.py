@@ -35,27 +35,23 @@ class AchievementRepository(BaseRepository):
              "check": lambda u: u.get("streak", 0) >= 30}
         ]
         
-        for achievement in achievements:
-            async with self._connection() as db:
-                async with db.execute(
-                    "SELECT id FROM user_achievements WHERE user_id = ? AND achievement_id = ?",
-                    (user_id, achievement["id"])
-                ) as cursor:
-                    if await cursor.fetchone():
-                        continue
-            
-            if achievement["check"](user):
-                async def operation() -> None:
-                    async with self._connection() as db:
-                        await db.execute(
-                            "INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)",
-                            (user_id, achievement["id"])
-                        )
-                        await db.commit()
+        eligible = [achievement for achievement in achievements if achievement["check"](user)]
+        if not eligible:
+            return []
 
-                await self._run_with_write_lock(operation)
-                unlocked.append(achievement)
-        
+        async with self._write_transaction() as db:
+            for achievement in eligible:
+                cursor = await db.execute(
+                    """
+                    INSERT INTO user_achievements (user_id, achievement_id)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id, achievement_id) DO NOTHING
+                    """,
+                    (user_id, achievement["id"]),
+                )
+                if (cursor.rowcount or 0) > 0:
+                    unlocked.append(achievement)
+
         return unlocked
 
     async def get_user_achievements(self, user_id: int) -> List[Dict[str, Any]]:

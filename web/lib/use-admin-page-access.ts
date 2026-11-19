@@ -17,6 +17,7 @@ export function useAdminPageAccess(
 ): {
   access: AdminCheckResponse | null;
   loading: boolean;
+  allowed: boolean;
 } {
   const router = useRouter();
   const [access, setAccess] = useState<AdminCheckResponse | null>(null);
@@ -28,11 +29,13 @@ export function useAdminPageAccess(
       return;
     }
     if (status === "unauthenticated") {
+      setAccess(null);
       setLoading(false);
       router.push("/");
       return;
     }
     if (!email) {
+      setAccess(null);
       setLoading(false);
       return;
     }
@@ -66,5 +69,12 @@ export function useAdminPageAccess(
     };
   }, [pageKey, status, email, router]);
 
-  return { access, loading };
+  const allowed =
+    status === "authenticated" &&
+    Boolean(email) &&
+    !loading &&
+    Boolean(access?.is_admin) &&
+    isAllowedForPage(pageKey, access?.role);
+
+  return { access, loading, allowed };
 }

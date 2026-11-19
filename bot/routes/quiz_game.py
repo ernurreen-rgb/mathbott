@@ -1,4 +1,5 @@
 """Live quiz HTTP and WebSocket boundaries for hosts and guest capabilities."""
+import asyncio
 import json
 import logging
 from uuid import uuid4
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter
 from dependencies import get_db, require_internal_identity, optional_internal_identity
 from database import Database
-from utils.quiz import QuizError, public_question, public_participant
+from utils.quiz import QuizError, public_question
 from utils.quiz_ws_auth import issue_quiz_ws_ticket, verify_quiz_ws_ticket, QUIZ_WS_TTL
 from utils.quiz_entry_auth import quiz_entry_client_key
 
@@ -44,14 +45,28 @@ class ReviewAnswerRequest(BaseModel):
 class QuizConnectionManager:
     """In-memory WebSocket connection manager for live quiz sessions."""
 
+    MAX_WS_PER_SESSION = 500
+    MAX_TOTAL_WS = 2000
+    WS_SEND_TIMEOUT_SECONDS = 2.0
+
     def __init__(self):
         # session_id -> dict of client_id -> WebSocket
         self.sessions: Dict[int, Dict[str, WebSocket]] = {}
 
-    async def connect(self, session_id: int, client_id: str, websocket: WebSocket):
+    def total_connections(self) -> int:
+        return sum(len(clients) for clients in self.sessions.values())
+
+    async def connect(self, session_id: int, client_id: str, websocket: WebSocket) -> bool:
+        session_clients = self.sessions.get(session_id)
+        if (session_clients is not None and len(session_clients) >= self.MAX_WS_PER_SESSION) or (
+            self.total_connections() >= self.MAX_TOTAL_WS
+        ):
+            await websocket.close(code=1013)
+            return False
         await websocket.accept()
         self.sessions.setdefault(session_id, {})
         self.sessions[session_id][client_id] = websocket
+        return True
 
     def disconnect(self, session_id: int, client_id: str):
         if session_id in self.sessions:
@@ -60,16 +75,29 @@ class QuizConnectionManager:
                 self.sessions.pop(session_id, None)
 
     async def broadcast(self, session_id: int, message: Dict[str, Any], exclude_client: Optional[str] = None):
-        if session_id not in self.sessions:
+        clients = self.sessions.get(session_id)
+        if not clients:
             return
         payload = json.dumps(message, ensure_ascii=False)
-        for client_id, ws in list(self.sessions[session_id].items()):
-            if exclude_client and client_id == exclude_client:
-                continue
+        targets = [
+            (client_id, ws)
+            for client_id, ws in list(clients.items())
+            if not (exclude_client and client_id == exclude_client)
+        ]
+        if not targets:
+            return
+
+        async def _send_one(client_id: str, ws: WebSocket) -> Optional[str]:
             try:
-                await ws.send_text(payload)
+                await asyncio.wait_for(ws.send_text(payload), timeout=self.WS_SEND_TIMEOUT_SECONDS)
+                return None
             except Exception:
-                self.disconnect(session_id, client_id)
+                return client_id
+
+        results = await asyncio.gather(*(_send_one(cid, ws) for cid, ws in targets), return_exceptions=True)
+        for failed_id in results:
+            if isinstance(failed_id, str):
+                self.disconnect(session_id, failed_id)
 
 
 quiz_manager = QuizConnectionManager()
@@ -298,7 +326,8 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
             await websocket.close(code=1008)
             return
         client_id = str(uuid4())
-        await quiz_manager.connect(session_id, client_id, websocket)
+        if not await quiz_manager.connect(session_id, client_id, websocket):
+            return
         try:
             await websocket.send_json({'type': 'session_state', 'status': session['status']})
             while True:

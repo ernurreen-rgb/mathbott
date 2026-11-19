@@ -149,10 +149,19 @@ def register_lesson_content_routes(app: FastAPI, db: Database, limiter: Limiter)
         task_ids = payload.get("task_ids")
         if not isinstance(task_ids, list):
             raise HTTPException(status_code=400, detail="task_ids must be a list of task IDs")
+        if len(task_ids) > 200:
+            raise HTTPException(status_code=400, detail="Too many task IDs to reorder at once (max 200)")
 
-        for order, task_id in enumerate(task_ids):
-            if isinstance(task_id, int):
-                await db.tasks.update_task(task_id=task_id, sort_order=order)
+        normalized_ids: List[int] = []
+        seen_ids = set()
+        for raw_task_id in task_ids:
+            if isinstance(raw_task_id, bool) or not isinstance(raw_task_id, int) or raw_task_id <= 0:
+                raise HTTPException(status_code=400, detail="task_ids must contain positive integers")
+            if raw_task_id not in seen_ids:
+                seen_ids.add(raw_task_id)
+                normalized_ids.append(raw_task_id)
+
+        await db.tasks.reorder_tasks_in_mini_lesson(mini_lesson_id, normalized_ids)
 
         return {"success": True, "message": "Tasks reordered successfully"}
 

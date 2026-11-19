@@ -35,7 +35,10 @@ const toLessonTask = (task: MiniLessonReviewTask): LessonTask => ({
 
 /** Readable form of the graded answer: option texts for choices, slots for written answers. */
 function correctAnswerParts(task: LessonTask, raw: string): string[] {
-  if (task.question_type === "tf") return [raw === "false" ? "\\text{Жалған}" : "\\text{Дұрыс}"];
+  if (task.question_type === "tf") {
+    const lowered = raw.trim().toLowerCase();
+    return [lowered === "false" || lowered === "0" ? "\\text{Жалған}" : "\\text{Дұрыс}"];
+  }
   if ((task.question_type === "mcq" || task.question_type === "mcq6") && getTaskAnswerMode(task) === "choices") {
     return parseMcqAnswerLabels(raw).map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || label);
   }
@@ -54,8 +57,11 @@ export default function MiniLessonReviewPage() {
   const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
-  const lessonId = Number(params.id);
-  const miniLessonId = Number(params.miniId);
+  const rawLessonId = Number(params.id);
+  const rawMiniLessonId = Number(params.miniId);
+  const lessonId = Number.isInteger(rawLessonId) && rawLessonId > 0 ? rawLessonId : 0;
+  const miniLessonId = Number.isInteger(rawMiniLessonId) && rawMiniLessonId > 0 ? rawMiniLessonId : 0;
+  const isValidRoute = lessonId > 0 && miniLessonId > 0;
   const email = session?.user?.email || null;
 
   const [review, setReview] = useState<MiniLessonReview | null>(null);
@@ -64,48 +70,76 @@ export default function MiniLessonReviewPage() {
   const [answer, setAnswer] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<MiniLessonReviewAnswerResult | null>(null);
+  const loadGenerationRef = useRef(0);
+  const submittingRef = useRef(false);
+  const continuedRef = useRef(false);
+
+  useEffect(() => {
+    continuedRef.current = false;
+    submittingRef.current = false;
+    setReview(null);
+    setAnswer("");
+    setResult(null);
+    setError(null);
+  }, [lessonId, miniLessonId]);
 
   const load = useCallback(async () => {
-    if (!email || !miniLessonId) return;
+    if (!isValidRoute) {
+      setError("Қателер талдауы табылмады.");
+      setLoading(false);
+      return;
+    }
+    if (!email) return;
+    const gen = ++loadGenerationRef.current;
     setLoading(true); setError(null);
     const { data, error: err } = await getMiniLessonReview(miniLessonId, email);
+    if (gen !== loadGenerationRef.current) return;
     setReview(data); setError(err); setAnswer(""); setResult(null); setLoading(false);
-  }, [email, miniLessonId]);
+  }, [email, isValidRoute, miniLessonId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const submit = async (value: string) => {
     const current = review?.current;
-    if (!email || !current || checking || result) return;
+    if (!email || !current || submittingRef.current || checking || result) return;
+    submittingRef.current = true;
     // Unlock audio inside the click: iOS refuses to start it after the request returns.
     primeLessonSound();
     setChecking(true); setError(null);
-    const { data, error: err } = await submitMiniLessonReviewAnswer(
-      miniLessonId, { task_id: current.task_id, bank_task_id: current.task.bank_task_id, answer: value }, email,
-    );
-    if (data) {
-      setResult(data);
-      setReview((previous) => previous && { ...previous, summary: data.summary });
-      playLessonCue(data.correct ? "correct" : "wrong");
+    const gen = loadGenerationRef.current;
+    try {
+      const { data, error: err } = await submitMiniLessonReviewAnswer(
+        miniLessonId, { task_id: current.task_id, bank_task_id: current.task.bank_task_id, answer: value }, email,
+      );
+      if (gen !== loadGenerationRef.current) return;
+      if (data) {
+        setResult(data);
+        setReview((previous) => previous && { ...previous, summary: data.summary });
+        playLessonCue(data.correct ? "correct" : "wrong");
+      }
+      else setError(err || "Жауапты тексеру мүмкін болмады.");
+    } finally {
+      submittingRef.current = false;
+      setChecking(false);
     }
-    else setError(err || "Жауапты тексеру мүмкін болмады.");
-    setChecking(false);
   };
 
-  const backHref = `/lessons/${review?.lesson_id ?? lessonId}`;
+  const backHref = review?.lesson_id ? `/lessons/${review.lesson_id}` : lessonId ? `/lessons/${lessonId}` : "/modules";
   // Opened from the lesson: step back. Opened directly: replace, so the review never sits between two lesson visits.
   const returnToLesson = () => {
     if (consumeReviewOpenedFromLesson(window.location.pathname)) router.back();
     else router.replace(backHref);
   };
   // A finished review has no screen of its own: the lesson goes straight on to the next step.
-  const continuedRef = useRef(false);
   const continueAfterReview = useCallback(() => {
     if (continuedRef.current) return;
     continuedRef.current = true;
-    markReviewFinished(review?.lesson_id ?? lessonId, miniLessonId);
+    const targetLessonId = review?.lesson_id ?? lessonId;
+    if (targetLessonId > 0 && miniLessonId > 0) {
+      markReviewFinished(targetLessonId, miniLessonId);
+    }
     if (consumeReviewOpenedFromLesson(window.location.pathname)) router.back();
-    else router.replace(`/lessons/${review?.lesson_id ?? lessonId}`);
+    else router.replace(targetLessonId > 0 ? `/lessons/${targetLessonId}` : "/modules");
   }, [lessonId, miniLessonId, review?.lesson_id, router]);
   const finished = !!review && !review.current && review.summary.mistakes > 0;
   useEffect(() => { if (finished) continueAfterReview(); }, [finished, continueAfterReview]);
@@ -174,6 +208,7 @@ export default function MiniLessonReviewPage() {
 
       <LessonTaskFooter
         taskId={task.id}
+        questionType={task.question_type}
         verdict={result ? (result.correct ? "correct" : "wrong") : null}
         correctMath={result && !result.correct && result.correct_answer ? correctAnswerParts(task, result.correct_answer) : []}
         detail={result?.correct ? "Бұл қате түзетілді." : undefined}

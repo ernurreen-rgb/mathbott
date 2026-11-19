@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from slowapi import Limiter
 
 from database import Database
@@ -25,9 +25,15 @@ PRESENCE_CLIENT_TIMEOUT_SECONDS = 70
 
 
 class PresenceConnectionManager:
+    MAX_TOTAL_WS = 2000
+    WS_SEND_TIMEOUT_SECONDS = 2.0
+
     def __init__(self):
         self.active_connections: Dict[int, Dict[str, WebSocket]] = {}
         self.users: Dict[int, Dict[str, Any]] = {}
+
+    def total_connections(self) -> int:
+        return sum(len(conns) for conns in self.active_connections.values())
 
     def _public_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -42,7 +48,10 @@ class PresenceConnectionManager:
             if self.active_connections.get(user_id)
         ]
 
-    async def connect(self, user: Dict[str, Any], websocket: WebSocket) -> tuple[str, bool, Dict[str, Any]]:
+    async def connect(self, user: Dict[str, Any], websocket: WebSocket) -> Optional[tuple[str, bool, Dict[str, Any]]]:
+        if self.total_connections() >= self.MAX_TOTAL_WS:
+            await websocket.close(code=1013)
+            return None
         await websocket.accept()
         user_id = int(user["id"])
         was_offline = user_id not in self.active_connections
@@ -65,46 +74,50 @@ class PresenceConnectionManager:
         return self.users.pop(user_id, None)
 
     async def send_snapshot(self, websocket: WebSocket) -> None:
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "presence_snapshot",
-                    "users": self.online_users(),
-                },
-                ensure_ascii=False,
-            )
+        await asyncio.wait_for(
+            websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "presence_snapshot",
+                        "users": self.online_users(),
+                    },
+                    ensure_ascii=False,
+                )
+            ),
+            timeout=self.WS_SEND_TIMEOUT_SECONDS,
         )
 
     async def broadcast(self, message: Dict[str, Any], exclude_connection_id: Optional[str] = None) -> None:
         data = json.dumps(message, ensure_ascii=False)
-        stale_connections: list[tuple[int, str]] = []
+        targets: list[tuple[int, str, WebSocket]] = [
+            (user_id, connection_id, ws)
+            for user_id, connections in list(self.active_connections.items())
+            for connection_id, ws in list(connections.items())
+            if not (exclude_connection_id and connection_id == exclude_connection_id)
+        ]
+        if not targets:
+            return
 
-        for user_id, connections in list(self.active_connections.items()):
-            for connection_id, ws in list(connections.items()):
-                if exclude_connection_id and connection_id == exclude_connection_id:
-                    continue
-                try:
-                    await ws.send_text(data)
-                except Exception:
-                    stale_connections.append((user_id, connection_id))
+        async def _send_one(user_id: int, connection_id: str, ws: WebSocket) -> Optional[tuple[int, str]]:
+            try:
+                await asyncio.wait_for(ws.send_text(data), timeout=self.WS_SEND_TIMEOUT_SECONDS)
+                return None
+            except Exception:
+                return (user_id, connection_id)
 
-        for user_id, connection_id in stale_connections:
-            offline_user = self.disconnect(user_id, connection_id)
-            if offline_user:
-                await self.broadcast(
-                    {
-                        "type": "presence_update",
-                        "status": "offline",
-                        "user": offline_user,
-                    }
-                )
+        results = await asyncio.gather(*(_send_one(uid, cid, ws) for uid, cid, ws in targets), return_exceptions=True)
+        for item in results:
+            if isinstance(item, tuple):
+                self.disconnect(item[0], item[1])
 
 
 def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
     manager = PresenceConnectionManager()
 
     @app.post("/api/presence/heartbeat")
+    @limiter.limit("30/minute")
     async def heartbeat(
+        request: Request,
         path: Optional[str] = Query(None, max_length=200),
         user: dict = Depends(require_internal_identity),
         database: Database = Depends(get_db),
@@ -115,7 +128,9 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
         }
 
     @app.get("/api/presence/ws-token")
+    @limiter.limit("20/minute")
     async def get_presence_ws_token(
+        request: Request,
         user: dict = Depends(require_internal_identity),
     ):
         try:
@@ -150,7 +165,10 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
             await websocket.close(code=1008)
             return
 
-        connection_id, was_offline, public_user = await manager.connect(user, websocket)
+        connected = await manager.connect(user, websocket)
+        if connected is None:
+            return
+        connection_id, was_offline, public_user = connected
         user_id = int(user["id"])
         try:
             await manager.send_snapshot(websocket)

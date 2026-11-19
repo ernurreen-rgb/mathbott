@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/components/ui/Icon";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -51,7 +51,16 @@ const OPTION_COLORS = [
   { bg: "bg-blue-500", border: "border-blue-200", light: "bg-blue-50/50", label: "B" },
   { bg: "bg-amber-500", border: "border-amber-200", light: "bg-amber-50/50", label: "C" },
   { bg: "bg-emerald-500", border: "border-emerald-200", light: "bg-emerald-50/50", label: "D" },
+  { bg: "bg-purple-500", border: "border-purple-200", light: "bg-purple-50/50", label: "E" },
+  { bg: "bg-pink-500", border: "border-pink-200", light: "bg-pink-50/50", label: "F" },
 ];
+
+function createLocalQuestionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `q-${crypto.randomUUID()}`;
+  }
+  return `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export interface QuizEditorProps {
   initialQuiz?: Quiz;
@@ -74,6 +83,7 @@ export default function QuizEditor({
   const [topic, setTopic] = useState(initialQuiz?.topic || "");
   const [topicSuggestions, setTopicSuggestions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const [questions, setQuestions] = useState<DraftQuestion[]>(() => {
     if (initialQuestions && initialQuestions.length > 0) {
@@ -246,7 +256,7 @@ export default function QuizEditor({
 
   const addNewQuestion = () => {
     const newQ: DraftQuestion = {
-      id: `q-${Date.now()}`,
+      id: createLocalQuestionId(),
       question_text: "",
       question_type: "mcq",
       options: [
@@ -268,7 +278,7 @@ export default function QuizEditor({
     const toDuplicate = questions[idx];
     const duplicated: DraftQuestion = {
       ...toDuplicate,
-      id: `q-${Date.now()}`,
+      id: createLocalQuestionId(),
       options: toDuplicate.options.map((o) => ({ ...o })),
     };
     const nextList = [...questions];
@@ -284,7 +294,9 @@ export default function QuizEditor({
     }
     const nextList = questions.filter((_, i) => i !== idx);
     setQuestions(nextList);
-    if (activeQuestionIndex >= nextList.length) {
+    if (idx < activeQuestionIndex) {
+      setActiveQuestionIndex(activeQuestionIndex - 1);
+    } else if (activeQuestionIndex >= nextList.length) {
       setActiveQuestionIndex(nextList.length - 1);
     }
   };
@@ -312,6 +324,7 @@ export default function QuizEditor({
   };
 
   const handleSaveQuiz = async () => {
+    if (submittingRef.current) return;
     if (!title.trim()) {
       toast.error("Квиз тақырыбын жазыңыз");
       return;
@@ -342,8 +355,14 @@ export default function QuizEditor({
           setActiveQuestionIndex(i);
           return;
         }
+      } else if (q.question_type === "tf") {
+        if (q.correct_answer !== "A" && q.correct_answer !== "B") {
+          toast.error(`${i + 1}-сұрақтың дұрыс жауабын белгілеңіз`);
+          setActiveQuestionIndex(i);
+          return;
+        }
       } else if (q.question_type === "input") {
-        if (!q.correct_answer.trim()) {
+        if (!normalizeMathFieldValueForStorage(q.correct_answer).trim()) {
           toast.error(`${i + 1}-сұрақтың дұрыс жауабын жазыңыз`);
           setActiveQuestionIndex(i);
           return;
@@ -351,6 +370,7 @@ export default function QuizEditor({
       }
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const email = session?.user?.email || undefined;
@@ -383,6 +403,7 @@ export default function QuizEditor({
 
         if (updateErr || !updatedQuiz) {
           toast.error(updateErr || "Квизді жаңарту мүмкін болмады");
+          submittingRef.current = false;
           setSubmitting(false);
           return;
         }
@@ -405,6 +426,7 @@ export default function QuizEditor({
 
         if (quizErr || !newQuiz) {
           toast.error(quizErr || "Квизді сақтау мүмкін болмады");
+          submittingRef.current = false;
           setSubmitting(false);
           return;
         }
@@ -415,6 +437,7 @@ export default function QuizEditor({
       }
     } catch (err: any) {
       toast.error(err?.message || "Қате орын алды");
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

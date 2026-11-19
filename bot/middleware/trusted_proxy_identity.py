@@ -46,22 +46,24 @@ def _is_email_path_segment(value: object) -> bool:
     return "@" in normalized and "." in normalized.rsplit("@", 1)[-1]
 
 
-def _private_email_from_path(path: str) -> Optional[str]:
+def _private_email_from_path(path: str, method: str = "GET") -> Optional[str]:
     parts = [unquote(part) for part in path.split("/") if part]
     if (
         len(parts) >= 4
         and parts[0] == "api"
         and parts[1] == "user"
         and parts[2] == "web"
-        and _is_email_path_segment(parts[3])
     ):
-        return _normalize_email(parts[3])
+        segment = _normalize_email(parts[3])
+        if segment == "nickname" and str(method or "").upper() != "GET":
+            return None
+        if _is_email_path_segment(segment) or str(method or "").upper() == "GET":
+            return segment
     if (
         len(parts) >= 4
         and parts[0] == "api"
         and parts[1] == "export"
         and parts[2] == "user"
-        and _is_email_path_segment(parts[3])
     ):
         return _normalize_email(parts[3])
     return None
@@ -159,7 +161,7 @@ class TrustedProxyIdentityMiddleware:
         proxy_email: Optional[str] = None
 
         explicit_query_emails = _extract_query_emails(scope)
-        explicit_path_email = _private_email_from_path(path)
+        explicit_path_email = _private_email_from_path(path, request.method)
 
         should_inspect_body = request.method.upper() in _MUTATING_METHODS and (
             _is_json_content_type(media_type)
@@ -171,10 +173,35 @@ class TrustedProxyIdentityMiddleware:
             and headers.get(PROXY_BODY_SHA256_HEADER)
         )
 
+        # Verify signature BEFORE buffering body whenever body hash verification is not needed.
+        if has_signature and not should_verify_signed_body:
+            is_valid_proxy, proxy_email, error_code = verify_proxy_signature(request)
+            if not is_valid_proxy:
+                logger.warning("Invalid trusted proxy signature: %s %s %s", path, error_code, proxy_email)
+                response = JSONResponse(
+                    {"detail": "Invalid trusted proxy signature."},
+                    status_code=401,
+                )
+                await response(scope, receive, send)
+                return
+
         body = b""
         replay_receive = receive
         if should_inspect_body or should_verify_signed_body:
             max_body_bytes = MAX_SIGNED_BODY_BYTES if should_verify_signed_body else MAX_IDENTITY_BODY_BYTES
+            raw_content_length = headers.get("content-length")
+            if raw_content_length:
+                try:
+                    if int(raw_content_length) > max_body_bytes:
+                        response = JSONResponse(
+                            {"detail": "Request body is too large for identity validation."},
+                            status_code=413,
+                        )
+                        await response(scope, receive, send)
+                        return
+                except ValueError:
+                    pass
+
             body_messages: list[Message] = []
             more_body = True
             while more_body:
@@ -195,13 +222,13 @@ class TrustedProxyIdentityMiddleware:
             async def _replay_receive() -> Message:
                 if body_messages:
                     return body_messages.pop(0)
-                return {"type": "http.disconnect"}
+                return {"type": "http.request", "body": b"", "more_body": False}
 
             replay_receive = _replay_receive
 
             request.state._trusted_proxy_body_sha256 = hashlib.sha256(body).hexdigest()
 
-        if has_signature:
+        if has_signature and should_verify_signed_body:
             is_valid_proxy, proxy_email, error_code = verify_proxy_signature(request)
             if not is_valid_proxy:
                 logger.warning("Invalid trusted proxy signature: %s %s %s", path, error_code, proxy_email)

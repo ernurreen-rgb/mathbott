@@ -103,7 +103,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
           task={task}
           value={value}
           onChange={onChange}
-          disabled={answered}
+          disabled={answered || checking}
           isAnswered={answered}
           isCorrect={correct}
           correctAnswer={key || undefined}
@@ -120,7 +120,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
             value={value}
             onChange={onChange}
             count={count}
-            disabled={answered}
+            disabled={answered || checking}
             labels={isSelect ? selectLabels(task) : []}
           />
         </div>
@@ -130,7 +130,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
 
   return (
     <div className={answered ? `rounded-xl p-0.5 ring-2 ${correct ? "bg-green-50 ring-green-500" : "bg-red-50 ring-red-500"}` : ""}>
-      <StudentMathAnswerInput value={value} onChange={onChange} disabled={answered} placeholder="Жауапты жазыңыз" />
+      <StudentMathAnswerInput value={value} onChange={onChange} disabled={answered || checking} placeholder="Жауапты жазыңыз" />
     </div>
   );
 }

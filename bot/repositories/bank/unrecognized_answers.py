@@ -1,14 +1,17 @@
 """Admin queue for repeated written answers that are still not accepted."""
 from collections import Counter
-from typing import Any, Dict, List
+import json
+from typing import Any, Dict, List, Optional, Tuple
 
 import storage as db_driver
 
 from utils.validation import (
     is_task_answer_correct,
+    normalize_accepted_answers,
     normalize_answer_mode,
     normalize_task_answer_for_compare,
 )
+from .versions import BankTaskVersionConflictError
 
 
 class BankTaskUnrecognizedAnswersMixin:
@@ -85,9 +88,19 @@ class BankTaskUnrecognizedAnswersMixin:
                     bt.options,
                     bt.subquestions,
                     bt.current_version
-                FROM trial_test_results r
-                JOIN LATERAL jsonb_each(r.answers::jsonb) AS answer_entry ON TRUE
-                JOIN trial_test_tasks ttt ON ttt.id = CAST(answer_entry.key AS INTEGER)
+                FROM (
+                    SELECT id, user_id, completed_at, answers
+                    FROM trial_test_results
+                    WHERE answers IS NOT NULL AND left(btrim(answers), 1) = '{'
+                    ORDER BY id DESC
+                    LIMIT ?
+                ) r
+                JOIN LATERAL jsonb_each(
+                    CASE WHEN left(btrim(r.answers), 1) = '{' THEN r.answers::jsonb ELSE '{}'::jsonb END
+                ) AS answer_entry ON TRUE
+                JOIN trial_test_tasks ttt
+                    ON answer_entry.key ~ '^[0-9]+$'
+                   AND ttt.id = CAST(answer_entry.key AS BIGINT)
                 JOIN bank_tasks bt ON bt.id = ttt.bank_task_id
                 WHERE (CASE WHEN answer_entry.value ->> 'correct' IN ('true', '1') THEN 1
                             WHEN answer_entry.value ->> 'correct' IN ('false', '0') THEN 0 END) = 0
@@ -96,7 +109,7 @@ class BankTaskUnrecognizedAnswersMixin:
                 ORDER BY r.id DESC
                 LIMIT ?
                 """,
-                (self._UNRECOGNIZED_EVENT_LIMIT,),
+                (self._UNRECOGNIZED_EVENT_LIMIT, self._UNRECOGNIZED_EVENT_LIMIT),
             ) as cursor:
                 trial_rows = await cursor.fetchall()
 
@@ -196,3 +209,67 @@ class BankTaskUnrecognizedAnswersMixin:
             "min_count": min_count,
             "sample_limit_per_source": self._UNRECOGNIZED_EVENT_LIMIT,
         }
+
+    async def add_accepted_answer(
+        self,
+        *,
+        task_id: int,
+        answer: str,
+        max_accepted_answers: int,
+        actor_user_id: Optional[int] = None,
+        source: str = "admin_unrecognized_answer_accept",
+        reason: str = "Accepted from repeated student answers",
+        expected_current_version: Optional[int] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], bool]:
+        """Atomically append an accepted answer alias under the write lock."""
+        async with self._write_transaction() as db:
+            db.row_factory = db_driver.Row
+            existing = await self._fetch_task_row(db, task_id)
+            if not existing or existing.get("deleted_at") is not None:
+                return None, False
+
+            existing_topics = await self._fetch_topics_for_task(db, task_id)
+            serialized = self._serialize_task_row(existing, existing_topics)
+            current_version = int(existing.get("current_version") or 1)
+            if expected_current_version is not None and current_version != int(expected_current_version):
+                raise BankTaskVersionConflictError(
+                    task_id=task_id,
+                    expected_version=int(expected_current_version),
+                    current_version=current_version,
+                    current_task=serialized,
+                )
+
+            if normalize_answer_mode(existing.get("answer_mode"), existing.get("question_type")) != "written":
+                raise ValueError("Only written-answer tasks can accept response aliases")
+
+            if is_task_answer_correct(serialized, answer):
+                return serialized, False
+
+            accepted_answers = normalize_accepted_answers(existing.get("accepted_answers"))
+            if len(accepted_answers) >= max_accepted_answers:
+                raise ValueError(f"accepted_answers must contain at most {max_accepted_answers} items")
+            accepted_answers.append(answer)
+            next_accepted_raw = json.dumps(normalize_accepted_answers(accepted_answers), ensure_ascii=False)
+
+            await db.execute(
+                "UPDATE bank_tasks SET accepted_answers = ?, updated_at = mathbot_datetime('now') WHERE id = ?",
+                (next_accepted_raw, task_id),
+            )
+            updated_row = await self._fetch_task_row(db, task_id)
+            if not updated_row:
+                return None, False
+            updated_topics = await self._fetch_topics_for_task(db, task_id)
+            after_snapshot = self._build_snapshot(updated_row, updated_topics)
+            await self._record_version_event(
+                db,
+                task_id=task_id,
+                event_type="update",
+                snapshot=after_snapshot,
+                changed_fields=["accepted_answers"],
+                source=source,
+                actor_user_id=actor_user_id,
+                reason=reason,
+                initial=False,
+            )
+
+        return await self.get_task_by_id(task_id, include_deleted=False), True

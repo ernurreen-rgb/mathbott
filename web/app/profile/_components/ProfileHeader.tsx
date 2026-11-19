@@ -60,16 +60,6 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                       <Icon name="close" />
                     </button>
                   </div>
-                  {message && (
-                    <div
-                      className={`text-sm px-3 py-2 rounded-lg ${message.type === "success"
-                          ? "bg-green-500/30 text-green-100"
-                          : "bg-red-500/30 text-red-100"
-                        }`}
-                    >
-                      {message.text}
-                    </div>
-                  )}
                 </form>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -89,7 +79,18 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                   </button>
                 </div>
               )}
-              <p className="text-blue-100 text-sm">{userData?.email}</p>
+              {message && (
+                <div
+                  role="status"
+                  className={`mt-2 text-sm px-3 py-2 rounded-lg ${message.type === "success"
+                      ? "bg-green-500/30 text-green-100"
+                      : "bg-red-500/30 text-red-100"
+                    }`}
+                >
+                  {message.text}
+                </div>
+              )}
+              <p className="text-blue-100 text-sm mt-1">{userData?.email}</p>
             </div>
           </div>
         </div>

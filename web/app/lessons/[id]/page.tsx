@@ -7,11 +7,12 @@ import { useParams, useRouter } from "next/navigation";
 import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { getLessonDetails, reportLessonTask } from "@/lib/api";
+import { apiPath, getLessonDetails, reportLessonTask } from "@/lib/api";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { useRequireAuth } from "@/lib/use-require-auth";
-import { API_URL } from "@/lib/constants";
-import { parseMcqAnswerLabels } from "@/lib/question-options";
+import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { isTaskAnswerComplete } from "@/lib/task-answer";
+import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import TaskStatement from "@/components/student/TaskStatement";
 import { LessonDetails, LessonMiniLesson, LessonTask } from "@/types";
 import { consumeFinishedReview, markReviewOpenedFromLesson } from "@/lib/module-review-navigation";
@@ -34,10 +35,13 @@ export default function LessonPage() {
   const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
-  const lessonId = parseInt(params.id as string);
+  const rawLessonId = Number(params.id);
+  const isValidLessonId = Number.isInteger(rawLessonId) && rawLessonId > 0;
+  const lessonId = isValidLessonId ? rawLessonId : 0;
 
   const [lesson, setLesson] = useState<LessonDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshingSummary, setRefreshingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMiniId, setSelectedMiniId] = useState<number | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
@@ -60,7 +64,10 @@ export default function LessonPage() {
 
   const prevLessonCompletedRef = useRef<boolean | null>(null);
   const congratsShownRef = useRef(false);
+  const continuationCheckedRef = useRef(false);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchGenerationRef = useRef(0);
+  const checkingTasksRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     setSoundOn(isLessonSoundEnabled());
@@ -68,6 +75,32 @@ export default function LessonPage() {
       if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
     };
   }, []);
+
+  // Reset per-lesson transient state whenever navigating between lessons.
+  useEffect(() => {
+    fetchGenerationRef.current += 1;
+    checkingTasksRef.current.clear();
+    prevLessonCompletedRef.current = null;
+    congratsShownRef.current = false;
+    continuationCheckedRef.current = false;
+    if (redirectTimerRef.current) {
+      clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+    setLesson(null);
+    setError(null);
+    setSelectedMiniId(null);
+    setActiveTaskId(null);
+    setAnswers({});
+    setChecking({});
+    setFeedback({});
+    setRetryTaskIds(new Set());
+    setSelectedAnswers({});
+    setCorrectAnswers({});
+    setShowCongrats(false);
+    setCongratsReviewMiniId(null);
+    setRefreshingSummary(false);
+  }, [lessonId]);
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -77,20 +110,29 @@ export default function LessonPage() {
   };
 
   const fetchLesson = async (opts?: { silent?: boolean }) => {
-    if (!email || !lessonId) return;
+    if (!isValidLessonId) {
+      setError("Сабақ табылмады");
+      setLoading(false);
+      return;
+    }
+    if (!email) return;
     const silent = opts?.silent === true;
+    const gen = ++fetchGenerationRef.current;
     if (!silent) {
       setLoading(true);
       setError(null);
+    } else {
+      setRefreshingSummary(true);
     }
     const { data, error: err } = await getLessonDetails(lessonId, email);
+    if (gen !== fetchGenerationRef.current) return;
     if (err) {
       if (!silent) setError(err);
       else console.error("Failed to fetch lesson:", err);
     }
     if (data) {
       setLesson((prev) => {
-        if (!prev) return data;
+        if (!prev || prev.id !== data.id) return data;
         // Preserve any tasks completed locally
         return {
           ...data,
@@ -109,20 +151,29 @@ export default function LessonPage() {
           }),
         };
       });
-      if (!selectedMiniId) {
+      setSelectedMiniId((prevSelected) => {
+        if (prevSelected && data.mini_lessons.some((ml) => ml.id === prevSelected)) {
+          return prevSelected;
+        }
         const firstNotCompleted = data.mini_lessons.find((ml) => !ml.progress?.completed);
-        setSelectedMiniId((firstNotCompleted || data.mini_lessons[0])?.id ?? null);
-      }
+        return (firstNotCompleted || data.mini_lessons[0])?.id ?? null;
+      });
     }
     if (!silent) setLoading(false);
+    else setRefreshingSummary(false);
   };
 
   useEffect(() => {
-    if (email && lessonId) {
-      fetchLesson();
+    if (!isValidLessonId) {
+      setError("Сабақ табылмады");
+      setLoading(false);
+      return;
+    }
+    if (email) {
+      void fetchLesson();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email, lessonId]);
+  }, [email, lessonId, isValidLessonId]);
 
   // Congrats + redirect when the lesson becomes completed (transition false -> true)
   useEffect(() => {
@@ -172,7 +223,6 @@ export default function LessonPage() {
   };
 
   // Back from a finished mistake review: go straight on instead of showing that mini-lesson again.
-  const continuationCheckedRef = useRef(false);
   useEffect(() => {
     if (!lesson || continuationCheckedRef.current) return;
     continuationCheckedRef.current = true;
@@ -233,6 +283,9 @@ export default function LessonPage() {
   const canGoNext = isTaskCompleted || isActiveTaskAnswered;
   const activeFeedback = activeTask ? feedback[activeTask.id] : undefined;
   const summaryPrimary = (() => {
+    if (refreshingSummary && selectedMini && !selectedMini.progress?.completed) {
+      return { label: "Нәтиже жүктелуде...", onClick: () => {}, disabled: true };
+    }
     const pending = selectedMini?.review?.pending ?? 0;
     if (selectedMini && pending > 0) {
       return { label: `Қателерді талдау (${pending})`, onClick: () => openReview(selectedMini.id) };
@@ -337,7 +390,9 @@ export default function LessonPage() {
   };
 
   const submitCheck = async (task: LessonTask, answer: string) => {
-    if (!email) return;
+    if (!email || checkingTasksRef.current.has(task.id)) return;
+    checkingTasksRef.current.add(task.id);
+    const submitLessonId = lessonId;
     // Unlock audio inside the click: iOS refuses to start it after the request returns.
     primeLessonSound();
     setChecking((m) => ({ ...m, [task.id]: true }));
@@ -346,15 +401,27 @@ export default function LessonPage() {
       delete next[task.id];
       return next;
     });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20_000);
     try {
-      const res = await fetch(`${API_URL}/api/task/check`, {
+      const res = await fetch(apiPath("task/check"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task_id: task.id, answer, email }),
+        signal: controller.signal,
       });
-      const data: CheckResult = await res.json();
-      if (!res.ok) {
-        const detail = (data as any)?.error?.detail || (data as any)?.detail;
+      const rawText = await res.text();
+      let data: (CheckResult & { detail?: unknown; error?: { detail?: unknown } }) | null = null;
+      if (rawText.trim()) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = null;
+        }
+      }
+      if (submitLessonId !== lessonId) return;
+      if (!res.ok || !data) {
+        const detail = data?.error?.detail || data?.detail;
         const text =
           res.status === 429
             ? "Тым жиі тексердіңіз. Бірнеше секундтан соң қайталаңыз."
@@ -378,15 +445,29 @@ export default function LessonPage() {
         // Quietly refresh lesson progress without showing the full-page loader
         void fetchLesson({ silent: true });
       } else {
-        const isMcqTask = task.question_type === "mcq" || task.question_type === "mcq6";
-        const correctMath = isMcqTask
-          ? parseMcqAnswerLabels(data.correct_answer || "")
-              .map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || "")
-              .filter(Boolean)
-          : [];
+        const qType = task.question_type || "input";
+        const isChoicesMode = getTaskAnswerMode(task) === "choices";
+        const isChoicesMcq = (qType === "mcq" || qType === "mcq6") && isChoicesMode;
+        const rawCorrect = data.correct_answer ?? "";
+        let correctMath: string[] = [];
+        let correctText: string | null = data.correct_answer ?? null;
+
+        if (isChoicesMcq) {
+          correctMath = parseMcqAnswerLabels(rawCorrect)
+            .map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || label)
+            .filter(Boolean);
+          correctText = correctMath.length > 0 ? null : data.correct_answer ?? null;
+        } else if (!isChoicesMode && (qType === "mcq" || qType === "mcq6" || qType === "select") && rawCorrect) {
+          const count = qType === "select" ? 2 : getTaskMcqCorrectCount(task);
+          const slots = parseWrittenAnswerSlots(rawCorrect, count).filter(Boolean);
+          if (slots.length > 0) {
+            correctMath = slots;
+            correctText = null;
+          }
+        }
         setFeedback((m) => ({
           ...m,
-          [task.id]: { ok: false, text: "Қате", correctMath, correctText: isMcqTask ? null : data.correct_answer ?? null },
+          [task.id]: { ok: false, text: "Қате", correctMath, correctText },
         }));
         playLessonCue("wrong");
         // Save correct answer even if wrong
@@ -394,9 +475,18 @@ export default function LessonPage() {
           setCorrectAnswers((m) => ({ ...m, [task.id]: data.correct_answer! }));
         }
       }
-    } catch (e: any) {
-      setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text: e?.message || "Желі қатесі" } }));
+    } catch (e: unknown) {
+      if (submitLessonId !== lessonId) return;
+      const isAbort = e instanceof Error && e.name === "AbortError";
+      const message = isAbort
+        ? "Сервер жауабы тым ұзақ. Қайта көріңіз."
+        : e instanceof Error && e.message
+          ? e.message
+          : "Желі қатесі";
+      setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text: message } }));
     } finally {
+      clearTimeout(timeoutId);
+      checkingTasksRef.current.delete(task.id);
       setChecking((m) => ({ ...m, [task.id]: false }));
     }
   };
@@ -676,6 +766,7 @@ export default function LessonPage() {
               {activeTask && (
                 <LessonTaskFooter
                   taskId={activeTask.id}
+                  questionType={activeTask.question_type}
                   verdict={verdict}
                   correctMath={activeFeedback?.correctMath}
                   correctText={activeFeedback?.correctText}

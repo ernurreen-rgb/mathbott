@@ -5,7 +5,7 @@ export const debugLog = (...args: any[]) => {
   if (DEBUG_API) console.log(...args);
 };
 
-export type FetchResult<T> = { data: T | null; error: string | null };
+export type FetchResult<T> = { data: T | null; error: string | null; status?: number };
 export type FileDownloadResult = { blob: Blob | null; filename: string | null; error: string | null };
 
 // Deduplicate in-flight GETs and briefly cache successful GET responses.
@@ -14,26 +14,33 @@ const inflightGetRequests = new Map<string, Promise<FetchResult<any>>>();
 const getCache = new Map<string, { expiresAt: number; value: FetchResult<any> }>();
 const GET_CACHE_TTL_MS = 1500;
 
+export function clearApiGetCache(): void {
+  getCache.clear();
+}
+
+function hasCustomAuthHeaders(headers?: HeadersInit): boolean {
+  if (!headers) return false;
+  if (headers instanceof Headers) {
+    return headers.has("authorization") || headers.has("x-quiz-participant-token");
+  }
+  const entries = Array.isArray(headers) ? headers : Object.entries(headers);
+  return entries.some(([key]) => {
+    const lower = key.toLowerCase();
+    return lower === "authorization" || lower === "x-quiz-participant-token";
+  });
+}
+
 export const apiPath = (path: string): string => {
-  // Use environment variable or default
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || API_URL;
-  
-  // Remove trailing slash if present
-  const baseUrl = apiUrl.replace(/\/$/, '');
-  // Remove leading slash from path if present
-  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  
-  // If baseUrl is a relative path like '/api/backend', just append the path
-  // If baseUrl is an absolute URL like 'http://localhost:8000', append '/api/' + path
-  if (baseUrl.startsWith('/')) {
-    // Relative path - already contains /api/backend, just add the path
+  const baseUrl = apiUrl.replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+
+  if (baseUrl.startsWith("/")) {
     return `${baseUrl}/${cleanPath}`;
   } else {
-    // Absolute URL - add /api/ prefix
     return `${baseUrl}/api/${cleanPath}`;
   }
 };
-
 
 export async function fetchWithErrorHandling<T>(
   url: string,
@@ -42,114 +49,132 @@ export async function fetchWithErrorHandling<T>(
   // Slow endpoints (AI drafts) raise the timeout; everything else keeps 30 seconds.
   const { timeoutMs = 30000, ...options } = requestOptions || {};
   const method = (options.method || "GET").toUpperCase();
+  const isMutating = method !== "GET" && method !== "HEAD";
+
+  // Invalidate short-lived GET cache on any write so subsequent reads see fresh data.
+  if (isMutating) {
+    getCache.clear();
+  }
 
   const doFetch = async (): Promise<FetchResult<T>> => {
+    const controller = new AbortController();
+    const externalSignal = options.signal;
+    let timedOut = false;
+
+    const onExternalAbort = () => {
+      controller.abort(externalSignal?.reason);
+    };
+
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(externalSignal.reason);
+      } else {
+        externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+      }
+    }
+
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
     try {
       debugLog("Fetching:", url, options);
-
-      // Add timeout to fetch
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       debugLog("Response status:", response.status);
 
-      // Check content type first
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
 
-      // Read response as text first (we can parse it later)
       let responseText: string;
       try {
         responseText = await response.text();
       } catch (textError: any) {
-        // Handle ERR_CONTENT_LENGTH_MISMATCH and other read errors
-        if (textError.message?.includes("CONTENT_LENGTH_MISMATCH") || 
-            textError.message?.includes("Failed to fetch") ||
-            textError.name === "TypeError") {
+        if (
+          textError?.message?.includes("CONTENT_LENGTH_MISMATCH") ||
+          textError?.message?.includes("Failed to fetch") ||
+          textError?.name === "TypeError"
+        ) {
           return {
             data: null,
-            error: `Серверден жауапты оқу қатесі. Байланыс үзілген немесе деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.`,
+            error:
+              "Серверден жауапты оқу қатесі. Байланыс үзілген немесе деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
+            status: response.status,
           };
         }
         throw textError;
       }
 
       if (!response.ok) {
-        let errorData: any = {};
+        let errorData: any = null;
         try {
-          if (isJson && responseText) {
+          if (isJson && responseText.trim()) {
             errorData = JSON.parse(responseText);
           }
         } catch (e) {
           debugLog("Error parsing error response:", e, "Response text:", responseText.substring(0, 200));
         }
 
-        // Check if it's HTML error page
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
             error: `Сервер JSON орнына HTML бетін қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
+            status: response.status,
           };
         }
 
-        // Extract error message from various possible fields
-        // Ensure we always get a string, not an object
         let errorMessage: string;
-        if (typeof errorData === 'string') {
+        if (typeof errorData === "string" && errorData.trim()) {
           errorMessage = errorData;
-        } else if (typeof errorData?.detail === 'string') {
+        } else if (typeof errorData?.detail === "string" && errorData.detail.trim()) {
           errorMessage = errorData.detail;
-        } else if (typeof errorData?.message === 'string') {
+        } else if (typeof errorData?.message === "string" && errorData.message.trim()) {
           errorMessage = errorData.message;
-        } else if (typeof errorData?.error === 'string') {
+        } else if (typeof errorData?.error === "string" && errorData.error.trim()) {
           errorMessage = errorData.error;
-        } else if (errorData?.error && typeof errorData.error === 'object') {
+        } else if (errorData?.error && typeof errorData.error === "object") {
           errorMessage =
             (errorData.error as any)?.detail ||
             (errorData.error as any)?.message ||
             JSON.stringify(errorData.error);
-        } else if (errorData?.detail && typeof errorData.detail === 'object') {
-          // If detail is an object, try to extract message from it
+        } else if (errorData?.detail && typeof errorData.detail === "object") {
           errorMessage = (errorData.detail as any)?.message || JSON.stringify(errorData.detail);
-        } else if (errorData && typeof errorData === 'object') {
-          // If errorData is an object, convert to string
+        } else if (errorData && typeof errorData === "object" && Object.keys(errorData).length > 0) {
           errorMessage = JSON.stringify(errorData);
         } else {
-          errorMessage = `Сервер қатесі: ${response.status} ${response.statusText}`;
+          errorMessage = `Сервер қатесі: ${response.status} ${response.statusText}`.trim();
         }
-        
+
         debugLog("Error response:", { status: response.status, errorData, errorMessage });
-        
+
         return {
           data: null,
           error: errorMessage,
+          status: response.status,
         };
       }
 
-      // Check if response is JSON
       if (!isJson) {
         debugLog("Non-JSON response:", responseText.substring(0, 500));
-        // If it's HTML, provide helpful error
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
             error: `Сервер JSON орнына HTML қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
+            status: response.status,
           };
         }
         return {
           data: null,
           error: `Сервер JSON емес жауап қайтарды (${contentType}). Бэкенд іске қосылғанын және қолжетімді екенін тексеріңіз.`,
+          status: response.status,
         };
       }
 
-      // Parse JSON
       let data: T;
       try {
         data = JSON.parse(responseText) as T;
@@ -158,32 +183,34 @@ export async function fetchWithErrorHandling<T>(
         return {
           data: null,
           error: `JSON жауабын талдау қатесі: ${jsonError.message}. Жауап басы: ${responseText.substring(0, 100)}`,
+          status: response.status,
         };
       }
       debugLog("Response data:", data);
-      return { data, error: null };
+      return { data, error: null, status: response.status };
     } catch (error: any) {
-      // Only log errors in development mode
       if (process.env.NODE_ENV === "development") {
         console.error("Fetch error:", error);
       }
-      const errorMessage = error.message || "Серверге қосылу қатесі";
+      const errorMessage = error?.message || "Серверге қосылу қатесі";
 
-      if (error.name === "AbortError") {
+      if (error?.name === "AbortError") {
         return {
           data: null,
-          error: `Серверден жауап күту уақыты асып кетті (${Math.round(timeoutMs / 1000)} секунд)`,
+          error: timedOut
+            ? `Серверден жауап күту уақыты асып кетті (${Math.round(timeoutMs / 1000)} секунд)`
+            : "Сұрау тоқтатылды",
         };
       }
 
-      // Handle ERR_CONTENT_LENGTH_MISMATCH
       if (
         errorMessage.includes("CONTENT_LENGTH_MISMATCH") ||
         errorMessage.includes("content-length")
       ) {
         return {
           data: null,
-          error: "Серверден деректерді алу қатесі. Деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
+          error:
+            "Серверден деректерді алу қатесі. Деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
         };
       }
 
@@ -199,11 +226,25 @@ export async function fetchWithErrorHandling<T>(
         };
       }
       return { data: null, error: errorMessage };
+    } finally {
+      clearTimeout(timeoutId);
+      if (externalSignal) {
+        externalSignal.removeEventListener("abort", onExternalAbort);
+      }
+      if (isMutating) {
+        getCache.clear();
+      }
     }
   };
 
-  // GET dedupe + short cache
-  if (method === "GET" && options?.cache !== "no-store") {
+  // GET dedupe + short cache (skipped when caller supplies AbortSignal or custom auth headers)
+  const cacheableGet =
+    method === "GET" &&
+    options.cache !== "no-store" &&
+    !options.signal &&
+    !hasCustomAuthHeaders(options.headers);
+
+  if (cacheableGet) {
     const cached = getCache.get(url);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.value as FetchResult<T>;

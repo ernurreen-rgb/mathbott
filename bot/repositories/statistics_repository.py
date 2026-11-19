@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import storage as db_driver
 from settings import get_settings
+from utils.timezone import today_almaty
 
 from .base import BaseRepository
 
@@ -314,7 +315,9 @@ class _Activity:
     def __init__(self) -> None:
         self.days: Dict[date, Dict[int, Dict[str, float]]] = {}
 
-    def add(self, day: date, user_id: int, **amounts: float) -> None:
+    def add(self, day: Optional[date], user_id: int, **amounts: float) -> None:
+        if day is None:
+            return
         cell = self.days.setdefault(day, {}).setdefault(int(user_id), dict.fromkeys(self.METRICS, 0))
         for metric, amount in amounts.items():
             cell[metric] += amount or 0
@@ -523,7 +526,7 @@ class StatisticsRepository(BaseRepository):
             # ISO weekday 1 (Monday) .. 7 becomes 0 .. 6.
             "heatmap": [
                 {"weekday": _int(row[0]) - 1, "hour": _int(row[1]), "count": _int(row[2])}
-                for row in sorted(heatmap_rows)
+                for row in sorted(r for r in heatmap_rows if r[0] is not None and r[1] is not None)
             ],
             "journey": journey,
             "attention": {
@@ -627,7 +630,7 @@ class StatisticsRepository(BaseRepository):
 
         current = activity.totals(window.start, window.today)
         previous = activity.totals(window.previous_start, window.previous_end) if window.days else _Totals()
-        utc_today = window.now.date()
+        almaty_today = today_almaty()
 
         students = []
         for row in user_rows:
@@ -661,7 +664,7 @@ class StatisticsRepository(BaseRepository):
                 "quiz_accuracy": _ratio(quiz_correct, quiz_answers),
                 "has_quiz_history": user_id in ever_quiz,
                 "total_solved": _int(row[5]),
-                "streak": effective_streak(row[6], row[7], utc_today),
+                "streak": effective_streak(row[6], row[7], almaty_today),
                 "is_admin": bool(row[8]),
                 "is_active": cell is not None,
                 "is_new": row[9] is not None and (window.start is None or row[9] >= window.start),
@@ -1119,9 +1122,16 @@ class StatisticsRepository(BaseRepository):
                            COUNT(*) AS shown,
                            COUNT(*) FILTER (WHERE entry.value ->> 'correct' IN ('true', '1')) AS correct,
                            COUNT(*) FILTER (WHERE btrim(COALESCE(entry.value ->> 'answer', '')) = '') AS skipped
-                    FROM trial_test_results r
-                    CROSS JOIN LATERAL jsonb_each(r.answers::jsonb) AS entry(key, value)
-                    WHERE r.completed_at >= ? AND r.completed_at < ?{admins}
+                    FROM (
+                        SELECT r.answers
+                        FROM trial_test_results r
+                        WHERE r.completed_at >= ? AND r.completed_at < ?{admins}
+                          AND r.answers IS NOT NULL
+                          AND left(btrim(r.answers), 1) = '{{'
+                    ) filtered
+                    CROSS JOIN LATERAL jsonb_each(
+                        CASE WHEN left(btrim(filtered.answers), 1) = '{{' THEN filtered.answers::jsonb ELSE '{{}}'::jsonb END
+                    ) AS entry(key, value)
                     GROUP BY entry.key
                 ) stats ON stats.task_key = ttt.id::text
                 WHERE ttt.deleted_at IS NULL OR stats.shown > 0
@@ -1136,8 +1146,14 @@ class StatisticsRepository(BaseRepository):
             }
             for row in result_rows
         ]
-        current = [item for item in results if window.start is None or item["day"] >= window.start]
-        previous = [item for item in results if window.start is not None and item["day"] < window.start]
+        current = [
+            item for item in results
+            if window.start is None or (item["day"] is not None and item["day"] >= window.start)
+        ]
+        previous = [
+            item for item in results
+            if window.start is not None and item["day"] is not None and item["day"] < window.start
+        ]
 
         def averages(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             scores = [item["percentage"] for item in items]
@@ -1176,11 +1192,17 @@ class StatisticsRepository(BaseRepository):
         for item in current:
             distribution[min(9, max(0, int(item["percentage"] // 10)))]["count"] += 1
 
-        first = window.start or min((item["day"] for item in current), default=window.today - timedelta(days=29))
+        first = window.start or min(
+            (item["day"] for item in current if item["day"] is not None),
+            default=window.today - timedelta(days=29),
+        )
         granularity, buckets = bucket_plan(first, window.today)
         points = []
         for start, end in buckets:
-            scores = [item["percentage"] for item in current if start <= item["day"] <= end]
+            scores = [
+                item["percentage"] for item in current
+                if item["day"] is not None and start <= item["day"] <= end
+            ]
             points.append({"start": start.isoformat(), "end": end.isoformat(), "attempts": len(scores),
                            "average": _ratio(sum(scores), len(scores) * 100)})
 
@@ -1246,8 +1268,14 @@ class StatisticsRepository(BaseRepository):
             }
             for row in session_rows
         ]
-        current = [item for item in sessions if window.start is None or item["day"] >= window.start]
-        previous = [item for item in sessions if window.start is not None and item["day"] < window.start]
+        current = [
+            item for item in sessions
+            if window.start is None or (item["day"] is not None and item["day"] >= window.start)
+        ]
+        previous = [
+            item for item in sessions
+            if window.start is not None and item["day"] is not None and item["day"] < window.start
+        ]
 
         def totals(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             answered = sum(item["answers"] for item in items)
@@ -1273,13 +1301,19 @@ class StatisticsRepository(BaseRepository):
         for quiz in quizzes:
             quiz["accuracy"] = _ratio(quiz.pop("correct"), quiz["answers"])
 
-        first = window.start or min((item["day"] for item in current), default=window.today - timedelta(days=29))
+        first = window.start or min(
+            (item["day"] for item in current if item["day"] is not None),
+            default=window.today - timedelta(days=29),
+        )
         granularity, buckets = bucket_plan(first, window.today)
         points = [
             {
                 "start": start.isoformat(), "end": end.isoformat(),
-                "sessions": sum(1 for item in current if start <= item["day"] <= end),
-                "participants": sum(item["participants"] for item in current if start <= item["day"] <= end),
+                "sessions": sum(1 for item in current if item["day"] is not None and start <= item["day"] <= end),
+                "participants": sum(
+                    item["participants"] for item in current
+                    if item["day"] is not None and start <= item["day"] <= end
+                ),
             }
             for start, end in buckets
         ]

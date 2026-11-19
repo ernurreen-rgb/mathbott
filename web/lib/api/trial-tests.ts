@@ -57,7 +57,8 @@ export async function getTrialTestDraft(testId: number, email: string): Promise<
 
 export async function getTrialTestDraftIds(email: string): Promise<{ data: { test_ids: number[] } | null; error: string | null }> {
   return fetchWithErrorHandling<{ test_ids: number[] }>(
-    `${apiPath("trial-tests/drafts")}?email=${encodeURIComponent(email)}`
+    `${apiPath("trial-tests/drafts")}?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
   );
 }
 

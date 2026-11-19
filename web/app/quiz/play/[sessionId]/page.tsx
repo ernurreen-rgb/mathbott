@@ -3,7 +3,9 @@ import Icon from "@/components/ui/Icon";
 
 
 import { useEffect, useState, use } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { apiPath } from "@/lib/api";
 import { useQuizPlayer } from "@/lib/use-quiz-player";
 import {
   QuizAvatar,
@@ -43,11 +45,53 @@ const MCQ_THEMES = [
     border: "border-emerald-600",
     icon: "square",
   },
+  {
+    id: "E",
+    bg: "bg-purple-500 hover:bg-purple-600 active:bg-purple-700",
+    border: "border-purple-600",
+    icon: "star",
+  },
+  {
+    id: "F",
+    bg: "bg-pink-500 hover:bg-pink-600 active:bg-pink-700",
+    border: "border-pink-600",
+    icon: "sparkles",
+  },
 ] as const;
+
+function formatQuizCorrectAnswer(
+  question: { question_type: string; options?: Array<{ id: string; text: string }> } | null | undefined,
+  rawAnswer: string
+): string {
+  const trimmed = rawAnswer.trim();
+  if (!trimmed || !question) return trimmed;
+  if (question.question_type === "tf") {
+    const upper = trimmed.toUpperCase();
+    if (upper === "A" || upper === "TRUE" || upper === "1") return "\\text{Шын (True)}";
+    if (upper === "B" || upper === "FALSE" || upper === "0") return "\\text{Жалған (False)}";
+  }
+  if (
+    (question.question_type === "mcq" || question.question_type === "multi_select") &&
+    Array.isArray(question.options) &&
+    question.options.length > 0
+  ) {
+    const parts = trimmed
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const mapped = parts.map((part) => {
+      const option = question.options?.find((opt) => opt.id.toUpperCase() === part.toUpperCase());
+      return option ? option.text : part;
+    });
+    if (mapped.length > 0) return mapped.join(",\\; ");
+  }
+  return trimmed;
+}
 
 export default function PlayQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const sessionId = parseInt(resolvedParams.sessionId, 10);
+  const rawSessionId = Number(resolvedParams.sessionId);
+  const sessionId = Number.isInteger(rawSessionId) && rawSessionId > 0 ? rawSessionId : 0;
 
   const game = useQuizPlayer(sessionId);
   const {
@@ -77,10 +121,16 @@ export default function PlayQuizPage({ params }: PageProps) {
   const isAllAnswered = questionCount > 0 && currentQIndex >= questionCount;
 
   useEffect(() => {
-    if ((isFinished || isAllAnswered) && credentials?.token && participantId && !progress?.participant.is_finished) {
+    if (
+      isAllAnswered &&
+      progress?.status === "in_progress" &&
+      credentials?.token &&
+      participantId &&
+      !progress?.participant.is_finished
+    ) {
       void completeQuizParticipant(sessionId, participantId, { participantToken: credentials.token });
     }
-  }, [isFinished, isAllAnswered, credentials?.token, participantId, progress?.participant.is_finished, sessionId]);
+  }, [isAllAnswered, progress?.status, credentials?.token, participantId, progress?.participant.is_finished, sessionId]);
 
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [inputAnswer, setInputAnswer] = useState("");
@@ -98,7 +148,7 @@ export default function PlayQuizPage({ params }: PageProps) {
       toast.error("Кем дегенде бір нұсқаны таңдаңыз");
       return;
     }
-    submitAnswer(selectedMulti.sort().join(","));
+    submitAnswer([...selectedMulti].sort().join(","));
   };
 
   const toggleMultiOption = (optId: string) => {
@@ -427,10 +477,22 @@ export default function PlayQuizPage({ params }: PageProps) {
       <main className="flex-1 min-w-0 max-w-3xl mx-auto w-full p-4 flex flex-col justify-between">
         {/* Question Text Box */}
         <div className="my-auto py-4">
-          <div className="min-w-0 bg-white border border-purple-100 rounded-3xl p-6 sm:p-8 shadow-lg text-center">
+          <div className="min-w-0 bg-white border border-purple-100 rounded-3xl p-6 sm:p-8 shadow-lg text-center space-y-4">
             <div className="min-w-0 text-lg sm:text-2xl font-bold text-gray-900 leading-relaxed">
               <MathRender latex={currentQ.question_text} />
             </div>
+            {currentQ.image_filename && (
+              <div className="flex justify-center">
+                <Image
+                  src={apiPath(`images/${currentQ.image_filename}`)}
+                  alt="Сұрақ суреті"
+                  width={1280}
+                  height={720}
+                  unoptimized
+                  className="max-h-64 w-auto max-w-full rounded-xl border border-gray-200 object-contain"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -457,9 +519,9 @@ export default function PlayQuizPage({ params }: PageProps) {
             )}
 
             {!lastResult.is_correct && lastResult.correct_answer && (
-              <div className="my-2 p-3 bg-white/90 rounded-xl text-xs text-gray-800 border border-gray-200 flex items-center justify-center gap-2">
+              <div className="my-2 p-3 bg-white/90 rounded-xl text-xs text-gray-800 border border-gray-200 flex flex-wrap items-center justify-center gap-2">
                 <span className="font-bold">Дұрыс жауап:</span>
-                <MathRender latex={lastResult.correct_answer} />
+                <MathRender inline latex={formatQuizCorrectAnswer(currentQ, lastResult.correct_answer)} />
               </div>
             )}
 

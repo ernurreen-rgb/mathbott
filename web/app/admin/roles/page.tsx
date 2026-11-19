@@ -32,7 +32,7 @@ const isSameEmail = (a: string | null | undefined, b: string | null | undefined)
 export default function AdminRolesPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
-  const { loading: accessLoading, access } = useAdminPageAccess("super", status, email);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("super", status, email);
 
   const [items, setItems] = useState<AdminRoleUserItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -86,9 +86,9 @@ export default function AdminRolesPage() {
   }, [email, appliedSearch, appliedRoleFilter, offset]);
 
   useEffect(() => {
-    if (!email || accessLoading || access?.role !== "super_admin") return;
+    if (!email || !allowed) return;
     void fetchRoles();
-  }, [email, accessLoading, access?.role, fetchRoles]);
+  }, [email, allowed, fetchRoles]);
 
   const applySearch = () => {
     setAppliedSearch(searchInput.trim());
@@ -185,10 +185,10 @@ export default function AdminRolesPage() {
     );
   }
 
-  if (!session) {
+  if (!session || !allowed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Әкімші рөлдеріне қол жеткізу үшін жүйеге кіріңіз</div>
+        <div className="text-xl">{!session ? "Әкімші рөлдеріне қол жеткізу үшін жүйеге кіріңіз" : "Қолжетім жоқ"}</div>
       </div>
     );
   }

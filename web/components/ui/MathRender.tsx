@@ -49,9 +49,27 @@ const normalizeSpacesForMathDisplay = (value: string): string => {
     command.replace(/ /g, textSpaceToken)
   );
   let output = "";
+  let inCommandName = false;
   for (let i = 0; i < protectedText.length; i += 1) {
     const ch = protectedText[i];
     const prev = i > 0 ? protectedText[i - 1] : "";
+    if (ch === "\\" && prev !== "\\") {
+      inCommandName = true;
+      output += ch;
+      continue;
+    }
+    if (inCommandName) {
+      if (/[A-Za-z]/.test(ch)) {
+        output += ch;
+        continue;
+      }
+      inCommandName = false;
+      // Preserve a single terminating space after a LaTeX command (e.g. `\pi r`, `\frac 1 2`).
+      if (ch === " ") {
+        output += ch;
+        continue;
+      }
+    }
     if (ch === " " && prev !== "\\") {
       output += "\\ ";
     } else {
@@ -203,9 +221,26 @@ const consumeLatexCommand = (value: string, start: number): number => {
 
   if (command === "left") {
     cursor = consumeLatexDelimiter(value, cursor);
-    const rightIndex = value.indexOf("\\right", cursor);
-    if (rightIndex !== -1) {
-      return consumeLatexDelimiter(value, rightIndex + "\\right".length);
+    let depth = 1;
+    let scan = cursor;
+    while (scan < value.length && depth > 0) {
+      if (value[scan] === "\\") {
+        const nextCmd = value.slice(scan + 1).match(LATEX_COMMAND_NAME_RE)?.[0];
+        if (nextCmd === "left") {
+          depth += 1;
+          scan = consumeLatexDelimiter(value, scan + 1 + nextCmd.length);
+          continue;
+        }
+        if (nextCmd === "right") {
+          depth -= 1;
+          scan = consumeLatexDelimiter(value, scan + 1 + nextCmd.length);
+          if (depth === 0) return consumeLatexScripts(value, scan);
+          continue;
+        }
+        scan += 1 + (nextCmd ? nextCmd.length : 1);
+        continue;
+      }
+      scan += 1;
     }
   } else if (command === "right") {
     return consumeLatexDelimiter(value, cursor);
@@ -721,9 +756,59 @@ const splitBreakableMathToken = (value: string): Array<{ type: "math" | "operato
 
   const parts: Array<{ type: "math" | "operator"; value: string }> = [];
   let buffer = "";
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let leftRightDepth = 0;
 
-  for (const ch of value) {
-    if (BREAKABLE_MATH_OPERATOR_RE.test(ch)) {
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+
+    if (ch === "\\") {
+      const cmdMatch = value.slice(i + 1).match(LATEX_COMMAND_NAME_RE)?.[0];
+      if (cmdMatch) {
+        if (cmdMatch === "left") leftRightDepth += 1;
+        else if (cmdMatch === "right" && leftRightDepth > 0) leftRightDepth -= 1;
+        buffer += value.slice(i, i + 1 + cmdMatch.length);
+        i += cmdMatch.length;
+        continue;
+      }
+      // Escaped single symbol like `\{`, `\}`, `\\`, `\ `
+      if (i + 1 < value.length) {
+        buffer += value.slice(i, i + 2);
+        i += 1;
+        continue;
+      }
+      buffer += ch;
+      continue;
+    }
+
+    if (ch === "{") {
+      braceDepth += 1;
+      buffer += ch;
+      continue;
+    }
+    if (ch === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+      buffer += ch;
+      continue;
+    }
+    if (ch === "[") {
+      bracketDepth += 1;
+      buffer += ch;
+      continue;
+    }
+    if (ch === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+      buffer += ch;
+      continue;
+    }
+
+    if (
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      leftRightDepth === 0 &&
+      BREAKABLE_MATH_OPERATOR_RE.test(ch)
+    ) {
       if (buffer) {
         parts.push({ type: "math", value: buffer });
         buffer = "";

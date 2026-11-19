@@ -1,7 +1,7 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -34,7 +34,9 @@ interface PageProps {
 
 export default function QuizDetailPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const quizId = parseInt(resolvedParams.id, 10);
+  const rawQuizId = Number(resolvedParams.id);
+  const isValidQuizId = Number.isInteger(rawQuizId) && rawQuizId > 0;
+  const quizId = isValidQuizId ? rawQuizId : 0;
   const router = useRouter();
   const { data: session } = useSession();
 
@@ -46,6 +48,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [startingSession, setStartingSession] = useState(false);
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
   const [forking, setForking] = useState(false);
 
@@ -54,10 +57,16 @@ export default function QuizDetailPage({ params }: PageProps) {
   const [loadingResults, setLoadingResults] = useState(false);
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
   const [finishingSessionId, setFinishingSessionId] = useState<number | null>(null);
+  const resultsRequestIdRef = useRef(0);
 
   useEffect(() => {
-    if (!quizId) return;
+    if (!isValidQuizId) {
+      setQuiz(null);
+      setLoading(false);
+      return;
+    }
 
+    let cancelled = false;
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -67,10 +76,12 @@ export default function QuizDetailPage({ params }: PageProps) {
           getQuizQuestions(quizId, email),
           getQuizSessions(quizId, email),
         ]);
+        if (cancelled) return;
 
         if (quizRes.data) {
           setQuiz(quizRes.data);
         } else {
+          setQuiz(null);
           toast.error("Квиз табылмады");
         }
 
@@ -82,15 +93,20 @@ export default function QuizDetailPage({ params }: PageProps) {
           setSessions(sessionsRes.data);
         }
       } catch (err) {
-        console.error(err);
-        toast.error("Ақпаратты жүктеу қатесі");
+        if (!cancelled) {
+          console.error(err);
+          toast.error("Ақпаратты жүктеу қатесі");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchData();
-  }, [quizId, session?.user?.email]);
+    void fetchData();
+    return () => {
+      cancelled = true;
+    };
+  }, [isValidQuizId, quizId, session?.user?.email]);
 
   const handleStartLiveGame = async () => {
     if (questions.length === 0) {
@@ -118,17 +134,21 @@ export default function QuizDetailPage({ params }: PageProps) {
   };
 
   const handleDeleteQuiz = async () => {
+    if (deleting) return;
     if (!confirm("Бұл квизді өшіргіңіз келетініне сенімдісіз бе?")) return;
+    setDeleting(true);
     try {
       const result = await deleteQuiz(quizId, session?.user?.email || undefined);
       if (result.error) {
         toast.error(result.error);
+        setDeleting(false);
         return;
       }
       toast.success("Квиз өшірілді");
       router.push("/quizzes");
     } catch {
       toast.error("Квизді өшіру мүмкін болмады");
+      setDeleting(false);
     }
   };
 
@@ -182,11 +202,14 @@ export default function QuizDetailPage({ params }: PageProps) {
   };
 
   const handleViewResults = async (sessionId: number) => {
+    const reqId = ++resultsRequestIdRef.current;
+    setSelectedSessionResults(null);
     setLoadingResults(true);
     setResultsModalOpen(true);
     try {
       const email = session?.user?.email || undefined;
       const res = await getQuizSessionFullResults(sessionId, { email });
+      if (reqId !== resultsRequestIdRef.current) return;
       if (res.data) {
         setSelectedSessionResults(res.data);
       } else {
@@ -194,10 +217,13 @@ export default function QuizDetailPage({ params }: PageProps) {
         setResultsModalOpen(false);
       }
     } catch (err: any) {
+      if (reqId !== resultsRequestIdRef.current) return;
       toast.error(err?.message || "Қате орын алды");
       setResultsModalOpen(false);
     } finally {
-      setLoadingResults(false);
+      if (reqId === resultsRequestIdRef.current) {
+        setLoadingResults(false);
+      }
     }
   };
 
@@ -421,7 +447,8 @@ export default function QuizDetailPage({ params }: PageProps) {
                   </button>
                   <button
                     onClick={handleDeleteQuiz}
-                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                    disabled={deleting}
+                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 disabled:opacity-50"
                     title="Квизді өшіру"
                   >
                     <Icon name="trash" className="w-4 h-4" />

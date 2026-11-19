@@ -56,7 +56,7 @@ function ReportsPageContent() {
   const { data: session, status } = useSession();
   const sessionEmail = session?.user?.email || null;
   const router = useRouter();
-  const { loading: accessLoading } = useAdminPageAccess("review", status, sessionEmail);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("review", status, sessionEmail);
   const searchParams = useSearchParams();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -333,10 +333,10 @@ function ReportsPageContent() {
   };
 
   useEffect(() => {
-    if (sessionEmail) {
+    if (allowed && sessionEmail) {
       void fetchReports();
     }
-  }, [sessionEmail, fetchReports]);
+  }, [allowed, sessionEmail, fetchReports]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -500,10 +500,10 @@ function ReportsPageContent() {
     );
   }
 
-  if (!session?.user?.email) {
+  if (!session?.user?.email || !allowed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Кіру қажет</div>
+        <div className="text-xl">{!session?.user?.email ? "Кіру қажет" : "Қолжетім жоқ"}</div>
       </div>
     );
   }

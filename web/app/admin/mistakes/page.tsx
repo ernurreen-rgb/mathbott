@@ -47,7 +47,7 @@ function Tile({ label, value, hint, tone = "text-gray-900" }: { label: string; v
 export default function MistakeAnalyticsPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
-  const { access, loading: accessLoading } = useAdminPageAccess("any", status, email);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("any", status, email);
   const [period, setPeriod] = useState<MistakeAnalyticsPeriod>("30d");
   const [moduleId, setModuleId] = useState<number | null>(null);
   const [data, setData] = useState<MistakeAnalyticsResponse | null>(null);
@@ -55,20 +55,24 @@ export default function MistakeAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!email || !access?.is_admin) return;
+    if (!email || !allowed) return;
     setLoading(true);
     const { data: result, error: err } = await getAdminMistakeAnalytics(email, { period, moduleId });
     setData(result); setError(err); setLoading(false);
-  }, [email, access?.is_admin, period, moduleId]);
+  }, [email, allowed, period, moduleId]);
   useEffect(() => { void load(); }, [load]);
 
-  if (status === "loading" || accessLoading || (loading && !data && !error)) {
+  if (status === "loading" || accessLoading || (allowed && loading && !data && !error)) {
     return <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0">
       <DesktopNav /><MobileNav currentPage="admin" />
       <div className="container mx-auto px-4 pt-20 md:pt-8 md:ml-64">
         <SkeletonLoader variant="card" className="mb-4" /><SkeletonLoader variant="card" className="mb-4" />
       </div>
     </div>;
+  }
+
+  if (!allowed) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Қолжетім жоқ</div></div>;
   }
 
   const summary = data?.summary;

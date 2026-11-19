@@ -11,6 +11,7 @@ const PRAISE = ["Дұрыс!", "Керемет!", "Жарайсың!", "Тама
 
 type Props = {
   taskId: number;
+  questionType?: string;
   verdict: LessonVerdict | null;
   /** Right answer to show after a wrong check: option texts or the raw stored answer. */
   correctMath?: string[];
@@ -34,12 +35,17 @@ type Props = {
   onReport?: () => void;
 };
 
-const formatStoredAnswer = (value: string): string => {
+const formatStoredAnswer = (value: string, questionType?: string): string => {
   const trimmed = value.trim();
-  const lowered = trimmed.toLowerCase();
-  if (lowered === "true" || lowered === "1") return "Дұрыс";
-  if (lowered === "false" || lowered === "0") return "Жалған";
-  if (trimmed.startsWith("[")) {
+  if (questionType === "tf") {
+    const lowered = trimmed.toLowerCase();
+    if (lowered === "true" || lowered === "1") return "\\text{Дұрыс}";
+    if (lowered === "false" || lowered === "0") return "\\text{Жалған}";
+  }
+  if (
+    (questionType === "select" || questionType === "mcq" || questionType === "mcq6") &&
+    trimmed.startsWith("[")
+  ) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) return parsed.map(String).join(", ");
@@ -52,6 +58,7 @@ const formatStoredAnswer = (value: string): string => {
 
 export default function LessonTaskFooter({
   taskId,
+  questionType,
   verdict,
   correctMath = [],
   correctText,
@@ -125,7 +132,7 @@ export default function LessonTaskFooter({
 
   const wrong = verdict === "wrong";
   const title = wrong ? "Қате" : verdict === "solved" ? "Бұл есеп шығарылған" : PRAISE[taskId % PRAISE.length];
-  const shownText = correctMath.length === 0 && correctText ? formatStoredAnswer(correctText) : null;
+  const shownText = correctMath.length === 0 && correctText ? formatStoredAnswer(correctText, questionType) : null;
 
   return (
     <div

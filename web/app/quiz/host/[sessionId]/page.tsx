@@ -2,7 +2,7 @@
 import Icon from "@/components/ui/Icon";
 
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, useRef, use } from "react";
 import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import Link from "next/link";
@@ -25,17 +25,21 @@ interface PageProps {
 
 export default function HostQuizPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const sessionId = parseInt(resolvedParams.sessionId, 10);
+  const rawSessionId = Number(resolvedParams.sessionId);
+  const isValidSessionId = Number.isInteger(rawSessionId) && rawSessionId > 0;
+  const sessionId = isValidSessionId ? rawSessionId : 0;
   const { data: session, status: authStatus } = useRequireAuth();
 
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [participants, setParticipants] = useState<QuizParticipant[]>([]);
   const [stats, setStats] = useState<QuizSessionStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
   const [activeTab, setActiveTab] = useState<"podium" | "questions">("podium");
+  const refreshGenerationRef = useRef(0);
 
   const email = session?.user?.email || undefined;
 
@@ -47,22 +51,37 @@ export default function HostQuizPage({ params }: PageProps) {
   }, [quizSession?.pin_code]);
 
   const refreshSession = useCallback(async () => {
-    if (!sessionId || !email) return;
+    if (!isValidSessionId) {
+      setLoading(false);
+      return;
+    }
+    if (!email) return;
+    const gen = ++refreshGenerationRef.current;
     const auth = { email };
     const result = await getQuizSession(sessionId, auth);
+    if (gen !== refreshGenerationRef.current) return;
     if (result.data) {
+      setRefreshError(null);
       setQuizSession(result.data);
       setParticipants(result.data.participants || []);
       if (result.data.status === "finished") {
         const report = await getQuizSessionStats(sessionId, auth);
-        if (report.data) setStats(report.data);
+        if (gen !== refreshGenerationRef.current) return;
+        if (report.data) {
+          setStats(report.data);
+          if (Array.isArray(report.data.leaderboard)) {
+            setParticipants(report.data.leaderboard);
+          }
+        }
       }
-    } else if (result.error) toast.error(result.error);
+    } else if (result.error) {
+      setRefreshError(result.error);
+    }
     setLoading(false);
-  }, [sessionId, email]);
+  }, [isValidSessionId, sessionId, email]);
   useEffect(() => { void refreshSession(); }, [refreshSession]);
   useQuizConnection(sessionId, { email }, () => void refreshSession(),
-    !!email && !(quizSession?.status === "finished" && stats));
+    isValidSessionId && !!email && !(quizSession?.status === "finished" && stats));
 
   const handleStartGame = async () => {
     if (participants.length === 0) {
@@ -98,6 +117,9 @@ export default function HostQuizPage({ params }: PageProps) {
         return;
       }
       setStats(data);
+      if (Array.isArray(data.leaderboard)) {
+        setParticipants(data.leaderboard);
+      }
       setQuizSession((prev) => (prev ? { ...prev, status: "finished" } : null));
       toast.success("Ойын аяқталды! Жеңімпаздар анықталды!");
     } catch {
@@ -109,14 +131,18 @@ export default function HostQuizPage({ params }: PageProps) {
 
   const copyPin = () => {
     if (!quizSession) return;
-    navigator.clipboard.writeText(quizSession.pin_code);
-    toast.success("PIN көшірілді!");
+    void navigator.clipboard?.writeText(quizSession.pin_code).then(
+      () => toast.success("PIN көшірілді!"),
+      () => toast.error("PIN көшіру мүмкін болмады")
+    );
   };
 
   const copyJoinLink = () => {
     if (!joinUrl) return;
-    navigator.clipboard.writeText(joinUrl);
-    toast.success("Сілтеме көшірілді!");
+    void navigator.clipboard?.writeText(joinUrl).then(
+      () => toast.success("Сілтеме көшірілді!"),
+      () => toast.error("Сілтемені көшіру мүмкін болмады")
+    );
   };
 
   if (authStatus === "loading" || !session) {
@@ -149,11 +175,21 @@ export default function HostQuizPage({ params }: PageProps) {
     );
   }
 
-  // Sorted leaderboard
-  const sortedLeaderboard = [...participants].sort((a, b) => b.score - a.score);
+  // Sorted leaderboard (matches backend tie-breakers: score DESC, correct_count DESC, id ASC)
+  const sortedLeaderboard = [...participants].sort(
+    (a, b) => b.score - a.score || b.correct_count - a.correct_count || a.id - b.id
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col select-none">
+      {refreshError && (
+        <div role="alert" className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs font-semibold text-amber-900 flex items-center justify-between gap-2">
+          <span>Байланыс уақытша үзілді: {refreshError}</span>
+          <button type="button" onClick={() => void refreshSession()} className="underline font-bold">
+            Қайталау
+          </button>
+        </div>
+      )}
       {/* Top Presentation Bar */}
       <header className="h-20 border-b border-purple-100 bg-white/90 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-4">
@@ -581,9 +617,9 @@ export default function HostQuizPage({ params }: PageProps) {
               </h3>
 
               {stats?.question_stats?.map((qStat, idx) => {
-                const total = qStat.total_answers || 1;
+                const total = qStat.total_answers || 0;
                 const correct = qStat.correct_answers || 0;
-                const accuracy = Math.round((correct / total) * 100);
+                const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
 
                 return (
                   <div

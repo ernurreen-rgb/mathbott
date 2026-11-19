@@ -186,7 +186,15 @@ class PostgresConnection:
         await self.close()
 
     @property
+    def closed(self) -> bool:
+        if self._conn is None:
+            return True
+        return bool(getattr(self._conn, "closed", False)) or bool(getattr(self._conn, "broken", False))
+
+    @property
     def in_transaction(self):
+        if self.closed:
+            return False
         from psycopg.pq import TransactionStatus
         return self._conn.info.transaction_status != TransactionStatus.IDLE
 
@@ -229,8 +237,11 @@ class PostgresConnection:
                     cursor.execute("RELEASE SAVEPOINT mathbot_statement")
             except psycopg.Error as exc:
                 if insert:
-                    cursor.execute("ROLLBACK TO SAVEPOINT mathbot_statement")
-                    cursor.execute("RELEASE SAVEPOINT mathbot_statement")
+                    try:
+                        cursor.execute("ROLLBACK TO SAVEPOINT mathbot_statement")
+                        cursor.execute("RELEASE SAVEPOINT mathbot_statement")
+                    except psycopg.Error:
+                        pass
                 if isinstance(exc, psycopg.IntegrityError):
                     raise IntegrityError(str(exc)) from exc
                 raise OperationalError(str(exc)) from exc
@@ -257,7 +268,9 @@ class PostgresConnection:
 
     async def close(self):
         if self._conn is not None:
-            await asyncio.to_thread(self._conn.close)
+            conn = self._conn
+            self._conn = None
+            await asyncio.to_thread(conn.close)
 
 
 Connection = PostgresConnection

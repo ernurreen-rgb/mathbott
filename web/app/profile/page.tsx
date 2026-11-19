@@ -10,7 +10,7 @@ import MobileNav from "@/components/MobileNav";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import DesktopNav from "@/components/DesktopNav";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
@@ -24,11 +24,13 @@ export default function ProfilePage() {
   const { data: session, status } = useRequireAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [streakAnimated, setStreakAnimated] = useState(false);
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionEmail = session?.user?.email || "";
 
   const weekDays = [
@@ -56,38 +58,33 @@ export default function ProfilePage() {
     }
   }, [userData?.streak]);
 
+  useEffect(() => {
+    return () => {
+      if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    };
+  }, []);
+
   const fetchUserData = useCallback(async () => {
     if (!sessionEmail) return;
 
     setLoading(true);
+    setFetchError(null);
     try {
       const { data, error } = await getUserData(sessionEmail);
-      if (error) {
-        // Only log in development
+      if (error || !data) {
         if (process.env.NODE_ENV === "development") {
           console.error("Failed to fetch user data:", error);
         }
-        // Set default user data so page can still render
-        setUserData({
-          id: 0,
-          email: sessionEmail,
-          total_solved: 0,
-        });
-      } else if (data) {
+        setFetchError(error || "Профиль деректерін жүктеу мүмкін болмады");
+      } else {
         setUserData(data);
         setNickname(data.nickname || "");
       }
     } catch (err) {
-      // Only log in development
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      // Set default user data so page can still render
-      setUserData({
-        id: 0,
-        email: sessionEmail || "",
-        total_solved: 0,
-      });
+      setFetchError("Профиль деректерін жүктеу мүмкін болмады");
     } finally {
       setLoading(false);
     }
@@ -107,6 +104,10 @@ export default function ProfilePage() {
 
     setSaving(true);
     setMessage(null);
+    if (messageTimerRef.current) {
+      clearTimeout(messageTimerRef.current);
+      messageTimerRef.current = null;
+    }
 
     const { error } = await updateNickname(sessionEmail, nickname.trim());
     if (error) {
@@ -117,7 +118,10 @@ export default function ProfilePage() {
         setUserData({ ...userData, nickname: nickname.trim() });
       }
       setIsEditingNickname(false);
-      setTimeout(() => setMessage(null), 3000);
+      messageTimerRef.current = setTimeout(() => {
+        setMessage(null);
+        messageTimerRef.current = null;
+      }, 3000);
     }
     setSaving(false);
   };
@@ -202,11 +206,29 @@ export default function ProfilePage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center">
-              <div className="text-gray-400 mb-4">
+            <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center space-y-4">
+              <div className="text-gray-400">
                 <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
-              <div className="text-gray-600 text-lg">Профиль деректерін жүктеу мүмкін болмады</div>
+              <div role="alert" className="text-gray-700 text-lg">
+                {fetchError || "Профиль деректерін жүктеу мүмкін болмады"}
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void fetchUserData()}
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors"
+                >
+                  Қайта жүктеу
+                </button>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="px-6 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold transition-colors"
+                >
+                  Аккаунттан шығу
+                </button>
+              </div>
             </div>
           )}
         </div>

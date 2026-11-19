@@ -1,64 +1,16 @@
 "use client";
 
-import { createContext, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { getPresenceWsToken, heartbeatPresence } from "@/lib/api";
 import { resolveWebSocketBase } from "@/lib/websocket-url";
 
-type PresenceStatus = "connecting" | "connected" | "disconnected";
-
 export interface PresenceUser {
   id: number;
   nickname?: string | null;
 }
-
-interface PresenceContextValue {
-  users: PresenceUser[];
-  onlineIds: Set<number>;
-  status: PresenceStatus;
-  isOnline: (userId: number | null | undefined) => boolean;
-}
-
-const PresenceContext = createContext<PresenceContextValue>({
-  users: [],
-  onlineIds: new Set<number>(),
-  status: "disconnected",
-  isOnline: () => false,
-});
-
-function normalizePresenceUser(value: unknown): PresenceUser | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as { id?: unknown; nickname?: unknown };
-  const id = Number(candidate.id);
-  if (!Number.isFinite(id) || id <= 0) return null;
-  return {
-    id,
-    nickname: typeof candidate.nickname === "string" && candidate.nickname.trim()
-      ? candidate.nickname.trim()
-      : null,
-  };
-}
-
-function sortPresenceUsers(users: PresenceUser[]): PresenceUser[] {
-  return [...users].sort((a, b) => {
-    const aName = presenceDisplayName(a).toLowerCase();
-    const bName = presenceDisplayName(b).toLowerCase();
-    return aName.localeCompare(bName) || a.id - b.id;
-  });
-}
-
-function upsertPresenceUser(users: PresenceUser[], nextUser: PresenceUser): PresenceUser[] {
-  const byId = new Map(users.map((user) => [user.id, user]));
-  byId.set(nextUser.id, nextUser);
-  return sortPresenceUsers(Array.from(byId.values()));
-}
-
-function presenceDisplayName(user: PresenceUser): string {
-  return user.nickname || `Ойыншы #${user.id}`;
-}
-
 
 const HEARTBEAT_INTERVAL_MS = 25000;
 const HEARTBEAT_RESUME_GAP_MS = 15000;
@@ -68,11 +20,13 @@ function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
 }
 
+/**
+ * Keeps the student's online presence and page-visit telemetry up to date
+ * without broadcasting unused global online-user state across the React tree.
+ */
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const pathname = usePathname() || "/";
-  const [users, setUsers] = useState<PresenceUser[]>([]);
-  const [status, setStatus] = useState<PresenceStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
@@ -83,8 +37,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !email) {
-      setUsers([]);
-      setStatus("disconnected");
       lastSentPathRef.current = "";
       pollingRefreshRef.current = null;
       return;
@@ -112,13 +64,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         inFlightPath = path;
         lastBeatAt = Date.now();
         try {
-          const { data, error } = await heartbeatPresence(email, path);
-          if (disposed) return;
-          if (error || !data) setStatus("disconnected");
-          else {
+          const { error } = await heartbeatPresence(email, path);
+          if (!disposed && !error) {
             lastSentPathRef.current = path;
-            setUsers(sortPresenceUsers(data.users.map(normalizePresenceUser).filter(Boolean) as PresenceUser[]));
-            setStatus("connected");
           }
         } finally {
           busy = false;
@@ -142,7 +90,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         if (disposed || !isTabVisible()) return;
         lastInteractionAtRef.current = Date.now();
         if (lastBeatAt === 0 || Date.now() - lastBeatAt >= HEARTBEAT_RESUME_GAP_MS) {
-          setStatus((prev) => (prev === "connected" ? prev : "connecting"));
           void refresh({ force: true });
         }
         if (!timer) {
@@ -212,7 +159,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
         ws.close();
       }
-      setStatus("disconnected");
     };
 
     const scheduleReconnect = () => {
@@ -225,39 +171,19 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       }, delayMs);
     };
 
-    const applyMessage = (payload: any) => {
-      if (payload?.type === "presence_snapshot" && Array.isArray(payload.users)) {
-        setUsers(sortPresenceUsers(payload.users.map(normalizePresenceUser).filter(Boolean) as PresenceUser[]));
-        return;
-      }
-
-      if (payload?.type === "presence_update") {
-        const user = normalizePresenceUser(payload.user);
-        if (!user) return;
-        if (payload.status === "online") {
-          setUsers((prev) => upsertPresenceUser(prev, user));
-        } else if (payload.status === "offline") {
-          setUsers((prev) => prev.filter((item) => item.id !== user.id));
-        }
-      }
-    };
-
     const connect = async () => {
       const wsBase = resolveWebSocketBase();
       if (!wsBase || closed || !isTabVisible() || connecting || wsRef.current) {
-        if (!wsBase) setStatus("disconnected");
         return;
       }
 
       connecting = true;
       const attempt = generation;
-      setStatus("connecting");
       let token = "";
       try {
         const { data, error } = await getPresenceWsToken(email);
         if (closed || attempt !== generation || !isTabVisible()) return;
         if (error || !data?.token) {
-          setStatus("disconnected");
           scheduleReconnect();
           return;
         }
@@ -277,20 +203,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           return;
         }
         reconnectAttempts = 0;
-        setStatus("connected");
         pingTimer = setInterval(() => {
           if (isTabVisible() && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping" }));
           }
         }, HEARTBEAT_INTERVAL_MS);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          applyMessage(JSON.parse(event.data));
-        } catch {
-          return;
-        }
       };
 
       ws.onerror = () => {
@@ -306,7 +223,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           pingTimer = null;
         }
         if (!closed && attempt === generation) {
-          setStatus("disconnected");
           scheduleReconnect();
         }
       };
@@ -332,7 +248,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       closed = true;
       document.removeEventListener("visibilitychange", onVisibilityChange);
       disconnect();
-      setUsers([]);
     };
   }, [email, sessionStatus]);
 
@@ -344,19 +259,5 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     }
   }, [email, pathname, sessionStatus]);
 
-  const value = useMemo<PresenceContextValue>(() => {
-    const onlineIds = new Set(users.map((user) => user.id));
-    return {
-      users,
-      onlineIds,
-      status,
-      isOnline: (userId) => typeof userId === "number" && onlineIds.has(userId),
-    };
-  }, [status, users]);
-
-  return (
-    <PresenceContext.Provider value={value}>
-      {children}
-    </PresenceContext.Provider>
-  );
+  return <>{children}</>;
 }

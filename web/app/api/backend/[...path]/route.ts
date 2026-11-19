@@ -16,14 +16,21 @@ import {
 // Matches the API function limit: AI twin drafts can take most of a minute.
 export const maxDuration = 60;
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/+$/, "");
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const MAX_PROXY_BODY_BYTES = 12 * 1024 * 1024;
+const PROXY_FETCH_TIMEOUT_MS = 55_000;
 const INTERNAL_PROXY_SHARED_SECRET =
   process.env.INTERNAL_PROXY_SHARED_SECRET?.trim() ||
   (IS_PRODUCTION ? "" : "dev-internal-proxy-secret-change-me");
 const KNOWN_PROXY_PLACEHOLDER_SECRETS = new Set([
   "replace-with-a-random-32-char-secret",
   "dev-internal-proxy-secret-change-me",
+]);
+const KNOWN_NEXTAUTH_PLACEHOLDER_SECRETS = new Set([
+  "replace-with-a-random-32-char-secret",
+  "dev-secret-key-change-in-production",
+  "your-secret-key-here",
 ]);
 
 const STRIP_REQUEST_HEADERS = new Set([
@@ -32,6 +39,18 @@ const STRIP_REQUEST_HEADERS = new Set([
   "content-length",
   "cookie",
   "host",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+  "x-real-ip",
   "x-proxy-request-ts",
   "x-proxy-request-signature",
   "x-proxy-request-nonce",
@@ -188,12 +207,40 @@ async function getProxyUserEmail(request: NextRequest): Promise<string | null> {
   if (!nextAuthSecret) {
     return null;
   }
+  if (IS_PRODUCTION && KNOWN_NEXTAUTH_PLACEHOLDER_SECRETS.has(nextAuthSecret)) {
+    return null;
+  }
   const token = await getToken({
     req: request,
     secret: nextAuthSecret,
   });
   const email = typeof token?.email === "string" ? token.email.trim().toLowerCase() : "";
   return email || null;
+}
+
+function hasInvalidPathSegment(segments: string[]): boolean {
+  if (!segments.length) return true;
+  for (const raw of segments) {
+    if (!raw || raw === "." || raw === ".." || raw.includes("\0") || raw.includes("/") || raw.includes("\\")) {
+      return true;
+    }
+    try {
+      const decoded = decodeURIComponent(raw);
+      if (
+        !decoded ||
+        decoded === "." ||
+        decoded === ".." ||
+        decoded.includes("\0") ||
+        decoded.includes("/") ||
+        decoded.includes("\\")
+      ) {
+        return true;
+      }
+    } catch {
+      return true;
+    }
+  }
+  return false;
 }
 
 function encodeBackendPath(pathSegments: string[]): string {
@@ -259,19 +306,26 @@ function pathRequiresProxyUserEmail(pathSegments: string[]): boolean {
   );
 }
 
-function redactBackendUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname
-      .split("/")
-      .map((segment) => {
+function redactPath(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((segment) => {
+      try {
         const decoded = decodeURIComponent(segment);
         if (decoded.includes("@")) return "[email]";
         if (decoded.length >= 24 && /^[A-Za-z0-9_-]+$/.test(decoded)) return "[token]";
-        return segment;
-      })
-      .join("/");
-    return `${parsed.origin}${path}${parsed.search ? "?[redacted]" : ""}`;
+      } catch {
+        return "[invalid]";
+      }
+      return segment;
+    })
+    .join("/");
+}
+
+function redactBackendUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${redactPath(parsed.pathname)}${parsed.search ? "?[redacted]" : ""}`;
   } catch {
     return "[unparseable backend url]";
   }
@@ -286,6 +340,9 @@ async function proxyRequest(
     const originalPathSegments = [...resolvedParams.path];
     const apiPathSegments =
       originalPathSegments[0] === "api" ? originalPathSegments.slice(1) : originalPathSegments;
+    if (hasInvalidPathSegment(apiPathSegments)) {
+      return NextResponse.json({ detail: "Invalid request path" }, { status: 400 });
+    }
     let effectivePathSegments = [...apiPathSegments];
     const searchParams = new URLSearchParams(request.nextUrl.searchParams);
     const preliminaryBackendRequestPath = `/api/${encodeBackendPath(effectivePathSegments)}`;
@@ -312,6 +369,36 @@ async function proxyRequest(
       );
     }
 
+    const rawContentLength = request.headers.get("content-length");
+    if (rawContentLength) {
+      const parsedLength = Number(rawContentLength);
+      if (Number.isFinite(parsedLength) && parsedLength > MAX_PROXY_BODY_BYTES) {
+        return NextResponse.json(
+          { detail: "Request body is too large" },
+          { status: 413 }
+        );
+      }
+    }
+
+    const preliminaryRequiresProxyUserEmail =
+      isAdminPath ||
+      pathRequiresProxyUserEmail(effectivePathSegments) ||
+      hasPrivatePathEmail ||
+      hasEmailSearchParam(searchParams);
+
+    let sessionEmailResolved = false;
+    let cachedSessionEmail: string | null = null;
+    if (preliminaryRequiresProxyUserEmail) {
+      cachedSessionEmail = await getProxyUserEmail(request);
+      sessionEmailResolved = true;
+      if (!cachedSessionEmail) {
+        return NextResponse.json(
+          { detail: "Authenticated session is required" },
+          { status: 401 }
+        );
+      }
+    }
+
     let body: BodyInit | undefined;
     const contentType = request.headers.get("content-type") || "";
     const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();
@@ -321,6 +408,9 @@ async function proxyRequest(
 
     if (isJsonBody && isMutatingMethod(request.method)) {
       const rawBody = await request.text();
+      if (Buffer.byteLength(rawBody, "utf8") > MAX_PROXY_BODY_BYTES) {
+        return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
+      }
       if (rawBody) {
         try {
           const payload = JSON.parse(rawBody);
@@ -348,6 +438,9 @@ async function proxyRequest(
     } else if (request.method !== "GET" && request.method !== "HEAD") {
       try {
         const rawBody = await request.text();
+        if (Buffer.byteLength(rawBody, "utf8") > MAX_PROXY_BODY_BYTES) {
+          return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
+        }
         bodyHasEmail = new URLSearchParams(rawBody).has("email");
         body = rawBody;
       } catch {
@@ -355,17 +448,14 @@ async function proxyRequest(
       }
     }
 
-    const requiresProxyUserEmail =
-      isAdminPath ||
-      pathRequiresProxyUserEmail(effectivePathSegments) ||
-      hasPrivatePathEmail ||
-      hasEmailSearchParam(searchParams) ||
-      bodyHasEmail;
+    const requiresProxyUserEmail = preliminaryRequiresProxyUserEmail || bodyHasEmail;
 
     let proxyUserEmail = "";
     const hasOptionalQuizIdentity = ["quizzes", "quiz-sessions"].includes(effectivePathSegments[0]);
     if (requiresProxyUserEmail || hasOptionalQuizIdentity) {
-      const sessionEmail = await getProxyUserEmail(request);
+      const sessionEmail = sessionEmailResolved
+        ? cachedSessionEmail
+        : await getProxyUserEmail(request);
       if (!sessionEmail && requiresProxyUserEmail) {
         return NextResponse.json(
           { detail: "Authenticated session is required" },
@@ -416,7 +506,7 @@ async function proxyRequest(
     const url = `${BACKEND_URL}/${backendPath}${searchString ? `?${searchString}` : ""}`;
 
     console.log(
-      `[Proxy] ${request.method} ${request.nextUrl.pathname} -> ${redactBackendUrl(url)}`
+      `[Proxy] ${request.method} ${redactPath(request.nextUrl.pathname)} -> ${redactBackendUrl(url)}`
     );
 
     const headers = new Headers();
@@ -433,6 +523,12 @@ async function proxyRequest(
 
     const preparedBody = await prepareBodyForProxy(body, contentType, request.method);
     body = preparedBody.body;
+    if (
+      (body instanceof Buffer && body.byteLength > MAX_PROXY_BODY_BYTES) ||
+      (typeof body === "string" && Buffer.byteLength(body, "utf8") > MAX_PROXY_BODY_BYTES)
+    ) {
+      return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
+    }
     const signedBodySha256 = preparedBody.bodySha256;
     const signedContentType = (preparedBody.contentType || "").toLowerCase();
 
@@ -489,12 +585,19 @@ async function proxyRequest(
       method: request.method,
       headers,
       body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(PROXY_FETCH_TIMEOUT_MS),
     });
 
-    const responseContentType = response.headers.get("content-type") || "";
+    const responseContentType = (response.headers.get("content-type") || "").toLowerCase();
+    const responseDisposition = (response.headers.get("content-disposition") || "").toLowerCase();
     const isBinary =
       responseContentType.startsWith("image/") ||
-      responseContentType.includes("application/octet-stream");
+      responseContentType.includes("application/octet-stream") ||
+      responseContentType.includes("application/pdf") ||
+      responseContentType.includes("application/zip") ||
+      responseContentType.includes("text/csv") ||
+      responseDisposition.includes("attachment");
 
     let nextResponse: NextResponse;
     if (isBinary) {
@@ -511,16 +614,24 @@ async function proxyRequest(
         console.error("Response:", data.substring(0, 500));
       }
 
-      const isJson =
+      const trimmed = data.trim();
+      const looksLikeJson =
         responseContentType.includes("application/json") ||
-        data.trim().startsWith("{") ||
-        data.trim().startsWith("[");
+        trimmed.startsWith("{") ||
+        trimmed.startsWith("[");
 
-      if (isJson && data.trim()) {
-        nextResponse = NextResponse.json(JSON.parse(data), {
-          status: response.status,
-          statusText: response.statusText,
-        });
+      if (looksLikeJson && trimmed) {
+        try {
+          nextResponse = NextResponse.json(JSON.parse(data), {
+            status: response.status,
+            statusText: response.statusText,
+          });
+        } catch {
+          nextResponse = new NextResponse(data, {
+            status: response.status,
+            statusText: response.statusText,
+          });
+        }
       } else {
         nextResponse = new NextResponse(data || null, {
           status: response.status,
@@ -531,17 +642,30 @@ async function proxyRequest(
 
     response.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
-      if (!["content-length", "content-encoding", "transfer-encoding"].includes(lowerKey)) {
-        nextResponse.headers.set(key, value);
+      if (
+        lowerKey === "content-length" ||
+        lowerKey === "content-encoding" ||
+        lowerKey === "transfer-encoding" ||
+        lowerKey === "connection" ||
+        lowerKey === "keep-alive" ||
+        lowerKey === "set-cookie" ||
+        lowerKey.startsWith("access-control-")
+      ) {
+        return;
       }
+      nextResponse.headers.set(key, value);
     });
 
     return nextResponse;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Proxy error:", error);
-    return NextResponse.json(
-      { detail: error.message || "Proxy error" },
-      { status: 500 }
-    );
+    const isTimeout =
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    if (isTimeout) {
+      return NextResponse.json({ detail: "Backend request timed out" }, { status: 504 });
+    }
+    const detail =
+      !IS_PRODUCTION && error instanceof Error && error.message ? error.message : "Proxy error";
+    return NextResponse.json({ detail }, { status: 500 });
   }
 }

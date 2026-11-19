@@ -195,15 +195,17 @@ def _parse_task_options(task: dict) -> List[dict]:
     return [item for item in raw_options if isinstance(item, dict)]
 
 
-def _parse_written_answer_slots(raw_answer: Any) -> List[str]:
+def _parse_written_answer_slots(raw_answer: Any, *, expected_slots: Optional[int] = None) -> List[str]:
     if isinstance(raw_answer, list):
-        return [str(item or "").strip() for item in raw_answer]
+        return [("" if item is None else str(item)).strip() for item in raw_answer]
     text = "" if raw_answer is None else str(raw_answer).strip()
     if not text:
         return []
     try:
         parsed = json.loads(text)
         if isinstance(parsed, list):
+            if expected_slots == 1 and (len(parsed) != 1 or not all(isinstance(item, str) for item in parsed)):
+                return [text]
             return [("" if item is None else str(item)).strip() for item in parsed]
     except Exception:
         pass
@@ -220,7 +222,13 @@ def _prepare_written_math_text(value: str) -> str:
     normalized = normalized.replace(r"\left", "").replace(r"\right", "")
     normalized = normalized.replace(r"\dfrac", r"\frac").replace(r"\tfrac", r"\frac")
     normalized = normalized.replace("{,}", ",")
-    return re.sub(r"\\[,;:! ]", "", normalized)
+    normalized = re.sub(r"\\[,;:! ]", "", normalized)
+    # Preserve command boundary when a Greek symbol is followed by whitespace and another identifier (e.g. "2\pi r").
+    return re.sub(
+        r"\\(alpha|beta|delta|gamma|lambda|mu|omega|phi|pi|rho|sigma|theta|varphi)\s+(?=[A-Za-z])",
+        r"\\\1\\cdot ",
+        normalized,
+    )
 
 
 def _same_written_form(answer: Any, key: Any) -> bool:
@@ -471,7 +479,11 @@ def _map_written_slots_to_option_labels(
     *,
     ordered: bool = False,
 ) -> Optional[List[str]]:
-    slots = _parse_written_answer_slots(raw_answer)
+    correct_labels = [
+        label for label in parse_mcq_answer_labels(task.get("answer")) if label in MCQ_ANSWER_LABELS
+    ]
+    expected_slot_count = len(correct_labels) if correct_labels else None
+    slots = _parse_written_answer_slots(raw_answer, expected_slots=expected_slot_count)
     if not slots:
         return None
 
@@ -487,9 +499,6 @@ def _map_written_slots_to_option_labels(
     if not option_values:
         return None
 
-    correct_labels = [
-        label for label in parse_mcq_answer_labels(task.get("answer")) if label in MCQ_ANSWER_LABELS
-    ]
     mapped: List[str] = []
     used_labels: set[str] = set()
     for slot_index, slot in enumerate(slots):

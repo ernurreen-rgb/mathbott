@@ -8,8 +8,23 @@ from slowapi import Limiter
 from models.requests import NicknameUpdateRequest
 from settings import get_settings
 from utils.cache import cache
+from utils.timezone import today_almaty
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_USER_WEB_FIELDS = frozenset(
+    {
+        "id",
+        "email",
+        "nickname",
+        "total_solved",
+        "streak",
+        "last_streak_date",
+        "recent_activity_timestamps",
+        "is_admin",
+        "achievements",
+    }
+)
 
 
 def setup_users_routes(app, db, limiter: Limiter):
@@ -59,37 +74,32 @@ def setup_users_routes(app, db, limiter: Limiter):
         - 200: Success (user created if didn't exist)
         - 500: Internal server error
         """
-        # Cache user stats (TTL 10 seconds as per plan)
-        fields_key = ",".join(sorted(f.strip() for f in fields.split(",") if f.strip())) if fields else "all"
-        cache_key = f"user:stats:{email}:{refresh_achievements}:{fields_key}"
+        # Cache user stats (TTL 10 seconds as per plan); allowlist field names to prevent cache key bloat.
+        normalized_email = email.strip().lower()
+        requested_fields = None
+        if fields:
+            requested_fields = sorted(
+                {f.strip() for f in fields.split(",") if f.strip() in _ALLOWED_USER_WEB_FIELDS}
+            )
+            fields_key = ",".join(requested_fields) if requested_fields else "minimal"
+        else:
+            fields_key = "all"
+        cache_key = f"user:stats:{normalized_email}:{refresh_achievements}:{fields_key}"
         if not refresh_achievements:
             cached_stats = cache.get(cache_key)
             if cached_stats is not None:
                 return cached_stats
         
-        user = await db.users.get_user_by_email(email)
+        user = await db.users.get_user_by_email(normalized_email)
         if not user:
             # Auto-create user for web interface
             admin_email = get_settings().admin_email
-            user = await db.users.create_user_by_email(email, check_admin_email=admin_email)
-            logger.info(f"Created new web user: {email}")
-            if admin_email and email.lower() == admin_email.lower():
-                logger.info(f"User {email} created as admin")
+            user = await db.users.create_user_by_email(normalized_email, check_admin_email=admin_email)
+            logger.info(f"Created new web user: {normalized_email}")
+            if admin_email and normalized_email == admin_email.lower():
+                logger.info(f"User {normalized_email} created as admin")
 
-        is_admin = await db.users.is_admin(email=email)
-        
-        # Check and update streak if needed (in case user hasn't solved today but streak needs checking)
-        # Only check if last_streak_date exists and is not today
-        if user.get("last_streak_date"):
-            from datetime import date, datetime
-            try:
-                last_streak_date = datetime.strptime(user["last_streak_date"], "%Y-%m-%d").date()
-                today = date.today()
-                if (today - last_streak_date).days > 1:
-                    # Streak might need reset, but don't update here - let it update on next solve
-                    pass
-            except (ValueError, TypeError):
-                pass
+        is_admin = await db.users.is_admin(email=normalized_email)
         
         # Get user achievements (optionally refresh; default off for speed)
         achievements = await db.achievements.get_user_achievements(user["id"])
@@ -114,17 +124,17 @@ def setup_users_routes(app, db, limiter: Limiter):
         except Exception:
             pass
 
-        # If streak is already broken (gap >= 2 days), show 0 on web until the next solve resets it.
+        # If streak is already broken (gap >= 2 days in Almaty time), show 0 on web until next solve.
         streak_value = int(user.get("streak", 0) or 0)
         if last_streak_date_value:
             try:
-                from datetime import date, datetime
+                from datetime import datetime
                 last_streak_date_parsed = (
                     datetime.strptime(last_streak_date_value, "%Y-%m-%d").date()
                     if isinstance(last_streak_date_value, str)
                     else last_streak_date_value
                 )
-                if (date.today() - last_streak_date_parsed).days > 1:
+                if (today_almaty() - last_streak_date_parsed).days > 1:
                     streak_value = 0
             except Exception:
                 # If parsing fails, keep stored streak_value
@@ -143,14 +153,12 @@ def setup_users_routes(app, db, limiter: Limiter):
         }
         
         # Apply field selection if specified
-        if fields:
-            field_list = [f.strip() for f in fields.split(",")]
-            filtered_result = {k: v for k, v in result.items() if k in field_list}
+        if requested_fields is not None:
+            field_set = set(requested_fields)
+            filtered_result = {k: v for k, v in result.items() if k in field_set}
             # Always include id and email for identification
-            if "id" not in field_list:
-                filtered_result["id"] = result["id"]
-            if "email" not in field_list:
-                filtered_result["email"] = result["email"]
+            filtered_result["id"] = result["id"]
+            filtered_result["email"] = result["email"]
             result = filtered_result
         
         # Cache result (TTL 10 seconds as per plan)
@@ -225,7 +233,7 @@ def setup_users_routes(app, db, limiter: Limiter):
                     if isinstance(last_streak_date_value, str)
                     else last_streak_date_value
                 )
-                if (date.today() - last_streak_date_parsed).days > 1:
+                if (today_almaty() - last_streak_date_parsed).days > 1:
                     streak_value = 0
             except Exception:
                 pass
@@ -253,5 +261,7 @@ def setup_users_routes(app, db, limiter: Limiter):
     @limiter.limit("5/minute")
     async def update_nickname(request: Request, nickname_request: NicknameUpdateRequest):
         """Update user nickname"""
-        await db.users.update_user_nickname(nickname_request.email, nickname_request.nickname)
+        normalized_email = nickname_request.email.strip().lower()
+        await db.users.update_user_nickname(normalized_email, nickname_request.nickname)
+        cache.invalidate_pattern(f"user:stats:{normalized_email}")
         return {"success": True}

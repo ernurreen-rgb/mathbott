@@ -24,6 +24,13 @@ const parseSelectAnswerPair = (value?: string): [string, string] => {
   return ["", ""];
 };
 
+const normalizeTfValue = (value?: string | null): "true" | "false" | "" => {
+  const lowered = String(value ?? "").trim().toLowerCase();
+  if (lowered === "true" || lowered === "1") return "true";
+  if (lowered === "false" || lowered === "0") return "false";
+  return "";
+};
+
 const renderMathOrText = (value: string, emptyLabel = "Жауап берілмеді") => {
   if (!value) return <span>{emptyLabel}</span>;
   return <MathRender inline latex={value} />;
@@ -67,15 +74,13 @@ export function ReviewAnswerBlock({
   const correctAnswer = resultAnswer?.correct_answer ?? task.answer ?? "";
   const qt: QuestionType = (task.question_type || "input") as QuestionType;
   const isCorrect = isReviewResultActuallyCorrect(task, resultAnswer);
-  const userUpper = String(userAnswerRaw).trim().toUpperCase();
-  const correctUpper = String(correctAnswer).trim().toUpperCase();
   const userMcqLabels = parseMcqAnswerLabels(userAnswerRaw);
   const correctMcqLabels = parseMcqAnswerLabels(correctAnswer);
   const renderAnswerBlock = () => {
     if (qt === "mcq" || qt === "mcq6") {
       const options = task.options || [];
       const isWrittenAnswer = getTaskAnswerMode(task) === "written";
-      const writtenAnswers = parseWrittenAnswerSlots(userAnswerRaw, getTaskMcqCorrectCount(task));
+      const writtenAnswers = parseWrittenAnswerSlots(userAnswerRaw, getTaskMcqCorrectCount(task)).filter((item) => item.trim());
       const isPartial =
         typeof resultAnswer?.score === "number" &&
         typeof resultAnswer?.max_score === "number" &&
@@ -95,9 +100,13 @@ export function ReviewAnswerBlock({
             >
               <div className="mb-1 text-sm font-semibold text-gray-700">Жауабыңыз</div>
               <div className="flex flex-wrap gap-3">
-                {writtenAnswers.map((answer, index) => (
-                  <MathRender key={`written-review-${index}`} inline latex={answer} />
-                ))}
+                {writtenAnswers.length > 0 ? (
+                  writtenAnswers.map((answer, index) => (
+                    <MathRender key={`written-review-${index}`} inline latex={answer} />
+                  ))
+                ) : (
+                  <span className="text-sm text-gray-600">Жауап берілмеді</span>
+                )}
               </div>
             </div>
           )}
@@ -131,14 +140,16 @@ export function ReviewAnswerBlock({
       const options = [
         { label: "Дұрыс", value: "true" },
         { label: "Жалған", value: "false" },
-      ];
+      ] as const;
+      const userTf = normalizeTfValue(userAnswerRaw);
+      const correctTf = normalizeTfValue(correctAnswer);
       return (
         <div className="flex gap-2 mt-2">
           {options.map((option) => {
-            const isUserChoice = userAnswerRaw === option.value || userUpper === option.value.toUpperCase();
-            const isCorrectOption = correctAnswer === option.value || correctUpper === option.value.toUpperCase();
+            const isUserChoice = userTf === option.value;
+            const isCorrectOption = correctTf === option.value;
             let style = "flex-1 border-2 rounded-lg p-3 text-center font-bold border-gray-200 bg-gray-50";
-            if (isUserChoice && isCorrect) {
+            if (isUserChoice && (isCorrect || isCorrectOption)) {
               style = "flex-1 border-2 border-green-500 rounded-lg p-3 text-center font-bold bg-green-100 text-green-800";
             } else if (isUserChoice && !isCorrect) {
               style = "flex-1 border-2 border-red-500 rounded-lg p-3 text-center font-bold bg-red-100 text-red-800";
@@ -168,10 +179,18 @@ export function ReviewAnswerBlock({
             const subquestion = subquestions[index];
             const userChoice = userChoices[index];
             const correctChoice = correctChoices[index];
+            const correctOptionText = options.find(
+              (item) => (item.label || "").trim().toUpperCase() === correctChoice.trim().toUpperCase()
+            )?.text;
             const rowCorrect = Boolean(
               isCorrect ||
-              (userChoice.trim().toUpperCase() &&
-                userChoice.trim().toUpperCase() === correctChoice.trim().toUpperCase())
+              (!isWrittenSelectAnswer &&
+                userChoice.trim().toUpperCase() &&
+                userChoice.trim().toUpperCase() === correctChoice.trim().toUpperCase()) ||
+              (isWrittenSelectAnswer &&
+                userChoice.trim() &&
+                (userChoice.trim() === correctChoice.trim() ||
+                  (correctOptionText && userChoice.trim() === correctOptionText.trim())))
             );
 
             return (
@@ -189,7 +208,7 @@ export function ReviewAnswerBlock({
                 {!rowCorrect && correctChoice && (
                   <div className="text-sm mt-1">
                     <span className="font-semibold text-gray-700">Дұрыс жауап: </span>
-                    <span className="text-green-700">{renderSelectChoice(options, correctChoice)}</span>
+                    <span className="text-green-700">{renderSelectChoice(options, correctChoice, isWrittenSelectAnswer && !correctOptionText)}</span>
                   </div>
                 )}
               </div>

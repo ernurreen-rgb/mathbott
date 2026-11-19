@@ -542,7 +542,7 @@ class BankTaskCrudMixin:
         source: Optional[str] = "admin_bank_soft_delete",
         reason: Optional[str] = None,
     ) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
@@ -550,10 +550,12 @@ class BankTaskCrudMixin:
             if existing.get("deleted_at"):
                 return True
 
-            await db.execute(
+            cursor = await db.execute(
                 "UPDATE bank_tasks SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now') WHERE id = ? AND deleted_at IS NULL",
                 (task_id,),
             )
+            if (cursor.rowcount or 0) == 0:
+                return True
             updated = await self._fetch_task_row(db, task_id)
             if updated:
                 updated_topics = await self._fetch_topics_for_task(db, task_id)
@@ -569,7 +571,6 @@ class BankTaskCrudMixin:
                     reason=reason,
                     initial=False,
                 )
-            await db.commit()
         return True
 
     async def restore_task(
@@ -579,7 +580,7 @@ class BankTaskCrudMixin:
         source: Optional[str] = "admin_bank_restore",
         reason: Optional[str] = None,
     ) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
@@ -587,10 +588,12 @@ class BankTaskCrudMixin:
             if not existing.get("deleted_at"):
                 return True
 
-            await db.execute(
+            cursor = await db.execute(
                 "UPDATE bank_tasks SET deleted_at = NULL, updated_at = mathbot_datetime('now') WHERE id = ? AND deleted_at IS NOT NULL",
                 (task_id,),
             )
+            if (cursor.rowcount or 0) == 0:
+                return True
             updated = await self._fetch_task_row(db, task_id)
             if updated:
                 updated_topics = await self._fetch_topics_for_task(db, task_id)
@@ -606,7 +609,6 @@ class BankTaskCrudMixin:
                     reason=reason,
                     initial=False,
                 )
-            await db.commit()
         return True
 
     async def hard_delete_task(
@@ -689,12 +691,8 @@ class BankTaskCrudMixin:
         return True
 
     async def cleanup_old_deleted_tasks(self, days: int = 30) -> int:
-        """Delete expired trash while retaining committed media for historical references.
-
-        Snapshots and other tasks can share these filenames. Reclaiming media
-        requires separate reference-aware garbage collection.
-        """
-        async with self._connection() as db:
+        """Delete expired trash atomically while retaining committed media for historical references."""
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 """
@@ -712,11 +710,29 @@ class BankTaskCrudMixin:
             task_ids = [int(row["id"]) for row in rows]
             placeholders = ",".join(["?"] * len(task_ids))
 
-            await self._trash_twins_of(db, task_ids)
-            await db.execute(
-                f"DELETE FROM bank_tasks WHERE id IN ({placeholders})",
+            twins_trashed = await self._trash_twins_of(db, task_ids)
+            delete_cursor = await db.execute(
+                f"DELETE FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NOT NULL",
                 task_ids,
             )
+            deleted_count = int(delete_cursor.rowcount or 0)
+            if deleted_count > 0:
+                await self._record_admin_audit_event(
+                    db,
+                    action=self.AUDIT_ACTION_HARD_DELETE,
+                    entity_type="bank_task",
+                    entity_id=None,
+                    actor_user_id=None,
+                    actor_email="system",
+                    summary=f"Expired trash cleanup deleted {deleted_count} bank task(s)",
+                    changed_fields=["deleted_permanently"],
+                    metadata={
+                        "retention_days": int(days),
+                        "deleted_count": deleted_count,
+                        "task_ids_sample": task_ids[:100],
+                        "twins_moved_to_trash": twins_trashed,
+                    },
+                )
             await db.execute(
                 """
                 DELETE FROM bank_topics
@@ -726,9 +742,8 @@ class BankTaskCrudMixin:
                 )
                 """
             )
-            await db.commit()
 
-        return len(task_ids)
+        return deleted_count
 
     async def list_topics(self, query: Optional[str] = None, limit: int = 20) -> List[str]:
         async with self._connection() as db:
@@ -903,11 +918,11 @@ class BankTaskCrudMixin:
                 "skipped_missing_ids": [],
             }
 
-        async with self._connection() as db:
+        async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             placeholders = ",".join(["?"] * len(ordered_unique_ids))
             async with db.execute(
-                f"SELECT * FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NULL",
+                f"SELECT bt.* FROM bank_tasks bt WHERE bt.id IN ({placeholders}) AND bt.deleted_at IS NULL AND {NOT_TWIN_SQL}",
                 ordered_unique_ids,
             ) as cursor:
                 bank_rows = await cursor.fetchall()
@@ -960,8 +975,6 @@ class BankTaskCrudMixin:
                     next_sort_order += 1
                 except db_driver.IntegrityError:
                     skipped_existing_ids.append(bank_task_id)
-
-            await db.commit()
 
         skipped_seen: set[int] = set()
         skipped_existing_ordered: List[int] = []

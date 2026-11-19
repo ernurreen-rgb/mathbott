@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
@@ -62,7 +62,7 @@ const formatDateTime = (value: string): string => {
 export default function AdminBankQualityPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
-  const { loading: accessLoading } = useAdminPageAccess("review", status, email);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("review", status, email);
 
   const [tab, setTab] = useState<QualityTab>("duplicates");
   const [search, setSearch] = useState("");
@@ -70,7 +70,11 @@ export default function AdminBankQualityPage() {
   const [difficultyFilter, setDifficultyFilter] = useState<BankDifficulty | "">("");
   const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionType | "">("");
   const [threshold, setThreshold] = useState(0.92);
-  const [thresholdLoadedFromSummary, setThresholdLoadedFromSummary] = useState(false);
+  const [debouncedThreshold, setDebouncedThreshold] = useState(0.92);
+  const thresholdLoadedRef = useRef(false);
+  const duplicatesReqRef = useRef(0);
+  const deadReqRef = useRef(0);
+  const noTopicsReqRef = useRef(0);
 
   const [summary, setSummary] = useState({
     active_total: 0,
@@ -118,8 +122,15 @@ export default function AdminBankQualityPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedThreshold(threshold);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [threshold]);
+
   const fetchSummary = useCallback(async () => {
-    if (!email) return;
+    if (!email || !allowed) return;
     setSummaryLoading(true);
 
     const { data, error: err } = await getAdminBankQualitySummary(email);
@@ -128,20 +139,22 @@ export default function AdminBankQualityPage() {
     } else if (data) {
       setSummary(data);
       if (
-        !thresholdLoadedFromSummary &&
+        !thresholdLoadedRef.current &&
         Number.isFinite(data.default_similarity_threshold) &&
         data.default_similarity_threshold > 0
       ) {
+        thresholdLoadedRef.current = true;
         setThreshold(data.default_similarity_threshold);
-        setThresholdLoadedFromSummary(true);
+        setDebouncedThreshold(data.default_similarity_threshold);
       }
     }
 
     setSummaryLoading(false);
-  }, [email, thresholdLoadedFromSummary]);
+  }, [email, allowed]);
 
   const fetchDuplicates = useCallback(async () => {
-    if (!email) return;
+    if (!email || !allowed) return;
+    const reqId = ++duplicatesReqRef.current;
     setDuplicatesLoading(true);
     setError(null);
 
@@ -149,10 +162,11 @@ export default function AdminBankQualityPage() {
       search: debouncedSearch,
       difficulty: difficultyFilter,
       question_type: questionTypeFilter,
-      threshold,
+      threshold: debouncedThreshold,
       limit: DUPLICATES_LIMIT,
       offset: duplicateOffset,
     });
+    if (reqId !== duplicatesReqRef.current) return;
 
     if (err) {
       setError(err);
@@ -166,10 +180,11 @@ export default function AdminBankQualityPage() {
     }
 
     setDuplicatesLoading(false);
-  }, [email, debouncedSearch, difficultyFilter, duplicateOffset, questionTypeFilter, threshold]);
+  }, [email, allowed, debouncedSearch, difficultyFilter, duplicateOffset, questionTypeFilter, debouncedThreshold]);
 
   const fetchDeadTasks = useCallback(async () => {
-    if (!email) return;
+    if (!email || !allowed) return;
+    const reqId = ++deadReqRef.current;
     setDeadLoading(true);
     setError(null);
 
@@ -179,6 +194,7 @@ export default function AdminBankQualityPage() {
       limit: DEAD_LIMIT,
       offset: deadOffset,
     });
+    if (reqId !== deadReqRef.current) return;
 
     if (err) {
       setError(err);
@@ -190,10 +206,11 @@ export default function AdminBankQualityPage() {
     }
 
     setDeadLoading(false);
-  }, [email, debouncedSearch, difficultyFilter, deadOffset]);
+  }, [email, allowed, debouncedSearch, difficultyFilter, deadOffset]);
 
   const fetchNoTopicsTasks = useCallback(async () => {
-    if (!email) return;
+    if (!email || !allowed) return;
+    const reqId = ++noTopicsReqRef.current;
     setNoTopicsLoading(true);
     setError(null);
 
@@ -203,6 +220,7 @@ export default function AdminBankQualityPage() {
       limit: NO_TOPICS_LIMIT,
       offset: noTopicsOffset,
     });
+    if (reqId !== noTopicsReqRef.current) return;
 
     if (err) {
       setError(err);
@@ -214,15 +232,15 @@ export default function AdminBankQualityPage() {
     }
 
     setNoTopicsLoading(false);
-  }, [email, debouncedSearch, difficultyFilter, noTopicsOffset]);
+  }, [email, allowed, debouncedSearch, difficultyFilter, noTopicsOffset]);
 
   useEffect(() => {
-    if (!email) return;
+    if (!email || !allowed) return;
     void fetchSummary();
-  }, [email, fetchSummary]);
+  }, [email, allowed, fetchSummary]);
 
   useEffect(() => {
-    if (!email) return;
+    if (!email || !allowed) return;
 
     if (tab === "duplicates") {
       void fetchDuplicates();
@@ -233,7 +251,7 @@ export default function AdminBankQualityPage() {
       return;
     }
     void fetchNoTopicsTasks();
-  }, [email, tab, fetchDuplicates, fetchDeadTasks, fetchNoTopicsTasks]);
+  }, [email, allowed, tab, fetchDuplicates, fetchDeadTasks, fetchNoTopicsTasks]);
 
   const handleRefreshCurrent = async () => {
     await fetchSummary();
@@ -302,7 +320,9 @@ export default function AdminBankQualityPage() {
     setDebouncedSearch("");
     setDifficultyFilter("");
     setQuestionTypeFilter("");
-    setThreshold(summary.default_similarity_threshold || 0.92);
+    const defaultThreshold = summary.default_similarity_threshold || 0.92;
+    setThreshold(defaultThreshold);
+    setDebouncedThreshold(defaultThreshold);
     setDuplicateOffset(0);
     setDeadOffset(0);
     setNoTopicsOffset(0);
@@ -441,10 +461,10 @@ export default function AdminBankQualityPage() {
     );
   }
 
-  if (!session) {
+  if (!session || !allowed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Әкімші панеліне кіру үшін аккаунтқа кіріңіз</div>
+        <div className="text-xl">{!session ? "Әкімші панеліне кіру үшін аккаунтқа кіріңіз" : "Қолжетім жоқ"}</div>
       </div>
     );
   }

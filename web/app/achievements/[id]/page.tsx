@@ -4,7 +4,7 @@ import Icon, { ContentIcon } from "@/components/ui/Icon";
 
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import MobileNav from "@/components/MobileNav";
 import DesktopNav from "@/components/DesktopNav";
@@ -16,63 +16,74 @@ export default function PublicAchievementsPage() {
   const { data: session } = useSession();
   const params = useParams();
   const sessionEmail = session?.user?.email || null;
-  const userId = params?.id ? parseInt(params.id as string, 10) : null;
+  const rawUserId = params?.id ? Number(params.id) : NaN;
+  const userId = Number.isInteger(rawUserId) && rawUserId > 0 ? rawUserId : null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCurrentUserData = useCallback(async () => {
-    if (!sessionEmail) return;
-    try {
-      const { data } = await getUserData(sessionEmail);
-      if (data) {
-        setCurrentUserData(data);
-      }
-    } catch (err) {
-      // Silently fail - not critical
+  useEffect(() => {
+    if (!userId) {
+      setUserData(null);
+      setError("Пайдаланушы ID-і қате");
+      setLoading(false);
+      return;
     }
-  }, [sessionEmail]);
 
-  const fetchUserData = useCallback(async () => {
-    if (!userId || isNaN(userId)) return;
-
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const { data, error: fetchError } = await getPublicUserDataById(userId);
-      if (fetchError) {
-        // Only log in development
-        if (process.env.NODE_ENV === "development") {
-          console.error("Failed to fetch user data:", fetchError);
+
+    void (async () => {
+      try {
+        const { data, error: fetchError } = await getPublicUserDataById(userId);
+        if (cancelled) return;
+        if (fetchError) {
+          if (process.env.NODE_ENV === "development") {
+            console.error("Failed to fetch user data:", fetchError);
+          }
+          setError(fetchError);
+        } else if (data) {
+          setUserData(data);
         }
-        setError(fetchError);
-      } else if (data) {
-        setUserData(data);
+      } catch (err) {
+        if (!cancelled) {
+          if (process.env.NODE_ENV === "development") {
+            console.error("Error fetching user data:", err);
+          }
+          setError("Жетістіктерді жүктеу қатесі");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err) {
-      // Only log in development
-      if (process.env.NODE_ENV === "development") {
-        console.error("Error fetching user data:", err);
-      }
-      setError("Жетістіктерді жүктеу қатесі");
-    } finally {
-      setLoading(false);
-    }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   useEffect(() => {
-    if (userId && !isNaN(userId)) {
-      void fetchUserData();
-      // Also fetch current user data to check if viewing own profile
-      if (sessionEmail) {
-        void fetchCurrentUserData();
-      }
-    } else {
-      setError("Пайдаланушы ID-і қате");
-      setLoading(false);
+    if (!sessionEmail) {
+      setCurrentUserData(null);
+      return;
     }
-  }, [userId, sessionEmail, fetchUserData, fetchCurrentUserData]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getUserData(sessionEmail);
+        if (!cancelled && data) {
+          setCurrentUserData(data);
+        }
+      } catch {
+        // Silently fail - not critical
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionEmail]);
 
   if (loading) {
     return (

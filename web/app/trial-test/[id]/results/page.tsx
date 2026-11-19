@@ -2,7 +2,7 @@
 import Icon from "@/components/ui/Icon";
 
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import { useRequireAuth } from "@/lib/use-require-auth";
@@ -127,12 +127,14 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
   );
 }
 
-export default function TrialTestResultsPage() {
+function TrialTestResultsPageContent() {
   const { data: session, status } = useRequireAuth();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const testId = parseInt(params.id as string, 10);
+  const rawTestId = Number(params.id);
+  const isValidTestId = Number.isInteger(rawTestId) && rawTestId > 0;
+  const testId = isValidTestId ? rawTestId : 0;
 
   const [test, setTest] = useState<TrialTestDetails | null>(null);
   const [resultsList, setResultsList] = useState<TrialTestResult[]>([]);
@@ -146,42 +148,55 @@ export default function TrialTestResultsPage() {
       new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime() || right.id - left.id
     );
   }, [resultsList]);
-  const requestedResultId = Number(searchParams.get("attempt"));
+  const requestedResultId = Number(searchParams?.get("attempt"));
   const selectedResult = orderedResults.find((result) => result.id === requestedResultId) || orderedResults[0] || null;
 
-  const fetchData = useCallback(async () => {
-    if (!email || !testId) return;
+  useEffect(() => {
+    if (!isValidTestId) {
+      setError("Тест табылмады");
+      setLoading(false);
+      return;
+    }
+    if (!email) return;
+
+    let cancelled = false;
     setLoading(true);
     setError(null);
 
-    try {
-      const testData = await getTrialTestDetails(testId, email);
-      if (testData.error) {
-        setError(testData.error);
-      } else if (testData.data) {
-        setTest(testData.data);
-      }
+    void (async () => {
+      try {
+        const [testData, resultsRes] = await Promise.all([
+          getTrialTestDetails(testId, email),
+          getTrialTestResults(testId, email),
+        ]);
+        if (cancelled) return;
 
-      const { data: resultsData, error: resultsError } = await getTrialTestResults(testId, email);
-      if (resultsError) {
-        setError((prev) => prev || resultsError);
-      } else if (resultsData && Array.isArray(resultsData)) {
-        setResultsList(resultsData);
-      } else {
-        setResultsList([]);
-      }
-    } catch (e: any) {
-      setError(e?.message || "Деректерді жүктеу қатесі");
-    } finally {
-      setLoading(false);
-    }
-  }, [email, testId]);
+        if (testData.error) {
+          setError(testData.error);
+        } else if (testData.data) {
+          setTest(testData.data);
+        }
 
-  useEffect(() => {
-    if (email && testId) {
-      void fetchData();
-    }
-  }, [email, testId, fetchData]);
+        if (resultsRes.error) {
+          setError((prev) => prev || resultsRes.error);
+        } else if (resultsRes.data && Array.isArray(resultsRes.data)) {
+          setResultsList(resultsRes.data);
+        } else {
+          setResultsList([]);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setError(e instanceof Error && e.message ? e.message : "Деректерді жүктеу қатесі");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [email, isValidTestId, testId]);
 
   if (status === "loading" || !session) {
     return <AuthRedirectScreen loading={status === "loading"} />;
@@ -205,7 +220,10 @@ export default function TrialTestResultsPage() {
     );
   }
 
-  const displayPercentage = selectedResult?.percentage ?? 0;
+  const rawPercentage = Number(selectedResult?.percentage ?? 0);
+  const displayPercentage = Number.isFinite(rawPercentage)
+    ? Math.max(0, Math.min(100, rawPercentage))
+    : 0;
   const tone = displayPercentage >= 80 ? "good" : displayPercentage >= 60 ? "mid" : "low";
   const barColor = tone === "good" ? "#16a34a" : tone === "mid" ? "#eab308" : "#ef4444";
 
@@ -288,5 +306,19 @@ export default function TrialTestResultsPage() {
       </main>
       <MobileNav currentPage="trial-test" />
     </div>
+  );
+}
+
+export default function TrialTestResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-xl">Нәтижелер жүктелуде...</div>
+        </div>
+      }
+    >
+      <TrialTestResultsPageContent />
+    </Suspense>
   );
 }

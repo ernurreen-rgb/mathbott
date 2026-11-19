@@ -270,6 +270,24 @@ class TaskRepository(BaseRepository):
                 source="task_repository_update",
             )
 
+    async def reorder_tasks_in_mini_lesson(self, mini_lesson_id: int, task_ids: List[int]) -> int:
+        """Atomically update sort_order for tasks belonging to the specified mini-lesson."""
+        if not task_ids:
+            return 0
+        updated = 0
+        async with self._write_transaction() as db:
+            for order, task_id in enumerate(task_ids):
+                async with db.execute(
+                    """
+                    UPDATE tasks
+                    SET sort_order = ?, updated_at = mathbot_datetime('now')
+                    WHERE id = ? AND mini_lesson_id = ? AND deleted_at IS NULL
+                    """,
+                    (order, task_id, mini_lesson_id),
+                ) as cursor:
+                    updated += max(0, int(cursor.rowcount or 0))
+        return updated
+
     async def get_tasks_by_creator(
         self,
         creator_id: int,
