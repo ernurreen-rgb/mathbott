@@ -109,7 +109,11 @@ test("a student takes a trial test and sees the result", async ({ studentPage: p
 
   await expect(page).toHaveURL(/\/trial-test\/1\/results/);
   const results = page.getByRole("main");
-  await expect(results.getByRole("heading", { name: "Тест нәтижесі" })).toBeVisible();
+  await expect(results.getByText("Тест нәтижесі", { exact: true })).toBeVisible();
   await expect(results).toContainText("2 / 2");
   await expect(results).toContainText("100.0%");
+  // Both answers were graded right: the written one and the chosen option.
+  const numbers = results.getByRole("region", { name: "Тапсырма нөмірлері" });
+  await expect(numbers.getByRole("button", { name: "Тапсырма 1: Дұрыс" })).toBeVisible();
+  await expect(numbers.getByRole("button", { name: "Тапсырма 2: Дұрыс" })).toBeVisible();
 });
