@@ -41,8 +41,51 @@
 .nextButton:hover { background: #6d28d9; }
 .toolbar button:disabled, .taskFooter button:disabled { cursor: not-allowed; opacity: .45; }
 .page button:focus-visible { outline: 2px solid #8b5cf6; outline-offset: 3px; }
+/* Results review: same shell as the exam, with a coloured number strip on top. */
+.scoreBadge { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; border-radius: 8px; background: #f2f4f7; color: #172033; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.scoreBadge strong { font-size: 16px; }
+.scoreBadge span { font-size: 13px; font-weight: 600; }
+.scoreBadge[data-tone="good"] { background: #dcfce7; color: #15803d; }
+.scoreBadge[data-tone="mid"] { background: #fef3c7; color: #b45309; }
+.scoreBadge[data-tone="low"] { background: #fee2e2; color: #b91c1c; }
+.attemptSelect { min-height: 40px; max-width: 220px; padding: 6px 10px; border: 1px solid #dce1e9; border-radius: 8px; background: #fff; color: #475467; font-size: 13px; font-weight: 600; }
+.retakeLink { background: #7c3aed; color: #fff; }
+.retakeLink:hover { background: #6d28d9; }
+.resultStrip { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #e1e5ec; border-radius: 12px; background: #fff; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: #667085; font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; }
+.resultNumbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px; }
+.resultNumber { min-height: 40px; border: 2px solid transparent; border-radius: 8px; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color 150ms, border-color 150ms, color 150ms; }
+.resultNumber[data-status="correct"], .legend i[data-status="correct"] { border-color: #86d4a3; background: #dcfce7; color: #15803d; }
+.resultNumber[data-status="wrong"], .legend i[data-status="wrong"] { border-color: #f1a5a5; background: #fee2e2; color: #b91c1c; }
+.resultNumber[data-status="skipped"], .legend i[data-status="skipped"] { border-color: #d0d5dd; background: #f2f4f7; color: #667085; }
+.legend i { border-width: 2px; border-style: solid; }
+.resultNumber[aria-current="step"][data-status="correct"] { border-color: #15803d; background: #16a34a; color: #fff; }
+.resultNumber[aria-current="step"][data-status="wrong"] { border-color: #b91c1c; background: #dc2626; color: #fff; }
+.resultNumber[aria-current="step"][data-status="skipped"] { border-color: #475467; background: #667085; color: #fff; }
+.resultNumber:not([aria-current="step"]):hover { filter: brightness(0.96); }
+.taskCard.reviewCard { min-height: 0; }
+.reviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-bottom: 1px solid #edf0f4; font-size: 13px; color: #6b7280; }
+.reviewHeader strong { color: #172033; font-size: 15px; font-variant-numeric: tabular-nums; }
+.statusPill { padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.statusPill[data-status="correct"] { background: #dcfce7; color: #15803d; }
+.statusPill[data-status="wrong"] { background: #fee2e2; color: #b91c1c; }
+.statusPill[data-status="skipped"] { background: #f2f4f7; color: #667085; }
+.reviewFooter { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid #edf0f4; background: #fcfcfd; }
+.reviewFooter > span { color: #6b7280; font-size: 13px; font-variant-numeric: tabular-nums; }
+.reviewFooter button:disabled { cursor: not-allowed; opacity: .45; }
 @media (max-width: 1050px) { .taskCounter > span { display: none; } .toolbarActions { gap: 8px; } }
 @media (max-width: 767px) {
+  .scoreBadge { padding: 5px 9px; }
+  .scoreBadge strong { font-size: 14px; }
+  .attemptSelect { min-height: 36px; max-width: 150px; font-size: 12px; }
+  .retakeLink { min-height: 36px; }
+  .resultStrip { padding: 10px; }
+  .resultNumbers { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 6px; }
+  .resultNumber { min-height: 36px; }
+  .reviewHeader { padding: 10px 14px; }
+  .reviewFooter { gap: 6px; padding: 10px; }
   .main { padding: 8px 8px calc(80px + env(safe-area-inset-bottom)); }
   .workspace { gap: 8px; min-height: calc(100dvh - 96px); }
   .toolbar { flex-wrap: wrap; gap: 8px; padding: 8px 10px 11px; }

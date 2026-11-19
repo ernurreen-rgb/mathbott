@@ -9,9 +9,115 @@ import { useRequireAuth } from "@/lib/use-require-auth";
 import Link from "next/link";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import TrialTestDetailedReview from "@/components/trial-test/TrialTestDetailedReview";
+import TaskStatement from "@/components/student/TaskStatement";
+import { ReviewAnswerBlock } from "@/components/trial-test/ReviewAnswerBlock";
 import { getTrialTestDetails, getTrialTestResults } from "@/lib/api";
+import { getReviewStatus, getReviewTasks, type ReviewStatus } from "@/lib/trial-test-review";
 import { TrialTestDetails, TrialTestResult } from "@/types";
+import styles from "../TrialTestWorkspace.module.css";
+
+const STATUS_LABEL: Record<ReviewStatus, string> = {
+  correct: "Дұрыс",
+  wrong: "Қате",
+  skipped: "Жауап берілмеді",
+};
+
+/** One attempt, shown like the exam screen: coloured task numbers on top, one task at a time. */
+function AttemptReview({ test, result }: { test: TrialTestDetails; result: TrialTestResult }) {
+  const tasks = useMemo(() => getReviewTasks(test.tasks, result.answers), [test.tasks, result.answers]);
+  const [index, setIndex] = useState(0);
+  const current = Math.min(index, Math.max(tasks.length - 1, 0));
+
+  const statuses = useMemo(
+    () => tasks.map((task) => getReviewStatus(task, result.answers[task.id])),
+    [tasks, result.answers]
+  );
+  const counts = useMemo(
+    () => ({
+      correct: statuses.filter((status) => status === "correct").length,
+      wrong: statuses.filter((status) => status === "wrong").length,
+      skipped: statuses.filter((status) => status === "skipped").length,
+    }),
+    [statuses]
+  );
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (event.key === "ArrowLeft") setIndex((value) => Math.max(0, value - 1));
+      if (event.key === "ArrowRight") setIndex((value) => Math.min(tasks.length - 1, value + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tasks.length]);
+
+  if (!tasks.length) {
+    return <div className={styles.resultStrip}>Тапсырмалар табылмады</div>;
+  }
+
+  const task = tasks[current];
+  const status = statuses[current];
+
+  return (
+    <>
+      <section className={styles.resultStrip} aria-label="Тапсырма нөмірлері">
+        <div className={styles.legend}>
+          <span><i data-status="correct" />Дұрыс: {counts.correct}</span>
+          <span><i data-status="wrong" />Қате: {counts.wrong}</span>
+          <span><i data-status="skipped" />Жауапсыз: {counts.skipped}</span>
+        </div>
+        <div className={styles.resultNumbers}>
+          {tasks.map((item, i) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setIndex(i)}
+              className={styles.resultNumber}
+              data-status={statuses[i]}
+              aria-current={i === current ? "step" : undefined}
+              aria-label={`Тапсырма ${i + 1}: ${STATUS_LABEL[statuses[i]]}`}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <article key={`${task.id}-${current}`} className={`${styles.taskCard} ${styles.reviewCard}`} aria-label={`Тапсырма ${current + 1}`}>
+        <div className={styles.reviewHeader}>
+          <span>Тапсырма <strong>{current + 1} / {tasks.length}</strong></span>
+          <span className={styles.statusPill} data-status={status}>{STATUS_LABEL[status]}</span>
+        </div>
+        <div className={styles.taskBody}>
+          <TaskStatement task={task} />
+          <div className={styles.answers}>
+            <ReviewAnswerBlock task={task} result={result.answers[task.id]} />
+          </div>
+        </div>
+        <nav className={styles.reviewFooter} aria-label="Тапсырмалар арасында өту">
+          <button
+            type="button"
+            onClick={() => setIndex(Math.max(0, current - 1))}
+            disabled={current === 0}
+            className={styles.previousButton}
+          >
+            <Icon name="arrowLeft" /> Алдыңғы
+          </button>
+          <span>{current + 1} / {tasks.length}</span>
+          <button
+            type="button"
+            onClick={() => setIndex(Math.min(tasks.length - 1, current + 1))}
+            disabled={current >= tasks.length - 1}
+            className={styles.nextButton}
+          >
+            Келесі <Icon name="arrowRight" />
+          </button>
+        </nav>
+      </article>
+    </>
+  );
+}
 
 export default function TrialTestResultsPage() {
   const { data: session, status } = useRequireAuth();
@@ -91,118 +197,85 @@ export default function TrialTestResultsPage() {
     );
   }
 
-  const displayScore = selectedResult?.score ?? 0;
   const displayPercentage = selectedResult?.percentage ?? 0;
+  const tone = displayPercentage >= 80 ? "good" : displayPercentage >= 60 ? "mid" : "low";
+  const barColor = tone === "good" ? "#16a34a" : tone === "mid" ? "#eab308" : "#ef4444";
 
   return (
-    <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
-      <div className="absolute inset-0 bg-black/5"></div>
+    <div className={styles.page}>
       <DesktopNav />
-      <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <div className="w-full max-w-4xl">
-          <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <button onClick={() => router.push("/trial-test")} className="text-gray-700 hover:text-gray-900 mb-4">
-              <Icon name="arrowLeft" /> Сынақ тесттері
-            </button>
-
-            <div className="text-center mb-6">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{test.title}</h1>
-              {test.description && <p className="text-gray-600">{test.description}</p>}
+      <main className={`md:ml-64 ${styles.main}`}>
+        <div className={styles.workspace}>
+          <header className={styles.toolbar}>
+            <div className={styles.testInfo}>
+              <button
+                type="button"
+                onClick={() => router.push("/trial-test")}
+                className={styles.backButton}
+                aria-label="Сынақ тесттері"
+                title="Сынақ тесттері"
+              >
+                <Icon name="arrowLeft" />
+              </button>
+              <div className={styles.testTitle}>
+                <h1 title={test.title}>{test.title}</h1>
+                <p>Тест нәтижесі</p>
+              </div>
             </div>
-
-            {selectedResult ? (
-              <>
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Тест нәтижесі</h2>
+            {selectedResult && (
+              <div className={styles.toolbarActions}>
+                <span className={styles.scoreBadge} data-tone={tone}>
+                  <strong>{selectedResult.score} / {selectedResult.total}</strong>
+                  <span>{displayPercentage.toFixed(1)}%</span>
+                </span>
                 {orderedResults.length > 1 && (
-                  <label className="mb-4 block text-sm font-semibold text-gray-700">
-                    Тапсыру әрекеті
-                    <select
-                      aria-label="Тапсыру әрекеті"
-                      value={selectedResult.id}
-                      onChange={(event) => router.replace(`/trial-test/${testId}/results?attempt=${event.target.value}`)}
-                      className="mt-2 block w-full rounded-lg border border-gray-300 bg-white p-2"
-                    >
-                      {orderedResults.map((result, index) => (
-                        <option key={result.id} value={result.id}>
-                          {orderedResults.length - index}-әрекет — {result.score}/{result.total} ({result.percentage.toFixed(1)}%)
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <select
+                    aria-label="Тапсыру әрекеті"
+                    value={selectedResult.id}
+                    onChange={(event) => router.replace(`/trial-test/${testId}/results?attempt=${event.target.value}`)}
+                    className={styles.attemptSelect}
+                  >
+                    {orderedResults.map((result, index) => (
+                      <option key={result.id} value={result.id}>
+                        {orderedResults.length - index}-әрекет — {result.score}/{result.total} ({result.percentage.toFixed(1)}%)
+                      </option>
+                    ))}
+                  </select>
                 )}
+                <Link href={`/trial-test/${testId}`} className={`${styles.finishButton} ${styles.retakeLink}`}>
+                  Қайта өту
+                </Link>
+              </div>
+            )}
+            {selectedResult && (
+              <div
+                className={styles.progress}
+                role="progressbar"
+                aria-label="Нәтиже"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(displayPercentage)}
+              >
+                <div style={{ width: `${displayPercentage}%`, background: barColor }} />
+              </div>
+            )}
+          </header>
 
-                <div className="bg-white/70 rounded-2xl p-6 border border-white/40 mb-6">
-                  <div className="text-center mb-4">
-                    <div className="text-6xl mb-2">
-                      {displayPercentage >= 80 ? "A" : displayPercentage >= 60 ? "B" : "C"}
-                    </div>
-                    <div className="text-4xl font-bold text-gray-900 mb-2">
-                      {displayScore} / {selectedResult.total}
-                    </div>
-                    <div className="text-2xl font-bold text-gray-700">{displayPercentage.toFixed(1)}%</div>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
-                    <div
-                      className={`h-4 rounded-full transition-all ${
-                        displayPercentage >= 80
-                          ? "bg-green-500"
-                          : displayPercentage >= 60
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
-                      }`}
-                      style={{ width: `${displayPercentage}%` }}
-                    />
-                  </div>
-
-                  <div className="text-center text-sm text-gray-600">
-                    {new Date(selectedResult.completed_at).toLocaleString("kk-KZ", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      timeZone: "Asia/Almaty",
-                    })}
-                  </div>
-                </div>
-
-                <TrialTestDetailedReview
-                  tasks={test.tasks}
-                  answers={selectedResult.answers}
-                  title="Тапсырмалар бойынша талдау"
-                  accentColor="purple"
-                />
-
-                <div className="flex gap-4 mt-6">
-                  <Link
-                    href={`/trial-test/${testId}`}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-center"
-                  >
-                    Қайта өту
-                  </Link>
-                  <Link
-                    href="/trial-test"
-                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-center"
-                  >
-                    Барлық тесттер
-                  </Link>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-12 text-gray-600">
-                <div className="text-6xl mb-4">i</div>
+          {selectedResult ? (
+            <AttemptReview key={selectedResult.id} test={test} result={selectedResult} />
+          ) : (
+            <div className={styles.taskCard}>
+              <div className={styles.taskBody} style={{ textAlign: "center" }}>
                 <div>Нәтижелер табылмады</div>
                 <Link
                   href={`/trial-test/${testId}`}
-                  className="mt-4 inline-block bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                  className="mx-auto inline-block bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
                 >
                   Тестті бастау
                 </Link>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </main>
       <MobileNav currentPage="trial-test" />

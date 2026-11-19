@@ -1,30 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
-import { apiPath } from "@/lib/api";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { TrialTestDetails } from "@/types";
-import { getReviewTasks, type ReviewAnswer } from "@/lib/trial-test-review";
+import type { ReviewAnswer } from "@/lib/trial-test-review";
 
 type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
-type AccentColor = "purple" | "red" | "blue" | "neutral";
 
 export type TrialTestReviewAnswer = ReviewAnswer;
-
-type TrialTestDetailedReviewProps = {
-  tasks: TrialTestDetails["tasks"];
-  answers?: Record<number, TrialTestReviewAnswer> | null;
-  title?: string;
-  accentColor?: AccentColor;
-  emptyStateLabel?: string;
-  defaultTaskIndex?: number;
-  className?: string;
-};
 
 const parseSelectAnswerPair = (value?: string): [string, string] => {
   if (!value) return ["", ""];
@@ -37,16 +22,6 @@ const parseSelectAnswerPair = (value?: string): [string, string] => {
     // Ignore malformed historic payloads.
   }
   return ["", ""];
-};
-
-const getSelectedTaskButtonClass = (accentColor: AccentColor, isActive: boolean): string => {
-  if (!isActive) {
-    return "bg-white/90 border-gray-200 text-gray-800 hover:border-purple-300";
-  }
-  if (accentColor === "red") return "bg-red-600 border-red-700 text-white";
-  if (accentColor === "blue") return "bg-blue-600 border-blue-700 text-white";
-  if (accentColor === "neutral") return "bg-gray-700 border-gray-800 text-white";
-  return "bg-purple-600 border-purple-700 text-white";
 };
 
 const renderMathOrText = (value: string, emptyLabel = "Жауап берілмеді") => {
@@ -78,46 +53,14 @@ const renderSelectChoice = (
   );
 };
 
-export default function TrialTestDetailedReview({
-  tasks: currentTasks,
-  answers,
-  title,
-  accentColor = "purple",
-  emptyStateLabel = "Тапсырмалар табылмады",
-  defaultTaskIndex = 0,
-  className = "",
-}: TrialTestDetailedReviewProps) {
-  const tasks = useMemo(() => getReviewTasks(currentTasks, answers), [currentTasks, answers]);
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(defaultTaskIndex);
-
-  useEffect(() => {
-    setCurrentTaskIndex(defaultTaskIndex);
-  }, [defaultTaskIndex, tasks]);
-
-  useEffect(() => {
-    if (tasks.length === 0) {
-      setCurrentTaskIndex(0);
-      return;
-    }
-    setCurrentTaskIndex((prev) => Math.min(Math.max(prev, 0), tasks.length - 1));
-  }, [tasks.length]);
-
-  const safeAnswers = useMemo(() => answers || {}, [answers]);
-  const task = tasks[currentTaskIndex];
-
-  if (!tasks.length) {
-    return (
-      <div className={`rounded-xl border border-dashed border-gray-300 bg-white/50 p-4 text-sm text-gray-600 ${className}`}>
-        {emptyStateLabel}
-      </div>
-    );
-  }
-
-  if (!task) {
-    return null;
-  }
-
-  const result = safeAnswers[task.id];
+/** Read-only view of one answered task: the student's choice and, when wrong, the right answer. */
+export function ReviewAnswerBlock({
+  task,
+  result,
+}: {
+  task: TrialTestDetails["tasks"][number];
+  result?: TrialTestReviewAnswer | null;
+}) {
   const resultAnswer = result && typeof result === "object" ? result : undefined;
   const userAnswerRaw = resultAnswer?.answer ?? "";
   const userAnswer = userAnswerRaw || "Жауап берілмеді";
@@ -263,59 +206,5 @@ export default function TrialTestDetailedReview({
     );
   };
 
-  return (
-    <div className={`space-y-4 ${className}`}>
-      {title && <h2 className="text-xl font-bold text-gray-900">{title}</h2>}
-
-      <div className="flex flex-wrap gap-2 justify-center">
-        {tasks.map((_, index) => (
-          <button
-            key={`review-nav-${index}`}
-            type="button"
-            onClick={() => setCurrentTaskIndex(index)}
-            className={`w-11 h-11 rounded-xl font-bold text-lg border-2 transition-colors ${getSelectedTaskButtonClass(
-              accentColor,
-              currentTaskIndex === index
-            )}`}
-          >
-            {index + 1}
-          </button>
-        ))}
-      </div>
-
-      <div
-        key={`review-task-${task.id}`}
-        className={`bg-white/70 rounded-xl p-4 border-2 ${isCorrect ? "border-green-300" : "border-red-300"}`}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <div
-              className={`font-semibold text-gray-900 min-w-0 max-w-full break-words ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
-              style={getTaskTextScaleStyle(task.text_scale)}
-            >
-              Тапсырма {currentTaskIndex + 1}:{" "}
-              {task.text ? <MathRender inline latex={task.text} /> : "Мәтіні жоқ есеп"}
-            </div>
-          </div>
-          <div className={`text-2xl ${isCorrect ? "text-green-600" : "text-red-600"}`}>{isCorrect ? "OK" : "X"}</div>
-        </div>
-
-        {task.image_filename && (
-          <div className="mb-2">
-            <Image
-              src={apiPath(`images/${task.image_filename}`)}
-              alt="Task"
-              width={1280}
-              height={720}
-              unoptimized
-              className="max-h-64 w-auto max-w-full rounded-lg border border-gray-200"
-            />
-          </div>
-        )}
-
-        {renderAnswerBlock()}
-      </div>
-    </div>
-  );
+  return renderAnswerBlock();
 }
-
