@@ -142,6 +142,34 @@ class OpsMonitor:
             high_latency=high_latency,
         )
         database_status = "ok" if db_ok else "error"
+        if not db_ok:
+            db_rule = self.rules[0]
+            state = self._rule_state[db_rule.kind]
+            state["breach_streak"] += 1
+            state["recover_streak"] = 0
+            logger.error(
+                "ops_monitor_db_down",
+                extra={
+                    "extra_fields": {
+                        "event": "ops_monitor_db_down",
+                        "kind": db_rule.kind,
+                        "severity": db_rule.severity,
+                        "breach_streak": state["breach_streak"],
+                        "requests_5m": requests_5m,
+                        "errors_5m": errors_5m,
+                    }
+                },
+            )
+            return {
+                "service_status": service_status,
+                "database_status": database_status,
+                "requests_5m": requests_5m,
+                "errors_5m": errors_5m,
+                "error_rate_5m": error_rate_5m,
+                "p95_ms_5m": p95_ms_5m,
+                "avg_ms_5m": avg_ms_5m,
+            }
+
         await self.db.ops.add_health_sample(
             service_status=service_status,
             database_status=database_status,

@@ -1,7 +1,25 @@
 """
 Admin ops routes.
 """
-from .common import *  # noqa: F401,F403
+from .common import (
+    Database,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Limiter,
+    OPS_INCIDENT_SEVERITIES,
+    OPS_INCIDENT_STATUSES,
+    OPS_TIMESERIES_DEFAULT_STEP,
+    OPS_TIMESERIES_RANGES,
+    OPS_TIMESERIES_STEPS,
+    Optional,
+    Query,
+    datetime,
+    get_db,
+    metrics,
+    require_admin_review_manage,
+    timezone,
+)
 
 def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
     # Ops / Production health
@@ -22,7 +40,7 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
                 "error_rate_5m": float(window.get("error_rate", 0.0) or 0.0),
                 "p95_ms_5m": float(window.get("p95_ms", 0.0) or 0.0),
                 "avg_ms_5m": float(window.get("avg_ms", 0.0) or 0.0),
-                "collected_at": datetime.utcnow().isoformat(),
+                "collected_at": datetime.now(timezone.utc).isoformat(),
             }
 
         open_incidents = await db.ops.count_open_incidents()
@@ -36,7 +54,7 @@ def register_ops_routes(app: FastAPI, db: Database, limiter: Limiter):
             "p95_ms_5m": float(sample.get("p95_ms_5m") or 0.0),
             "avg_ms_5m": float(sample.get("avg_ms_5m") or 0.0),
             "open_incidents": int(open_incidents),
-            "updated_at": sample.get("collected_at") or datetime.utcnow().isoformat(),
+            "updated_at": sample.get("collected_at") or datetime.now(timezone.utc).isoformat(),
         }
 
     @app.get("/api/admin/ops/health/timeseries")

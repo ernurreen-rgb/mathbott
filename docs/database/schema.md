@@ -1,6 +1,6 @@
 # Database Schema & Migration Reference
 
-This document describes the complete database schema of QazMath (`CursorMathbot`, last reviewed 2026-11-15), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0009`) and the storage adapter in [`bot/storage.py`](../../bot/storage.py).
+This document describes the complete database schema of QazMath (`CursorMathbot`), verified directly against the PostgreSQL migrations in [`bot/migrations/postgres/`](../../bot/migrations/postgres/) (`0001` through `0015`) and the storage adapter in [`bot/storage.py`](../../bot/storage.py).
 
 ---
 
@@ -12,7 +12,7 @@ PostgreSQL is the only supported database: Neon in production, PostgreSQL 17 loc
 |---|---|
 | **Driver** | `psycopg[binary]` (`>=3.2,<4`) via `PostgresConnection` in [`bot/storage.py`](../../bot/storage.py), run in worker threads |
 | **Configuration** | `DATABASE_URL` (required, `postgresql://...`); `DATABASE_MIGRATION_URL` (optional direct URL for migrations) |
-| **Migration Tool** | Checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0010`); applied files must never change |
+| **Migration Tool** | Checksum-verified SQL runner ([`bot/migrations/postgres_runner.py`](../../bot/migrations/postgres_runner.py), `0001`–`0015`); applied files must never change |
 | **Migration Tracking Table** | `mathbot_schema_migrations` (stores `version`, `checksum`, `applied_at`) |
 | **Query Placeholders** | Repositories write `?`; `postgres_sql()` rewrites them to `%s` outside quotes/comments. All other SQL is PostgreSQL as written (`ON CONFLICT`, `jsonb_each`, `RETURNING`). |
 | **Generated IDs** | `INSERT` into a table with an `id` column gets `RETURNING id` appended unless it has its own `RETURNING`; the value is `cursor.lastrowid` |
@@ -67,7 +67,7 @@ erDiagram
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
-| `users` | `id` (Identity) | `telegram_id BIGINT UNIQUE`, `email TEXT UNIQUE`, `nickname TEXT`, `streak INTEGER DEFAULT 0`, `last_streak_date TEXT`, `is_admin INTEGER DEFAULT 0`, `admin_role TEXT` | Core user identity, daily streak state, and admin RBAC role (`viewer`, `content_editor`, `reviewer`, `super_admin`). Note: `total_points` was dropped in PG `0003`. |
+| `users` | `id` (Identity) | `telegram_id BIGINT UNIQUE`, `email TEXT UNIQUE`, `nickname TEXT`, `streak INTEGER DEFAULT 0`, `last_streak_date TEXT`, `is_admin INTEGER DEFAULT 0`, `admin_role TEXT`, `last_seen_path TEXT` | Core user identity, daily streak state (Asia/Almaty calendar), and admin RBAC role (`content_editor`, `reviewer`, `super_admin`). Note: `total_points` was dropped in PG `0003`, `last_seen_path` added in PG `0013`. |
 | `user_achievements` | `id` (Identity) | `user_id INTEGER FK -> users.id`, `achievement_id TEXT`, `unlocked_at TEXT` | Unlocked achievement badges per user (`UNIQUE(user_id, achievement_id)`). |
 | `user_progress` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `task_id INTEGER FK -> tasks.id ON DELETE CASCADE`, `status TEXT`, `completed_at TEXT` | Tracks per-user completion status (`solved`) for curriculum tasks (`UNIQUE(user_id, task_id)`). |
 | `user_task_completions` | `id` (Identity) | `user_id INTEGER FK -> users.id ON DELETE CASCADE`, `completion_key TEXT`, `bank_task_id INTEGER FK -> bank_tasks.id ON DELETE SET NULL`, `source TEXT`, `completed_at TEXT` | Renamed from `user_task_rewards` in PG `0003` (`points_awarded` and `difficulty` dropped). Deduplicates task completions across curriculum and bank placements (`UNIQUE(user_id, completion_key)`). |
@@ -93,7 +93,7 @@ erDiagram
 | `sections` | `id` (Identity) | `module_id INTEGER FK -> modules.id ON DELETE CASCADE`, `name TEXT`, `sort_order INTEGER`, `description TEXT`, `guide_text TEXT` | Sections within a module. |
 | `lessons` | `id` (Identity) | `section_id INTEGER FK -> sections.id ON DELETE CASCADE`, `lesson_number INTEGER`, `title TEXT`, `sort_order INTEGER` | Numbered lessons inside a section. |
 | `mini_lessons` | `id` (Identity) | `lesson_id INTEGER FK -> lessons.id ON DELETE CASCADE`, `mini_index INTEGER` (`1`–`4`), `title TEXT`, `sort_order INTEGER` | Each lesson contains 4 mini-lessons (`UNIQUE(lesson_id, mini_index)`). |
-| `tasks` | `id` (Identity) | `section_id FK -> sections.id`, `mini_lesson_id FK -> mini_lessons.id ON DELETE CASCADE`, `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE`, `text TEXT`, `answer TEXT`, `question_type TEXT`, `options TEXT`, `subquestions TEXT`, `image_filename TEXT`, `solution_filename TEXT`, `difficulty INTEGER`, `sort_order INTEGER`, `deleted_at TEXT` | Curriculum task placements. When `bank_task_id` is set, content is synchronized with the parent `bank_tasks` record. |
+| `tasks` | `id` (Identity) | `section_id FK -> sections.id`, `mini_lesson_id FK -> mini_lessons.id ON DELETE CASCADE`, `bank_task_id FK -> bank_tasks.id ON DELETE CASCADE`, `task_type TEXT`, `sort_order INTEGER`, `created_by FK -> users.id`, `deleted_at TEXT` | Curriculum task placements referencing `bank_tasks` (all task text, answers, options, and media live in `bank_tasks`). |
 
 ### 3.4 Trial Tests (Folders & Templates)
 
@@ -145,4 +145,8 @@ erDiagram
 | `0008` | [`0008_module_review.sql`](../../bot/migrations/postgres/0008_module_review.sql) | Creates `bank_task_twins` and `module_review_attempts`, and adds `idx_solutions_user_task_id` for first-attempt lookups. |
 | `0009` | [`0009_ai_twin_checks.sql`](../../bot/migrations/postgres/0009_ai_twin_checks.sql) | Adds `ai_model`, `ai_check_status`, `ai_check_answer`, `ai_checked_version` and `ai_checked_at` to `bank_task_twins`. |
 | `0010` | [`0010_remove_unused_tables.sql`](../../bot/migrations/postgres/0010_remove_unused_tables.sql) | Drops the tables of removed features: `trial_test_coop_*`, `friendships`, `friend_requests`, `friend_invites`, `blocks`, `user_onboarding`, and the unused `user_progress_summary`. |
+| `0011` | [`0011_push_subscriptions.sql`](../../bot/migrations/postgres/0011_push_subscriptions.sql) | Creates `push_subscriptions` for daily Web Push streak reminders. |
 | `0012` | [`0012_quiz_catalog.sql`](../../bot/migrations/postgres/0012_quiz_catalog.sql) | Adds the catalog filters `quizzes.grade` and `quizzes.topic` (grade backfilled from titles such as "4-сынып: ...") and the index `idx_quiz_sessions_quiz` used to count games per quiz. |
+| `0013` | [`0013_user_page_visits.sql`](../../bot/migrations/postgres/0013_user_page_visits.sql) | Adds `users.last_seen_path` and creates `user_page_visits` for lightweight student activity diagnostics. |
+| `0014` | [`0014_reminder_prompt_events.sql`](../../bot/migrations/postgres/0014_reminder_prompt_events.sql) | Creates `reminder_prompt_events` to track streak-reminder prompt impressions and user actions. |
+| `0015` | [`0015_performance_and_integrity.sql`](../../bot/migrations/postgres/0015_performance_and_integrity.sql) | Adds 11 performance indexes on hot analytics/quiz/trial-test tables and replaces `ops_incidents_fingerprint_status_key` with partial unique index `uq_ops_incidents_open_fingerprint` (`WHERE status = 'open'`). |

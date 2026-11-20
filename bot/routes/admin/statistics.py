@@ -16,7 +16,15 @@ from repositories.statistics_repository import (
     build_window,
 )
 
-from .common import *  # noqa: F401,F403
+from .common import (
+    Database,
+    Depends,
+    FastAPI,
+    Limiter,
+    Query,
+    get_db,
+    require_admin_review_manage,
+)
 
 
 def statistics_window(

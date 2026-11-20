@@ -39,14 +39,30 @@ export default function QuizHistoryPage() {
           finished: !!item.is_finished || item.session_status === "finished", pin: item.pin_code,
         });
       }
+      const pendingPlayers: QuizPlayerCredentials[] = [];
       for (const player of listQuizPlayers()) {
         if (player.accountEmail && player.accountEmail.toLowerCase() !== email) continue;
         const key = `${player.sessionId}:${player.participantId}`;
         const saved = merged.get(key);
         if (saved) { saved.player = player; continue; }
-        const response = await getQuizProgress(player.sessionId, { participantToken: player.token });
-        if (!response.data) { issue = true; continue; }
+        pendingPlayers.push(player);
+      }
+      const fetched = await Promise.all(
+        pendingPlayers.map(async (player) => ({
+          player,
+          response: await getQuizProgress(player.sessionId, { participantToken: player.token }),
+        }))
+      );
+      for (const { player, response } of fetched) {
+        if (!response.data) {
+          // Ignore 404/401 for deleted or expired sessions instead of showing a permanent error banner.
+          if (response.status !== 404 && response.status !== 401 && response.status !== 403) {
+            issue = true;
+          }
+          continue;
+        }
         const progress = response.data;
+        const key = `${player.sessionId}:${player.participantId}`;
         merged.set(key, { sessionId: player.sessionId, participantId: player.participantId,
           title: progress.session?.quiz_title || `Квиз #${player.sessionId}`,
           score: progress.participant.score, correct: progress.participant.correct_count, total: progress.question_count,

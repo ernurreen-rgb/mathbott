@@ -2,15 +2,23 @@
 Базовые роуты приложения (root, health check)
 """
 import logging
-from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import FileResponse
 from slowapi import Limiter
 
-from utils.file_storage import get_images_dir, read_object_image, uses_object_storage
+from utils.file_storage import (
+    get_images_dir,
+    normalize_stored_image_filename,
+    read_object_image,
+    uses_object_storage,
+)
 
 logger = logging.getLogger(__name__)
+_IMAGE_RESPONSE_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 def setup_core_routes(app: FastAPI, db, limiter: Limiter):
@@ -27,7 +35,7 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
         """Проверка здоровья сервиса для мониторинга"""
         try:
             # Проверить подключение к БД
-            test_user = await db.users.get_user_by_email("health-check@test.com")
+            await db.users.get_user_by_email("health-check@test.com")
             db_status = "ok"
         except Exception as e:
             logger.error(f"Health check DB error: {e}")
@@ -51,14 +59,16 @@ def setup_core_routes(app: FastAPI, db, limiter: Limiter):
     @app.get("/api/images/{filename}")
     async def get_image(filename: str):
         """Serve uploaded task images"""
+        safe_filename = normalize_stored_image_filename(filename)
+        if not safe_filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
         if uses_object_storage():
-            content, content_type = await read_object_image(filename)
-            return Response(content=content, media_type=content_type,
-                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
+            content, content_type = await read_object_image(safe_filename)
+            return Response(content=content, media_type=content_type, headers=_IMAGE_RESPONSE_HEADERS)
         images_dir = get_images_dir().resolve()
-        file_path = (images_dir / filename).resolve()
+        file_path = (images_dir / safe_filename).resolve()
         if images_dir not in file_path.parents:
             raise HTTPException(status_code=400, detail="Invalid filename")
-        if not file_path.exists():
+        if not file_path.is_file():
             raise HTTPException(status_code=404, detail="Image not found")
-        return FileResponse(file_path)
+        return FileResponse(file_path, headers=_IMAGE_RESPONSE_HEADERS)

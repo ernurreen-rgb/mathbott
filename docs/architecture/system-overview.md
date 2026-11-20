@@ -91,19 +91,19 @@ Configured via [`bot/Dockerfile`](../../bot/Dockerfile), [`web/Dockerfile`](../.
      - `authenticated`: Requires an authenticated NextAuth session (trial test submissions/drafts, reports, user profile updates, quiz hosting/management).
      - `guest_capable`: Allows either an authenticated session or a guest (`X-Quiz-Participant-Token` or public PIN lookup/join on `/api/quiz-sessions/*`, `/api/tasks/{id}/questions/check`).
      - `public`: Allows unauthenticated read access (`/api/health`, `/api/images/*`, `/api/modules/*`, `/api/lessons/*`, `/api/trial-tests`, `/api/quizzes`, `/api/user/public/*`).
-   - Canonicalizes actor identity: for non-admin authenticated routes, rewrites `email`, `user_email`, `sender_email`, or `blocker_email` in query parameters, JSON payloads, or `FormData` to the session user's email.
+   - Canonicalizes actor identity: for non-admin authenticated routes, rewrites `email` in query parameters, JSON payloads, or `FormData` to the session user's email.
    - Signs the outbound request to FastAPI using `INTERNAL_PROXY_SHARED_SECRET` and attaches:
-     - `X-Proxy-Request-Ts` (Unix timestamp, validated within a 300-second window)
+     - `X-Proxy-Request-Ts` (Unix timestamp, validated within a 60-second window)
      - `X-Proxy-Request-Nonce` (UUIDv4, tracked in a bounded in-memory replay cache)
      - `X-Proxy-Body-Sha256` (SHA-256 digest of the normalized request body)
      - `X-Proxy-User-Email` (when authenticated)
-     - `X-Proxy-Request-Signature-V2` (HMAC-SHA256 over method, path, raw query bytes, email, timestamp, nonce, and body SHA-256)
-     - `X-Proxy-Signature` (legacy V1 email signature retained for compatibility)
+     - `X-Proxy-Request-Signature-V2` (HMAC-SHA256 over method, path, raw query bytes, email, timestamp, nonce, and body SHA-256; mandatory on all signed requests in production)
+     - `X-Proxy-Request-Signature` (legacy V1 signature accepted only in non-production environments)
 3. **Quiz Entry Network Identity (`web/lib/quiz-entry-identity.ts` & `bot/utils/quiz_entry_auth.py`):**
    - For `GET /api/quiz-sessions/pin/{pin}` and `POST /api/quiz-sessions/join`, the proxy derives an anonymized HMAC network key (`X-Proxy-Quiz-Entry-Key`) and signature (`X-Proxy-Quiz-Entry-Signature`) from the platform's trusted client IP header (`x-vercel-forwarded-for` on Vercel, or `TRUSTED_CLIENT_IP_HEADER` when self-hosted).
    - IPv4 addresses map to `/32`, IPv6 addresses normalize to `/64`, and missing/untrusted headers fall back to a shared `"shared-proxy"` bucket.
 4. **FastAPI Verification (`bot/middleware/trusted_proxy_identity.py` & `bot/utils/internal_proxy_auth.py`):**
-   - `TrustedProxyIdentityMiddleware` verifies the V2 signature, timestamp window, body SHA-256, and nonce uniqueness before setting `request.state.verified_user_email` and `request.state.proxy_authenticated`.
+   - `TrustedProxyIdentityMiddleware` verifies the V2 signature, timestamp window, body SHA-256, and nonce uniqueness before setting `request.state.trusted_proxy_email` and `request.state.trusted_proxy_verified`.
    - Any request carrying `X-Proxy-*` headers with an invalid signature is rejected with `401 Invalid internal proxy signature`.
 
 ### 3.2 Role-Based Access Control (RBAC)
@@ -115,7 +115,7 @@ Admin authorization is enforced in `bot/dependencies.py` and `bot/repositories/u
 | `content_editor` | `content_manage` | Curriculum CMS (`/admin/cms`), Task Bank CRUD/import/export (`/admin/bank`), and Trial Tests & Folders (`/admin/trial-tests`). |
 | `reviewer` | `review_manage` | Task reports moderation (`/admin/reports`), Bank quality & audit logs (`/admin/bank/quality`, `/admin/bank/audit`), and platform statistics (`/admin/statistics`, `/api/export/admin/stats`). |
 
-> **Bootstrap Note:** If `ADMIN_EMAIL` is set in the backend environment, a user whose email matches `ADMIN_EMAIL` is automatically promoted to `super_admin` (`is_admin = 1`, `admin_role = 'super_admin'`). Legacy `is_admin = 1` rows with `admin_role IS NULL` also resolve to `super_admin` in `dependencies.resolve_admin_role`.
+> **Bootstrap Note:** If `ADMIN_EMAIL` is set in the backend environment, a user whose email matches `ADMIN_EMAIL` is automatically promoted to `super_admin` (`is_admin = 1`, `admin_role = 'super_admin'`). Legacy `is_admin = 1` rows with `admin_role IS NULL` fail closed (403) until an explicit `admin_role` is assigned.
 
 ---
 

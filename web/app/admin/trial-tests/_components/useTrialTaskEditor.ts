@@ -73,9 +73,14 @@ export function useTrialTaskEditor(selectedTestId: number, slotCount: number) {
   useEffect(() => { setBankOffset(0); }, [bankSearch, bankDifficulty]);
   useEffect(() => {
     const requests = version.current;
-    void fetchBank();
-    return () => { requests.bank += 1; };
-  }, [fetchBank]);
+    const timer = setTimeout(() => {
+      void fetchBank();
+    }, bankSearch.trim() ? 250 : 0);
+    return () => {
+      clearTimeout(timer);
+      requests.bank += 1;
+    };
+  }, [fetchBank, bankSearch]);
 
   const assignBankTask = async (bankTaskId: number) => {
     if (!email || !selectedTestId || !activeSlot) return;

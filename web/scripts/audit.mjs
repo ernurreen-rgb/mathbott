@@ -10,6 +10,13 @@ import { fileURLToPath } from "node:url";
 
 const SEVERITIES = ["info", "low", "moderate", "high", "critical"];
 const FAIL_FROM = SEVERITIES.indexOf("moderate");
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidIsoDate(value) {
+  if (typeof value !== "string" || !ISO_DATE_RE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const allowlistPath = resolve(process.argv[2] || resolve(root, "audit-allowlist.json"));
@@ -50,12 +57,14 @@ for (const vulnerability of Object.values(report.vulnerabilities || {})) {
 const allowed = new Map(allowlist.map((item) => [item.id, item]));
 const failing = [];
 for (const advisory of advisories.values()) {
-  if (SEVERITIES.indexOf(advisory.severity) < FAIL_FROM) continue;
+  const severityIndex = SEVERITIES.indexOf(advisory.severity);
+  // Fail closed on unknown severity values instead of silently skipping them.
+  if (severityIndex !== -1 && severityIndex < FAIL_FROM) continue;
   const exception = allowed.get(advisory.id);
   if (!exception) {
     failing.push(advisory);
-  } else if (!exception.until || exception.until < today) {
-    failing.push({ ...advisory, expired: exception.until || "(no date)" });
+  } else if (!isValidIsoDate(exception.until) || exception.until < today) {
+    failing.push({ ...advisory, expired: exception.until || "(no/invalid date)" });
   } else {
     console.log(`allowed until ${exception.until}: ${advisory.id} ${advisory.title} (${[...advisory.packages].join(", ")})`);
   }

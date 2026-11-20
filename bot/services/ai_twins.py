@@ -11,6 +11,7 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import aiohttp
 from pydantic import BaseModel, Field, ValidationError
@@ -20,6 +21,8 @@ from settings import get_settings
 logger = logging.getLogger(__name__)
 
 TWIN_DRAFTS_PER_REQUEST = 3
+MAX_AI_PROVIDER_RESPONSE_BYTES = 2 * 1024 * 1024
+_LOCAL_AI_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 _ANSWER_FORMATS = {
     "input": 'the final value only, written like the source answer (LaTeX allowed, e.g. "35" or "\\frac{3}{4}")',
@@ -83,9 +86,26 @@ class _Solved(BaseModel):
     answer: str = Field(min_length=1, max_length=1000)
 
 
+def _validate_provider_base_url(base_url: str, *, is_production: bool) -> str:
+    cleaned = (base_url or "").strip().rstrip("/")
+    try:
+        parts = urlsplit(cleaned)
+        _ = parts.port
+    except ValueError as exc:
+        raise AiTwinError("not_configured", "AI_TWIN_BASE_URL пішімі жарамсыз.") from exc
+    host = (parts.hostname or "").lower()
+    if not host or parts.username is not None or parts.password is not None:
+        raise AiTwinError("not_configured", "AI_TWIN_BASE_URL пішімі жарамсыз.")
+    if parts.scheme == "https":
+        return cleaned
+    if parts.scheme == "http" and (not is_production or host in _LOCAL_AI_HOSTS):
+        return cleaned
+    raise AiTwinError("not_configured", "AI_TWIN_BASE_URL HTTPS хаттамасын қолдануы керек.")
+
+
 def _parse_json_object(content: str) -> Any:
-    # Some providers wrap JSON mode output in a Markdown fence.
-    cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", content or "")
+    # Some providers wrap JSON mode output in a Markdown fence (e.g. ```json or ```JSON).
+    cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", content or "", flags=re.IGNORECASE)
     try:
         return json.loads(cleaned)
     except ValueError as exc:
@@ -96,7 +116,8 @@ async def _chat(system: str, user: str) -> str:
     settings = get_settings()
     if not settings.ai_twins_enabled:
         raise AiTwinError("not_configured", "ЖИ бапталмаған: AI_TWIN_BASE_URL, AI_TWIN_API_KEY және AI_TWIN_MODEL қажет.")
-    url = f"{settings.ai_twin_base_url.rstrip('/')}/chat/completions"
+    base_url = _validate_provider_base_url(settings.ai_twin_base_url, is_production=settings.is_production)
+    url = f"{base_url}/chat/completions"
     body = {
         "model": settings.ai_twin_model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -106,8 +127,13 @@ async def _chat(system: str, user: str) -> str:
     try:
         timeout = aiohttp.ClientTimeout(total=settings.ai_twin_timeout_seconds)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=body, headers=headers) as response:
-                text = await response.text()
+            async with session.post(url, json=body, headers=headers, allow_redirects=False) as response:
+                if 300 <= response.status < 400:
+                    raise AiTwinError("provider", "ЖИ провайдері бағыттау (redirect) қайтарды.")
+                raw_bytes = await response.content.read(MAX_AI_PROVIDER_RESPONSE_BYTES + 1)
+                if len(raw_bytes) > MAX_AI_PROVIDER_RESPONSE_BYTES:
+                    raise AiTwinError("invalid_output", "ЖИ провайдерінің жауабы тым үлкен.")
+                text = raw_bytes.decode("utf-8", errors="replace")
                 if response.status >= 400:
                     logger.warning("ai_twin_provider_error status=%s body=%s", response.status, text[:300])
                     raise AiTwinError("provider", f"ЖИ провайдері қате қайтарды (HTTP {response.status}).")

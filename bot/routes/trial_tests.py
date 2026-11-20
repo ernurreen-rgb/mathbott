@@ -5,8 +5,9 @@ import asyncio
 import json
 import logging
 import re
+import weakref
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Body, Depends
+from fastapi import FastAPI, HTTPException, Query, Body, Depends, Request
 from slowapi import Limiter
 
 from dependencies import get_db
@@ -14,14 +15,14 @@ from database import Database
 from utils.cache import cache
 from utils.public_payload import public_options, public_review_answers, public_subquestions, task_review_snapshot
 from utils.learning_progress import build_completion_identity
-from utils.validation import get_mcq_answer_count, grade_task_answer, is_task_answer_correct, normalize_answer_mode
+from utils.validation import get_mcq_answer_count, grade_task_answer, normalize_answer_mode
 
 logger = logging.getLogger(__name__)
-_trial_test_write_locks: dict[tuple[int, int], asyncio.Lock] = {}
+_trial_test_write_locks: "weakref.WeakValueDictionary[tuple[int, int], asyncio.Lock]" = weakref.WeakValueDictionary()
 
 
 def _get_trial_test_write_lock(user_id: int, test_id: int) -> asyncio.Lock:
-    """Serialize writes per user/test pair within this process."""
+    """Serialize writes per user/test pair within this process without leaking memory."""
     key = (int(user_id), int(test_id))
     lock = _trial_test_write_locks.get(key)
     if lock is None:
@@ -182,16 +183,18 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=500, detail="Internal server error")
     
     @app.post("/api/trial-tests/{test_id}/submit")
+    @limiter.limit("20/minute")
     async def submit_trial_test(
+        request: Request,
         test_id: int,
-        request: dict = Body(...),
+        payload: dict = Body(...),
         db: Database = Depends(get_db)
     ):
         """Submit trial test answers and get results"""
         try:
-            email = request.get("email")
-            answers = request.get("answers", {})
-            attempt_id = request.get("attempt_id")
+            email = payload.get("email")
+            answers = payload.get("answers", {})
+            attempt_id = payload.get("attempt_id")
             if attempt_id is not None and (
                 not isinstance(attempt_id, str)
                 or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", attempt_id) is None
@@ -328,16 +331,18 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.put("/api/trial-tests/{test_id}/draft")
+    @limiter.limit("60/minute")
     async def save_trial_test_draft(
+        request: Request,
         test_id: int,
-        request: dict = Body(...),
+        payload: dict = Body(...),
         db: Database = Depends(get_db)
     ):
         """Save draft (answers + current_task_index). Called on change with debounce."""
         try:
-            email = request.get("email")
-            answers = request.get("answers", {})
-            current_task_index = request.get("current_task_index", 0)
+            email = payload.get("email")
+            answers = payload.get("answers", {})
+            current_task_index = payload.get("current_task_index", 0)
             logger.info(f"[draft] PUT draft test_id={test_id} email={email} answers_keys={list(answers.keys()) if answers else []} current_task_index={current_task_index}")
             if not email:
                 logger.warning("[draft] PUT draft missing email")

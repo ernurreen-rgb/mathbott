@@ -21,7 +21,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 
 ### Reference
 - **[API Overview](docs/api/api-overview.md)** — Complete catalog of FastAPI HTTP/WebSocket endpoints and Next.js API routes, proxy authentication contract, rate limits, and RBAC requirements.
-- **[Database Schema](docs/database/schema.md)** — Complete reference of all 26 application tables, foreign-key relationships, the PostgreSQL access layer (`bot/storage.py`), and migration history (`0001`–`0009`).
+- **[Database Schema](docs/database/schema.md)** — Complete reference of application tables, foreign-key relationships, the PostgreSQL access layer (`bot/storage.py`), and migration history (`0001`–`0015`).
 - **[Implemented Features](docs/features/implemented-features.md)** — Verified inventory of active production and administrative features in the current codebase.
 - **[Planned, Flagged & Retired Features](docs/features/planned-features.md)** — Feature-flagged UI, logging stubs, deferred roadmap items, and retired legacy tables/features.
 
@@ -31,7 +31,7 @@ All project documentation is organized under [`docs/`](docs/) and [`deploy/`](de
 
 | Layer | Technology | Version / Runtime |
 | :--- | :--- | :--- |
-| **Frontend** | Next.js (App Router), React, TypeScript, Tailwind CSS | Node.js `24.x` (`.nvmrc`), Next.js `15.5.28`, React `18.3.1`, TypeScript `5.6.3` |
+| **Frontend** | Next.js (App Router), React, TypeScript, Tailwind CSS | Node.js `24.x` (`.nvmrc`), Next.js `15.5.29`, React `18.3.1`, TypeScript `5.6.3` |
 | **Math Rendering & Input** | MathLive (`<math-field>`, `<math-span>`, `<math-div>`) | `mathlive` `^0.110.0` |
 | **Worksheet Export** | Client-side raster-to-PDF pipeline | `html-to-image` `1.11.13`, `pdf-lib` `1.17.1` |
 | **Authentication** | NextAuth.js (Google OAuth + encrypted JWT) + HMAC Proxy | `next-auth` `^4.24.15` |
@@ -62,7 +62,7 @@ Copy-Item .env.example .env.local
 python main.py
 ```
 
-The backend listens on `http://localhost:8000`, applies the PostgreSQL migrations (`bot/migrations/postgres/0001`–`0010`) and initial seeds on startup, and refuses to start without a PostgreSQL `DATABASE_URL`.
+The backend listens on `http://localhost:8000`, applies the PostgreSQL migrations (`bot/migrations/postgres/0001`–`0015`) and initial seeds on startup, and refuses to start without a PostgreSQL `DATABASE_URL`.
 
 ### 2. Frontend (`web/`)
 

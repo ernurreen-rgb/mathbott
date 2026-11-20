@@ -146,7 +146,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             test = await db.trial_tests.update_trial_test(
                 test_id=test_id,
                 title=title,
-                description=description if description and description.strip() else None,
+                description=description.strip() if description is not None else None,
                 sort_order=sort_order,
                 expected_tasks_count=expected_tasks_count,
                 category=normalized_category,
@@ -175,6 +175,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             await db.trial_tests.delete_trial_test(test_id)
             return {"success": True}
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error deleting trial test: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
@@ -195,26 +197,23 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         tasks = await db.trial_tests.get_trial_test_tasks(test_id)
         serialized_tasks = [_serialize_bank_placement_task(task) for task in tasks]
 
-        # Enrich topics for linked bank tasks.
-        bank_ids = [
+        # Batch-enrich topics and difficulty for linked bank tasks (avoids N+1 queries).
+        unique_bank_ids = sorted({
             int(t["bank_task_id"])
             for t in serialized_tasks
             if isinstance(t.get("bank_task_id"), int) and int(t["bank_task_id"]) > 0
-        ]
-        unique_bank_ids = sorted(set(bank_ids))
-        topics_map: dict[int, List[str]] = {}
-        for bank_id in unique_bank_ids:
-            bank_task = await db.bank_tasks.get_task_by_id(bank_id, include_deleted=True)
-            if not bank_task:
+        })
+        meta_by_id = await db.bank_tasks.get_tasks_metadata_by_ids(unique_bank_ids)
+        for item in serialized_tasks:
+            bank_id = item.get("bank_task_id")
+            meta = meta_by_id.get(bank_id) if isinstance(bank_id, int) else None
+            if not meta:
                 continue
-            topics_map[bank_id] = bank_task.get("topics") if isinstance(bank_task.get("topics"), list) else []
-            for item in serialized_tasks:
-                if item.get("bank_task_id") == bank_id:
-                    item["bank_topics"] = topics_map[bank_id]
-                    item["bank_difficulty"] = bank_task.get("difficulty") or item.get("bank_difficulty")
-                    if isinstance(item.get("bank_task"), dict):
-                        item["bank_task"]["difficulty"] = item["bank_difficulty"]
-                        item["bank_task"]["topics"] = item["bank_topics"]
+            item["bank_topics"] = meta.get("topics") or []
+            item["bank_difficulty"] = meta.get("difficulty") or item.get("bank_difficulty")
+            if isinstance(item.get("bank_task"), dict):
+                item["bank_task"]["difficulty"] = item["bank_difficulty"]
+                item["bank_task"]["topics"] = item["bank_topics"]
 
         return {
             "tasks": serialized_tasks,

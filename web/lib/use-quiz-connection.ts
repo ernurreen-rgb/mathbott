@@ -61,7 +61,19 @@ export function useQuizConnection(sessionId: number, auth: QuizAuth, refresh: ()
     };
     document.addEventListener("visibilitychange", visibilityChanged);
     void connect();
-    const polling = setInterval(() => { if (visible()) refreshRef.current(); }, 4000);
+    let openPollTicks = 0;
+    const polling = setInterval(() => {
+      if (!visible()) return;
+      if (socket?.readyState === WebSocket.OPEN) {
+        // Lightweight reconciliation every 20s while live WS is connected.
+        openPollTicks += 1;
+        if (openPollTicks < 5) return;
+        openPollTicks = 0;
+      } else {
+        openPollTicks = 0;
+      }
+      refreshRef.current();
+    }, 4000);
     const ping = setInterval(() => {
       if (visible() && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }));
     }, 20000);

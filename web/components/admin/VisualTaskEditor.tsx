@@ -772,10 +772,17 @@ export default function VisualTaskEditor({
               setLegacyOptionCount(null); setValidationError(null); setEditingField(null);
               updateTempTask({
                 question_type: questionType,
-                ...(isMcqQuestionType(questionType) ? {
-                  options: getMcqEditorLabels(questionType).map((label) => ({ label, text: tempTaskData.options?.find((option) => option.label === label)?.text || "" })),
-                  answer: serializeMcqAnswerLabels(parseMcqAnswerLabels(tempTaskData.answer).filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType))),
-                } : {}),
+                ...(isMcqQuestionType(questionType) ? (() => {
+                  const allowedLabels = getMcqEditorLabels(questionType);
+                  const keptAnswers = parseMcqAnswerLabels(tempTaskData.answer)
+                    .filter((label) => allowedLabels.includes(label))
+                    .slice(0, getMcqCorrectOptionLimit(questionType));
+                  return {
+                    options: allowedLabels.map((label) => ({ label, text: tempTaskData.options?.find((option) => option.label === label)?.text || "" })),
+                    answer: serializeMcqAnswerLabels(keptAnswers.length > 0 ? keptAnswers : [allowedLabels[0]]),
+                  };
+                })() : {}),
+                ...(questionType !== "select" ? { subquestions: undefined } : {}),
                 answer_mode: getTaskAnswerMode({ question_type: questionType }),
               });
             }}

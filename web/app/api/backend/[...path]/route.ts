@@ -111,13 +111,19 @@ function tryGetOrigin(value: string | null): string | null {
 }
 
 function isTrustedOrigin(request: NextRequest): boolean {
-  const appOrigin = tryGetOrigin(process.env.NEXTAUTH_URL || request.nextUrl.origin);
+  const configuredOrigin = tryGetOrigin(process.env.NEXTAUTH_URL || null);
+  const appOrigin = IS_PRODUCTION
+    ? configuredOrigin
+    : configuredOrigin || tryGetOrigin(request.nextUrl.origin);
   if (!appOrigin) return false;
-  const requestOrigin =
-    tryGetOrigin(request.headers.get("origin")) ||
-    tryGetOrigin(request.headers.get("referer"));
-  if (!requestOrigin) return false;
-  return requestOrigin === appOrigin;
+  // If Origin header is present (including "null"), never fall back to Referer.
+  const rawOrigin = request.headers.get("origin");
+  if (rawOrigin !== null) {
+    const parsedOrigin = tryGetOrigin(rawOrigin);
+    return parsedOrigin !== null && parsedOrigin === appOrigin;
+  }
+  const refererOrigin = tryGetOrigin(request.headers.get("referer"));
+  return refererOrigin !== null && refererOrigin === appOrigin;
 }
 
 function buildProxySignature({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import MathRender from "@/components/ui/MathRender";
@@ -13,7 +13,8 @@ import type { QuizAuth, QuizPracticeResult, QuizQuestion, QuizReview } from "@/t
 function answerText(question: QuizQuestion, answer: string) {
   if (!answer || answer === "__timeout__") return "Жауап берілмеді";
   if (question.question_type === "input") return answer;
-  return answer.split(",").map((id) => question.options.find((option) => option.id === id)?.text || id).join("; ");
+  const options = Array.isArray(question.options) ? question.options : [];
+  return answer.split(",").map((id) => options.find((option) => option.id === id)?.text || id).join("; ");
 }
 
 export default function QuizResultReview({ sessionId, participantId }: { sessionId: number; participantId: number }) {
@@ -29,6 +30,7 @@ export default function QuizResultReview({ sessionId, participantId }: { session
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<QuizPracticeResult | null>(null);
   const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
   const [solved, setSolved] = useState<Set<number>>(new Set());
   useEffect(() => {
     if (status === "loading") return;
@@ -50,14 +52,18 @@ export default function QuizResultReview({ sessionId, participantId }: { session
   const current = mistakes[index];
   const resetAnswer = () => { setAnswer(""); setResult(null); setError(null); };
   const check = async () => {
-    if (!current || !answer.trim() || checking) return;
+    if (!current || !answer.trim() || checkingRef.current) return;
+    checkingRef.current = true;
     setChecking(true); setError(null);
     try {
       const response = await checkQuizPracticeAnswer(sessionId, participantId, current.question.id, answer, auth);
       if (response.error || !response.data) { setError(response.error || "Жауап тексерілмеді. Қайта көріңіз."); return; }
       setResult(response.data);
       if (response.data.is_correct) setSolved((previous) => new Set([...previous, current.question.id]));
-    } finally { setChecking(false); }
+    } finally {
+      checkingRef.current = false;
+      setChecking(false);
+    }
   };
 
   return (
@@ -84,7 +90,7 @@ export default function QuizResultReview({ sessionId, participantId }: { session
             <TaskStatement task={{ text: current.question.question_text, image_filename: current.question.image_filename, text_scale: "md" }} />
             {current.question.question_type === "input" ? <StudentMathAnswerInput key={current.question.id} ariaLabel="Қайталау жауабы" value={answer}
               onChange={setAnswer} disabled={checking || !!result?.is_correct} /> :
-              <div className="grid gap-2">{current.question.options.map((option) => {
+              <div className="grid gap-2">{(Array.isArray(current.question.options) ? current.question.options : []).map((option) => {
                 const selected = answer.split(",").includes(option.id);
                 return <button key={option.id} aria-pressed={selected} disabled={checking || !!result?.is_correct}
                   className={`rounded-lg border p-4 text-left ${selected ? "border-purple-600 bg-purple-50" : "border-gray-200"}`}

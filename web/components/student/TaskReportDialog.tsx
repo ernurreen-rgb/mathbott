@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MIN_TASK_REPORT_LENGTH } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 
@@ -13,6 +13,7 @@ export function useTaskReport(send: SendTaskReport | null) {
   const [taskId, setTaskId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const open = (id: number) => {
     setTaskId(id);
@@ -21,7 +22,8 @@ export function useTaskReport(send: SendTaskReport | null) {
 
   const submit = async () => {
     const trimmed = message.trim();
-    if (!send || taskId === null || trimmed.length < MIN_TASK_REPORT_LENGTH) return;
+    if (submittingRef.current || !send || taskId === null || trimmed.length < MIN_TASK_REPORT_LENGTH) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const { error } = await send(taskId, trimmed);
@@ -35,6 +37,7 @@ export function useTaskReport(send: SendTaskReport | null) {
     } catch (e: any) {
       showToast.error(`Қате: ${e?.message || "Желі қатесі"}`);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -46,7 +49,9 @@ export function useTaskReport(send: SendTaskReport | null) {
       message,
       onMessageChange: setMessage,
       submitting,
-      onCancel: () => setTaskId(null),
+      onCancel: () => {
+        if (!submittingRef.current) setTaskId(null);
+      },
       onSubmit: submit,
     },
   };
@@ -55,11 +60,27 @@ export function useTaskReport(send: SendTaskReport | null) {
 type TaskReportDialogProps = ReturnType<typeof useTaskReport>["dialog"];
 
 export function TaskReportDialog({ open, message, onMessageChange, submitting, onCancel, onSubmit }: TaskReportDialogProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting) {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, submitting, onCancel]);
+
   if (!open) return null;
   const canSubmit = message.trim().length >= MIN_TASK_REPORT_LENGTH && !submitting;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onCancel();
+      }}
+    >
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" role="dialog" aria-modal="true" aria-labelledby="task-report-title">
         <h3 id="task-report-title" className="text-lg font-bold text-gray-900 mb-4">Шағым жіберу</h3>
         <p className="text-gray-600 mb-4">

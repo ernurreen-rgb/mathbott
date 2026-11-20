@@ -4,7 +4,18 @@ Admin analytics of first-attempt mistakes in module lessons and of their review.
 from typing import Literal
 from datetime import timedelta
 
-from .common import *  # noqa: F401,F403
+from .common import (
+    Database,
+    Depends,
+    FastAPI,
+    Limiter,
+    Optional,
+    Query,
+    datetime,
+    get_db,
+    require_admin_any_admin,
+    timezone,
+)
 
 _PERIOD_DAYS = {"7d": 7, "30d": 30, "all": None}
 _TASK_LIMIT = 50

@@ -56,8 +56,10 @@ def _fraction_literal(node: ast.AST) -> Optional[Term]:
     numerator, denominator = _integer_literal(node.left), _integer_literal(node.right)
     if numerator is None or denominator is None or denominator == 0:
         return None
-    sign = -1 if (numerator < 0) != (denominator < 0) and numerator != 0 else 1
-    numerator, denominator = abs(numerator), abs(denominator)
+    if denominator < 0:
+        return 1, ("unsimplified_frac_sign", numerator, denominator)
+    sign = -1 if (numerator < 0) and numerator != 0 else 1
+    numerator = abs(numerator)
     if denominator != 1 and gcd(numerator, denominator) == 1:
         return sign, ("n", Fraction(numerator, denominator))
     return sign, ("frac", numerator, denominator)
@@ -65,23 +67,29 @@ def _fraction_literal(node: ast.AST) -> Optional[Term]:
 
 def _sum_terms(node: ast.AST, source: str, sign: int) -> list[Term]:
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
-        right_sign = sign if isinstance(node.op, ast.Add) else -sign
-        return _sum_terms(node.left, source, sign) + _sum_terms(node.right, source, right_sign)
+        left_terms = _sum_terms(node.left, source, sign)
+        if isinstance(node.op, ast.Sub):
+            if isinstance(node.right, ast.UnaryOp) and isinstance(node.right.op, ast.USub):
+                _, right_form = _term(node.right.operand, source)
+                return left_terms + [(sign, ("unsimplified_sub_neg", right_form))]
+            return left_terms + _sum_terms(node.right, source, -sign)
+        return left_terms + _sum_terms(node.right, source, sign)
     term_sign, form = _term(node, source)
     return [(sign * term_sign, form)]
 
 
-def _product_factors(node: ast.AST, source: str) -> tuple[int, list]:
+def _product_factors(node: ast.AST, source: str) -> tuple[int, list, int]:
     literal = _fraction_literal(node)
     if literal is not None:
-        return literal[0], [literal[1]]
+        return literal[0], [literal[1]], 1 if literal[0] < 0 else 0
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
-        left_sign, left = _product_factors(node.left, source)
-        right_sign, right = _product_factors(node.right, source)
-        return left_sign * right_sign, left + right
+        left_sign, left, left_negs = _product_factors(node.left, source)
+        right_sign, right, right_negs = _product_factors(node.right, source)
+        return left_sign * right_sign, left + right, left_negs + right_negs
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-        sign, factors = _product_factors(node.left, source)
+        sign, factors, left_negs = _product_factors(node.left, source)
         divisor_sign, divisor = _term(node.right, source)
+        neg_count = left_negs + (1 if divisor_sign < 0 else 0)
         if divisor[0] == "n" and divisor[1] != 0:
             # Combine a single coprime integer coefficient with an integer denominator
             # so \frac{2x}{3} and \frac{2}{3}x (or \frac{2\pi}{3} and \frac{2}{3}\pi) match,
@@ -99,12 +107,12 @@ def _product_factors(node: ast.AST, source: str) -> tuple[int, list]:
                     ):
                         combined = list(factors)
                         combined[num_indices[0]] = ("n", Fraction(coeff.numerator, divisor_val.numerator))
-                        return sign * divisor_sign, combined
+                        return sign * divisor_sign, combined, neg_count
             # x/2 is the same answer as ½x or 0,5x.
-            return sign * divisor_sign, factors + [("n", 1 / divisor[1])]
-        return sign * divisor_sign, factors + [("inv", divisor)]
+            return sign * divisor_sign, factors + [("n", 1 / divisor[1])], neg_count
+        return sign * divisor_sign, factors + [("inv", divisor)], neg_count
     sign, form = _term(node, source)
-    return sign, [form]
+    return sign, [form], 1 if sign < 0 else 0
 
 
 def _term(node: ast.AST, source: str) -> Term:
@@ -119,6 +127,12 @@ def _term(node: ast.AST, source: str) -> Term:
     if isinstance(node, ast.Name):
         return 1, ("v", node.id.lower())
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        if (
+            isinstance(node.op, ast.USub)
+            and isinstance(node.operand, ast.UnaryOp)
+            and isinstance(node.operand.op, ast.USub)
+        ):
+            return 1, ("unsimplified_double_neg", _term(node.operand.operand, source))
         sign, form = _term(node.operand, source)
         return (-sign if isinstance(node.op, ast.USub) else sign), form
     if isinstance(node, ast.BinOp):
@@ -128,7 +142,9 @@ def _term(node: ast.AST, source: str) -> Term:
             literal = _fraction_literal(node)
             if literal is not None:
                 return literal
-            sign, factors = _product_factors(node, source)
+            sign, factors, neg_count = _product_factors(node, source)
+            if neg_count >= 2:
+                return sign, ("unsimplified_neg_prod", _sorted(factors))
             return sign, ("prod", _sorted(factors))
         if isinstance(node.op, ast.Pow):
             return 1, ("pow", _term(node.left, source), _term(node.right, source))

@@ -1,6 +1,7 @@
 // Daily streak reminder over Web Push: the browser side. The server sends the reminders
 // (bot/services/streak_reminders.py) and public/sw.js shows them.
 import { deletePushSubscription, getPushConfig, savePushSubscription, type PushSubscriptionKeys } from "@/lib/api";
+import { tr } from "@/lib/i18n/translate";
 
 export type ReminderState =
   | "unsupported" // this browser has no Web Push
@@ -65,16 +66,18 @@ function toKeys(subscription: PushSubscription): PushSubscriptionKeys | null {
   return json.endpoint && p256dh && auth ? { endpoint: json.endpoint, keys: { p256dh, auth } } : null;
 }
 
-const UNAVAILABLE = "Еске салуды қосу мүмкін болмады. Кейінірек қайталап көріңіз.";
+// Read at call time: the student may switch language while the page is open.
+const unavailable = () => tr("push.unavailable");
 
 /** Call straight from a click: iOS only shows the permission prompt inside a user gesture. */
 export async function enableStreakReminder(email: string): Promise<ReminderResult> {
+  const UNAVAILABLE = unavailable();
   if (!hasPushApi()) return { ok: false, error: UNAVAILABLE, state: await getReminderState() };
   const permission = await Notification.requestPermission();
   if (permission === "denied") {
-    return { ok: false, state: "denied", error: "Хабарландыруларға тыйым салынған. Оларды браузер баптауларында рұқсат етіңіз." };
+    return { ok: false, state: "denied", error: tr("push.denied") };
   }
-  if (permission !== "granted") return { ok: false, state: "off", error: "Хабарландыруларға рұқсат берілмеді." };
+  if (permission !== "granted") return { ok: false, state: "off", error: tr("push.notGranted") };
 
   try {
     const [{ data: config }, registration] = await Promise.all([getPushConfig(email), getRegistration()]);
@@ -87,12 +90,16 @@ export async function enableStreakReminder(email: string): Promise<ReminderResul
       await subscription.unsubscribe();
       subscription = null;
     }
+    const createdFresh = !subscription;
     subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
 
     const keys = toKeys(subscription);
-    const saved = keys ? await savePushSubscription(keys, email, true) : { data: null, error: UNAVAILABLE };
+    const saved = keys ? await savePushSubscription(keys, email, true) : { data: null, error: UNAVAILABLE, status: undefined };
     if (!saved.data) {
-      await subscription.unsubscribe().catch(() => undefined);
+      // Only tear down browser subscription if we freshly created it or the server confirmed it is gone (404/410).
+      if (createdFresh || saved.status === 404 || saved.status === 410) {
+        await subscription.unsubscribe().catch(() => undefined);
+      }
       return { ok: false, error: saved.error || UNAVAILABLE };
     }
     return { ok: true };
@@ -112,7 +119,7 @@ export async function disableStreakReminder(email: string): Promise<ReminderResu
     }
     return { ok: true };
   } catch {
-    return { ok: false, error: "Еске салуды өшіру мүмкін болмады. Қайталап көріңіз." };
+    return { ok: false, error: tr("push.disableFailed") };
   }
 }
 

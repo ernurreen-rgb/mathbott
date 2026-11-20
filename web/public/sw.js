@@ -73,9 +73,16 @@ function isStaticAsset(url, request) {
   const path = url.pathname;
   if (path.startsWith("/_next/static/") || path.startsWith("/icons/")) return true;
   if (path === "/_next/image") {
-    // Never cache the optimizer's copy of anything served from /api.
-    const source = url.searchParams.get("url") || "";
-    return !source.startsWith("/api/");
+    // Never cache the optimizer's copy of anything served from /api or another origin.
+    const source = (url.searchParams.get("url") || "").trim();
+    if (!source) return false;
+    try {
+      const parsed = new URL(source, self.location.origin);
+      if (parsed.origin !== self.location.origin) return false;
+      return parsed.pathname !== "/api" && !parsed.pathname.startsWith("/api/");
+    } catch {
+      return false;
+    }
   }
   return request.destination === "font" || request.destination === "image";
 }

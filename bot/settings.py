@@ -152,6 +152,13 @@ class Settings(BaseSettings):
             return 0.1
 
     @field_validator(
+        "cron_secret",
+        "admin_secret",
+        "s3_bucket",
+        "s3_endpoint_url",
+        "s3_region",
+        "s3_access_key_id",
+        "s3_secret_access_key",
         "internal_proxy_shared_secret",
         "ai_twin_base_url",
         "ai_twin_api_key",
@@ -167,6 +174,14 @@ class Settings(BaseSettings):
     @classmethod
     def _strip_str(cls, value: object) -> str:
         return str(value or "").strip()
+
+    @field_validator("admin_email", "import_preview_token_secret", mode="before")
+    @classmethod
+    def _strip_optional_str(cls, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
 
     @property
     def is_production(self) -> bool:

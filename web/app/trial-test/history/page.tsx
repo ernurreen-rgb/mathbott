@@ -73,6 +73,16 @@ export default function TrialTestHistoryPage() {
                 <div className="text-4xl mb-4"><Icon name="loader" className="animate-spin" /></div>
                 <div className="text-gray-600">Жүктелуде...</div>
               </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <button
+                  type="button"
+                  onClick={() => void fetchTests()}
+                  className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700"
+                >
+                  Қайта жүктеу
+                </button>
+              </div>
             ) : tests.length === 0 ? (
               <div className="text-center py-12 text-gray-600">
                 <div className="text-6xl mb-4"><Icon name="test" /></div>

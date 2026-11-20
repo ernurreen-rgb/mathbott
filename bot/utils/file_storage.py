@@ -3,7 +3,6 @@ File storage helpers for uploaded images.
 """
 import logging
 import asyncio
-import mimetypes
 import os
 import re
 import uuid
@@ -25,6 +24,12 @@ ALLOWED_IMAGE_TYPES = {
     "image/png": {".png"},
     "image/gif": {".gif"},
     "image/webp": {".webp"},
+}
+DEFAULT_IMAGE_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
 }
 DEFAULT_MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
 STORED_IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -127,8 +132,7 @@ async def save_image_upload(image: UploadFile) -> str:
 
     ext = Path(image.filename or "").suffix.lower()
     if not ext:
-        guessed = mimetypes.guess_extension(declared_content_type)
-        ext = guessed if guessed else ".png"
+        ext = DEFAULT_IMAGE_EXTENSIONS.get(declared_content_type, ".png")
     if ext not in ALLOWED_IMAGE_TYPES[declared_content_type]:
         raise HTTPException(status_code=400, detail="Unsupported image extension")
 
@@ -159,10 +163,13 @@ async def save_image_upload(image: UploadFile) -> str:
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Image storage is temporarily unavailable") from exc
     else:
-        _IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = _IMAGES_DIR / filename
-        with open(file_path, "wb") as f:
-            f.write(content)
+        def _write_local() -> None:
+            _IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            file_path = _IMAGES_DIR / filename
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+        await asyncio.to_thread(_write_local)
 
     logger.info(
         "Image saved: filename=%s, bytes=%s",

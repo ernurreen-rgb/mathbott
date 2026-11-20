@@ -8,6 +8,7 @@ skipped, except in CI, where a missing server is an error.
 """
 import asyncio
 import os
+import re
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -24,6 +25,19 @@ if not TEST_DATABASE_URL and os.environ.get("CI"):
 requires_postgres = unittest.skipUnless(
     TEST_DATABASE_URL, "TEST_DATABASE_URL is not set; database tests need a disposable PostgreSQL server")
 
+_SAFE_DB_PREFIX_RE = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
+_SAFE_DB_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+_SAFE_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres"}
+
+
+def _ensure_safe_test_server(url: str) -> None:
+    host = (urlsplit(url).hostname or "").strip().lower()
+    if host not in _SAFE_LOCAL_HOSTS and os.environ.get("ALLOW_REMOTE_TEST_DB") != "1":
+        raise RuntimeError(
+            f"Refusing to create/drop disposable test databases on non-local host '{host}'. "
+            "Use a local PostgreSQL server or set ALLOW_REMOTE_TEST_DB=1 explicitly."
+        )
+
 
 def _database_name(url: str) -> str:
     return urlsplit(url).path.lstrip("/")
@@ -32,18 +46,27 @@ def _database_name(url: str) -> str:
 def create_database(prefix: str = "qazmath_test") -> str:
     """Create an empty database on the test server and return its URL."""
     import psycopg
+    from psycopg import sql
 
+    _ensure_safe_test_server(TEST_DATABASE_URL)
+    if not _SAFE_DB_PREFIX_RE.fullmatch(prefix):
+        raise ValueError(f"Unsafe test database prefix: {prefix!r}")
     name = f"{prefix}_{uuid4().hex[:12]}"
     with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as server:
-        server.execute(f'CREATE DATABASE "{name}"')
+        server.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
     return urlunsplit(urlsplit(TEST_DATABASE_URL)._replace(path=f"/{name}"))
 
 
 def drop_database(url: str) -> None:
     import psycopg
+    from psycopg import sql
 
+    _ensure_safe_test_server(TEST_DATABASE_URL)
+    name = _database_name(url)
+    if not _SAFE_DB_NAME_RE.fullmatch(name):
+        raise ValueError(f"Refusing to drop unsafe database name: {name!r}")
     with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as server:
-        server.execute(f'DROP DATABASE IF EXISTS "{_database_name(url)}" WITH (FORCE)')
+        server.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 def sync_id_sequences(url: str) -> None:
@@ -79,8 +102,9 @@ class PostgresTestCase(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(environment.stop)
         # The pool matches production and saves a new connection per repository call.
         self.db = Database(self.database_url)
+        if self.db.connection_pool is not None:
+            self.addAsyncCleanup(self.db.connection_pool.close)
         await self.db.init()
-        self.addAsyncCleanup(self.db.connection_pool.close)
 
     def connect(self) -> storage.PostgresConnection:
         """A plain connection to this test's database."""

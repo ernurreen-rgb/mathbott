@@ -140,9 +140,10 @@ class BankTaskCrudMixin:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
 
-            where_clause = ""
+            where_parts = [NOT_TWIN_SQL]
             if not include_deleted:
-                where_clause = "WHERE bt.deleted_at IS NULL"
+                where_parts.append("bt.deleted_at IS NULL")
+            where_clause = f"WHERE {' AND '.join(where_parts)}"
 
             async with db.execute(
                 f"""
@@ -164,6 +165,30 @@ class BankTaskCrudMixin:
                 items.append(item)
 
             return items
+
+    async def get_tasks_metadata_by_ids(self, task_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+        unique_ids = sorted({int(tid) for tid in task_ids if isinstance(tid, int) and tid > 0})
+        if not unique_ids:
+            return {}
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            topics_map = await self._fetch_topics_map(db, unique_ids)
+            result: Dict[int, Dict[str, Any]] = {}
+            chunk_size = 500
+            for start in range(0, len(unique_ids), chunk_size):
+                chunk = unique_ids[start:start + chunk_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                async with db.execute(
+                    f"SELECT id, difficulty FROM bank_tasks WHERE id IN ({placeholders})",
+                    chunk,
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        tid = int(row["id"])
+                        result[tid] = {
+                            "difficulty": row["difficulty"],
+                            "topics": topics_map.get(tid, []),
+                        }
+            return result
 
     async def get_task_by_id(self, task_id: int, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
@@ -411,7 +436,7 @@ class BankTaskCrudMixin:
         async with self._write_transaction() as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
-            if not existing:
+            if not existing or existing.get("deleted_at") is not None:
                 return None
 
             current_version = int(existing.get("current_version") or 1)

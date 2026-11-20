@@ -106,8 +106,13 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         cls.environment = patch.dict(os.environ, {"ENVIRONMENT": "development", "DATABASE_URL": cls.database_url,
                                                   "DATABASE_MIGRATION_URL": "", "SENTRY_DSN": ""})
         cls.environment.start()
-        cls.db = Database(cls.database_url, use_pool=False)
-        asyncio.run(cls._seed())
+        try:
+            cls.db = Database(cls.database_url, use_pool=False)
+            asyncio.run(cls._seed())
+        except Exception:
+            cls.environment.stop()
+            drop_database(cls.database_url)
+            raise
         cls.app = FastAPI()
         cls.app.state.db = cls.db
         register_statistics_routes(cls.app, cls.db, Limiter(key_func=get_remote_address))
@@ -591,9 +596,11 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
 
         trial_admin = (await get("trial-tests", period="all")).json()
         self.assertTrue(trial_admin["emails_visible"])
+        self.assertGreater(len(trial_admin["recent"]), 0)
         self.assertTrue(all(item.get("email") for item in trial_admin["recent"]))
         trial_reviewer = (await get("trial-tests", email=REVIEWER, period="all")).json()
         self.assertFalse(trial_reviewer["emails_visible"])
+        self.assertGreater(len(trial_reviewer["recent"]), 0)
         self.assertTrue(all("email" not in item for item in trial_reviewer["recent"]))
 
         self.assertEqual((await get("overview", email=STUDENTS["bek"])).status_code, 403)

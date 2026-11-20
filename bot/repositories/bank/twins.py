@@ -129,7 +129,17 @@ class BankTaskTwinsMixin:
         """Release a draft to mistake review; returns False when it was not a draft."""
         async with self._write_transaction() as db:
             cursor = await db.execute(
-                "UPDATE bank_task_twins SET status = 'approved' WHERE twin_bank_task_id = ? AND status = 'draft'",
+                """
+                UPDATE bank_task_twins
+                SET status = 'approved'
+                WHERE twin_bank_task_id = ?
+                  AND status = 'draft'
+                  AND EXISTS (
+                      SELECT 1 FROM bank_tasks bt
+                      WHERE bt.id = bank_task_twins.twin_bank_task_id
+                        AND bt.deleted_at IS NULL
+                  )
+                """,
                 (twin_task_id,),
             )
             if not (cursor.rowcount or 0):

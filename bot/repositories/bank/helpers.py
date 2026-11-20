@@ -118,19 +118,23 @@ class BankTaskHelpersMixin:
     async def _fetch_topics_map(self, db: db_driver.Connection, task_ids: List[int]) -> Dict[int, List[str]]:
         if not task_ids:
             return {}
-        placeholders = ",".join(["?"] * len(task_ids))
-        query = f"""
-            SELECT m.bank_task_id, t.name
-            FROM bank_task_topic_map m
-            JOIN bank_topics t ON t.id = m.topic_id
-            WHERE m.bank_task_id IN ({placeholders})
-            ORDER BY LOWER(t.name) ASC
-        """
-        topics_map: Dict[int, List[str]] = {task_id: [] for task_id in task_ids}
-        async with db.execute(query, task_ids) as cursor:
-            rows = await cursor.fetchall()
-            for row in rows:
-                topics_map[row["bank_task_id"]].append(row["name"])
+        unique_ids = list(dict.fromkeys(task_ids))
+        topics_map: Dict[int, List[str]] = {task_id: [] for task_id in unique_ids}
+        chunk_size = 500
+        for start in range(0, len(unique_ids), chunk_size):
+            chunk = unique_ids[start:start + chunk_size]
+            placeholders = ",".join(["?"] * len(chunk))
+            query = f"""
+                SELECT m.bank_task_id, t.name
+                FROM bank_task_topic_map m
+                JOIN bank_topics t ON t.id = m.topic_id
+                WHERE m.bank_task_id IN ({placeholders})
+                ORDER BY LOWER(t.name) ASC
+            """
+            async with db.execute(query, chunk) as cursor:
+                rows = await cursor.fetchall()
+                for row in rows:
+                    topics_map[row["bank_task_id"]].append(row["name"])
         return topics_map
 
     async def _fetch_topics_for_task(self, db: db_driver.Connection, task_id: int) -> List[str]:

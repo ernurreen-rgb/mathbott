@@ -14,7 +14,7 @@ import {
 } from "@/lib/question-options";
 import { getTaskTextScaleClass } from "@/lib/task-text-scale";
 import { AnswerMode } from "@/types";
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import type { CreateTaskFormState } from "./model";
 import { TASK_TEXT_SCALE_OPTIONS } from "./model";
 import styles from "../CmsWorkspace.module.css";
@@ -38,9 +38,32 @@ export default function CreateTaskForm({
   setTaskAnswerMode,
   taskAnswerMode,
 }: Props) {
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleGuardedSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      await createMiniLessonTask(e);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
-      <form onSubmit={createMiniLessonTask} onPaste={handlePasteImageCreate} className={`${styles.taskForm} space-y-3`}>
+      <form
+        onSubmit={(e) => {
+          void handleGuardedSubmit(e);
+        }}
+        onPaste={handlePasteImageCreate}
+        aria-busy={submitting}
+        className={`${styles.taskForm} space-y-3`}
+      >
         <MathFieldInput
           value={taskForm.text}
           onChange={(text) => setTaskForm((prev) => ({ ...prev, text }))}

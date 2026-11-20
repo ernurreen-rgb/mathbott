@@ -11,23 +11,27 @@ import { UserData } from "@/types";
 import { getPublicUserDataById } from "@/lib/api";
 import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
+import { useI18n } from "@/lib/i18n/provider";
 
 export default function PublicProfilePage() {
   const params = useParams();
-  const userId = params?.id ? parseInt(params.id as string, 10) : null;
+  const { t } = useI18n();
+  const rawId = typeof params?.id === "string" ? params.id.trim() : "";
+  const parsedId = /^\d+$/.test(rawId) ? Number(rawId) : NaN;
+  const userId = Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streakAnimated, setStreakAnimated] = useState(false);
 
   const weekDays = [
-    { short: "Дс", weekDay: 1 }, // Monday
-    { short: "Сс", weekDay: 2 }, // Tuesday
-    { short: "Ср", weekDay: 3 }, // Wednesday
-    { short: "Бс", weekDay: 4 }, // Thursday
-    { short: "Жм", weekDay: 5 }, // Friday
-    { short: "Сб", weekDay: 6 }, // Saturday
-    { short: "Жс", weekDay: 0 }, // Sunday
+    { short: t("week.short.1"), weekDay: 1 }, // Monday
+    { short: t("week.short.2"), weekDay: 2 }, // Tuesday
+    { short: t("week.short.3"), weekDay: 3 }, // Wednesday
+    { short: t("week.short.4"), weekDay: 4 }, // Thursday
+    { short: t("week.short.5"), weekDay: 5 }, // Friday
+    { short: t("week.short.6"), weekDay: 6 }, // Saturday
+    { short: t("week.short.0"), weekDay: 0 }, // Sunday
   ];
   const streakDaysSet = getProfileWeekActivityDaysSet({
     recentActivityTimestamps: userData?.recent_activity_timestamps,
@@ -56,17 +60,17 @@ export default function PublicProfilePage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      setError("Профильді жүктеу қатесі");
+      setError(t("publicProfile.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     if (userData?.streak && userData.streak > 0) {
       setStreakAnimated(true);
-      const t = setTimeout(() => setStreakAnimated(false), 1500);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setStreakAnimated(false), 1500);
+      return () => clearTimeout(timer);
     }
   }, [userData?.streak]);
 
@@ -74,10 +78,10 @@ export default function PublicProfilePage() {
     if (userId && !isNaN(userId)) {
       fetchUserData();
     } else {
-      setError("Пайдаланушы ID-і қате");
+      setError(t("publicProfile.badId"));
       setLoading(false);
     }
-  }, [userId, fetchUserData]);
+  }, [userId, fetchUserData, t]);
 
   if (loading) {
     return (
@@ -106,13 +110,13 @@ export default function PublicProfilePage() {
                 <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
               <div className="text-gray-600 text-lg mb-4">
-                {error || "Пайдаланушы табылмады"}
+                {error || t("publicProfile.notFound")}
               </div>
               <Link
                 href="/modules"
                 className="inline-block px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-bold rounded-xl hover:shadow-glow transition-all"
               >
-                Модульдерге оралу
+                {t("publicProfile.backToModules")}
               </Link>
             </div>
           </div>
@@ -137,9 +141,9 @@ export default function PublicProfilePage() {
                 {userData?.nickname?.[0]?.toUpperCase() || <><Icon name="user" /></>}
               </div>
               <div className="flex-1">
-                <h2 className="text-3xl font-bold mb-1">
-                  {userData?.nickname || "Пайдаланушы"}
-                </h2>
+                <h1 className="text-3xl font-bold mb-1">
+                  {userData?.nickname || t("profile.user")}
+                </h1>
               </div>
             </div>
           </div>
@@ -148,15 +152,15 @@ export default function PublicProfilePage() {
         {userData ? (
           <div className="space-y-6">
             {/* Weekly streak bar (before statistics) */}
-            <div className="glass rounded-3xl shadow-xl p-4 border border-white/30 bg-slate-900/80 text-white">
+            <div className="rounded-3xl shadow-xl p-4 border border-white/20 bg-slate-900/90 backdrop-blur-md text-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className={`w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center shadow-glow ${streakAnimated ? "animate-bounce" : ""}`}>
                     <Icon name="flame" className="w-5 h-5 text-white" />
                   </div>
                   <div className={`flex items-baseline gap-1 ${streakAnimated ? "animate-pulse" : ""}`}>
-                    <span className="text-2xl font-extrabold text-orange-500">{userData?.streak || 0}</span>
-                    <span className="text-xs font-semibold uppercase tracking-wide text-orange-500">күн</span>
+                    <span className="text-2xl font-extrabold text-orange-400">{userData?.streak || 0}</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-orange-300">{t("profile.streakDays", { count: userData?.streak || 0 })}</span>
                   </div>
                 </div>
               </div>
@@ -174,7 +178,7 @@ export default function PublicProfilePage() {
                       >
                         <Icon name="flame" className={`w-3 h-3 ${isActive ? "text-white" : "text-slate-400"}`} />
                       </div>
-                      <span className="text-[11px] font-semibold text-black">{day.short}</span>
+                      <span className="text-[11px] font-semibold text-slate-200">{day.short}</span>
                     </div>
                   );
                 })}
@@ -186,7 +190,7 @@ export default function PublicProfilePage() {
             <div className="text-gray-400 mb-4">
               <Icon name="info" className="w-16 h-16 mx-auto" />
             </div>
-            <div className="text-gray-600 text-lg">Профиль деректерін жүктеу мүмкін болмады</div>
+            <div className="text-gray-600 text-lg">{t("profile.loadFailed")}</div>
           </div>
         )}
         </div>

@@ -24,7 +24,9 @@ from app import create_app
 from config import validate_configuration
 from dependencies import require_admin, require_admin_review_manage
 from middleware.cache_headers_middleware import CacheHeadersMiddleware
+from middleware.request_context_middleware import _sanitize_request_id
 from middleware.trusted_proxy_identity import _private_email_from_path
+from repositories.bank.quality import _find_similar_pairs
 from repositories.base import BaseRepository
 from repositories.statistics_repository import parse_visit_route
 from repositories.user_repository import normalize_visit_path
@@ -42,6 +44,7 @@ from routes.admin.roles import _legacy_role_bootstrap_enabled
 from routes.export import _safe_csv_value, _safe_export_filename_stem
 from routes.quiz_game import QuizConnectionManager
 from routes.reports import _strip_report_answers
+from services.ai_twins import AiTwinError, _parse_json_object, _validate_provider_base_url
 from services.streak_reminders import is_allowed_push_endpoint
 from settings import DEFAULT_ADMIN_SECRET, get_settings
 from utils.cache import SimpleCache
@@ -56,6 +59,7 @@ from utils.internal_proxy_auth import (
     verify_proxy_signature,
 )
 from utils.learning_progress import calculate_next_streak
+from utils.sentry import _before_send
 from utils.timezone import today_almaty
 from utils.validation import grade_task_answer, is_task_answer_correct
 
@@ -749,6 +753,98 @@ class Sprint2RegressionTests(unittest.TestCase):
         self.assertEqual(lru.get("a"), 1)
         self.assertEqual(lru.get("c"), 3)
         self.assertEqual(lru.get("d"), 4)
+
+
+class Sprint3RegressionTests(unittest.TestCase):
+    def test_p2_prod_app_hides_docs_and_preserves_http_exception_headers_and_sanitizes_request_id(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "DATABASE_URL": "postgresql://u:p@localhost/db",
+                "INTERNAL_PROXY_SHARED_SECRET": "x" * 40,
+                "ALLOWED_ORIGINS": "https://app.qazmath.test",
+            },
+            clear=False,
+        ):
+            app = create_app()
+            self.assertIsNone(app.docs_url)
+            self.assertIsNone(app.redoc_url)
+            self.assertIsNone(app.openapi_url)
+
+            @app.get("/api/test-rate-header")
+            async def _rate_header():
+                raise HTTPException(status_code=429, detail="Too many", headers={"Retry-After": "42"})
+
+            client = TestClient(app, raise_server_exceptions=False)
+            self.assertEqual(client.get("/docs").status_code, 404)
+            self.assertEqual(client.get("/openapi.json").status_code, 404)
+
+            resp = client.get(
+                "/api/test-rate-header",
+                headers={"X-Request-ID": "bad\r\nid with spaces"},
+            )
+            self.assertEqual(resp.status_code, 429)
+            self.assertEqual(resp.headers.get("retry-after"), "42")
+            req_id = resp.headers.get("x-request-id") or ""
+            self.assertNotIn("\r", req_id)
+            self.assertNotIn(" ", req_id)
+            self.assertNotEqual(req_id, "bad\r\nid with spaces")
+
+            ok_id = _sanitize_request_id("req-123_abc.9")
+            self.assertEqual(ok_id, "req-123_abc.9")
+
+    def test_p2_sentry_scrubs_proxy_headers_and_sensitive_query_params(self):
+        event = {
+            "request": {
+                "url": "https://api.qazmath.test/api/user?email=victim@example.com&token=abc&page=2",
+                "query_string": "email=victim@example.com&secret=s3cr3t&page=2",
+                "headers": {
+                    "Authorization": "Bearer secret",
+                    "X-Proxy-User-Email": "victim@example.com",
+                    "X-Proxy-Request-Signature-V2": "deadbeef",
+                    "User-Agent": "pytest",
+                },
+            }
+        }
+        cleaned = _before_send(event, {})
+        self.assertIsNotNone(cleaned)
+        assert cleaned is not None
+        self.assertEqual(cleaned["request"]["headers"]["Authorization"], "[REDACTED]")
+        self.assertEqual(cleaned["request"]["headers"]["X-Proxy-User-Email"], "[REDACTED]")
+        self.assertEqual(cleaned["request"]["headers"]["X-Proxy-Request-Signature-V2"], "[REDACTED]")
+        self.assertEqual(cleaned["request"]["headers"]["User-Agent"], "pytest")
+        self.assertNotIn("victim@example.com", cleaned["request"]["url"])
+        self.assertNotIn("s3cr3t", cleaned["request"]["query_string"])
+        self.assertIn("page=2", cleaned["request"]["query_string"])
+
+    def test_p2_math_final_form_rejects_unsimplified_double_negatives(self):
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": "2x"}, "(-2)(-x)"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": "x+2"}, "x-(-2)"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": "1/2"}, "(-1)/(-2)"))
+        self.assertFalse(is_task_answer_correct({"question_type": "input", "answer": "2"}, "--2"))
+        # Legitimate signed forms remain accepted
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": "-5"}, "+(-5)"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": "-2x"}, "-2x"))
+        self.assertTrue(is_task_answer_correct({"question_type": "input", "answer": "-1/2"}, r"\frac{-1}{2}"))
+
+    def test_p2_bank_quality_exact_float_threshold_and_ai_twins_validation(self):
+        # 4 of 5 chars match -> exact SequenceMatcher ratio = 2*4/(5+5) = 0.80
+        # Test lengths 4 and 6 where ratio = 2*4/(4+6) = 0.80 (max_len = 4 * (1.2/0.8) = 6.0 exact boundary)
+        pairs = _find_similar_pairs([[(0, 1, "abcd"), (1, 2, "abcdxy")]], 0.80)
+        self.assertEqual(len(pairs), 1)
+        self.assertAlmostEqual(pairs[0][2], 0.80, places=6)
+
+        # AI twins case-insensitive markdown fence & HTTPS enforcement in prod
+        self.assertEqual(_parse_json_object("```JSON\n{\"answer\": \"5\"}\n```"), {"answer": "5"})
+        self.assertEqual(
+            _validate_provider_base_url("https://provider.example/v1/", is_production=True),
+            "https://provider.example/v1",
+        )
+        with self.assertRaises(AiTwinError):
+            _validate_provider_base_url("http://provider.example/v1", is_production=True)
+        with self.assertRaises(AiTwinError):
+            _validate_provider_base_url("https://user:pass@provider.example/v1", is_production=True)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,29 @@
 """
 Admin role management routes.
 """
-from .common import *  # noqa: F401,F403
+from .common import (
+    ADMIN_ROLES,
+    ADMIN_ROLE_SUPER_ADMIN,
+    AdminRoleConflictError,
+    Any,
+    Body,
+    DEFAULT_ADMIN_SECRET,
+    Database,
+    Depends,
+    Dict,
+    FastAPI,
+    HTTPException,
+    LastSuperAdminError,
+    Limiter,
+    Optional,
+    Query,
+    get_db,
+    get_settings,
+    hmac,
+    logger,
+    require_admin_super_critical,
+    validate_email,
+)
 
 
 def _legacy_role_bootstrap_enabled() -> bool:

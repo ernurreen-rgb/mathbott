@@ -21,7 +21,13 @@ class PushRepository(BaseRepository):
             await db.execute(
                 """INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
                    ON CONFLICT (endpoint) DO UPDATE
-                   SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth""",
+                   SET user_id = EXCLUDED.user_id,
+                       p256dh = EXCLUDED.p256dh,
+                       auth = EXCLUDED.auth,
+                       last_reminded_on = CASE
+                           WHEN push_subscriptions.user_id = EXCLUDED.user_id THEN push_subscriptions.last_reminded_on
+                           ELSE NULL
+                       END""",
                 (user_id, endpoint, p256dh, auth),
             )
 

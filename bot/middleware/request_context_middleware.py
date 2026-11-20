@@ -4,6 +4,7 @@ Middleware to set request_id context and emit request lifecycle logs.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from uuid import uuid4
 
@@ -19,12 +20,19 @@ from utils.request_context import (
 )
 
 logger = logging.getLogger(__name__)
+_SAFE_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _sanitize_request_id(raw_value: str | None) -> str:
+    candidate = (raw_value or "").strip()
+    if candidate and _SAFE_REQUEST_ID_RE.fullmatch(candidate):
+        return candidate
+    return str(uuid4())
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        incoming_request_id = (request.headers.get("X-Request-ID") or "").strip()
-        request_id = incoming_request_id or str(uuid4())
+        request_id = _sanitize_request_id(request.headers.get("X-Request-ID"))
         request.state.request_id = request_id
         try:
             import sentry_sdk

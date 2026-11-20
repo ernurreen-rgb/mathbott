@@ -31,31 +31,59 @@ export async function createCroppedImageFile(
     throw new Error("Could not get canvas context");
   }
 
-  // Set canvas size to match the crop area
-  // pixelCrop is already in natural image pixels from react-easy-crop
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+  const cropWidth = Math.max(1, Math.round(pixelCrop.width));
+  const cropHeight = Math.max(1, Math.round(pixelCrop.height));
+  const normalizedRotation = ((rotation % 360) + 360) % 360;
 
-  // Apply rotation if needed
-  if (rotation !== 0) {
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+  if (normalizedRotation === 0) {
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    ctx.drawImage(
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      cropWidth,
+      cropHeight
+    );
+  } else {
+    // Rotate the full source image into its rotated bounding box first so
+    // pixelCrop coordinates match react-easy-crop's rotated space.
+    const rad = (normalizedRotation * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    const bBoxWidth = Math.max(1, Math.round(image.width * cos + image.height * sin));
+    const bBoxHeight = Math.max(1, Math.round(image.width * sin + image.height * cos));
+
+    const rotatedCanvas = document.createElement("canvas");
+    rotatedCanvas.width = bBoxWidth;
+    rotatedCanvas.height = bBoxHeight;
+    const rotatedCtx = rotatedCanvas.getContext("2d");
+    if (!rotatedCtx) {
+      throw new Error("Could not get canvas context");
+    }
+    rotatedCtx.translate(bBoxWidth / 2, bBoxHeight / 2);
+    rotatedCtx.rotate(rad);
+    rotatedCtx.translate(-image.width / 2, -image.height / 2);
+    rotatedCtx.drawImage(image, 0, 0);
+
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    ctx.drawImage(
+      rotatedCanvas,
+      pixelCrop.x,
+      pixelCrop.y,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      cropWidth,
+      cropHeight
+    );
   }
-
-  // Draw the cropped portion of the image
-  // pixelCrop coordinates are already relative to natural image size
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    pixelCrop.width,
-    pixelCrop.height
-  );
 
   // Convert canvas to blob, then to File
   return new Promise((resolve, reject) => {

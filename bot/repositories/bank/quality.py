@@ -41,6 +41,7 @@ def _find_similar_pairs(
     to the brute-force scan. Each group holds ``(position, task_id, blob)`` tuples.
     """
     edges: List[Tuple[int, int, float]] = []
+    eps = 1e-9
     # ratio = 2*M/T <= 2*min/(la+lb), so a longer blob can only match within this factor.
     growth = (2.0 - threshold) / threshold if threshold > 0 else float("inf")
     offsets: Dict[str, int] = {}
@@ -51,7 +52,7 @@ def _find_similar_pairs(
             for pos, task_id, blob in ordered
         ]
         for i, (first_pos, first_id, first_blob, first_len, first_sig, first_excess) in enumerate(prepared):
-            max_len = first_len * growth
+            max_len = first_len * growth + eps
             half_threshold = threshold / 2.0
             bound = None
             for second_pos, second_id, second_blob, second_len, second_sig, second_excess in prepared[i + 1:]:
@@ -59,20 +60,20 @@ def _find_similar_pairs(
                     break
                 # Letters both blobs share, never undercounted: capped overlap plus the smaller excess.
                 shared = (first_sig & second_sig).bit_count() + min(first_excess, second_excess)
-                if shared < half_threshold * (first_len + second_len):
+                if shared + eps < half_threshold * (first_len + second_len):
                     continue
                 if bound is None:
                     bound = SequenceMatcher(None)
                     bound.set_seq2(first_blob)
                 bound.set_seq1(second_blob)
-                if bound.real_quick_ratio() < threshold or bound.quick_ratio() < threshold:
+                if bound.real_quick_ratio() + eps < threshold or bound.quick_ratio() + eps < threshold:
                     continue
                 # Keep the original (newest first) orientation so scores do not change.
                 if first_pos < second_pos:
                     score = SequenceMatcher(None, first_blob, second_blob).ratio()
                 else:
                     score = SequenceMatcher(None, second_blob, first_blob).ratio()
-                if score >= threshold:
+                if score + eps >= threshold:
                     edges.append((first_id, second_id, float(score)))
     return edges
 

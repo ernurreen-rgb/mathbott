@@ -16,28 +16,30 @@ export default function AchievementsPage() {
   const sessionEmail = session?.user?.email || null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchUserData = useCallback(async () => {
     if (!sessionEmail) return;
 
     setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await getUserData(sessionEmail);
-      if (error) {
-        // Only log in development
+      const { data, error: fetchError } = await getUserData(sessionEmail);
+      if (fetchError) {
         if (process.env.NODE_ENV === "development") {
-          console.error("Failed to fetch user data:", error);
+          console.error("Failed to fetch user data:", fetchError);
         }
         setUserData(null);
+        setError(fetchError);
       } else if (data) {
         setUserData(data);
       }
     } catch (err) {
-      // Only log in development
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
       setUserData(null);
+      setError("Жетістіктерді жүктеу қатесі");
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,21 @@ export default function AchievementsPage() {
           </p>
         </div>
 
-        {userData?.achievements && userData.achievements.length > 0 ? (
+        {error ? (
+          <div className="bg-white rounded-xl shadow-lg p-12 border border-red-200 text-center">
+            <div className="text-red-500 mb-4">
+              <Icon name="info" className="w-16 h-16 mx-auto" />
+            </div>
+            <div className="text-gray-700 text-lg mb-4">{error}</div>
+            <button
+              type="button"
+              onClick={() => void fetchUserData()}
+              className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700"
+            >
+              Қайта жүктеу
+            </button>
+          </div>
+        ) : userData?.achievements && userData.achievements.length > 0 ? (
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {userData.achievements.map((achievement) => (

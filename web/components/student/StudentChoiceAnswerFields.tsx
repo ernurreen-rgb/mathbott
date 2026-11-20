@@ -65,7 +65,7 @@ export default function StudentChoiceAnswerFields({
               </div>
               <div className={optionLayoutClass}>
                 {options.map((option) => {
-                  const isSelected = selected[index] === option.label;
+                  const isSelected = selected[index].trim().toUpperCase() === option.label.trim().toUpperCase();
                   const isCorrectOption = Boolean(subqCorrect && subqCorrect.toUpperCase() === option.label.toUpperCase());
 
                   let buttonStyle = "border-gray-200 bg-white text-gray-900 hover:border-purple-300 hover:bg-purple-50";

@@ -1,5 +1,6 @@
 "use client";
 import MathRender from "@/components/ui/MathRender";
+import { getTaskAnswerMode } from "@/lib/answer-mode";
 import {
   getMcqCorrectOptionLimit,
   McqOptionLabel,
@@ -20,6 +21,10 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
   if (!currentPlacement) return null;
 
   const questionType = getPlacementQuestionType(currentPlacement);
+  const answerMode = getTaskAnswerMode({
+    question_type: questionType,
+    answer_mode: currentPlacement.answer_mode || currentPlacement.bank_task?.answer_mode,
+  });
   const options = getPlacementOptions(currentPlacement);
   const subquestions = getPlacementSubquestions(currentPlacement);
   const value = previewAnswers[currentSlotIndex] || "";
@@ -53,7 +58,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
     );
   }
 
-  if (questionType === "select") {
+  if (questionType === "select" && answerMode !== "written") {
     const selected = parseSelectAnswer(value);
     const subLabels = ["A", "B"];
     return (
@@ -100,7 +105,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
     );
   }
 
-  if (questionType === "mcq" || questionType === "mcq6") {
+  if ((questionType === "mcq" || questionType === "mcq6") && answerMode !== "written") {
     const selectedLabels = parseMcqAnswerLabels(value);
     return (
       <div className="grid grid-cols-1 gap-2">

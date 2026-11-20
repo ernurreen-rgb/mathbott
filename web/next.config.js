@@ -84,25 +84,19 @@ const nextConfig = {
 };
 
 if (isProduction) {
-  const { withSentryConfig } = require("@sentry/nextjs");
+  const { withSentryConfig } = require("@sentry/nextjs/config");
 
-  module.exports = withSentryConfig(
-    nextConfig,
-    {
-      silent: true,
-      webpack: {
-        treeshake: {
-          removeDebugLogging: true,
-        },
-      },
-      sourcemaps: {
-        deleteSourcemapsAfterUpload: true,
+  module.exports = withSentryConfig(nextConfig, {
+    silent: true,
+    webpack: {
+      treeshake: {
+        removeDebugLogging: true,
       },
     },
-    {
-      hideSourceMaps: true,
-    }
-  );
+    sourcemaps: {
+      deleteSourcemapsAfterUpload: true,
+    },
+  });
 } else {
   // Keep the development compiler lean. Runtime Sentry instrumentation is
   // disabled in development as well; production keeps the full integration.

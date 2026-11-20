@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "./StudentMathAnswerInput";
 import { parseWrittenAnswerSlots, serializeWrittenAnswerSlots } from "@/lib/written-answer";
@@ -23,6 +24,8 @@ export default function StudentWrittenAnswerFields({
   labels = [],
 }: StudentWrittenAnswerFieldsProps) {
   const slots = parseWrittenAnswerSlots(value, count);
+  const slotsRef = useRef<string[]>(slots);
+  slotsRef.current = slots;
 
   return (
     <div className="space-y-3">
@@ -36,8 +39,9 @@ export default function StudentWrittenAnswerFields({
           <StudentMathAnswerInput
             value={slot}
             onChange={(nextValue) => {
-              const next = [...slots];
+              const next = [...slotsRef.current];
               next[index] = nextValue;
+              slotsRef.current = next;
               onChange(serializeWrittenAnswerSlots(next));
             }}
             disabled={disabled}

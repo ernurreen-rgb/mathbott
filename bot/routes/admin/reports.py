@@ -1,7 +1,31 @@
 """
 Admin reports moderation routes.
 """
-from .common import *  # noqa: F401,F403
+from .common import (
+    Any,
+    CAPABILITY_CONTENT_MANAGE,
+    Database,
+    Depends,
+    Dict,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Limiter,
+    List,
+    Optional,
+    Query,
+    UploadFile,
+    _normalize_text_scale,
+    _normalize_trial_like_answer_or_raise,
+    _validate_trial_like_payload,
+    get_db,
+    has_admin_capability,
+    json,
+    logger,
+    require_admin_review_manage,
+    save_image_upload,
+)
 
 
 def _mask_email(email: Optional[str]) -> Optional[str]:
