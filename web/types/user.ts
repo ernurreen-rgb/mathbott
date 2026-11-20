@@ -11,6 +11,7 @@ export interface UserData {
   id: number;
   email: string;
   nickname?: string;
+  language?: "kk" | "ru" | null;
   total_solved: number;
   streak?: number;
   last_streak_date?: string | null;

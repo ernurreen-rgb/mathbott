@@ -21,6 +21,7 @@ import StudentAnswerField from "@/components/student/StudentAnswerField";
 import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReportDialog";
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
 import { pickNextTaskId, pickStepAfterReview } from "@/lib/lesson-flow";
+import { useI18n } from "@/lib/i18n/provider";
 import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
 import MiniLessonSummary from "./_components/MiniLessonSummary";
 
@@ -33,6 +34,7 @@ function clamp01(n: number) {
 
 export default function LessonPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const rawLessonId = Number(params.id);
@@ -111,7 +113,7 @@ export default function LessonPage() {
 
   const fetchLesson = async (opts?: { silent?: boolean }) => {
     if (!isValidLessonId) {
-      setError("Сабақ табылмады");
+      setError(t("lesson.notFound"));
       setLoading(false);
       return;
     }
@@ -165,7 +167,7 @@ export default function LessonPage() {
 
   useEffect(() => {
     if (!isValidLessonId) {
-      setError("Сабақ табылмады");
+      setError(t("lesson.notFound"));
       setLoading(false);
       return;
     }
@@ -284,25 +286,25 @@ export default function LessonPage() {
   const activeFeedback = activeTask ? feedback[activeTask.id] : undefined;
   const summaryPrimary = (() => {
     if (refreshingSummary && selectedMini && !selectedMini.progress?.completed) {
-      return { label: "Нәтиже жүктелуде...", onClick: () => {}, disabled: true };
+      return { label: t("lesson.resultLoading"), onClick: () => {}, disabled: true };
     }
     const pending = selectedMini?.review?.pending ?? 0;
     if (selectedMini && pending > 0) {
-      return { label: `Қателерді талдау (${pending})`, onClick: () => openReview(selectedMini.id) };
+      return { label: t("lesson.reviewMistakesN", { count: pending }), onClick: () => openReview(selectedMini.id) };
     }
-    if (nextMiniId) return { label: "Келесі кіші сабақ", onClick: () => setSelectedMiniId(nextMiniId) };
+    if (nextMiniId) return { label: t("lesson.nextMini"), onClick: () => setSelectedMiniId(nextMiniId) };
     const unfinished = lesson?.mini_lessons
       .slice()
       .sort((a, b) => a.mini_index - b.mini_index)
       .find((ml) => ml.id !== selectedMini?.id && !ml.progress?.completed);
     if (unfinished) {
-      return { label: `${unfinished.mini_index}-кіші сабаққа өту`, onClick: () => setSelectedMiniId(unfinished.id) };
+      return { label: t("lesson.goToMini", { n: unfinished.mini_index }), onClick: () => setSelectedMiniId(unfinished.id) };
     }
     const nextLesson = lesson?.next_lesson;
     if (nextLesson && !nextLesson.locked) {
-      return { label: "Келесі сабақ", onClick: () => router.push(`/lessons/${nextLesson.id}`) };
+      return { label: t("lesson.nextLesson"), onClick: () => router.push(`/lessons/${nextLesson.id}`) };
     }
-    return { label: "Бөлімге оралу", onClick: () => router.push(sectionHref) };
+    return { label: t("lesson.backToSection"), onClick: () => router.push(sectionHref), backToSection: true };
   })();
   const verdict: LessonVerdict | null = !activeTask
     ? null
@@ -424,10 +426,10 @@ export default function LessonPage() {
         const detail = data?.error?.detail || data?.detail;
         const text =
           res.status === 429
-            ? "Тым жиі тексердіңіз. Бірнеше секундтан соң қайталаңыз."
+            ? t("lesson.tooFrequent")
             : typeof detail === "string"
               ? detail
-              : "Тексеру қатесі";
+              : t("lesson.checkError");
         setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text } }));
         // The lesson waits for an earlier mistake review: reload to show why.
         if (res.status === 423) void fetchLesson();
@@ -436,7 +438,7 @@ export default function LessonPage() {
       setSelectedAnswers((m) => ({ ...m, [task.id]: answer }));
       if (data.correct) {
         updateTaskStatusLocal(task.id, "completed");
-        setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: "Дұрыс!" } }));
+        setFeedback((m) => ({ ...m, [task.id]: { ok: true, text: t("review.correct") } }));
         playLessonCue("correct");
         // Save correct answer - if API provides it, use it; otherwise the selected answer is correct
         const correctAns = data.correct_answer || answer;
@@ -467,7 +469,7 @@ export default function LessonPage() {
         }
         setFeedback((m) => ({
           ...m,
-          [task.id]: { ok: false, text: "Қате", correctMath, correctText },
+          [task.id]: { ok: false, text: t("lesson.wrong"), correctMath, correctText },
         }));
         playLessonCue("wrong");
         // Save correct answer even if wrong
@@ -479,10 +481,10 @@ export default function LessonPage() {
       if (submitLessonId !== lessonId) return;
       const isAbort = e instanceof Error && e.name === "AbortError";
       const message = isAbort
-        ? "Сервер жауабы тым ұзақ. Қайта көріңіз."
+        ? t("lesson.serverSlow")
         : e instanceof Error && e.message
           ? e.message
-          : "Желі қатесі";
+          : t("lesson.networkError");
       setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text: message } }));
     } finally {
       clearTimeout(timeoutId);
@@ -535,7 +537,7 @@ export default function LessonPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error || "Сабақты жүктеу мүмкін болмады"}
+          {error || t("lesson.loadFailed")}
         </div>
       </div>
     );
@@ -544,7 +546,7 @@ export default function LessonPage() {
   if (lesson.lock) {
     const lock = lesson.lock;
     const lockReviewHref = `/lessons/${lock.lesson_id}/review/${lock.mini_lesson_id}`;
-    const previousName = lock.lesson_title?.trim() || `Сабақ ${lock.lesson_number ?? lock.lesson_id}`;
+    const previousName = lock.lesson_title?.trim() || t("journey.lessonN", { n: lock.lesson_number ?? lock.lesson_id });
     return (
       <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0 relative">
         <div className="absolute inset-0 bg-black/5"></div>
@@ -554,9 +556,9 @@ export default function LessonPage() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <Icon name="lock" className="h-8 w-8" />
             </div>
-            <h1 className="text-2xl font-extrabold text-gray-900">Сабақ әлі жабық</h1>
+            <h1 className="text-2xl font-extrabold text-gray-900">{t("lesson.lockedTitle")}</h1>
             <p className="mt-3 text-gray-700">
-              «{previousName}» сабағында талданбаған {lock.pending} қате бар. Келесі сабаққа өту үшін алдымен оларды ұқсас есептермен талдап шығыңыз.
+              {t("lesson.lockedBody", { name: previousName, count: lock.pending })}
             </p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <button
@@ -568,14 +570,14 @@ export default function LessonPage() {
                 }}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg inline-flex items-center justify-center gap-1.5"
               >
-                Қателерді талдау ({lock.pending}) <Icon name="arrowRight" />
+                {t("lesson.reviewMistakesN", { count: lock.pending })} <Icon name="arrowRight" />
               </button>
               <button
                 type="button"
                 onClick={() => router.push(sectionHref)}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 px-5 rounded-lg"
               >
-                Бөлімге оралу
+                {t("lesson.backToSection")}
               </button>
             </div>
           </div>
@@ -594,33 +596,33 @@ export default function LessonPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-3xl shadow-2xl border border-white/40 w-full max-w-sm p-8 text-center">
             <div className="text-6xl mb-3 animate-bounce"><Icon name="sparkles" /></div>
-            <div className="text-2xl font-extrabold text-gray-900">Құттықтаймыз!</div>
-            <div className="text-sm text-gray-600 mt-1">Сабақ аяқталды</div>
+            <div className="text-2xl font-extrabold text-gray-900">{t("lesson.congrats")}</div>
+            <div className="text-sm text-gray-600 mt-1">{t("lesson.finished")}</div>
             {congratsReviewMiniId ? (
               <div className="mt-5 space-y-2">
                 <p className="text-sm text-gray-700">
-                  Қате кеткен есептерді ұқсас есептермен талдап шығыңыз.
-                  {lesson.next_lesson?.locked && " Келесі сабақ талдаудан кейін ашылады."}
+                  {t("lesson.reviewHint")}
+                  {lesson.next_lesson?.locked && ` ${t("lesson.nextOpensAfterReview")}`}
                 </p>
                 <button
                   type="button"
                   onClick={() => openReview(congratsReviewMiniId)}
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg"
                 >
-                  Қателерді талдау
+                  {t("lesson.reviewMistakes")}
                 </button>
                 <button
                   type="button"
                   onClick={() => router.push(sectionHref)}
                   className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg"
                 >
-                  Бөлімге оралу
+                  {t("lesson.backToSection")}
                 </button>
               </div>
             ) : (
               <div className="mt-5 flex items-center justify-center gap-2 text-gray-700">
                 <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
-                <span className="text-sm font-semibold">Бөлімге оралу...</span>
+                <span className="text-sm font-semibold">{t("lesson.backToSection")}...</span>
               </div>
             )}
           </div>
@@ -637,14 +639,14 @@ export default function LessonPage() {
                 onClick={() => router.push(sectionHref)}
                 className="text-gray-700 hover:text-gray-900"
               >
-                <Icon name="arrowLeft" /> Артқа
+                <Icon name="arrowLeft" /> {t("common.back")}
               </button>
               <button
                 type="button"
                 onClick={toggleSound}
                 aria-pressed={soundOn}
-                aria-label={soundOn ? "Дыбыс пен дірілді өшіру" : "Дыбыс пен дірілді қосу"}
-                title={soundOn ? "Дыбысты өшіру" : "Дыбысты қосу"}
+                aria-label={soundOn ? t("lesson.soundOffAria") : t("lesson.soundOnAria")}
+                title={soundOn ? t("lesson.soundOff") : t("lesson.soundOn")}
                 className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-600 hover:bg-white/70 hover:text-gray-900 transition-colors"
               >
                 <Icon name={soundOn ? "volume" : "volumeOff"} className="h-5 w-5" />
@@ -665,7 +667,7 @@ export default function LessonPage() {
                       <div key={ml.id} className="flex-1 flex items-center">
                         <button
                           onClick={() => setSelectedMiniId(ml.id)}
-                          aria-label={pendingReview ? `${ml.mini_index}-кіші сабақ, талданбаған қате: ${pendingReview}` : undefined}
+                          aria-label={pendingReview ? t("lesson.miniPendingAria", { n: ml.mini_index, count: pendingReview }) : undefined}
                           className={`relative w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
                             completed
                               ? "bg-green-600 border-green-700 text-white"
@@ -704,11 +706,11 @@ export default function LessonPage() {
                   selectedMini.review!.pending > 0 ? (
                     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
                       <div className="text-gray-800">
-                        <div className="font-bold">Қателерді талдау</div>
-                        <div className="text-sm">Бірінші әрекетте {selectedMini.review!.mistakes} есепте қате кетті. Оларды ұқсас есептермен қайта шығарып көріңіз.</div>
+                        <div className="font-bold">{t("lesson.reviewMistakes")}</div>
+                        <div className="text-sm">{t("lesson.firstTryMistakes", { count: selectedMini.review!.mistakes })}</div>
                         {lesson.next_lesson?.locked && (
                           <div className="mt-1 text-sm font-semibold text-amber-800">
-                            <Icon name="lock" className="mr-1" />Келесі сабақ қателер талданғаннан кейін ашылады.
+                            <Icon name="lock" className="mr-1" />{t("lesson.nextOpensAfterMistakes")}
                           </div>
                         )}
                       </div>
@@ -717,21 +719,21 @@ export default function LessonPage() {
                         onClick={() => openReview(selectedMini.id)}
                         className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center gap-1.5"
                       >
-                        Талдауды бастау ({selectedMini.review!.pending}) <Icon name="arrowRight" />
+                        {t("lesson.startReview", { count: selectedMini.review!.pending })} <Icon name="arrowRight" />
                       </button>
                     </div>
                   ) : (
                     <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
-                      <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />Қателер талданды: түзетілді {selectedMini.review!.resolved}{selectedMini.review!.weak ? `, әлсіз тұс ${selectedMini.review!.weak}` : ""}.</span>
+                      <span><Icon name="checkCircle" className="mr-1.5 text-green-600" />{t("lesson.reviewedSummary", { resolved: selectedMini.review!.resolved })}{selectedMini.review!.weak ? t("lesson.reviewedWeak", { weak: selectedMini.review!.weak }) : ""}.</span>
                       <button type="button" onClick={() => openReview(selectedMini.id)} className="font-semibold text-purple-700 hover:underline">
-                        Нәтижені көру
+                        {t("lesson.viewResult")}
                       </button>
                     </div>
                   )
                 )}
 
                 {orderedMiniTasks.length === 0 ? (
-                  <div className="text-gray-600">Бұл кіші сабақта әлі есептер жоқ.</div>
+                  <div className="text-gray-600">{t("lesson.noTasks")}</div>
                 ) : !activeTask ? (
                   <MiniLessonSummary
                     miniIndex={selectedMini.mini_index}
@@ -740,16 +742,16 @@ export default function LessonPage() {
                     pendingReview={selectedMini.review?.pending ?? 0}
                     primary={summaryPrimary}
                     onPrevTask={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
-                    onBackToSection={summaryPrimary.label === "Бөлімге оралу" ? null : () => router.push(sectionHref)}
+                    onBackToSection={"backToSection" in summaryPrimary ? null : () => router.push(sectionHref)}
                     email={email}
                   />
                 ) : (
                   <div className="space-y-2 md:space-y-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                      <span>Есеп {currentTaskIndex + 1} / {orderedMiniTasks.length}</span>
+                      <span>{t("lesson.taskOf", { n: currentTaskIndex + 1, total: orderedMiniTasks.length })}</span>
                       {retryTaskIds.has(activeTask.id) && activeTask.status !== "completed" && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-                          <Icon name="target" /> Қатені түзету
+                          <Icon name="target" /> {t("lesson.fixMistake")}
                         </span>
                       )}
                     </div>
@@ -785,7 +787,7 @@ export default function LessonPage() {
             </div>
           ) : (
             <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30">
-              <div className="text-gray-600">Кіші сабақты таңдаңыз.</div>
+              <div className="text-gray-600">{t("lesson.pickMini")}</div>
             </div>
           )}
         </div>

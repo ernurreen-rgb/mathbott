@@ -6,6 +6,10 @@ import Link from "next/link";
 
 import type { LessonSummary, Section } from "@/types";
 import styles from "./ModuleLessonJourney.module.css";
+import { useI18n } from "@/lib/i18n/provider";
+import { translate, type MessageKey, type Translate } from "@/lib/i18n/translate";
+
+const kazakhT: Translate = (key, params) => translate("kk", key, params);
 
 export type LessonJourneyStatus = "completed" | "active" | "upcoming" | "locked";
 
@@ -23,8 +27,8 @@ export const sortJourneyLessons = (lessons: LessonSummary[] = []): LessonSummary
       a.id - b.id
   );
 
-export const getLessonDisplayName = (lesson: LessonSummary): string =>
-  lesson.title?.trim() || `Сабақ ${lesson.lesson_number ?? lesson.id}`;
+export const getLessonDisplayName = (lesson: LessonSummary, t: Translate = kazakhT): string =>
+  lesson.title?.trim() || t("journey.lessonN", { n: lesson.lesson_number ?? lesson.id });
 
 export const getLessonDisplayProgress = (lesson: LessonSummary): number => {
   const reportedProgress = clamp01(lesson.progress?.progress);
@@ -72,11 +76,11 @@ export const getLessonJourneyStatus = (
   return "upcoming";
 };
 
-const statusAriaLabel: Record<LessonJourneyStatus, string> = {
-  completed: "Аяқталды",
-  active: "Қазір оқитын сабақ",
-  upcoming: "Алда",
-  locked: "Жабық: алдымен алдыңғы сабақтың қателерін талдаңыз",
+const statusAriaLabel: Record<LessonJourneyStatus, MessageKey> = {
+  completed: "journey.status.completed",
+  active: "journey.status.active",
+  upcoming: "journey.status.upcoming",
+  locked: "journey.status.locked",
 };
 
 const nodeClasses: Record<LessonJourneyStatus, string> = {
@@ -124,13 +128,14 @@ function LessonNodeIcon({ lesson, status }: { lesson: LessonSummary; status: Les
 }
 
 function ProgressMarks({ lesson }: { lesson: LessonSummary }) {
+  const { t } = useI18n();
   const progress = getLessonDisplayProgress(lesson);
   const filled = progress > 0 ? Math.ceil(progress * 4) : 0;
 
   return (
     <span
       role="img"
-      aria-label={`Сабақ прогресі ${Math.round(progress * 100)}%`}
+      aria-label={t("journey.lessonProgressAria", { percent: Math.round(progress * 100) })}
       className={`${styles.progressMarks} flex justify-center gap-1`}
     >
       {[0, 1, 2, 3].map((mark) => (
@@ -145,18 +150,19 @@ function ProgressMarks({ lesson }: { lesson: LessonSummary }) {
 }
 
 function SectionProgress({ lessons }: { lessons: LessonSummary[] }) {
+  const { t } = useI18n();
   const completed = lessons.filter(isLessonJourneyCompleted).length;
   const percent = lessons.length > 0 ? Math.round((completed / lessons.length) * 100) : 0;
 
   return (
     <div className="min-w-[88px] text-right sm:min-w-[104px]">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-purple-500 sm:text-xs">Сабақтар</div>
+      <div className="text-[10px] font-bold uppercase tracking-wide text-purple-500 sm:text-xs">{t("journey.lessons")}</div>
       <div className="mt-0.5 text-lg font-black text-slate-800 sm:mt-1 sm:text-xl">
         {completed}/{lessons.length}
       </div>
       <div
         role="progressbar"
-        aria-label="Бөлім прогресі"
+        aria-label={t("journey.sectionProgressAria")}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
@@ -177,6 +183,7 @@ type ModuleLessonJourneyProps = {
 };
 
 export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLessonJourneyProps) {
+  const { t } = useI18n();
   const sortedSections = sortJourneySections(sections);
   const activeLessonId = getNextJourneyLessonId(sortedSections);
   let globalLessonIndex = 0;
@@ -197,7 +204,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
             <header className="flex items-start justify-between gap-3 border-b border-purple-100/80 bg-gradient-to-r from-rose-50/90 via-white/80 to-violet-50/90 px-4 py-3.5 sm:gap-4 sm:px-7 sm:py-[18px]">
               <div className="min-w-0">
                 <div className="text-xs font-black uppercase tracking-[0.18em] text-fuchsia-600">
-                  {sectionIndex + 1}-бөлім
+                  {t("journey.sectionN", { n: sectionIndex + 1 })}
                 </div>
                 <h2 className="mt-0.5 text-lg font-black text-slate-900 sm:text-2xl">{section.name}</h2>
                 {section.description?.trim() && (
@@ -212,12 +219,12 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                   <button
                     type="button"
                     onClick={(event) => onOpenGuide(section.id, event.currentTarget)}
-                    aria-label={`Анықтамалық: ${section.name}`}
-                    title={`Анықтамалық: ${section.name}`}
+                    aria-label={t("journey.guideFor", { name: section.name })}
+                    title={t("journey.guideFor", { name: section.name })}
                     className={`${styles.guideButton} inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-700 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 motion-reduce:transition-none`}
                   >
                     <Icon name="file" className="h-5 w-5" />
-                    <span className={`${styles.guideLabel} hidden whitespace-nowrap`}>Анықтамалық</span>
+                    <span className={`${styles.guideLabel} hidden whitespace-nowrap`}>{t("module.guide")}</span>
                   </button>
                 )}
               </div>
@@ -225,7 +232,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
 
             {lessons.length === 0 ? (
               <div className="px-6 py-10 text-center text-sm font-semibold text-slate-500">
-                Бұл бөлімде сабақтар әлі қосылмаған.
+                {t("journey.noLessons")}
               </div>
             ) : (
               <ol
@@ -242,7 +249,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                   const isLeft = index % 2 === 0;
                   const status = getLessonJourneyStatus(lesson, activeLessonId);
                   const progress = getLessonDisplayProgress(lesson);
-                  const title = getLessonDisplayName(lesson);
+                  const title = getLessonDisplayName(lesson, t);
 
                   return (
                     <li
@@ -288,7 +295,7 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                       <Link
                         href={`/lessons/${lesson.id}`}
                         aria-current={status === "active" ? "step" : undefined}
-                        aria-label={`${title}. ${statusAriaLabel[status]}. ${Math.round(progress * 100)}%`}
+                        aria-label={`${title}. ${t(statusAriaLabel[status])}. ${Math.round(progress * 100)}%`}
                         className={`${styles.lessonLink} group absolute top-0 z-10 w-[132px] -translate-x-1/2 text-center focus:outline-none ${
                           isLeft ? "left-1/4" : "left-3/4"
                         }`}
@@ -299,12 +306,12 @@ export default function ModuleLessonJourney({ sections, onOpenGuide }: ModuleLes
                           <LessonNodeIcon lesson={lesson} status={status} />
                           {status === "active" && (
                             <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border-2 border-violet-100 bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-purple-700 shadow-md after:absolute after:-bottom-2 after:left-1/2 after:h-3 after:w-3 after:-translate-x-1/2 after:rotate-45 after:border-b-2 after:border-r-2 after:border-violet-100 after:bg-white sm:-top-11 sm:px-3 sm:text-[10px]">
-                              Бастау
+                              {t("journey.start")}
                             </span>
                           )}
                           {status === "locked" && (
                             <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border-2 border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-700 shadow-md after:absolute after:-bottom-2 after:left-1/2 after:h-3 after:w-3 after:-translate-x-1/2 after:rotate-45 after:border-b-2 after:border-r-2 after:border-amber-200 after:bg-amber-50 sm:-top-11 sm:px-3 sm:text-[10px]">
-                              Алдымен қателер
+                              {t("journey.mistakesFirst")}
                             </span>
                           )}
                         </span>

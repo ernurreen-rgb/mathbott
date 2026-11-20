@@ -3,6 +3,7 @@
 import Icon from "@/components/ui/Icon";
 
 import StreakReminderPrompt from "./StreakReminderPrompt";
+import { useI18n } from "@/lib/i18n/provider";
 
 type Action = { label: string; onClick: () => void; disabled?: boolean };
 
@@ -30,6 +31,7 @@ export default function MiniLessonSummary({
   onBackToSection,
   email,
 }: Props) {
+  const { t } = useI18n();
   const firstTry = mistakes === null ? null : Math.max(0, totalTasks - mistakes);
   const share = firstTry === null || totalTasks === 0 ? null : Math.round((firstTry / totalTasks) * 100);
   const flawless = firstTry !== null && firstTry === totalTasks && totalTasks > 0;
@@ -44,16 +46,16 @@ export default function MiniLessonSummary({
       >
         <Icon name={flawless ? "crown" : "trophy"} className="h-10 w-10" />
       </span>
-      <h2 className="mt-4 text-2xl font-extrabold text-gray-900">{miniIndex}-кіші сабақ аяқталды!</h2>
-      {flawless && <p className="mt-1 font-semibold text-amber-700">Бірде-бір қатесіз!</p>}
+      <h2 className="mt-4 text-2xl font-extrabold text-gray-900">{t("summary.miniDone", { n: miniIndex })}</h2>
+      {flawless && <p className="mt-1 font-semibold text-amber-700">{t("summary.flawless")}</p>}
 
       <dl className="mt-5 grid w-full max-w-sm grid-cols-2 gap-3">
         <div className="rounded-2xl border border-white/60 bg-white/80 p-3">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Есептер</dt>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t("summary.tasks")}</dt>
           <dd className="mt-1 text-2xl font-extrabold text-gray-900">{totalTasks}</dd>
         </div>
         <div className="rounded-2xl border border-white/60 bg-white/80 p-3">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Бірден дұрыс</dt>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t("summary.firstTry")}</dt>
           <dd className="mt-1 text-2xl font-extrabold text-green-700">
             {firstTry === null ? "—" : `${firstTry}/${totalTasks}`}
           </dd>
@@ -67,7 +69,7 @@ export default function MiniLessonSummary({
 
       {pendingReview > 0 && (
         <p className="mt-4 max-w-sm text-sm text-gray-700">
-          {pendingReview} есепте бірінші әрекетте қате кетті. Оларды ұқсас есептермен талдап шығыңыз.
+          {t("summary.pendingReview", { count: pendingReview })}
         </p>
       )}
 
@@ -89,7 +91,7 @@ export default function MiniLessonSummary({
             onClick={onPrevTask}
             className="h-11 flex-1 rounded-xl bg-white/80 font-semibold text-gray-700 hover:bg-white inline-flex items-center justify-center gap-1.5 transition-colors"
           >
-            <Icon name="arrowLeft" /> Соңғы есеп
+            <Icon name="arrowLeft" /> {t("summary.lastTask")}
           </button>
           {onBackToSection && (
             <button
@@ -97,7 +99,7 @@ export default function MiniLessonSummary({
               onClick={onBackToSection}
               className="h-11 flex-1 rounded-xl bg-white/80 font-semibold text-gray-700 hover:bg-white transition-colors"
             >
-              Бөлімге оралу
+              {t("lesson.backToSection")}
             </button>
           )}
         </div>

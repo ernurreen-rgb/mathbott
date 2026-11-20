@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import { MCQ_EDITOR_OPTION_COUNTS, MCQ_OPTION_LABELS } from "@/lib/question-options";
 import styles from "./QuizEditor.module.css";
 import { quizDraftKey, useQuizDraft } from "@/lib/use-quiz-draft";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface DraftQuestion {
   id: string; // temporary local id
@@ -75,6 +76,7 @@ export default function QuizEditor({
 }: QuizEditorProps) {
   const router = useRouter();
   const { data: session } = useSession();
+  const { t, intlLocale } = useI18n();
 
   const [title, setTitle] = useState(initialQuiz?.title || "");
   const [description, setDescription] = useState(initialQuiz?.description || "");
@@ -289,7 +291,7 @@ export default function QuizEditor({
 
   const removeQuestion = (idx: number) => {
     if (questions.length <= 1) {
-      toast.error("Кем дегенде 1 сұрақ болуы керек");
+      toast.error(t("editor.err.atLeastOne"));
       return;
     }
     const nextList = questions.filter((_, i) => i !== idx);
@@ -326,7 +328,7 @@ export default function QuizEditor({
   const handleSaveQuiz = async () => {
     if (submittingRef.current) return;
     if (!title.trim()) {
-      toast.error("Квиз тақырыбын жазыңыз");
+      toast.error(t("editor.err.title"));
       return;
     }
 
@@ -334,36 +336,36 @@ export default function QuizEditor({
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       if (!q.question_text.trim()) {
-        toast.error(`${i + 1}-сұрақтың мәтіні бос`);
+        toast.error(t("editor.err.emptyText", { n: i + 1 }));
         setActiveQuestionIndex(i);
         return;
       }
       if (q.question_type === "mcq" || q.question_type === "multi_select") {
         if (![4, 6].includes(q.options.length)) {
-          toast.error(`${i + 1}-сұрақ үшін 4 немесе 6 жауап нұсқасын таңдаңыз`);
+          toast.error(t("editor.err.optionCount", { n: i + 1 }));
           setActiveQuestionIndex(i); return;
         }
         for (const opt of q.options) {
           if (!opt.text.trim()) {
-            toast.error(`${i + 1}-сұрақтың "${opt.id}" жауап нұсқасын толтырыңыз`);
+            toast.error(t("editor.err.emptyOption", { n: i + 1, id: opt.id }));
             setActiveQuestionIndex(i);
             return;
           }
         }
         if (!q.correct_answer) {
-          toast.error(`${i + 1}-сұрақтың дұрыс жауабын белгілеңіз`);
+          toast.error(t("editor.err.markCorrect", { n: i + 1 }));
           setActiveQuestionIndex(i);
           return;
         }
       } else if (q.question_type === "tf") {
         if (q.correct_answer !== "A" && q.correct_answer !== "B") {
-          toast.error(`${i + 1}-сұрақтың дұрыс жауабын белгілеңіз`);
+          toast.error(t("editor.err.markCorrect", { n: i + 1 }));
           setActiveQuestionIndex(i);
           return;
         }
       } else if (q.question_type === "input") {
         if (!normalizeMathFieldValueForStorage(q.correct_answer).trim()) {
-          toast.error(`${i + 1}-сұрақтың дұрыс жауабын жазыңыз`);
+          toast.error(t("editor.err.writeCorrect", { n: i + 1 }));
           setActiveQuestionIndex(i);
           return;
         }
@@ -402,13 +404,13 @@ export default function QuizEditor({
         );
 
         if (updateErr || !updatedQuiz) {
-          toast.error(updateErr || "Квизді жаңарту мүмкін болмады");
+          toast.error(updateErr || t("editor.updateFailed"));
           submittingRef.current = false;
           setSubmitting(false);
           return;
         }
 
-        toast.success("Квиз сәтті жаңартылды!");
+        toast.success(t("editor.updated"));
         autosave.clear({ title, description, isPublic, grade, topic, questions, activeQuestionIndex });
         router.push(`/quizzes/${initialQuiz.id}`);
       } else {
@@ -425,18 +427,18 @@ export default function QuizEditor({
         );
 
         if (quizErr || !newQuiz) {
-          toast.error(quizErr || "Квизді сақтау мүмкін болмады");
+          toast.error(quizErr || t("editor.saveFailed"));
           submittingRef.current = false;
           setSubmitting(false);
           return;
         }
 
-        toast.success("Квиз сәтті сақталды!");
+        toast.success(t("editor.saved"));
         autosave.clear({ title, description, isPublic, grade, topic, questions, activeQuestionIndex });
         router.push(`/quizzes/${newQuiz.id}`);
       }
     } catch (err: any) {
-      toast.error(err?.message || "Қате орын алды");
+      toast.error(err?.message || t("error.title"));
       submittingRef.current = false;
       setSubmitting(false);
     }
@@ -452,14 +454,14 @@ export default function QuizEditor({
           <Link
             href={backUrl}
             className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-            title="Квиздерге оралу"
+            title={t("editor.backToQuizzes")}
           >
             <Icon name="arrowLeft" className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="text-base sm:text-lg font-extrabold text-gray-900 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse" />
-              {isEditMode ? "Квизді өңдеу (Edit Quiz)" : "Квиз құрастырушы (Quiz Builder)"}
+              {isEditMode ? t("editor.titleEdit") : t("editor.titleNew")}
             </h1>
           </div>
         </div>
@@ -475,17 +477,17 @@ export default function QuizEditor({
             ) : (
               <Icon name="check" className="w-4 h-4" />
             )}
-            {isEditMode ? "Өзгерістерді сақтау" : "Сақтау және дайын"}
+            {isEditMode ? t("editor.saveChanges") : t("editor.saveDone")}
           </button>
         </div>
       </header>
 
       {email && (
         <div role="status" className="border-b border-purple-100 bg-white px-4 py-2 text-xs text-gray-600">
-          {autosave.status === "error" ? "Нобайды сақтау мүмкін болмады. Браузердің сақтау орнын тексеріңіз." :
-            autosave.status === "saving" ? "Нобай сақталуда..." : autosave.savedAt ?
-              `${autosave.restored ? "Нобай қалпына келтірілді. " : ""}Осы браузерде сақталды · ${new Date(autosave.savedAt).toLocaleTimeString("kk-KZ", { hour: "2-digit", minute: "2-digit" })}` :
-              "Өзгерістер осы браузерде автоматты сақталады"}
+          {autosave.status === "error" ? t("editor.draft.error") :
+            autosave.status === "saving" ? t("editor.draft.saving") : autosave.savedAt ?
+              `${autosave.restored ? `${t("editor.draft.restored")} ` : ""}${t("editor.draft.savedAt", { time: new Date(autosave.savedAt).toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" }) })}` :
+              t("editor.draft.auto")}
         </div>
       )}
 
@@ -495,21 +497,21 @@ export default function QuizEditor({
           {/* Quiz metadata */}
           <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm">
             <label className="text-xs font-bold text-gray-700 block mb-1.5">
-              Квиз атауы *
+              {t("editor.titleLabel")}
             </label>
             <input
               type="text"
-              placeholder="Мысалы: 9-сынып Теңдеулер жарысы"
+              placeholder={t("editor.titlePlaceholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-3 py-2 text-sm text-gray-900 transition-all focus:outline-none"
             />
 
             <label className="text-xs font-bold text-gray-700 block mt-3 mb-1.5">
-              Сипаттамасы
+              {t("editor.description")}
             </label>
             <textarea
-              placeholder="Қысқаша түсініктеме..."
+              placeholder={t("editor.descriptionPlaceholder")}
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -519,7 +521,7 @@ export default function QuizEditor({
             {/* Catalog placement: what students filter the library by */}
             <div className="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
               <div>
-                <label htmlFor="quiz-grade" className="text-xs font-bold text-gray-700 block mb-1.5">Сынып</label>
+                <label htmlFor="quiz-grade" className="text-xs font-bold text-gray-700 block mb-1.5">{t("catalog.grade")}</label>
                 <select
                   id="quiz-grade"
                   value={grade ?? ""}
@@ -531,13 +533,13 @@ export default function QuizEditor({
                 </select>
               </div>
               <div>
-                <label htmlFor="quiz-topic" className="text-xs font-bold text-gray-700 block mb-1.5">Тақырып</label>
+                <label htmlFor="quiz-topic" className="text-xs font-bold text-gray-700 block mb-1.5">{t("catalog.topic")}</label>
                 <input
                   id="quiz-topic"
                   type="text"
                   list="quiz-topic-suggestions"
                   maxLength={80}
-                  placeholder="Мысалы: Бөлшектер"
+                  placeholder={t("editor.topicPlaceholder")}
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   className="w-full bg-gray-50/80 border border-gray-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100 rounded-xl px-3 py-2 text-sm text-gray-900 transition-all focus:outline-none"
@@ -548,12 +550,12 @@ export default function QuizEditor({
               </div>
             </div>
             <p className="mt-1.5 text-[10px] leading-tight text-gray-500">
-              Каталогта квиз осы сынып пен тақырып бойынша табылады
+              {t("editor.catalogHint")}
             </p>
 
             <div className="mt-4 pt-3 border-t border-gray-100">
               <label className="text-xs font-bold text-gray-700 block mb-2">
-                Қолжетімділік түрі (Privacy)
+                {t("editor.privacy")}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -568,7 +570,7 @@ export default function QuizEditor({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold flex items-center gap-1.5">
                       <span><Icon name="lock" /></span>
-                      <span>Жеке</span>
+                      <span>{t("catalog.private")}</span>
                     </span>
                     <input
                       type="radio"
@@ -579,7 +581,7 @@ export default function QuizEditor({
                     />
                   </div>
                   <span className="text-[10px] leading-tight text-gray-500">
-                    Тек маған, PIN-кодпен ойнатылады
+                    {t("editor.privateHint")}
                   </span>
                 </button>
 
@@ -595,7 +597,7 @@ export default function QuizEditor({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold flex items-center gap-1.5">
                       <span><Icon name="globe" /></span>
-                      <span>Ашық</span>
+                      <span>{t("catalog.public")}</span>
                     </span>
                     <input
                       type="radio"
@@ -606,7 +608,7 @@ export default function QuizEditor({
                     />
                   </div>
                   <span className="text-[10px] leading-tight text-gray-500">
-                    Каталогта баршаға көрінеді
+                    {t("editor.publicHint")}
                   </span>
                 </button>
               </div>
@@ -616,7 +618,7 @@ export default function QuizEditor({
           {/* Question cards list */}
           <div className="flex-1 flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs font-bold text-gray-600 px-1">
-              <span>Сұрақтар ({questions.length})</span>
+              <span>{t("editor.questionsN", { count: questions.length })}</span>
             </div>
 
             <div className="space-y-2 max-h-[46vh] lg:max-h-none overflow-y-auto pr-1">
@@ -629,7 +631,7 @@ export default function QuizEditor({
                   <div
                     key={q.id}
                     draggable={canMove}
-                    title={canMove ? "Тасымалдау немесе ретін өзгерту үшін сүйреңіз" : undefined}
+                    title={canMove ? t("editor.dragHint") : undefined}
                     onDragStart={(e) => {
                       if (!canMove) return;
                       e.dataTransfer.setData("text/plain", String(idx));
@@ -677,9 +679,9 @@ export default function QuizEditor({
                       >
                         {idx + 1}
                       </span>
-                      <div className={styles.questionPreview} aria-label={`Сұрақ ${idx + 1} мәтіні`}>
+                      <div className={styles.questionPreview} aria-label={t("editor.questionTextAria", { n: idx + 1 })}>
                         <div className={styles.questionPreviewContent}>
-                          {q.question_text ? <MathRender latex={q.question_text} inline /> : "Жаңа сұрақ..."}
+                          {q.question_text ? <MathRender latex={q.question_text} inline /> : t("editor.newQuestion")}
                         </div>
                       </div>
                     </div>
@@ -694,7 +696,7 @@ export default function QuizEditor({
                               e.stopPropagation();
                               moveQuestion(idx, idx - 1);
                             }}
-                            title="Жоғары жылжыту"
+                            title={t("editor.moveUp")}
                             className="p-1 hover:text-purple-600 text-gray-400 disabled:opacity-20 rounded hover:bg-purple-50 transition-colors"
                           >
                             <Icon name="chevronUp" className="w-3.5 h-3.5" />
@@ -706,7 +708,7 @@ export default function QuizEditor({
                               e.stopPropagation();
                               moveQuestion(idx, idx + 1);
                             }}
-                            title="Төмен жылжыту"
+                            title={t("editor.moveDown")}
                             className="p-1 hover:text-purple-600 text-gray-400 disabled:opacity-20 rounded hover:bg-purple-50 transition-colors"
                           >
                             <Icon name="chevronDown" className="w-3.5 h-3.5" />
@@ -719,7 +721,7 @@ export default function QuizEditor({
                           e.stopPropagation();
                           duplicateQuestion(idx);
                         }}
-                        title="Көшірмесін жасау"
+                        title={t("editor.duplicate")}
                         className="p-1 hover:text-purple-600 text-gray-400 rounded hover:bg-purple-50 transition-colors"
                       >
                         <Icon name="copy" className="w-3.5 h-3.5" />
@@ -731,7 +733,7 @@ export default function QuizEditor({
                             e.stopPropagation();
                             removeQuestion(idx);
                           }}
-                          title="Өшіру"
+                          title={t("catalog.delete")}
                           className="p-1 hover:text-red-600 text-gray-400 rounded hover:bg-red-50 transition-colors"
                         >
                           <Icon name="trash" className="w-3.5 h-3.5" />
@@ -748,7 +750,7 @@ export default function QuizEditor({
               className="mt-2 w-full py-2.5 rounded-xl border border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 text-purple-700 font-bold text-xs transition-all flex items-center justify-center gap-1.5"
             >
               <Icon name="plus" className="w-4 h-4 text-purple-600" />
-              Сұрақ қосу
+              {t("editor.addQuestion")}
             </button>
           </div>
         </aside>
@@ -760,58 +762,58 @@ export default function QuizEditor({
               {/* Question Control Settings Toolbar */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-purple-100 shadow-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-600">Түрі:</span>
+                  <span className="text-xs font-bold text-gray-600">{t("editor.type")}</span>
                   <select
                     value={currentQ.question_type}
                     onChange={(e) => handleTypeChange(e.target.value as QuestionType)}
                     className="bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-500 focus:bg-white"
                   >
-                    <option value="mcq">Таңдаулы тест (MCQ)</option>
-                    <option value="tf">Шын не Жалған (True/False)</option>
-                    <option value="multi_select">Бірнеше дұрыс жауап</option>
-                    <option value="input">Ашық математикалық жауап (Input)</option>
+                    <option value="mcq">{t("editor.type.mcq")}</option>
+                    <option value="tf">{t("editor.type.tf")}</option>
+                    <option value="multi_select">{t("editor.type.multi")}</option>
+                    <option value="input">{t("editor.type.input")}</option>
                   </select>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4">
-                  {(currentQ.question_type === "mcq" || currentQ.question_type === "multi_select") && <label className="flex items-center gap-2 text-xs font-bold text-gray-600">Жауап саны:
-                    <select aria-label="Жауап саны" value={[4, 6].includes(currentQ.options.length) ? currentQ.options.length : ""}
+                  {(currentQ.question_type === "mcq" || currentQ.question_type === "multi_select") && <label className="flex items-center gap-2 text-xs font-bold text-gray-600">{t("editor.answerCount")}:
+                    <select aria-label={t("editor.answerCount")} value={[4, 6].includes(currentQ.options.length) ? currentQ.options.length : ""}
                       onChange={(event) => changeOptionCount(Number(event.target.value) as 4 | 6)}
                       className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900">
-                      {![4, 6].includes(currentQ.options.length) && <option value="" disabled>4 немесе 6 таңдаңыз</option>}
-                      {MCQ_EDITOR_OPTION_COUNTS.map((count) => <option value={count} key={count}>{count} жауап</option>)}
+                      {![4, 6].includes(currentQ.options.length) && <option value="" disabled>{t("editor.pick4or6")}</option>}
+                      {MCQ_EDITOR_OPTION_COUNTS.map((count) => <option value={count} key={count}>{t("editor.answersN", { count })}</option>)}
                     </select>
                   </label>}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-600">Уақыт:</span>
+                    <span className="text-xs font-bold text-gray-600">{t("editor.time")}</span>
                     <select
                       value={currentQ.time_limit_seconds}
                       onChange={(e) => updateCurrentQuestion({ time_limit_seconds: Number(e.target.value) })}
                       className="bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-500 focus:bg-white"
                     >
-                      <option value={10}>10 секунд</option>
-                      <option value={15}>15 секунд</option>
-                      <option value={20}>20 секунд</option>
-                      <option value={30}>30 секунд</option>
-                      <option value={45}>45 секунд</option>
-                      <option value={60}>60 секунд</option>
-                      <option value={90}>90 секунд</option>
-                      <option value={120}>2 минут</option>
+                      <option value={10}>{t("editor.secondsN", { count: 10 })}</option>
+                      <option value={15}>{t("editor.secondsN", { count: 15 })}</option>
+                      <option value={20}>{t("editor.secondsN", { count: 20 })}</option>
+                      <option value={30}>{t("editor.secondsN", { count: 30 })}</option>
+                      <option value={45}>{t("editor.secondsN", { count: 45 })}</option>
+                      <option value={60}>{t("editor.secondsN", { count: 60 })}</option>
+                      <option value={90}>{t("editor.secondsN", { count: 90 })}</option>
+                      <option value={120}>{t("editor.minutesN", { count: 2 })}</option>
                     </select>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-600">Ұпай:</span>
+                    <span className="text-xs font-bold text-gray-600">{t("editor.points")}</span>
                     <select
                       value={currentQ.points}
                       onChange={(e) => updateCurrentQuestion({ points: Number(e.target.value) })}
                       className="bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-500 focus:bg-white"
                     >
-                      <option value={600}>600 балл</option>
-                      <option value={800}>800 балл</option>
-                      <option value={1000}>1000 балл</option>
-                      <option value={1200}>1200 балл</option>
-                      <option value={1500}>1500 балл</option>
+                      <option value={600}>{t("host.points", { count: 600 })}</option>
+                      <option value={800}>{t("host.points", { count: 800 })}</option>
+                      <option value={1000}>{t("host.points", { count: 1000 })}</option>
+                      <option value={1200}>{t("host.points", { count: 1200 })}</option>
+                      <option value={1500}>{t("host.points", { count: 1500 })}</option>
                     </select>
                   </div>
                 </div>
@@ -821,28 +823,28 @@ export default function QuizEditor({
               <div className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-gray-700">
-                    Сұрақ мәтіні
+                    {t("editor.questionText")}
                   </label>
                   <span className="text-xs text-purple-600 font-mono font-bold">
-                    Сұрақ #{activeQuestionIndex + 1}
+                    {t("editor.questionHash", { n: activeQuestionIndex + 1 })}
                   </span>
                 </div>
                 <MathFieldInput
-                  ariaLabel="Сұрақ мәтіні"
-                  placeholder={String.raw`\text{Мысалы: Теңдеуді шешіңіз: }x^2-5x+6=0`}
+                  ariaLabel={t("editor.questionText")}
+                  placeholder={String.raw`\text{${t("editor.questionPlaceholder")} }x^2-5x+6=0`}
                   value={currentQ.question_text}
                   onChange={(value) => updateCurrentQuestion({ question_text: value })}
                   className="w-full text-base text-gray-900"
                 />
                 <p className="mt-2 text-xs text-gray-500">
-                  Өрісті басып, мәтін мен формулаларды математикалық пернетақтамен енгізіңіз.
+                  {t("editor.fieldHint")}
                 </p>
 
                 {/* Live Preview */}
                 {currentQ.question_text && (
                   <div className="mt-3 p-3.5 bg-purple-50/60 rounded-xl border border-purple-100">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-purple-800 block mb-1">
-                      Алдын ала көрініс (Preview):
+                      {t("editor.preview")}
                     </span>
                     <div className="text-base text-gray-900 font-medium">
                       <MathRender latex={currentQ.question_text} />
@@ -856,14 +858,14 @@ export default function QuizEditor({
                 /* Numeric / Math Input */
                 <div className="bg-white rounded-2xl p-6 border border-purple-100 shadow-sm">
                   <h3 className="text-sm font-bold text-gray-800 mb-1">
-                    Дұрыс математикалық жауапты енгізіңіз
+                    {t("editor.enterCorrectMath")}
                   </h3>
                   <p className="text-xs text-gray-500 mb-4">
-                    Оқушының енгізген жауабы Mathbott математикалық қозғалтқышы арқылы тексеріледі (мысалы, 1/2 мен 0.5 екеуі де дұрыс деп қабылданады).
+                    {t("editor.mathCheckHint")}
                   </p>
                   <MathFieldInput
-                    ariaLabel="Дұрыс математикалық жауап"
-                    placeholder={String.raw`\text{Мысалы: 2 немесе x+3 немесе 3/4}`}
+                    ariaLabel={t("editor.correctMathAria")}
+                    placeholder={String.raw`\text{${t("editor.answerPlaceholder")}}`}
                     value={currentQ.correct_answer}
                     onChange={(value) => updateCurrentQuestion({ correct_answer: value })}
                     defaultMode="math"
@@ -872,7 +874,7 @@ export default function QuizEditor({
                   />
                   {currentQ.correct_answer && (
                     <div className="mt-3 text-sm text-gray-700 flex items-center gap-2">
-                      <span className="font-semibold">Көрінісі:</span>
+                      <span className="font-semibold">{t("editor.looksLike")}</span>
                       <MathRender latex={currentQ.correct_answer} />
                     </div>
                   )}
@@ -883,11 +885,11 @@ export default function QuizEditor({
                   <div className="flex items-center justify-between text-xs text-gray-600 px-1">
                     <span className="font-bold">
                       {currentQ.question_type === "multi_select"
-                        ? "Барлық дұрыс нұсқаларды белгілеңіз:"
-                        : "Дұрыс жауапты таңдаңыз:"}
+                        ? t("editor.markAllCorrect")
+                        : t("editor.pickCorrect")}
                     </span>
                     <span className="text-[11px] text-emerald-600 font-semibold">
-                      Жасыл белгі = Дұрыс жауап
+                      {t("editor.greenMeansCorrect")}
                     </span>
                   </div>
 
@@ -919,7 +921,7 @@ export default function QuizEditor({
                               <button
                                 type="button"
                                 onClick={() => toggleMultiSelectCorrect(opt.id)}
-                                aria-label={`${opt.id} нұсқасын дұрыс жауап ретінде таңдау`}
+                                aria-label={t("editor.markOptionAria", { id: opt.id })}
                                 aria-pressed={isCorrect}
                                 className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
                                   isCorrect
@@ -945,8 +947,8 @@ export default function QuizEditor({
                           </div>
 
                           <MathFieldInput
-                            ariaLabel={`${opt.id} жауап нұсқасы`}
-                            placeholder={`\\text{${opt.id} нұсқасын жазыңыз...}`}
+                            ariaLabel={t("editor.optionAria", { id: opt.id })}
+                            placeholder={`\\text{${t("editor.optionPlaceholder", { id: opt.id })}}`}
                             value={opt.text}
                             onChange={(value) => updateOptionText(opt.id, value)}
                             className="w-full text-sm text-gray-900 shadow-sm"
@@ -967,11 +969,11 @@ export default function QuizEditor({
               {/* Explanation Box */}
               <div className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm">
                 <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Түсіндірме (Оқушылар жауап бергеннен кейін көретін шешім жолы, міндетті емес)
+                  {t("editor.explanationLabel")}
                 </label>
                 <MathFieldInput
-                  ariaLabel="Түсіндірме"
-                  placeholder={String.raw`\text{Шешімнің қадамдары...}`}
+                  ariaLabel={t("editor.explanationAria")}
+                  placeholder={String.raw`\text{${t("editor.explanationPlaceholder")}}`}
                   value={currentQ.explanation}
                   onChange={(value) => updateCurrentQuestion({ explanation: value })}
                   className="w-full text-sm text-gray-900"

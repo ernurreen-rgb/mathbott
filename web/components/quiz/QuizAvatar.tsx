@@ -3,6 +3,21 @@ import Icon from "@/components/ui/Icon";
 
 
 import React from "react";
+import { useI18n } from "@/lib/i18n/provider";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
+
+/** Character and colour names live in the message tables; unknown ids fall back to the Kazakh name in lib/quiz-avatar. */
+function characterName(t: Translate, char: { id: string; name: string }): string {
+  const key = `avatar.char.${char.id}` as MessageKey;
+  const name = t(key);
+  return name === key ? char.name : name;
+}
+
+function colorName(t: Translate, color: { hex: string; name: string }): string {
+  const key = `avatar.color.${color.hex.replace("#", "").toLowerCase()}` as MessageKey;
+  const name = t(key);
+  return name === key ? color.name : name;
+}
 import {
   QUIZ_AVATAR_CHARACTERS,
   QUIZ_AVATAR_COLORS,
@@ -575,13 +590,14 @@ export const QuizAvatar = React.memo(function QuizAvatar({
   size = "md",
   className = "",
 }: QuizAvatarProps) {
+  const { t } = useI18n();
   const parsed = parseQuizAvatar(avatarColor, nickname);
 
   return (
     <div
       className={`relative inline-flex items-center justify-center shrink-0 overflow-hidden select-none border border-gray-200/80 shadow-sm ${SIZE_CLASSES[size]} ${className}`}
       style={{ backgroundColor: parsed.tileBg }}
-      title={`${nickname} (${parsed.character.name})`}
+      title={`${nickname} (${characterName(t, parsed.character)})`}
     >
       <div className="relative z-10 w-full h-full flex items-center justify-center">
         <CharacterSvg characterId={parsed.characterId} />
@@ -600,12 +616,13 @@ export interface QuizAvatarPickerProps {
 
 export function QuizAvatarPicker({
   value,
-  nickname = "Ойыншы",
+  nickname,
   onChange,
   compact = false,
   showCharacterNames = true,
 }: QuizAvatarPickerProps) {
-  const parsed = parseQuizAvatar(value, nickname);
+  const { t } = useI18n();
+  const parsed = parseQuizAvatar(value, nickname || t("avatar.defaultNickname"));
 
   const handleSelectCharacter = (charId: string) => {
     onChange(encodeQuizAvatar(parsed.color, charId));
@@ -626,11 +643,11 @@ export function QuizAvatarPicker({
       <div className="flex items-center justify-between">
         <div>
           <span className="block text-xs font-bold uppercase tracking-wider text-gray-600">
-            Кейіпкерді таңдаңыз
+            {t("avatar.choose")}
           </span>
           {showCharacterNames && (
             <span className="text-xs font-semibold text-purple-700">
-              {parsed.character.name}
+              {characterName(t, parsed.character)}
             </span>
           )}
         </div>
@@ -640,7 +657,7 @@ export function QuizAvatarPicker({
           className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5"
         >
           <span><Icon name="dice" /></span>
-          <span>Кездейсоқ</span>
+          <span>{t("avatar.random")}</span>
         </button>
       </div>
 
@@ -653,8 +670,8 @@ export function QuizAvatarPicker({
               type="button"
               key={char.id}
               onClick={() => handleSelectCharacter(char.id)}
-              title={char.name}
-              aria-label={char.name}
+              title={characterName(t, char)}
+              aria-label={characterName(t, char)}
               aria-pressed={isSelected}
               className={`group relative flex flex-col items-center p-1.5 rounded-2xl border-2 transition-all ${
                 isSelected
@@ -664,13 +681,13 @@ export function QuizAvatarPicker({
             >
               <QuizAvatar
                 avatarColor={encodeQuizAvatar(parsed.color, char.id)}
-                nickname={char.name}
+                nickname={characterName(t, char)}
                 size={compact ? "md" : "lg"}
                 className="group-hover:scale-105 transition-transform"
               />
               {!compact && showCharacterNames && (
                 <span className="mt-1 text-[10px] font-bold text-gray-700 truncate w-full text-center">
-                  {char.name.split(" ").pop()}
+                  {characterName(t, char).split(" ").pop()}
                 </span>
               )}
             </button>
@@ -681,7 +698,7 @@ export function QuizAvatarPicker({
       {/* Soft Tile Background Picker */}
       <div>
         <span className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-          Фон реңкі
+          {t("avatar.backgroundTone")}
         </span>
         <div className="flex flex-wrap items-center gap-2">
           {QUIZ_AVATAR_COLORS.map((c) => {
@@ -691,8 +708,8 @@ export function QuizAvatarPicker({
                 type="button"
                 key={c.hex}
                 onClick={() => handleSelectColor(c.hex)}
-                title={c.name}
-                aria-label={`Фон: ${c.name}`}
+                title={colorName(t, c)}
+                aria-label={t("avatar.backgroundAria", { name: colorName(t, c) })}
                 aria-pressed={isSelected}
                 className={`w-7 h-7 rounded-full transition-all border ${
                   isSelected

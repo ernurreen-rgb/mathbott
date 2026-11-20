@@ -233,6 +233,18 @@ class UserRepository(BaseRepository):
             )
             await db.commit()
 
+    async def update_user_language(self, email: str, language: str):
+        """Store the student's interface language ('kk' or 'ru')."""
+        normalized_email = _normalize_email(email)
+        if not normalized_email:
+            return
+        async with self._connection() as db:
+            await db.execute(
+                "UPDATE users SET language = ? WHERE LOWER(email) = ?",
+                (language, normalized_email)
+            )
+            await db.commit()
+
     async def get_recent_activity_timestamps(
         self,
         user_id: int,

@@ -41,3 +41,19 @@ export async function updateNickname(email: string, nickname: string): Promise<{
     }
   );
 }
+
+/** The interface language saved in the student's profile, or null if they never chose one. */
+export async function getUserLanguage(email: string): Promise<{ data: string | null; error: string | null }> {
+  const { data, error } = await fetchWithErrorHandling<{ language?: string | null }>(
+    `${apiPath(`user/web/${encodeURIComponent(email)}`)}?fields=language`
+  );
+  return { data: data?.language ?? null, error };
+}
+
+export async function updateUserLanguage(email: string, language: "kk" | "ru"): Promise<{ data: any | null; error: string | null }> {
+  return fetchWithErrorHandling(apiPath("user/web/language"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, language }),
+  });
+}

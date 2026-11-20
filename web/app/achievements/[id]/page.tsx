@@ -11,10 +11,13 @@ import DesktopNav from "@/components/DesktopNav";
 import { UserData } from "@/types";
 import { getPublicUserDataById, getUserData } from "@/lib/api";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 export default function PublicAchievementsPage() {
   const { data: session } = useSession();
   const params = useParams();
+  const { t } = useI18n();
   const sessionEmail = session?.user?.email || null;
   const rawUserId = params?.id ? Number(params.id) : NaN;
   const userId = Number.isInteger(rawUserId) && rawUserId > 0 ? rawUserId : null;
@@ -26,7 +29,7 @@ export default function PublicAchievementsPage() {
   useEffect(() => {
     if (!userId) {
       setUserData(null);
-      setError("Пайдаланушы ID-і қате");
+      setError(tr("publicProfile.badId"));
       setLoading(false);
       return;
     }
@@ -52,7 +55,7 @@ export default function PublicAchievementsPage() {
           if (process.env.NODE_ENV === "development") {
             console.error("Error fetching user data:", err);
           }
-          setError("Жетістіктерді жүктеу қатесі");
+          setError(tr("achievements.loadError"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -112,13 +115,13 @@ export default function PublicAchievementsPage() {
                 <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
               <div className="text-gray-600 text-lg mb-4">
-                {error || "Пайдаланушы табылмады"}
+                {error || t("publicProfile.notFound")}
               </div>
               <Link
                 href="/achievements"
                 className="inline-block px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-bold rounded-xl hover:shadow-glow transition-all"
               >
-                Жетістіктерге оралу
+                {t("achievements.backTo")}
               </Link>
             </div>
           </div>
@@ -142,20 +145,20 @@ export default function PublicAchievementsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-              Барлық жетістіктер
+              {t("achievements.all")}
             </h1>
             {!isCurrentUser && (
               <Link
                 href={`/profile/${userData.id}`}
                 className="text-purple-600 hover:text-pink-600 font-bold text-sm flex items-center gap-1 transition-colors px-3 py-1 rounded-lg hover:bg-white/50"
               >
-                <Icon name="arrowLeft" /> Профильге оралу
+                <Icon name="arrowLeft" /> {t("achievements.backToProfile")}
               </Link>
             )}
           </div>
           <div className="flex items-center gap-4">
             <p className="text-gray-700 font-semibold text-lg">
-              {isCurrentUser ? "Сіздің" : `${userData.nickname || "Пайдаланушының"}`} ашық жетістіктері: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
+              {isCurrentUser ? t("achievements.yoursUnlocked") : t("achievements.userUnlocked", { name: userData.nickname || t("achievements.userFallback") })}: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
             </p>
           </div>
         </div>
@@ -195,7 +198,7 @@ export default function PublicAchievementsPage() {
             <div className="text-gray-400 mb-4">
               <Icon name="award" className="w-16 h-16 mx-auto" />
             </div>
-            <div className="text-gray-600 text-lg">Жетістіктер әлі жүктеліп тұрған жоқ</div>
+            <div className="text-gray-600 text-lg">{t("achievements.notLoaded")}</div>
           </div>
         )}
         </div>

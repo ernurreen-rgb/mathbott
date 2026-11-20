@@ -12,6 +12,7 @@ import { getPublicUserDataById } from "@/lib/api";
 import { getProfileWeekActivityDaysSet } from "@/lib/week-activity";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -60,11 +61,11 @@ export default function PublicProfilePage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      setError(t("publicProfile.loadError"));
+      setError(tr("publicProfile.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [userId, t]);
+  }, [userId]);
 
   useEffect(() => {
     if (userData?.streak && userData.streak > 0) {
@@ -78,10 +79,10 @@ export default function PublicProfilePage() {
     if (userId && !isNaN(userId)) {
       fetchUserData();
     } else {
-      setError(t("publicProfile.badId"));
+      setError(tr("publicProfile.badId"));
       setLoading(false);
     }
-  }, [userId, fetchUserData, t]);
+  }, [userId, fetchUserData]);
 
   if (loading) {
     return (

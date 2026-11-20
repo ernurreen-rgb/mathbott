@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MIN_TASK_REPORT_LENGTH } from "@/lib/api";
 import { showToast } from "@/lib/toast";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 const MAX_TASK_REPORT_LENGTH = 500;
 
@@ -28,14 +30,14 @@ export function useTaskReport(send: SendTaskReport | null) {
     try {
       const { error } = await send(taskId, trimmed);
       if (error) {
-        showToast.error(`Қате: ${error}`);
+        showToast.error(tr("report.errorPrefix", { error }));
         return;
       }
-      showToast.success("Шағым сәтті жіберілді! Әкімші тексерісін күтіңіз.");
+      showToast.success(tr("report.sent"));
       setTaskId(null);
       setMessage("");
     } catch (e: any) {
-      showToast.error(`Қате: ${e?.message || "Желі қатесі"}`);
+      showToast.error(tr("report.errorPrefix", { error: e?.message || tr("lesson.networkError") }));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -60,6 +62,7 @@ export function useTaskReport(send: SendTaskReport | null) {
 type TaskReportDialogProps = ReturnType<typeof useTaskReport>["dialog"];
 
 export function TaskReportDialog({ open, message, onMessageChange, submitting, onCancel, onSubmit }: TaskReportDialogProps) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -82,19 +85,19 @@ export function TaskReportDialog({ open, message, onMessageChange, submitting, o
       }}
     >
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" role="dialog" aria-modal="true" aria-labelledby="task-report-title">
-        <h3 id="task-report-title" className="text-lg font-bold text-gray-900 mb-4">Шағым жіберу</h3>
+        <h3 id="task-report-title" className="text-lg font-bold text-gray-900 mb-4">{t("report.title")}</h3>
         <p className="text-gray-600 mb-4">
-          Бұл тапсырмамен мәселе бар ма? Әкімшіге хабарлаңыз.
+          {t("report.body")}
         </p>
         <textarea
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
-          placeholder="Мәселені сипаттаңыз"
+          placeholder={t("report.placeholder")}
           className="w-full border border-gray-300 bg-white text-base text-gray-900 placeholder:text-gray-400 caret-purple-600 rounded-lg px-3 py-2 mb-4 min-h-[100px] resize-none focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
           maxLength={MAX_TASK_REPORT_LENGTH}
         />
         <div className="text-sm text-gray-500 mb-4">
-          {message.length}/{MAX_TASK_REPORT_LENGTH} таңба (мин. {MIN_TASK_REPORT_LENGTH})
+          {t("report.counter", { length: message.length, max: MAX_TASK_REPORT_LENGTH, min: MIN_TASK_REPORT_LENGTH })}
         </div>
         <div className="flex justify-end space-x-2">
           <button
@@ -103,7 +106,7 @@ export function TaskReportDialog({ open, message, onMessageChange, submitting, o
             className="px-4 py-2 text-gray-600 hover:text-gray-800"
             disabled={submitting}
           >
-            Бас тарту
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -111,7 +114,7 @@ export function TaskReportDialog({ open, message, onMessageChange, submitting, o
             disabled={!canSubmit}
             className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg"
           >
-            {submitting ? "Жіберіледі..." : "Жіберу"}
+            {submitting ? t("report.sending") : t("report.send")}
           </button>
         </div>
       </div>

@@ -16,11 +16,14 @@ import {
   QUIZ_AVATAR_CHARACTERS,
 } from "@/components/quiz/QuizAvatar";
 import toast from "react-hot-toast";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/provider";
 
 function JoinForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { t } = useI18n();
 
   const [pinCode, setPinCode] = useState("");
   const [nickname, setNickname] = useState("");
@@ -61,13 +64,13 @@ function JoinForm() {
     const cleanNick = nickname.trim();
 
     if (!cleanPin || cleanPin.length !== 6) {
-      toast.error("6 таңбалы PIN кодты енгізіңіз");
+      toast.error(t("join.enterPin"));
       pinRef.current?.focus();
       return;
     }
 
     if (!cleanNick) {
-      toast.error("Лақап атыңызды (аты-жөніңізді) жазыңыз");
+      toast.error(t("join.enterNickname"));
       nicknameRef.current?.focus();
       return;
     }
@@ -84,7 +87,7 @@ function JoinForm() {
       const email = session?.user?.email || undefined;
       const lobby = await getQuizSessionByPin(cleanPin);
       if (!lobby.data) {
-        toast.error(lobby.error || "Ойын табылмады");
+        toast.error(lobby.error || t("join.gameNotFound"));
         setLoading(false);
         return;
       }
@@ -98,7 +101,7 @@ function JoinForm() {
       );
 
       if (error || !data) {
-        toast.error(error || "Қосылу мүмкін болмады. PIN кодты тексеріңіз.");
+        toast.error(error || t("join.joinFailed"));
         setLoading(false);
         return;
       }
@@ -114,13 +117,13 @@ function JoinForm() {
           avatarColor: data.participant.avatar_color,
           ...(normalizedEmail ? { accountEmail: normalizedEmail } : {}),
         });
-        if (!persisted) toast.error("Браузер сақтау орнын бұғаттады. Нәтижені жоғалтпау үшін осы вкладканы жаппаңыз.");
+        if (!persisted) toast.error(t("join.storageBlocked"));
       }
 
-      toast.success("Сәтті қосылдыңыз!");
+      toast.success(t("join.joined"));
       router.push(`/quiz/play/${data.session.id}`);
     } catch (err: any) {
-      toast.error(err?.message || "Сессияға қосылу қатесі");
+      toast.error(err?.message || t("join.sessionError"));
       setLoading(false);
     }
   };
@@ -128,24 +131,29 @@ function JoinForm() {
   return (
     <section aria-labelledby="join-title" className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/80 bg-white/95 shadow-2xl shadow-purple-900/10">
       <div className="shrink-0 px-5 pb-4 pt-5 text-center sm:px-8 sm:pt-6">
-        <ol aria-label="Қосылу қадамдары" className="mb-4 flex justify-center gap-4 text-xs font-bold">
+        {step === "identity" && (
+          <div className="mb-4 flex justify-center">
+            <LanguageSwitcher />
+          </div>
+        )}
+        <ol aria-label={t("join.stepsAria")} className="mb-4 flex justify-center gap-4 text-xs font-bold">
           {(["identity", "avatar"] as const).map((item, index) => (
             <li key={item} aria-current={step === item ? "step" : undefined}
               className={`flex items-center gap-2 ${step === item ? "text-purple-700" : "text-gray-400"}`}>
               <span className={`flex h-6 w-6 items-center justify-center rounded-full ${step === item ? "bg-purple-600 text-white" : "bg-gray-100"}`}>
                 {index + 1}
               </span>
-              {item === "identity" ? "PIN және есім" : "Кейіпкер"}
+              {item === "identity" ? t("join.stepIdentity") : t("join.stepAvatar")}
             </li>
           ))}
         </ol>
         <h1 id="join-title" ref={titleRef} tabIndex={-1} className="text-2xl font-extrabold tracking-tight text-gray-900 outline-none sm:text-3xl">
-          {step === "identity" ? "Ойынға қосылу" : "Кейіпкеріңізді таңдаңыз"}
+          {step === "identity" ? t("join.title") : t("join.chooseAvatarTitle")}
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           {step === "identity"
-            ? "Мұғалім берген PIN код пен есіміңізді енгізіңіз"
-            : "Кейіпкеріңізді таңдап, ойынға кіріңіз"}
+            ? t("join.identityHint")
+            : t("join.avatarHint")}
         </p>
       </div>
 
@@ -155,7 +163,7 @@ function JoinForm() {
             <div className="space-y-4 px-2">
               <div>
                 <label htmlFor="quiz-pin" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5 text-center">
-                  Ойын PIN коды
+                  {t("join.pinLabel")}
                 </label>
                 <input
                   id="quiz-pin"
@@ -171,7 +179,7 @@ function JoinForm() {
               </div>
               <div>
                 <label htmlFor="quiz-nickname" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5">
-                  Сіздің есіміңіз (Никнейм)
+                  {t("join.nicknameLabel")}
                 </label>
                 <input
                   id="quiz-nickname"
@@ -180,7 +188,7 @@ function JoinForm() {
                   autoComplete="nickname"
                   enterKeyHint="next"
                   maxLength={25}
-                  placeholder="Мысалы: Арман немесе Айша"
+                  placeholder={t("join.nicknamePlaceholder")}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="w-full py-3 px-4 rounded-2xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-purple-600 focus:outline-none transition-all text-gray-800 font-semibold text-base placeholder-gray-400"
@@ -215,7 +223,7 @@ function JoinForm() {
                 onClick={() => setStep("identity")}
                 className="flex shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-gray-200 px-3 py-3 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
               >
-                <Icon name="arrowLeft" /> Артқа
+                <Icon name="arrowLeft" /> {t("common.back")}
               </button>
             )}
             <button
@@ -226,19 +234,19 @@ function JoinForm() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Қосылуда...
+                  {t("join.joining")}
                 </span>
               ) : step === "identity" ? (
-                <>Кейіпкерді таңдау <Icon name="arrowRight" /></>
+                <>{t("join.chooseAvatar")} <Icon name="arrowRight" /></>
               ) : (
-                <>Ойынға кіру <Icon name="rocket" /></>
+                <>{t("join.enterGame")} <Icon name="rocket" /></>
               )}
             </button>
           </div>
           {step === "identity" && (
             <div className="mt-4 text-center">
               <Link href="/quizzes" className="text-xs font-bold text-gray-500 hover:text-purple-600 transition-colors">
-                <Icon name="arrowLeft" /> Квиздер каталогына оралу
+                <Icon name="arrowLeft" /> {t("join.backToCatalog")}
               </Link>
             </div>
           )}
@@ -249,12 +257,13 @@ function JoinForm() {
 }
 
 export default function JoinQuizPage() {
+  const { t } = useI18n();
   return (
     <div className="flex h-[100dvh] flex-col items-center justify-center bg-slate-50 p-3 sm:p-4">
       <Suspense
         fallback={
           <div className="w-full max-w-lg bg-white/90 rounded-3xl p-8 text-center text-gray-600">
-            Жүктелуде...
+            {t("common.loading")}
           </div>
         }
       >

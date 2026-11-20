@@ -12,12 +12,14 @@ import { deleteQuiz, forkQuiz, getQuizCatalog, setQuizCatalogFields, updateQuiz 
 import { Quiz, QuizCatalog, QuizCatalogSort } from "@/types/quiz";
 import QuizBulkBar from "./_components/QuizBulkBar";
 import QuizRow from "./_components/QuizRow";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr, type MessageKey } from "@/lib/i18n/translate";
 
 const PAGE_SIZE = 24;
 const MAX_SELECTED = 200; // the API's limit for one bulk change
-const SORTS: Array<{ value: QuizCatalogSort; label: string }> = [
-  { value: "newest", label: "Жаңалары" },
-  { value: "popular", label: "Танымалдары" },
+const SORTS: Array<{ value: QuizCatalogSort; label: MessageKey }> = [
+  { value: "newest", label: "catalog.sort.newest" },
+  { value: "popular", label: "catalog.sort.popular" },
 ];
 const number = new Intl.NumberFormat("ru-RU");
 const HIDE_SCROLLBAR = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
@@ -116,6 +118,7 @@ function QuizzesCatalog() {
   const pathname = usePathname() || "/quizzes";
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
+  const { t } = useI18n();
   const email = session?.user?.email || undefined;
 
   const urlFilters = useMemo(() => readFilters(searchParams), [searchParams]);
@@ -189,7 +192,7 @@ function QuizzesCatalog() {
     }, email);
     if (id !== request.current) return; // a newer search already replaced this one
     if (loadError || !data) {
-      setError(loadError || "Квиздерді жүктеу кезінде қате орын алды");
+      setError(loadError || tr("catalog.loadError"));
     } else {
       setError(null);
       setCatalog(data);
@@ -236,12 +239,12 @@ function QuizzesCatalog() {
 
   const handleDelete = async (quiz: Quiz) => {
     setOpenMenuId(null);
-    if (!confirm(`«${quiz.title}» квизін өшіргіңіз келетініне сенімдісіз бе?`)) return;
+    if (!confirm(t("catalog.confirmDelete", { title: quiz.title }))) return;
     setBusyId(quiz.id);
     const result = await deleteQuiz(quiz.id, email);
     setBusyId(null);
     if (result.error) return void toast.error(result.error);
-    toast.success("Квиз өшірілді");
+    toast.success(t("catalog.deleted"));
     void load();
   };
 
@@ -250,8 +253,8 @@ function QuizzesCatalog() {
     setBusyId(quiz.id);
     const result = await updateQuiz(quiz.id, { is_public: !quiz.is_public }, email);
     setBusyId(null);
-    if (result.error || !result.data) return void toast.error(result.error || "Квиз мәртебесін өзгерту мүмкін болмады");
-    toast.success(quiz.is_public ? "Квиз енді жеке: каталогтан жасырылды" : "Квиз енді баршаға ашық");
+    if (result.error || !result.data) return void toast.error(result.error || t("catalog.privacyFailed"));
+    toast.success(quiz.is_public ? t("catalog.nowPrivate") : t("catalog.nowPublic"));
     // Flip the switch at once; the reload then settles counts and drops the row if a filter excludes it now.
     setCatalog((current) => current && {
       ...current, items: current.items.map((item) => (item.id === quiz.id ? { ...item, is_public: !quiz.is_public } : item)),
@@ -265,9 +268,9 @@ function QuizzesCatalog() {
     const { data: forked, error: forkError } = await forkQuiz(quiz.id, email);
     if (forkError || !forked) {
       setBusyId(null);
-      return void toast.error(forkError || "Квизді көшіру сәтсіз аяқталды");
+      return void toast.error(forkError || t("catalog.forkFailed"));
     }
-    toast.success("Көшірме сақталды. Өңдеу терезесі ашылуда...");
+    toast.success(t("catalog.forked"));
     router.push(`/quizzes/${forked.id}/edit`);
   };
 
@@ -280,7 +283,7 @@ function QuizzesCatalog() {
       if (!on) next.delete(id);
       else if (next.size < MAX_SELECTED || next.has(id)) next.add(id);
       else {
-        toast.error(`Бір жолда ең көбі ${MAX_SELECTED} квиз таңдауға болады`);
+        toast.error(t("catalog.maxSelected", { count: MAX_SELECTED }));
         break;
       }
     }
@@ -291,8 +294,8 @@ function QuizzesCatalog() {
     setApplying(true);
     const { data, error: applyError } = await setQuizCatalogFields(Array.from(selected), change, email);
     setApplying(false);
-    if (applyError || !data) return void toast.error(applyError || "Квиздерді жаңарту мүмкін болмады");
-    toast.success(`${data.updated} квиз жаңартылды`);
+    if (applyError || !data) return void toast.error(applyError || t("catalog.bulkFailed"));
+    toast.success(t("catalog.bulkDone", { count: data.updated }));
     setSelected(null);
     void load();
   };
@@ -346,21 +349,21 @@ function QuizzesCatalog() {
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-center gap-x-2 gap-y-3">
           <h1 className="mr-auto bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
-            Квиздер
+            {t("nav.quizzes")}
           </h1>
           <Link href="/quiz/history" className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200/60 hover:text-slate-900">
             <Icon name="clock" className="h-4 w-4" />
-            Менің ойындарым
+            {t("history.title")}
           </Link>
           {/* On a phone the two main actions share one full-width line under the title. */}
           <div className="order-last flex w-full gap-2 sm:order-none sm:w-auto">
             <Link href="/join" className="inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-purple-300 hover:text-purple-700">
               <Icon name="logIn" className="h-4 w-4 text-purple-600" />
-              PIN-кодпен қосылу
+              {t("history.joinByPin")}
             </Link>
             <Link href="/quizzes/create" className="inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-purple-700">
               <Icon name="plus" className="h-4 w-4" />
-              Жаңа квиз
+              {t("catalog.new")}
             </Link>
           </div>
         </header>
@@ -375,15 +378,15 @@ function QuizzesCatalog() {
                 value={searchText}
                 maxLength={100}
                 onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Квиз атауы немесе тақырыбы"
-                aria-label="Квиздерді іздеу"
+                placeholder={t("catalog.searchPlaceholder")}
+                aria-label={t("catalog.searchAria")}
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-11 text-base text-slate-900 shadow-sm transition-shadow placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-100 [&::-webkit-search-cancel-button]:hidden"
               />
               {searchText ? (
                 <button
                   type="button"
                   onClick={() => { setSearchText(""); searchRef.current?.focus(); }}
-                  aria-label="Іздеуді тазалау"
+                  aria-label={t("catalog.clearSearch")}
                   className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <Icon name="close" className="h-4 w-4" />
@@ -398,25 +401,25 @@ function QuizzesCatalog() {
         <div className={`-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 ${HIDE_SCROLLBAR}`}>
           {session && (
             <Segmented
-              label="Қай квиздер"
+              label={t("catalog.scopeLabel")}
               value={filters.scope}
               onChange={(scope) => setFilters({ scope })}
-              options={[{ value: "all", label: "Каталог" }, { value: "mine", label: "Менің квиздерім" }]}
+              options={[{ value: "all", label: t("catalog.scopeAll") }, { value: "mine", label: t("catalog.scopeMine") }]}
             />
           )}
           {filters.scope === "mine" && (
             <Segmented
-              label="Қолжетімділік"
+              label={t("catalog.visibilityLabel")}
               value={filters.visibility || "any"}
               onChange={(visibility) => setFilters({ visibility: visibility === "any" ? undefined : visibility })}
-              options={[{ value: "any", label: "Бәрі" }, { value: "public", label: "Ашық" }, { value: "private", label: "Жеке" }]}
+              options={[{ value: "any", label: t("catalog.all") }, { value: "public", label: t("catalog.public") }, { value: "private", label: t("catalog.private") }]}
             />
           )}
           {grades.length > 0 && (
             <>
               {session && <span className="mx-1 hidden h-6 w-px shrink-0 bg-slate-200 sm:block" />}
-              <span className="shrink-0 text-sm font-semibold text-slate-500">Сынып</span>
-              <Chip active={!filters.grade} onClick={() => setFilters({ grade: undefined })}>Бәрі</Chip>
+              <span className="shrink-0 text-sm font-semibold text-slate-500">{t("catalog.grade")}</span>
+              <Chip active={!filters.grade} onClick={() => setFilters({ grade: undefined })}>{t("catalog.all")}</Chip>
               {grades.map((g) => (
                 <Chip key={g.grade} active={filters.grade === g.grade} onClick={() => setFilters({ grade: filters.grade === g.grade ? undefined : g.grade })}>
                   {g.grade}
@@ -429,7 +432,7 @@ function QuizzesCatalog() {
         {/* Topics on small screens: one scrollable line */}
         {rail && (
           <div className={`-mx-4 mt-2 flex items-center gap-2 overflow-x-auto px-4 pb-1 lg:hidden ${HIDE_SCROLLBAR}`}>
-            <Chip active={!filters.topic && !filters.untagged} onClick={() => setFilters({ topic: "", untagged: false })}>Барлық тақырып</Chip>
+            <Chip active={!filters.topic && !filters.untagged} onClick={() => setFilters({ topic: "", untagged: false })}>{t("catalog.allTopics")}</Chip>
             {/* The picked topic leads the line, or it would sit somewhere off screen. */}
             {[...topics].sort((a, b) => Number(b.topic === filters.topic) - Number(a.topic === filters.topic)).map((t) => (
               <Chip key={t.topic} active={filters.topic === t.topic} onClick={() => setFilters({ topic: filters.topic === t.topic ? "" : t.topic, untagged: false })}>
@@ -438,7 +441,7 @@ function QuizzesCatalog() {
             ))}
             {untaggedCount > 0 && (
               <Chip active={filters.untagged} onClick={() => setFilters({ topic: "", untagged: !filters.untagged })}>
-                Тақырыпсыз <span className="ml-1 font-normal opacity-70">{number.format(untaggedCount)}</span>
+                {t("catalog.noTopic")} <span className="ml-1 font-normal opacity-70">{number.format(untaggedCount)}</span>
               </Chip>
             )}
           </div>
@@ -446,23 +449,23 @@ function QuizzesCatalog() {
 
         <div className="mt-4 flex items-start gap-6">
           {rail && (
-            <aside aria-label="Тақырыптар" className="sticky top-[84px] hidden max-h-[calc(100vh-108px)] w-60 shrink-0 flex-col rounded-2xl border border-slate-200 bg-white p-2 lg:flex">
-              <h2 className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-500">Тақырыптар</h2>
+            <aside aria-label={t("catalog.topicsAria")} className="sticky top-[84px] hidden max-h-[calc(100vh-108px)] w-60 shrink-0 flex-col rounded-2xl border border-slate-200 bg-white p-2 lg:flex">
+              <h2 className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-500">{t("catalog.topics")}</h2>
               {topics.length > 10 && (
                 <input
                   type="search"
                   value={topicFilter}
                   onChange={(event) => setTopicFilter(event.target.value)}
-                  placeholder="Тақырыпты табу"
-                  aria-label="Тақырыпты табу"
+                  placeholder={t("catalog.findTopic")}
+                  aria-label={t("catalog.findTopic")}
                   className="mx-1 mb-1 mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-purple-500 focus:bg-white focus:outline-none"
                 />
               )}
               <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-                {!topicFilter.trim() && topicButton("Барлық тақырып", topicTotal, !filters.topic && !filters.untagged, () => setFilters({ topic: "", untagged: false }), "__all")}
+                {!topicFilter.trim() && topicButton(t("catalog.allTopics"), topicTotal, !filters.topic && !filters.untagged, () => setFilters({ topic: "", untagged: false }), "__all")}
                 {visibleTopics.map((t) => topicButton(t.topic, t.count, filters.topic === t.topic, () => setFilters({ topic: t.topic, untagged: false })))}
-                {!topicFilter.trim() && untaggedCount > 0 && topicButton("Тақырыпсыз", untaggedCount, filters.untagged, () => setFilters({ topic: "", untagged: true }), "__untagged")}
-                {visibleTopics.length === 0 && topicFilter.trim() && <li className="px-3 py-2 text-sm text-slate-400">Тақырып табылмады</li>}
+                {!topicFilter.trim() && untaggedCount > 0 && topicButton(t("catalog.noTopic"), untaggedCount, filters.untagged, () => setFilters({ topic: "", untagged: true }), "__untagged")}
+                {visibleTopics.length === 0 && topicFilter.trim() && <li className="px-3 py-2 text-sm text-slate-400">{t("catalog.topicNotFound")}</li>}
               </ul>
             </aside>
           )}
@@ -470,28 +473,28 @@ function QuizzesCatalog() {
           <section className="min-w-0 flex-1" aria-busy={loading}>
             <div className="mb-2 flex min-h-[32px] flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm text-slate-500">
               <span role="status">
-                {firstLoad ? "Жүктелуде..." : total === 0 ? "" : hasFilters
-                  ? `${number.format(total)} квиз табылды`
-                  : `${number.format(total)} квиз`}
+                {firstLoad ? t("common.loading") : total === 0 ? "" : hasFilters
+                  ? t("catalog.foundCount", { count: total, n: number.format(total) })
+                  : t("catalog.totalCount", { count: total, n: number.format(total) })}
               </span>
               {hasFilters && (
                 <button type="button" onClick={resetFilters} className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:underline">
                   <Icon name="close" className="h-3.5 w-3.5" />
-                  Сүзгілерді тазалау
+                  {t("catalog.clearFilters")}
                 </button>
               )}
               {pageIds.length > 0 && selected === null && (
                 <button type="button" onClick={() => { setOpenMenuId(null); setSelected(new Set()); }}
                   className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:underline">
                   <Icon name="checkCircle" className="h-3.5 w-3.5" />
-                  Бірнешеуін таңдау
+                  {t("catalog.selectSeveral")}
                 </button>
               )}
-              <div role="group" aria-label="Сұрыптау" className="ml-auto flex items-center gap-1">
+              <div role="group" aria-label={t("catalog.sortAria")} className="ml-auto flex items-center gap-1">
                 {SORTS.map((sort) => (
                   <button key={sort.value} type="button" aria-pressed={filters.sort === sort.value} onClick={() => setFilters({ sort: sort.value })}
                     className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${filters.sort === sort.value ? "bg-slate-200/80 text-slate-900" : "hover:text-slate-900"}`}>
-                    {sort.label}
+                    {t(sort.label)}
                   </button>
                 ))}
               </div>
@@ -513,7 +516,7 @@ function QuizzesCatalog() {
               <div className="rounded-2xl border border-red-200 bg-white p-8 text-center">
                 <p className="font-medium text-red-600">{error}</p>
                 <button type="button" onClick={() => void load()} className="mt-3 rounded-lg bg-purple-100 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-200">
-                  Қайталау
+                  {t("common.retry")}
                 </button>
               </div>
             ) : items.length === 0 ? (
@@ -523,18 +526,18 @@ function QuizzesCatalog() {
                 </div>
                 {hasFilters ? (
                   <>
-                    <h2 className="text-lg font-bold text-slate-800">Ештеңе табылмады</h2>
-                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Іздеу сөзін қысқартып көріңіз немесе сүзгілерді алып тастаңыз.</p>
+                    <h2 className="text-lg font-bold text-slate-800">{t("catalog.nothingFound")}</h2>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{t("catalog.nothingFoundHint")}</p>
                     <button type="button" onClick={resetFilters} className="mt-5 rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-purple-700">
-                      Сүзгілерді тазалау
+                      {t("catalog.clearFilters")}
                     </button>
                   </>
                 ) : (
                   <>
-                    <h2 className="text-lg font-bold text-slate-800">{filters.scope === "mine" ? "Сізде әлі квиздер жоқ" : "Квиздер әлі жоқ"}</h2>
-                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Алғашқы квизіңізді жасап, сыныппен бірге ойнаңыз.</p>
+                    <h2 className="text-lg font-bold text-slate-800">{filters.scope === "mine" ? t("catalog.noneMine") : t("catalog.none")}</h2>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{t("catalog.createHint")}</p>
                     <Link href="/quizzes/create" className="mt-5 inline-flex rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-purple-700">
-                      Квиз жасау
+                      {t("catalog.create")}
                     </Link>
                   </>
                 )}
@@ -560,12 +563,12 @@ function QuizzesCatalog() {
             )}
 
             {!error && lastPage > 1 && items.length > 0 && (
-              <nav aria-label="Беттер" className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <nav aria-label={t("catalog.pagesAria")} className="mt-5 flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-slate-500">
                   {number.format((filters.page - 1) * PAGE_SIZE + 1)}–{number.format(Math.min(filters.page * PAGE_SIZE, total))} / {number.format(total)}
                 </span>
                 <div className="flex items-center gap-1">
-                  <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label="Алдыңғы бет"
+                  <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label={t("catalog.prevPage")}
                     className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-purple-300 disabled:opacity-40 disabled:hover:border-slate-200">
                     <Icon name="chevronLeft" className="h-4 w-4" />
                   </button>
@@ -579,7 +582,7 @@ function QuizzesCatalog() {
                       {page}
                     </button>
                   ))}
-                  <button type="button" disabled={filters.page >= lastPage} onClick={() => goToPage(filters.page + 1)} aria-label="Келесі бет"
+                  <button type="button" disabled={filters.page >= lastPage} onClick={() => goToPage(filters.page + 1)} aria-label={t("catalog.nextPage")}
                     className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-purple-300 disabled:opacity-40 disabled:hover:border-slate-200">
                     <Icon name="chevronRight" className="h-4 w-4" />
                   </button>

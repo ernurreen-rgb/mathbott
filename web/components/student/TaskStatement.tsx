@@ -11,6 +11,7 @@ import {
   normalizeTaskTextScale,
 } from "@/lib/task-text-scale";
 import type { LessonTask } from "@/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 export default function TaskStatement({ task, imageSrc, viewport }: {
   task: Pick<LessonTask, "text" | "text_scale" | "image_filename">;
@@ -20,6 +21,7 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
   const src = imageSrc === undefined && task.image_filename
     ? apiPath(`images/${task.image_filename}`) : imageSrc;
   const [imageFailed, setImageFailed] = useState(false);
+  const { t } = useI18n();
   useEffect(() => {
     setImageFailed(false);
   }, [src]);
@@ -30,12 +32,12 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
         className={`min-w-0 break-words font-semibold leading-[1.65] text-gray-900 ${viewport ? "" : getTaskTextScaleClass(normalizedScale)}`}
         style={getTaskTextScaleStyle(normalizedScale, viewport)}
       >
-        {task.text ? <MathRender latex={task.text} /> : <span className="text-gray-400">Тапсырма мәтіні осы жерде көрсетіледі</span>}
+        {task.text ? <MathRender latex={task.text} /> : <span className="text-gray-400">{t("task.textPlaceholder")}</span>}
       </div>
       {src && !imageFailed && (
         <Image
           src={src}
-          alt="Тапсырма"
+          alt={t("task.imageAlt")}
           width={1280}
           height={720}
           unoptimized
@@ -45,7 +47,7 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
       )}
       {src && imageFailed && (
         <div className="mx-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
-          Сурет жүктелмеді
+          {t("task.imageFailed")}
         </div>
       )}
     </div>

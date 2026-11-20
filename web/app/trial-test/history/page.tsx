@@ -7,12 +7,15 @@ import { useRequireAuth } from "@/lib/use-require-auth";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getTrialTestsAttempted } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 import { TrialTest } from "@/types";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 
 export default function TrialTestHistoryPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const [tests, setTests] = useState<TrialTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export default function TrialTestHistoryPage() {
         setTests([]);
       }
     } catch {
-      setError("Тесттерді жүктеу қатесі");
+      setError(tr("trial.loadError"));
       setTests([]);
     } finally {
       setLoading(false);
@@ -58,9 +61,9 @@ export default function TrialTestHistoryPage() {
               href="/trial-test"
               className="text-gray-700 hover:text-gray-900 mb-4 inline-block"
             >
-              <Icon name="arrowLeft" /> Сынақ тесттері
+              <Icon name="arrowLeft" /> {t("trial.allTests")}
             </Link>
-            <h1 className="text-3xl font-bold text-gray-900 mb-6">Өту тарихы</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-6">{t("trial.history")}</h1>
 
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -71,7 +74,7 @@ export default function TrialTestHistoryPage() {
             {loading ? (
               <div className="text-center py-12">
                 <div className="text-4xl mb-4"><Icon name="loader" className="animate-spin" /></div>
-                <div className="text-gray-600">Жүктелуде...</div>
+                <div className="text-gray-600">{t("common.loading")}</div>
               </div>
             ) : error ? (
               <div className="text-center py-8">
@@ -80,15 +83,15 @@ export default function TrialTestHistoryPage() {
                   onClick={() => void fetchTests()}
                   className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700"
                 >
-                  Қайта жүктеу
+                  {t("profile.reload")}
                 </button>
               </div>
             ) : tests.length === 0 ? (
               <div className="text-center py-12 text-gray-600">
                 <div className="text-6xl mb-4"><Icon name="test" /></div>
-                <div>Сіз әлі ешқандай сынақ тестін тапсырған жоқсыз</div>
+                <div>{t("trialHistory.empty")}</div>
                 <Link href="/trial-test" className="mt-4 inline-block text-purple-600 font-semibold hover:underline">
-                  Сынақ тесттеріне өту <Icon name="arrowRight" />
+                  {t("trialHistory.goToTests")} <Icon name="arrowRight" />
                 </Link>
               </div>
             ) : (
@@ -110,7 +113,7 @@ export default function TrialTestHistoryPage() {
                       )}
                     </div>
                     <span className="text-purple-600 font-semibold text-sm whitespace-nowrap">
-                      Нәтижелерді көру <Icon name="arrowRight" />
+                      {t("trialHistory.viewResults")} <Icon name="arrowRight" />
                     </span>
                   </Link>
                 ))}

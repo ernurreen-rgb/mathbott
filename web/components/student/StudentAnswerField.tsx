@@ -6,6 +6,8 @@ import StudentWrittenAnswerFields, { type WrittenAnswerLabel } from "./StudentWr
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { getTaskMcqCorrectCount } from "@/lib/question-options";
 import type { LessonTask } from "@/types";
+import { useI18n } from "@/lib/i18n/provider";
+import type { Translate } from "@/lib/i18n/translate";
 
 /** The checked answer: the controls lock and show what was right. */
 export type StudentAnswerResult = {
@@ -27,8 +29,8 @@ interface StudentAnswerFieldProps {
 }
 
 const TF_CHOICES = [
-  { value: "true", label: "Дұрыс", idle: "bg-green-600 hover:bg-green-700 text-white", focus: "focus:ring-green-500" },
-  { value: "false", label: "Жалған", idle: "bg-red-600 hover:bg-red-700 text-white", focus: "focus:ring-red-500" },
+  { value: "true", label: "footer.tfTrue", idle: "bg-green-600 hover:bg-green-700 text-white", focus: "focus:ring-green-500" },
+  { value: "false", label: "footer.tfFalse", idle: "bg-red-600 hover:bg-red-700 text-white", focus: "focus:ring-red-500" },
 ] as const;
 
 const normalizeTf = (value?: string | null) => {
@@ -38,10 +40,10 @@ const normalizeTf = (value?: string | null) => {
   return "";
 };
 
-const selectLabels = (task: LessonTask): WrittenAnswerLabel[] =>
+const selectLabels = (task: LessonTask, t: Translate): WrittenAnswerLabel[] =>
   [0, 1].map((index) => ({
     prefix: `${String.fromCharCode(65 + index)})`,
-    text: task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`,
+    text: task.subquestions?.[index]?.text || t("answer.subquestionN", { n: index + 1 }),
   }));
 
 /**
@@ -50,6 +52,7 @@ const selectLabels = (task: LessonTask): WrittenAnswerLabel[] =>
  * everywhere and the admin preview shows exactly that.
  */
 export default function StudentAnswerField({ task, value, onChange, result, onSubmit, checking = false }: StudentAnswerFieldProps) {
+  const { t } = useI18n();
   const answered = !!result;
   const correct = !!result?.correct;
   const key = result ? result.correctAnswer || (correct ? value : "") : "";
@@ -61,7 +64,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
     // A tap that checks straight away shows no separate "selected" state before the result.
     const showSelection = !onSubmit;
     return (
-      <div className="flex gap-2" role="group" aria-label="Жауап таңдау">
+      <div className="flex gap-2" role="group" aria-label={t("answer.chooseGroupAria")}>
         {TF_CHOICES.map((choice) => {
           const isSelected = selected === choice.value;
           const isKey = keyTf === choice.value;
@@ -77,7 +80,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
               key={choice.value}
               type="button"
               disabled={checking || answered}
-              aria-label={`${choice.label} деп таңдау`}
+              aria-label={t("answer.chooseAria", { label: t(choice.label) })}
               aria-pressed={isSelected && (answered || showSelection)}
               onClick={() => {
                 onChange(choice.value);
@@ -85,7 +88,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
               }}
               className={`flex-1 rounded-lg px-3 py-2 font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-default ${choice.focus} ${style}`}
             >
-              {choice.label}
+              {t(choice.label)}
             </button>
           );
         })}
@@ -114,14 +117,14 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
 
     return (
       <div className="space-y-3">
-        {!isSelect && count > 1 && <p className="text-sm text-gray-600">{count} жауап жазыңыз</p>}
+        {!isSelect && count > 1 && <p className="text-sm text-gray-600">{t("answer.writeN", { count })}</p>}
         <div className={answered ? `rounded-xl border p-1 ${correct ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}` : ""}>
           <StudentWrittenAnswerFields
             value={value}
             onChange={onChange}
             count={count}
             disabled={answered || checking}
-            labels={isSelect ? selectLabels(task) : []}
+            labels={isSelect ? selectLabels(task, t) : []}
           />
         </div>
       </div>
@@ -130,7 +133,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
 
   return (
     <div className={answered ? `rounded-xl p-0.5 ring-2 ${correct ? "bg-green-50 ring-green-500" : "bg-red-50 ring-red-500"}` : ""}>
-      <StudentMathAnswerInput value={value} onChange={onChange} disabled={answered || checking} placeholder="Жауапты жазыңыз" />
+      <StudentMathAnswerInput value={value} onChange={onChange} disabled={answered || checking} placeholder={t("answer.placeholder")} />
     </div>
   );
 }

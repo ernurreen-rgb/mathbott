@@ -27,6 +27,8 @@ import {
 } from "@/types/quiz";
 import { QuizAvatar } from "@/components/quiz/QuizAvatar";
 import toast from "react-hot-toast";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -39,6 +41,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   const quizId = isValidQuizId ? rawQuizId : 0;
   const router = useRouter();
   const { data: session } = useSession();
+  const { t, intlLocale } = useI18n();
 
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -82,7 +85,7 @@ export default function QuizDetailPage({ params }: PageProps) {
           setQuiz(quizRes.data);
         } else {
           setQuiz(null);
-          toast.error("Квиз табылмады");
+          toast.error(tr("quiz.notFound"));
         }
 
         if (questionsRes.data) {
@@ -95,7 +98,7 @@ export default function QuizDetailPage({ params }: PageProps) {
       } catch (err) {
         if (!cancelled) {
           console.error(err);
-          toast.error("Ақпаратты жүктеу қатесі");
+          toast.error(tr("quiz.infoLoadError"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -110,7 +113,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
   const handleStartLiveGame = async () => {
     if (questions.length === 0) {
-      toast.error("Квизде сұрақтар жоқ. Алдымен сұрақ қосыңыз!");
+      toast.error(t("quiz.noQuestions"));
       return;
     }
 
@@ -120,22 +123,22 @@ export default function QuizDetailPage({ params }: PageProps) {
       const { data: sessionData, error } = await createQuizSession(quizId, {}, email);
 
       if (error || !sessionData) {
-        toast.error(error || "Ойын сессиясын ашу мүмкін болмады");
+        toast.error(error || t("quiz.sessionOpenFailed"));
         setStartingSession(false);
         return;
       }
 
-      toast.success("Ойын бөлмесі ашылды!");
+      toast.success(t("quiz.roomOpened"));
       router.push(`/quiz/host/${sessionData.id}`);
     } catch (err: any) {
-      toast.error(err?.message || "Сессияны бастау кезінде қате");
+      toast.error(err?.message || t("quiz.sessionStartError"));
       setStartingSession(false);
     }
   };
 
   const handleDeleteQuiz = async () => {
     if (deleting) return;
-    if (!confirm("Бұл квизді өшіргіңіз келетініне сенімдісіз бе?")) return;
+    if (!confirm(t("quiz.confirmDelete"))) return;
     setDeleting(true);
     try {
       const result = await deleteQuiz(quizId, session?.user?.email || undefined);
@@ -144,17 +147,17 @@ export default function QuizDetailPage({ params }: PageProps) {
         setDeleting(false);
         return;
       }
-      toast.success("Квиз өшірілді");
+      toast.success(t("catalog.deleted"));
       router.push("/quizzes");
     } catch {
-      toast.error("Квизді өшіру мүмкін болмады");
+      toast.error(t("quiz.deleteFailed"));
       setDeleting(false);
     }
   };
 
   const handleForkQuiz = async () => {
     if (!session?.user) {
-      toast.error("Квизді көшіру үшін жүйеге кіріңіз");
+      toast.error(t("quiz.signInToFork"));
       return;
     }
     setForking(true);
@@ -162,14 +165,14 @@ export default function QuizDetailPage({ params }: PageProps) {
       const email = session?.user?.email || undefined;
       const { data: forked, error } = await forkQuiz(quizId, email);
       if (error || !forked) {
-        toast.error(error || "Квизді көшіру мүмкін болмады");
+        toast.error(error || t("quiz.forkFailed"));
         setForking(false);
         return;
       }
-      toast.success("Квиз көшірмесі сәтті сақталды! Енді өңдей аласыз.");
+      toast.success(t("quiz.forked"));
       router.push(`/quizzes/${forked.id}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || "Қате орын алды");
+      toast.error(err?.message || t("error.title"));
       setForking(false);
     }
   };
@@ -185,17 +188,17 @@ export default function QuizDetailPage({ params }: PageProps) {
         session?.user?.email || undefined
       );
       if (result.error || !result.data) {
-        toast.error(result.error || "Квиз мәртебесін өзгерту сәтсіз аяқталды");
+        toast.error(result.error || t("quiz.privacyFailed"));
       } else {
         setQuiz((prev) => (prev ? { ...prev, is_public: nextPublic } : null));
         toast.success(
           nextPublic
-            ? "Квиз енді баршаға ашық (Public)"
-            : "Квиз жеке форматқа ауыстырылды (Private)"
+            ? t("quiz.nowPublic")
+            : t("quiz.nowPrivate")
         );
       }
     } catch {
-      toast.error("Қате орын алды");
+      toast.error(t("error.title"));
     } finally {
       setTogglingPrivacy(false);
     }
@@ -213,12 +216,12 @@ export default function QuizDetailPage({ params }: PageProps) {
       if (res.data) {
         setSelectedSessionResults(res.data);
       } else {
-        toast.error(res.error || "Нәтижелерді жүктеу сәтсіз аяқталды");
+        toast.error(res.error || t("quiz.resultsFailed"));
         setResultsModalOpen(false);
       }
     } catch (err: any) {
       if (reqId !== resultsRequestIdRef.current) return;
-      toast.error(err?.message || "Қате орын алды");
+      toast.error(err?.message || t("error.title"));
       setResultsModalOpen(false);
     } finally {
       if (reqId === resultsRequestIdRef.current) {
@@ -228,7 +231,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   };
 
   const handleFinishSession = async (sessionId: number) => {
-    if (!confirm("Ойын сессиясын аяқтауға сенімдісіз бе?")) return;
+    if (!confirm(t("quiz.confirmEndSession"))) return;
     setFinishingSessionId(sessionId);
     try {
       const email = session?.user?.email || undefined;
@@ -236,14 +239,14 @@ export default function QuizDetailPage({ params }: PageProps) {
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success("Ойын сәтті аяқталды!");
+        toast.success(t("quiz.sessionEnded"));
         const sessionsRes = await getQuizSessions(quizId, email);
         if (sessionsRes.data) {
           setSessions(sessionsRes.data);
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || "Сессияны аяқтау кезінде қате");
+      toast.error(err?.message || t("quiz.sessionEndError"));
     } finally {
       setFinishingSessionId(null);
     }
@@ -252,7 +255,7 @@ export default function QuizDetailPage({ params }: PageProps) {
   const formatSessionDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
-      return d.toLocaleString("kk-KZ", {
+      return d.toLocaleString(intlLocale, {
         month: "short",
         day: "numeric",
         hour: "2-digit",
@@ -270,7 +273,7 @@ export default function QuizDetailPage({ params }: PageProps) {
         <MobileNav currentPage="quizzes" />
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-gray-600">Квиз жүктелуде...</p>
+          <p className="text-sm font-semibold text-gray-600">{t("quiz.loading")}</p>
         </div>
       </div>
     );
@@ -282,13 +285,13 @@ export default function QuizDetailPage({ params }: PageProps) {
         <DesktopNav currentPage="quizzes" />
         <MobileNav currentPage="quizzes" />
         <div className="text-center p-8 bg-white rounded-3xl shadow-md border border-gray-100 max-w-sm">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Квиз табылмады</h2>
-          <p className="text-sm text-gray-500 mb-4">Бұл квиз өшірілген немесе сілтеме қате болуы мүмкін.</p>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">{t("quiz.notFound")}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t("quiz.notFoundHint")}</p>
           <Link
             href="/quizzes"
             className="inline-block px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm"
           >
-            Барлық квиздерге оралу
+            {t("quiz.backToAll")}
           </Link>
         </div>
       </div>
@@ -304,7 +307,7 @@ export default function QuizDetailPage({ params }: PageProps) {
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mb-6">
           <Link href="/quizzes" className="hover:text-purple-600 transition-colors">
-            Квиздер
+            {t("nav.quizzes")}
           </Link>
           <span>/</span>
           <span className="text-gray-900 truncate max-w-xs">{quiz.title}</span>
@@ -324,24 +327,24 @@ export default function QuizDetailPage({ params }: PageProps) {
                 >
                   {quiz.is_public ? (
                     <>
-                      <Icon name="globe" /> Ашық квиз (Public)
+                      <Icon name="globe" /> {t("quiz.publicBadge")}
                     </>
                   ) : (
                     <>
-                      <Icon name="lock" /> Жеке квиз (Private)
+                      <Icon name="lock" /> {t("quiz.privateBadge")}
                     </>
                   )}
                 </span>
                 <span className="text-xs text-gray-500 font-medium">
-                  {questions.length} сұрақ
+                  {t("catalog.questionsCount", { count: questions.length })}
                 </span>
                 {quiz.grade && (
                   <Link href={`/quizzes?grade=${quiz.grade}`} className="px-2.5 py-1 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">
-                    {quiz.grade}-сынып
+                    {t("catalog.gradeN", { n: quiz.grade })}
                   </Link>
                 )}
                 {quiz.topic && (
-                  <Link href={`/quizzes?topic=${encodeURIComponent(quiz.topic)}`} className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100" title="Осы тақырыптағы квиздер">
+                  <Link href={`/quizzes?topic=${encodeURIComponent(quiz.topic)}`} className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100" title={t("catalog.topicQuizzes")}>
                     {quiz.topic}
                   </Link>
                 )}
@@ -352,7 +355,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     <Icon name="lock" />
                   </span>
                   <span>
-                    <strong>Жеке квиз (Private):</strong> Каталогта басқаларға көрінбейді. Бірақ ойын бастап, PIN-код беріп ойната аласыз.
+                    <strong>{t("quiz.privateBadge")}:</strong> {t("quiz.privateNote")}
                   </span>
                 </div>
               )}
@@ -370,12 +373,12 @@ export default function QuizDetailPage({ params }: PageProps) {
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 {quiz.author_nickname && (
                   <span>
-                    Автор: <strong className="text-gray-700">{quiz.author_nickname}</strong>
+                    {t("quiz.author")}: <strong className="text-gray-700">{quiz.author_nickname}</strong>
                   </span>
                 )}
                 <span>•</span>
                 <span>
-                  Жасалған күні: {new Date(quiz.created_at).toLocaleDateString("kk-KZ")}
+                  {t("quiz.createdAt", { date: new Date(quiz.created_at).toLocaleDateString(intlLocale) })}
                 </span>
               </div>
             </div>
@@ -394,7 +397,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                 ) : (
                   <Icon name="play" className="w-6 h-6 text-yellow-300" />
                 )}
-                <span>Тікелей ойынды бастау</span>
+                <span>{t("quiz.startLive")}</span>
               </button>
 
               {quiz.can_manage && (
@@ -402,18 +405,18 @@ export default function QuizDetailPage({ params }: PageProps) {
                   <Link
                     href={`/quizzes/${quiz.id}/edit`}
                     className="px-3.5 py-1.5 rounded-xl border border-purple-200 bg-purple-50 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-colors flex items-center gap-1.5"
-                    title="Квизді өңдеу"
+                    title={t("quiz.editHint")}
                   >
                     <Icon name="edit" className="w-3.5 h-3.5" />
-                    <span>Өңдеу</span>
+                    <span>{t("common.edit")}</span>
                   </Link>
                   <button
                     onClick={handleTogglePrivacy}
                     disabled={togglingPrivacy}
                     title={
                       quiz.is_public
-                        ? "Квизді жеке ету (каталогтан жасыру)"
-                        : "Квизді ашық ету (баршаға қолжетімді)"
+                        ? t("quiz.makePrivateHint")
+                        : t("quiz.makePublicHint")
                     }
                     className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 ${
                       quiz.is_public
@@ -429,11 +432,11 @@ export default function QuizDetailPage({ params }: PageProps) {
                       <span>
                         {quiz.is_public ? (
                           <>
-                            <Icon name="lock" /> Жеке ету
+                            <Icon name="lock" /> {t("quiz.makePrivate")}
                           </>
                         ) : (
                           <>
-                            <Icon name="globe" /> Ашық ету
+                            <Icon name="globe" /> {t("quiz.makePublic")}
                           </>
                         )}
                       </span>
@@ -443,13 +446,13 @@ export default function QuizDetailPage({ params }: PageProps) {
                     onClick={() => setShowAnswers(!showAnswers)}
                     className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
                   >
-                    {showAnswers ? "Жауаптарды жасыру" : "Жауаптарды көру"}
+                    {showAnswers ? t("quiz.hideAnswers") : t("quiz.showAnswers")}
                   </button>
                   <button
                     onClick={handleDeleteQuiz}
                     disabled={deleting}
                     className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 disabled:opacity-50"
-                    title="Квизді өшіру"
+                    title={t("quiz.deleteHint")}
                   >
                     <Icon name="trash" className="w-4 h-4" />
                   </button>
@@ -462,14 +465,14 @@ export default function QuizDetailPage({ params }: PageProps) {
                     onClick={handleForkQuiz}
                     disabled={forking}
                     className="px-4 py-2 rounded-xl border border-purple-200 bg-purple-50 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                    title="Бұл квизді өзіңіздің аккаунтыңызға көшіріп алып, өңдеу"
+                    title={t("quiz.forkHint")}
                   >
                     {forking ? (
                       <Icon name="loader" className="animate-spin w-3.5 h-3.5" />
                     ) : (
                       <Icon name="copy" className="w-3.5 h-3.5" />
                     )}
-                    <span>Өзіме көшіріп өңдеу</span>
+                    <span>{t("quiz.forkEdit")}</span>
                   </button>
                 </div>
               )}
@@ -488,7 +491,7 @@ export default function QuizDetailPage({ params }: PageProps) {
             }`}
           >
             <Icon name="layers" className="w-4 h-4" />
-            <span>Сұрақтар</span>
+            <span>{t("trial.questions")}</span>
             <span
               className={`text-xs px-2 py-0.5 rounded-full ${
                 activeTab === "questions"
@@ -510,7 +513,7 @@ export default function QuizDetailPage({ params }: PageProps) {
               }`}
             >
               <Icon name="trophy" className="w-4 h-4" />
-              <span>Өткізілген ойындар мен нәтижелер</span>
+              <span>{t("quiz.sessionsTitle")}</span>
               <span
                 className={`text-xs px-2 py-0.5 rounded-full ${
                   activeTab === "sessions"
@@ -528,7 +531,7 @@ export default function QuizDetailPage({ params }: PageProps) {
         {activeTab === "questions" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900 flex items-center justify-between">
-              <span>Сұрақтар тізімі ({questions.length})</span>
+              <span>{t("quiz.questionsList", { count: questions.length })}</span>
             </h2>
 
             {questions.map((q, idx) => (
@@ -543,21 +546,21 @@ export default function QuizDetailPage({ params }: PageProps) {
                     </span>
                     <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
                       {q.question_type === "mcq"
-                        ? "Таңдаулы тест"
+                        ? t("quiz.type.mcq")
                         : q.question_type === "tf"
-                        ? "Шын/Жалған"
+                        ? t("quiz.type.tf")
                         : q.question_type === "multi_select"
-                        ? "Бірнеше дұрыс"
-                        : "Ашық жауап"}
+                        ? t("quiz.type.multi")
+                        : t("quiz.type.input")}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
                     <span>
-                      <Icon name="timer" /> {q.time_limit_seconds} сек
+                      <Icon name="timer" /> {t("quiz.seconds", { count: q.time_limit_seconds })}
                     </span>
                     <span>
-                      <Icon name="star" /> {q.points} балл
+                      <Icon name="star" /> {t("host.points", { count: q.points })}
                     </span>
                   </div>
                 </div>
@@ -571,7 +574,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                 {q.question_type === "input" ? (
                   showAnswers && (
                     <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-sm text-emerald-800 flex items-center gap-2">
-                      <span className="font-bold">Дұрыс математикалық жауап:</span>
+                      <span className="font-bold">{t("quiz.correctMath")}</span>
                       <MathRender latex={q.correct_answer || ""} />
                     </div>
                   )
@@ -607,7 +610,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                           </div>
                           {isCorrect && (
                             <span className="text-emerald-600 text-xs font-bold">
-                              <Icon name="check" /> Дұрыс
+                              <Icon name="check" /> {t("answer.correctBadge")}
                             </span>
                           )}
                         </div>
@@ -618,7 +621,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
                 {showAnswers && q.explanation && (
                   <div className="mt-3 p-3 bg-purple-50/60 rounded-xl border border-purple-100 text-xs text-purple-900">
-                    <span className="font-bold block mb-1">Түсіндірме:</span>
+                    <span className="font-bold block mb-1">{t("quiz.explanation")}</span>
                     <MathRender latex={q.explanation} />
                   </div>
                 )}
@@ -633,10 +636,10 @@ export default function QuizDetailPage({ params }: PageProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  Өткізілген ойындар мен нәтижелер ({sessions.length})
+                  {t("quiz.sessionsTitleN", { count: sessions.length })}
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Бұл квизді тапсырған барлық оқушылардың ұпайлары, дәлдігі мен жауаптары
+                  {t("quiz.sessionsHint")}
                 </p>
               </div>
 
@@ -646,7 +649,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-500/20 transition-all flex items-center gap-2"
               >
                 <Icon name="play" className="w-3.5 h-3.5" />
-                <span>Жаңа ойын қосу</span>
+                <span>{t("quiz.newGame")}</span>
               </button>
             </div>
 
@@ -656,17 +659,17 @@ export default function QuizDetailPage({ params }: PageProps) {
                   <Icon name="trophy" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-1">
-                  Әзірге өткізілген ойындар жоқ
+                  {t("quiz.noSessions")}
                 </h3>
                 <p className="text-xs text-gray-500 max-w-md mx-auto mb-6">
-                  Оқушыларға бұл квизді ойнату үшін жоғарыдағы «Тікелей ойынды бастау» батырмасын басыңыз. Барлық қатысушылардың нәтижелері мен рейтингі осында сақталады.
+                  {t("quiz.noSessionsHint")}
                 </p>
                 <button
                   onClick={handleStartLiveGame}
                   disabled={startingSession || questions.length === 0}
                   className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-extrabold shadow-lg shadow-purple-500/25 transition-all"
                 >
-                  Ойын бөлмесін ашу
+                  {t("quiz.openRoom")}
                 </button>
               </div>
             ) : (
@@ -693,16 +696,16 @@ export default function QuizDetailPage({ params }: PageProps) {
                           >
                             {isFinished ? (
                               <>
-                                <Icon name="check" className="w-3 h-3" /> Аяқталды
+                                <Icon name="check" className="w-3 h-3" /> {t("host.statusFinished")}
                               </>
                             ) : isInProgress ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />{" "}
-                                Жүріп жатыр
+                                {t("quiz.inProgress")}
                               </>
                             ) : (
                               <>
-                                <Icon name="users" className="w-3 h-3" /> Лобби
+                                <Icon name="users" className="w-3 h-3" /> {t("quiz.lobby")}
                               </>
                             )}
                           </span>
@@ -723,7 +726,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                             className="px-3.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold border border-purple-200 transition-colors flex items-center gap-1.5"
                           >
                             <Icon name="chart" className="w-3.5 h-3.5" />
-                            <span>Нәтижелерді көру</span>
+                            <span>{t("trialHistory.viewResults")}</span>
                           </button>
 
                           <Link
@@ -731,7 +734,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                             className="px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 transition-colors flex items-center gap-1.5"
                           >
                             <Icon name="arrowRight" className="w-3.5 h-3.5" />
-                            <span>{isFinished ? "Пьедестал" : "Бөлмеге өту"}</span>
+                            <span>{isFinished ? t("quiz.podium") : t("quiz.goToRoom")}</span>
                           </Link>
 
                           {!isFinished && (
@@ -739,14 +742,14 @@ export default function QuizDetailPage({ params }: PageProps) {
                               onClick={() => handleFinishSession(s.id)}
                               disabled={finishingSessionId === s.id}
                               className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                              title="Ойынды тоқтатып, нәтижелерін бекіту"
+                              title={t("quiz.endHint")}
                             >
                               {finishingSessionId === s.id ? (
                                 <Icon name="loader" className="animate-spin w-3.5 h-3.5" />
                               ) : (
                                 <Icon name="stop" className="w-3.5 h-3.5" />
                               )}
-                              <span>Аяқтау</span>
+                              <span>{t("quiz.end")}</span>
                             </button>
                           )}
                         </div>
@@ -756,16 +759,16 @@ export default function QuizDetailPage({ params }: PageProps) {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4">
                         <div className="bg-slate-50/80 rounded-xl p-3 border border-gray-100 text-center">
                           <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">
-                            Қатысушылар
+                            {t("quiz.participants")}
                           </span>
                           <span className="text-lg font-black text-gray-900">
-                            {s.participant_count} оқушы
+                            {t("quiz.studentsCount", { count: s.participant_count })}
                           </span>
                         </div>
 
                         <div className="bg-slate-50/80 rounded-xl p-3 border border-gray-100 text-center">
                           <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">
-                            Аяқтағандар
+                            {t("quiz.finishedCol")}
                           </span>
                           <span className="text-lg font-black text-emerald-600">
                             {s.finished_count}
@@ -774,19 +777,19 @@ export default function QuizDetailPage({ params }: PageProps) {
 
                         <div className="bg-slate-50/80 rounded-xl p-3 border border-gray-100 text-center">
                           <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">
-                            Орташа ұпай
+                            {t("quiz.avgScore")}
                           </span>
                           <span className="text-lg font-black text-purple-700 font-mono">
-                            {s.avg_score.toLocaleString()}
+                            {s.avg_score.toLocaleString(intlLocale)}
                           </span>
                         </div>
 
                         <div className="bg-slate-50/80 rounded-xl p-3 border border-gray-100 text-center">
                           <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">
-                            Ең жоғары ұпай
+                            {t("quiz.maxScore")}
                           </span>
                           <span className="text-lg font-black text-amber-600 font-mono">
-                            {s.max_score.toLocaleString()}
+                            {s.max_score.toLocaleString(intlLocale)}
                           </span>
                         </div>
                       </div>
@@ -796,7 +799,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                         <div className="pt-2 border-t border-gray-100">
                           <div className="text-xs font-extrabold text-gray-700 mb-2 flex items-center gap-1.5">
                             <Icon name="medal" className="w-3.5 h-3.5 text-amber-500" />
-                            <span>Үздік нәтиже көрсеткендер:</span>
+                            <span>{t("quiz.topPlayers")}</span>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -826,7 +829,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                                       {topP.nickname}
                                     </div>
                                     <div className="text-[11px] font-mono text-gray-500">
-                                      {topP.score.toLocaleString()} балл
+                                      {t("host.points", { count: topP.score })}
                                     </div>
                                   </div>
                                 </div>
@@ -852,13 +855,13 @@ export default function QuizDetailPage({ params }: PageProps) {
                 <div>
                   <h3 className="text-lg font-black flex items-center gap-2">
                     <Icon name="trophy" className="w-5 h-5 text-amber-300" />
-                    <span>Ойынның толық нәтижелері</span>
+                    <span>{t("quiz.fullResults")}</span>
                   </h3>
                   {selectedSessionResults && (
                     <div className="text-xs text-purple-200 flex items-center gap-2 mt-0.5">
                       <span>PIN: {selectedSessionResults.session.pin_code}</span>
                       <span>•</span>
-                      <span>{selectedSessionResults.total_players} қатысушы</span>
+                      <span>{t("quiz.participantsCount", { count: selectedSessionResults.total_players })}</span>
                     </div>
                   )}
                 </div>
@@ -880,7 +883,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                   <div className="py-16 text-center">
                     <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                     <p className="text-sm font-semibold text-gray-600">
-                      Нәтижелер жүктелуде...
+                      {t("review.loading")}
                     </p>
                   </div>
                 ) : selectedSessionResults ? (
@@ -889,7 +892,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-purple-50 rounded-2xl p-3 border border-purple-100 text-center">
                         <span className="text-[10px] font-bold uppercase text-purple-700 block mb-0.5">
-                          Қатысушылар
+                          {t("quiz.participants")}
                         </span>
                         <span className="text-xl font-black text-purple-900">
                           {selectedSessionResults.total_players}
@@ -898,7 +901,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
                       <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-100 text-center">
                         <span className="text-[10px] font-bold uppercase text-emerald-700 block mb-0.5">
-                          Аяқтағандар
+                          {t("quiz.finishedCol")}
                         </span>
                         <span className="text-xl font-black text-emerald-900">
                           {
@@ -911,7 +914,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
                       <div className="bg-amber-50 rounded-2xl p-3 border border-amber-100 text-center">
                         <span className="text-[10px] font-bold uppercase text-amber-700 block mb-0.5">
-                          Орташа балл
+                          {t("quiz.avgPoints")}
                         </span>
                         <span className="text-xl font-black text-amber-900 font-mono">
                           {selectedSessionResults.participants.length > 0
@@ -927,7 +930,7 @@ export default function QuizDetailPage({ params }: PageProps) {
 
                       <div className="bg-indigo-50 rounded-2xl p-3 border border-indigo-100 text-center">
                         <span className="text-[10px] font-bold uppercase text-indigo-700 block mb-0.5">
-                          Ең жоғары балл
+                          {t("quiz.maxPoints")}
                         </span>
                         <span className="text-xl font-black text-indigo-900 font-mono">
                           {Math.max(
@@ -946,7 +949,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                         <div className="bg-slate-50 rounded-2xl p-4 border border-gray-200/80">
                           <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-3 flex items-center gap-1.5">
                             <Icon name="chart" className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Сұрақтар бойынша оқушылардың дәлдігі</span>
+                            <span>{t("quiz.accuracyByQuestion")}</span>
                           </h4>
 
                           <div className="space-y-2.5">
@@ -968,7 +971,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                                 <div key={stat.question_id} className="text-xs">
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="font-semibold text-gray-800">
-                                      #{sIdx + 1} сұрақ ({stat.correct_answers}/{stat.total_answers} дұрыс)
+                                      {t("quiz.questionStat", { n: sIdx + 1, correct: stat.correct_answers, total: stat.total_answers })}
                                     </span>
                                     <span className="font-mono font-bold text-gray-700">
                                       {pct}%
@@ -991,7 +994,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     <div>
                       <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-3 flex items-center gap-1.5">
                         <Icon name="users" className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Оқушылар рейтингі ({selectedSessionResults.participants.length})</span>
+                        <span>{t("quiz.ranking", { count: selectedSessionResults.participants.length })}</span>
                       </h4>
 
                       <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
@@ -1000,11 +1003,11 @@ export default function QuizDetailPage({ params }: PageProps) {
                             <thead className="bg-slate-50 text-gray-600 uppercase font-bold border-b border-gray-200">
                               <tr>
                                 <th className="py-3 px-3.5 text-center w-12">#</th>
-                                <th className="py-3 px-3">Қатысушы</th>
-                                <th className="py-3 px-3 text-right">Ұпай</th>
-                                <th className="py-3 px-3 text-center">Дұрыс / Жалпы</th>
-                                <th className="py-3 px-3 text-center">Дәлдік</th>
-                                <th className="py-3 px-3 text-center">Күйі</th>
+                                <th className="py-3 px-3">{t("quiz.col.participant")}</th>
+                                <th className="py-3 px-3 text-right">{t("quiz.col.score")}</th>
+                                <th className="py-3 px-3 text-center">{t("quiz.col.correctTotal")}</th>
+                                <th className="py-3 px-3 text-center">{t("quizPlay.accuracy")}</th>
+                                <th className="py-3 px-3 text-center">{t("quiz.col.status")}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 bg-white">
@@ -1041,7 +1044,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                                       </div>
                                     </td>
                                     <td className="py-3 px-3 text-right font-mono font-black text-purple-700 text-sm">
-                                      {p.score.toLocaleString()}
+                                      {p.score.toLocaleString(intlLocale)}
                                     </td>
                                     <td className="py-3 px-3 text-center font-mono text-gray-700">
                                       {p.correct_count} / {selectedSessionResults.question_stats.length || questions.length}
@@ -1062,11 +1065,11 @@ export default function QuizDetailPage({ params }: PageProps) {
                                     <td className="py-3 px-3 text-center">
                                       {p.is_finished ? (
                                         <span className="text-emerald-600 font-bold text-[11px] flex items-center justify-center gap-1">
-                                          <Icon name="check" className="w-3 h-3" /> Аяқтады
+                                          <Icon name="check" className="w-3 h-3" /> {t("host.finishedBadge")}
                                         </span>
                                       ) : (
                                         <span className="text-gray-400 text-[11px]">
-                                          Ойында
+                                          {t("quiz.inGame")}
                                         </span>
                                       )}
                                     </td>
@@ -1081,7 +1084,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                   </>
                 ) : (
                   <div className="py-8 text-center text-gray-500">
-                    Ақпарат табылмады
+                    {t("quiz.noInfo")}
                   </div>
                 )}
               </div>
@@ -1094,7 +1097,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold transition-colors flex items-center gap-1.5"
                   >
                     <Icon name="trophy" className="w-3.5 h-3.5" />
-                    <span>3D Пьедестал көрінісі</span>
+                    <span>{t("quiz.podium3d")}</span>
                   </Link>
                 )}
 
@@ -1105,7 +1108,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                   }}
                   className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold transition-colors ml-auto"
                 >
-                  Жабу
+                  {t("common.close")}
                 </button>
               </div>
             </div>

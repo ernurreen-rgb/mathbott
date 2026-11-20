@@ -25,6 +25,8 @@ import { getModuleDetails } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import type { ModuleDetails } from "@/types";
 import styles from "./ModuleDetail.module.css";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 function OrnamentRail({ side }: { side: "left" | "right" }) {
   return (
@@ -91,6 +93,7 @@ function PageLoader({ label }: { label: string }) {
 
 export default function ModuleDetailPage() {
   const { data: session, status: sessionStatus } = useRequireAuth();
+  const { t } = useI18n();
   const params = useParams();
   const rawModuleId = Array.isArray(params.id) ? params.id[0] : params.id;
   const moduleId = Number(rawModuleId);
@@ -125,7 +128,7 @@ export default function ModuleDetailPage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Failed to load module:", requestError);
       }
-      setError("Модульді жүктеу мүмкін болмады");
+      setError(tr("module.loadFailed"));
       setModule(null);
     } finally {
       setLoading(false);
@@ -139,7 +142,7 @@ export default function ModuleDetailPage() {
   useEffect(() => {
     if (sessionStatus === "loading") return;
     if (!isValidModuleId) {
-      setError("Модуль нөмірі қате");
+      setError(tr("module.badId"));
       setLoading(false);
       return;
     }
@@ -232,13 +235,13 @@ export default function ModuleDetailPage() {
   }, [sortedSections]);
 
   if (sessionStatus === "loading")
-    return <PageLoader label="Сессия жүктелуде" />;
+    return <PageLoader label={t("module.sessionLoading")} />;
 
   if (!session) {
     return <AuthRedirectScreen loading={false} />;
   }
 
-  if (loading) return <PageLoader label="Модуль жүктелуде" />;
+  if (loading) return <PageLoader label={t("module.loading")} />;
 
   if (error || !module) {
     return (
@@ -249,7 +252,7 @@ export default function ModuleDetailPage() {
         >
           <div className="text-4xl"><Icon name="alert" /></div>
           <div className="mt-3 font-bold text-red-700">
-            {error || "Модуль табылмады"}
+            {error || t("module.notFound")}
           </div>
           {isValidModuleId && sessionEmail && (
             <button
@@ -257,14 +260,14 @@ export default function ModuleDetailPage() {
               onClick={() => void fetchModule()}
               className="mt-5 rounded-xl bg-red-600 px-5 py-2.5 font-bold text-white hover:bg-red-700"
             >
-              Қайта жүктеу
+              {t("profile.reload")}
             </button>
           )}
           <Link
             href="/modules"
             className="mt-4 block text-sm font-bold text-purple-700 hover:underline"
           >
-            <Icon name="arrowLeft" /> Модульдерге қайту
+            <Icon name="arrowLeft" /> {t("module.backToModules")}
           </Link>
         </div>
       </div>
@@ -285,7 +288,7 @@ export default function ModuleDetailPage() {
           <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/modules"
-              aria-label="Модульдерге қайту"
+              aria-label={t("module.backToModules")}
               className={`flex shrink-0 items-center justify-center rounded-2xl bg-purple-50 font-black text-purple-700 transition-all duration-200 hover:bg-purple-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200 ${
                 compactHeader ? "h-8 w-8 text-base" : "h-11 w-11 text-xl"
               }`}
@@ -321,11 +324,11 @@ export default function ModuleDetailPage() {
               <div
                 className="text-[10px] font-bold uppercase tracking-wide text-purple-500"
               >
-                Прогресс
+                {t("module.progress")}
               </div>
               <div className="whitespace-nowrap text-sm font-black text-slate-800 sm:text-lg">
                 {moduleSummary.completed}/{moduleSummary.total}
-                &nbsp;сабақ
+                &nbsp;{t("module.lessonsUnit", { count: moduleSummary.total })}
               </div>
             </div>
 
@@ -333,7 +336,7 @@ export default function ModuleDetailPage() {
 
           <div
             role="progressbar"
-            aria-label="Модуль прогресі"
+            aria-label={t("module.progressAria")}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={moduleSummary.progress}
@@ -363,7 +366,7 @@ export default function ModuleDetailPage() {
             <div className="rounded-[2rem] border border-white/90 bg-white/80 px-6 py-16 text-center shadow-xl">
               <div className="text-5xl"><Icon name="box" /></div>
               <div className="mt-3 font-bold text-slate-600">
-                Бұл модульде бөлімдер әлі қосылмаған.
+                {t("module.noSections")}
               </div>
             </div>
           ) : (
@@ -388,7 +391,7 @@ export default function ModuleDetailPage() {
             <div className="flex items-center justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-rose-50 to-violet-50 px-5 py-4">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-600">
-                  Анықтамалық
+                  {t("module.guide")}
                 </div>
                 <h2
                   id="module-guide-title"
@@ -401,7 +404,7 @@ export default function ModuleDetailPage() {
                 ref={guideCloseButtonRef}
                 type="button"
                 onClick={closeGuide}
-                aria-label="Жабу"
+                aria-label={t("common.close")}
                 className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-2xl text-slate-500 shadow-sm hover:text-slate-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-200"
               >
                 <Icon name="close" />
@@ -410,7 +413,7 @@ export default function ModuleDetailPage() {
             <div className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-5 py-5 text-sm leading-relaxed text-slate-700 sm:px-7">
               {guideSection.guide?.trim() || (
                 <span className="text-slate-500">
-                  Бұл бөлім үшін анықтамалық әлі жазылмаған.
+                  {t("module.noGuide")}
                 </span>
               )}
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import MathFieldInput from "@/components/ui/MathFieldInput";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface StudentMathAnswerInputProps {
   value: string;
@@ -17,12 +18,15 @@ export default function StudentMathAnswerInput({
   value,
   onChange,
   disabled = false,
-  placeholder = "Жауапты жазыңыз",
-  ariaLabel = "Математикалық жауап",
+  placeholder: placeholderProp,
+  ariaLabel: ariaLabelProp,
   className = "",
   compact = false,
   autoFocus = false,
 }: StudentMathAnswerInputProps) {
+  const { t } = useI18n();
+  const placeholder = placeholderProp ?? t("answer.placeholder");
+  const ariaLabel = ariaLabelProp ?? t("answer.mathAria");
   return (
     <div className="relative w-full">
       {!value && placeholder && (

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { checkAdminStatus } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface MobileNavProps {
   currentPage?: "modules" | "profile" | "admin" | "trial-test" | "achievements" | "quizzes";
@@ -15,6 +16,7 @@ interface MobileNavProps {
 export default function MobileNav({ currentPage }: MobileNavProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { t } = useI18n();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +54,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
   const navItems = [
     {
       id: "modules",
-      label: "Модульдер",
+      label: t("nav.modules"),
       href: "/modules",
       icon: (
         <Icon name="book" className="w-6 h-6" />
@@ -60,7 +62,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     },
     {
       id: "trial-test",
-      label: "\u0422\u0435\u0441\u0442",
+      label: t("nav.trialTest"),
       href: "/trial-test",
       icon: (
         <Icon name="test" className="w-6 h-6" />
@@ -68,7 +70,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     },
     {
       id: "quizzes",
-      label: "Квиздер",
+      label: t("nav.quizzes"),
       href: "/quizzes",
       icon: (
         <Icon name="quiz" className="w-6 h-6" />
@@ -76,7 +78,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     },
     {
       id: "profile",
-      label: "Профиль",
+      label: t("nav.profile"),
       href: "/profile",
       icon: (
         <Icon name="user" className="w-6 h-6" />
@@ -84,11 +86,11 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     },
   ];
 
-  // Добавляем админ-панель только для админов
+  // Only admins get the admin panel link
   if (!loading && isAdmin) {
     navItems.push({
       id: "admin",
-      label: "Әкімші",
+      label: t("nav.admin"),
       href: "/admin/",
       icon: (
         <Icon name="shield" className="w-6 h-6" />
@@ -102,7 +104,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     <nav 
       className="fixed bottom-0 left-0 right-0 glass border-t border-white/30 pb-[env(safe-area-inset-bottom)] shadow-2xl md:hidden z-50"
       role="navigation"
-      aria-label="Мобильді навигация"
+      aria-label={t("nav.mobileAria")}
     >
       <div className={`grid ${gridCols} h-16`}>
         {navItems.map((item) => {

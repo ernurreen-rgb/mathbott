@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/translate";
+
 export type MathVirtualKeyboardPreset = "default" | "student";
 
 type MathKeyboardKeycap = {
@@ -189,7 +191,7 @@ const character = (value: string, name: string, className = "qm-fn"): MathKeyboa
 
 // `{,}` is a decimal comma (no spacing after it), the form the answer checker expects.
 const decimalComma = (): MathKeyboardKeycap => ({
-  ...character("{,}", "Ондық үтір", "qm-digit"),
+  ...character("{,}", tr("kbd.decimalComma"), "qm-digit"),
   label: ",",
 });
 
@@ -200,18 +202,18 @@ const mainLayer = (): MathVirtualKeyboardLayout["layers"][number] => ({
     [
       symbol("x", "x"),
       symbol("y", "y"),
-      symbol("\\pi", "Пи"),
-      character("(", "Жақшаны ашу"),
-      character(")", "Жақшаны жабу"),
-      action("[backspace]", "Өшіру"),
+      symbol("\\pi", tr("kbd.pi")),
+      character("(", tr("kbd.openParen")),
+      character(")", tr("kbd.closeParen")),
+      action("[backspace]", tr("kbd.backspace")),
     ],
     [
       digit("7"),
       digit("8"),
       digit("9"),
-      operator("\\div", "&divide;", "Бөлу"),
-      symbol("\\frac{#@}{#0}", "Бөлшек"),
-      symbol("\\sqrt{#0}", "Квадрат түбір"),
+      operator("\\div", "&divide;", tr("kbd.divide")),
+      symbol("\\frac{#@}{#0}", tr("kbd.fraction")),
+      symbol("\\sqrt{#0}", tr("kbd.sqrt")),
     ],
     [
       digit("4"),
@@ -219,25 +221,25 @@ const mainLayer = (): MathVirtualKeyboardLayout["layers"][number] => ({
       digit("6"),
       // Inserts \cdot like the editors' keyboard does: the checker compares expressions it cannot
       // evaluate (e.g. 3\cdot\sqrt{2}) as plain text, so teachers' answers and students' must agree.
-      operator("\\cdot", "&times;", "Көбейту"),
-      symbol("#@^2", "Квадрат"),
-      symbol("#@^{#?}", "Дәреже"),
+      operator("\\cdot", "&times;", tr("kbd.multiply")),
+      symbol("#@^2", tr("kbd.square")),
+      symbol("#@^{#?}", tr("kbd.power")),
     ],
     [
       digit("1"),
       digit("2"),
       digit("3"),
-      operator("-", "&minus;", "Азайту"),
-      action("[left]", "Солға"),
-      action("[right]", "Оңға"),
+      operator("-", "&minus;", tr("kbd.minus")),
+      action("[left]", tr("kbd.left")),
+      action("[right]", tr("kbd.right")),
     ],
     [
       digit("0"),
       decimalComma(),
-      operator("=", "=", "Тең"),
-      operator("+", "+", "Қосу"),
-      { ...action("[hide-keyboard]", "Пернетақтаны жасыру"), class: `qm-act ${STUDENT_KEYBOARD_HIDE_KEY_CLASS}` },
-      switchLayer("≤ ∞", STUDENT_KEYBOARD_MORE_LAYER, "Теңсіздіктер, аралықтар, жиындар"),
+      operator("=", "=", tr("kbd.equals")),
+      operator("+", "+", tr("kbd.plus")),
+      { ...action("[hide-keyboard]", tr("kbd.hide")), class: `qm-act ${STUDENT_KEYBOARD_HIDE_KEY_CLASS}` },
+      switchLayer("≤ ∞", STUDENT_KEYBOARD_MORE_LAYER, tr("kbd.moreLayer")),
     ],
   ],
 });
@@ -246,44 +248,44 @@ const moreLayer = (): MathVirtualKeyboardLayout["layers"][number] => ({
   id: STUDENT_KEYBOARD_MORE_LAYER,
   rows: [
     [
-      symbol("<", "Кіші"),
-      symbol(">", "Үлкен"),
-      symbol("\\le", "Кіші немесе тең"),
-      symbol("\\ge", "Үлкен немесе тең"),
-      symbol("\\ne", "Тең емес"),
-      action("[backspace]", "Өшіру"),
+      symbol("<", tr("kbd.less")),
+      symbol(">", tr("kbd.greater")),
+      symbol("\\le", tr("kbd.le")),
+      symbol("\\ge", tr("kbd.ge")),
+      symbol("\\ne", tr("kbd.ne")),
+      action("[backspace]", tr("kbd.backspace")),
     ],
     [
       digit("7"),
       digit("8"),
       digit("9"),
-      character("(", "Жақшаны ашу"),
-      character(")", "Жақшаны жабу"),
-      symbol("\\infty", "Шексіздік"),
+      character("(", tr("kbd.openParen")),
+      character(")", tr("kbd.closeParen")),
+      symbol("\\infty", tr("kbd.infinity")),
     ],
     [
       digit("4"),
       digit("5"),
       digit("6"),
-      character("[", "Шаршы жақшаны ашу"),
-      character("]", "Шаршы жақшаны жабу"),
-      symbol("\\cup", "Бірігу"),
+      character("[", tr("kbd.openBracket")),
+      character("]", tr("kbd.closeBracket")),
+      symbol("\\cup", tr("kbd.union")),
     ],
     [
       digit("1"),
       digit("2"),
       digit("3"),
-      character(";", "Нүктелі үтір"),
-      symbol("\\in", "Тиісті"),
-      symbol("\\mathbb{R}", "Нақты сандар"),
+      character(";", tr("kbd.semicolon")),
+      symbol("\\in", tr("kbd.in")),
+      symbol("\\mathbb{R}", tr("kbd.reals")),
     ],
     [
       digit("0"),
-      operator("-", "&minus;", "Азайту"),
-      symbol("\\mathbb{Z}", "Бүтін сандар"),
-      symbol("\\mathbb{N}", "Натурал сандар"),
-      symbol("\\mathbb{Q}", "Рационал сандар"),
-      switchLayer("123", STUDENT_KEYBOARD_MAIN_LAYER, "Негізгі пернелер"),
+      operator("-", "&minus;", tr("kbd.minus")),
+      symbol("\\mathbb{Z}", tr("kbd.integers")),
+      symbol("\\mathbb{N}", tr("kbd.naturals")),
+      symbol("\\mathbb{Q}", tr("kbd.rationals")),
+      switchLayer("123", STUDENT_KEYBOARD_MAIN_LAYER, tr("kbd.mainLayer")),
     ],
   ],
 });

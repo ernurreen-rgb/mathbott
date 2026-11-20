@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { checkAdminStatus } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/provider";
 import { useDesktopNav } from "@/lib/desktop-nav-context";
 
 interface DesktopNavProps {
@@ -22,6 +23,7 @@ function SidebarIcon({ className = "w-5 h-5" }: { className?: string }) {
 export default function DesktopNav(_props: DesktopNavProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { t } = useI18n();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const { isCollapsed, toggleNav } = useDesktopNav();
@@ -60,7 +62,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
   const navItems = [
     {
       id: "modules",
-      label: "Модульдер",
+      label: t("nav.modules"),
       href: "/modules",
       icon: (
         <Icon name="book" className="w-6 h-6" />
@@ -68,7 +70,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
     },
     {
       id: "trial-test",
-      label: "Тест",
+      label: t("nav.trialTest"),
       href: "/trial-test",
       icon: (
         <Icon name="test" className="w-6 h-6" />
@@ -76,7 +78,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
     },
     {
       id: "quizzes",
-      label: "Квиздер",
+      label: t("nav.quizzes"),
       href: "/quizzes",
       icon: (
         <Icon name="quiz" className="w-6 h-6" />
@@ -84,7 +86,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
     },
     {
       id: "profile",
-      label: "Профиль",
+      label: t("nav.profile"),
       href: "/profile",
       icon: (
         <Icon name="user" className="w-6 h-6" />
@@ -95,7 +97,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
   if (!loading && isAdmin) {
     navItems.push({
       id: "admin",
-      label: "Әкімші",
+      label: t("nav.admin"),
       href: "/admin/",
       icon: (
         <Icon name="shield" className="w-6 h-6" />
@@ -110,7 +112,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
         isCollapsed ? "w-16" : "w-64"
       }`}
       role="navigation"
-      aria-label="Негізгі навигация"
+      aria-label={t("nav.mainAria")}
     >
       {/* Header */}
       {!isCollapsed ? (
@@ -130,15 +132,15 @@ export default function DesktopNav(_props: DesktopNavProps) {
             <button
               type="button"
               onClick={toggleNav}
-              aria-label="Навигацияны жабу"
-              title="Бүйірлік тақтаны жию (Ctrl+B)"
+              aria-label={t("nav.collapseAria")}
+              title={`${t("nav.collapse")} (Ctrl+B)`}
               className="p-1.5 rounded-xl bg-white/70 hover:bg-purple-100 text-gray-500 hover:text-purple-700 border border-gray-200/60 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <SidebarIcon className="w-5 h-5" />
             </button>
             <div className="pointer-events-none absolute right-0 top-full mt-2 hidden group-hover:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/95 text-white text-xs font-medium shadow-xl whitespace-nowrap z-50">
               <div className="absolute bottom-full right-3 border-4 border-transparent border-b-gray-900/95" />
-              <span>Бүйірлік тақтаны жию</span>
+              <span>{t("nav.collapse")}</span>
               <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] font-mono text-gray-300 border border-gray-700">
                 Ctrl+B
               </kbd>
@@ -151,8 +153,8 @@ export default function DesktopNav(_props: DesktopNavProps) {
             <button
               type="button"
               onClick={toggleNav}
-              aria-label="Навигацияны ашу"
-              title="Бүйірлік тақтаны ашу (Ctrl+B)"
+              aria-label={t("nav.expandAria")}
+              title={`${t("nav.expand")} (Ctrl+B)`}
               className="relative flex items-center justify-center w-10 h-10 rounded-xl hover:bg-purple-100/80 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               {/* Default state: QM Logo */}
@@ -168,7 +170,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
             {/* Floating tooltip to the right (ChatGPT style) */}
             <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/95 text-white text-xs font-medium shadow-xl whitespace-nowrap z-50">
               <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900/95" />
-              <span>Бүйірлік тақтаны ашу</span>
+              <span>{t("nav.expand")}</span>
               <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] font-mono text-gray-300 border border-gray-700">
                 Ctrl+B
               </kbd>

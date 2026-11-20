@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buildLoginRedirectHref } from "@/lib/use-require-auth";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface AuthRedirectScreenProps {
   loading?: boolean;
@@ -15,13 +16,14 @@ export default function AuthRedirectScreen({
   label,
 }: AuthRedirectScreenProps) {
   const [loginHref, setLoginHref] = useState("/");
+  const { t } = useI18n();
 
   useEffect(() => {
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     setLoginHref(buildLoginRedirectHref(currentPath));
   }, []);
 
-  const text = label || (loading ? "Жүктелуде..." : "Кіру бетіне бағытталуда...");
+  const text = label || (loading ? t("common.loading") : t("auth.redirecting"));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
@@ -33,7 +35,7 @@ export default function AuthRedirectScreen({
             href={loginHref}
             className="mt-4 inline-block text-sm font-bold text-purple-600 hover:text-purple-700 underline"
           >
-            Кіру бетіне өту
+            {t("auth.goToLogin")}
           </Link>
         )}
       </div>

@@ -3,6 +3,7 @@ import Icon from "@/components/ui/Icon";
 
 
 import React, { Component, ErrorInfo, ReactNode } from "react";
+import { tr } from "@/lib/i18n/translate";
 
 interface Props {
   children: ReactNode;
@@ -48,15 +49,15 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
             <div className="text-6xl mb-4"><Icon name="alert" /></div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Қате орын алды
+              {tr("error.title")}
             </h1>
             <p className="text-gray-600 mb-4">
-              Кешіріңіз, бір нәрсе дұрыс жұмыс істемеді. Бетті жаңартып көріңіз.
+              {tr("error.body")}
             </p>
             {this.state.error && (
               <details className="text-left mb-4">
                 <summary className="cursor-pointer text-sm text-gray-500 mb-2">
-                  Техникалық ақпарат
+                  {tr("common.techDetails")}
                 </summary>
                 <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto max-h-32">
                   {this.state.error.toString()}
@@ -70,7 +71,7 @@ export class ErrorBoundary extends Component<Props, State> {
               }}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
             >
-              Бетті жаңарту
+              {tr("common.reloadPage")}
             </button>
           </div>
         </div>

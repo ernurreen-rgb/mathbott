@@ -20,10 +20,13 @@ import {
 } from "@/lib/trial-test-answer";
 import { TrialTestDetails, LessonTask } from "@/types";
 import styles from "./TrialTestWorkspace.module.css";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 
 export default function TrialTestPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const testId = parseInt(params.id as string);
@@ -203,7 +206,7 @@ export default function TrialTestPage() {
         const { data: draft, error: draftErr } = await getTrialTestDraft(testId, email);
         if (!isCurrentLoad()) return;
         if (draftErr || !draft) {
-          setError("Сақталған жауаптарды жүктеу мүмкін болмады. Бетті қайта жүктеңіз.");
+          setError(tr("trial.draftFailed"));
           return;
         }
         if (data.tasks?.length) {
@@ -237,7 +240,7 @@ export default function TrialTestPage() {
         setTest(data);
       }
     } catch (e: any) {
-      if (isCurrentLoad()) setError(e?.message || "Тестті жүктеу қатесі");
+      if (isCurrentLoad()) setError(e?.message || tr("trial.testLoadError"));
     } finally {
       if (isCurrentLoad() && !submittedRef.current) setLoading(false);
     }
@@ -245,7 +248,7 @@ export default function TrialTestPage() {
 
   useEffect(() => {
     if (!Number.isInteger(testId) || testId <= 0) {
-      setError("Жарамсыз тест идентификаторы");
+      setError(tr("trial.badId"));
       setLoading(false);
       return;
     }
@@ -361,7 +364,7 @@ export default function TrialTestPage() {
     } catch (e: any) {
       if (generation === loadGenerationRef.current) {
         submitFailed = true;
-        setSubmitError(e?.message || "Тестті жіберу қатесі");
+        setSubmitError(e?.message || tr("trial.submitError"));
       }
     } finally {
       submittingRef.current = false;
@@ -385,7 +388,7 @@ export default function TrialTestPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Тест жүктелуде…</div>
+        <div className="text-xl">{t("trial.testLoading")}</div>
       </div>
     );
   }
@@ -394,7 +397,7 @@ export default function TrialTestPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error || "Тестті жүктеу мүмкін болмады"}
+          {error || t("trial.testLoadFailed")}
         </div>
       </div>
     );
@@ -415,8 +418,8 @@ export default function TrialTestPage() {
                 type="button"
                 onClick={() => router.back()}
                 className={styles.backButton}
-                aria-label="Артқа"
-                title="Артқа"
+                aria-label={t("common.back")}
+                title={t("common.back")}
               >
                 <Icon name="arrowLeft" />
               </button>
@@ -429,7 +432,7 @@ export default function TrialTestPage() {
             </div>
             <div className={styles.toolbarActions}>
               <span className={styles.taskCounter} aria-live="polite">
-                <span>Тапсырма</span>
+                <span>{t("trial.task")}</span>
                 <strong>
                   {currentTaskIndex + 1} / {test.tasks.length}
                 </strong>
@@ -442,13 +445,13 @@ export default function TrialTestPage() {
                   aria-expanded={taskNavigatorOpen}
                   aria-controls="trial-task-navigator"
                 >
-                  <Icon name="layers" /> Сұрақтар
+                  <Icon name="layers" /> {t("trial.questions")}
                 </button>
                 {taskNavigatorOpen && (
-                  <nav id="trial-task-navigator" className={styles.navigatorPanel} aria-label="Тапсырма нөмірлері">
+                  <nav id="trial-task-navigator" className={styles.navigatorPanel} aria-label={t("trial.taskNumbersAria")}>
                     <div className={styles.navigatorHeading}>
-                      <span>Тапсырмалар</span>
-                      <span>{answeredTasksCount} / {test.tasks.length} орындалды</span>
+                      <span>{t("trial.tasks")}</span>
+                      <span>{t("trial.doneOf", { done: answeredTasksCount, total: test.tasks.length })}</span>
                     </div>
                     <div className={styles.taskNumbers}>
                       {test.tasks.map((task, idx) => {
@@ -464,7 +467,7 @@ export default function TrialTestPage() {
                             }}
                             className={`${styles.taskNumber} ${isCurrent ? styles.currentTaskNumber : isAnswered ? styles.answeredTaskNumber : ""}`}
                             aria-current={isCurrent ? "step" : undefined}
-                            aria-label={`Тапсырма ${idx + 1}${isAnswered ? ", жауап берілді" : ""}`}
+                            aria-label={isAnswered ? t("trial.taskAnsweredAria", { n: idx + 1 }) : t("trial.taskN", { n: idx + 1 })}
                           >
                             {idx + 1}
                           </button>
@@ -480,17 +483,17 @@ export default function TrialTestPage() {
                 disabled={submitting}
                 className={styles.finishButton}
               >
-                {submitting ? "Жіберілуде..." : "Тестті аяқтау"}
+                {submitting ? t("trial.submitting") : t("trial.finish")}
               </button>
             </div>
             <div
               className={styles.progress}
               role="progressbar"
-              aria-label="Тест барысы"
+              aria-label={t("trial.progressAria")}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={answerProgress}
-              aria-valuetext={`${answeredTasksCount} / ${test.tasks.length} орындалды`}
+              aria-valuetext={t("trial.doneOf", { done: answeredTasksCount, total: test.tasks.length })}
             >
               <div style={{ width: `${answerProgress}%` }} />
             </div>
@@ -508,7 +511,7 @@ export default function TrialTestPage() {
                 disabled={submitting}
                 className="rounded-lg bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {submitting ? "Жіберілуде..." : "Қайта жіберу"}
+                {submitting ? t("trial.submitting") : t("quizPlay.resend")}
               </button>
             </div>
           )}
@@ -518,28 +521,28 @@ export default function TrialTestPage() {
             <article
               key={`task-${currentTask.id}-${currentTaskIndex}`}
               className={styles.taskCard}
-              aria-label={`Тапсырма ${currentTaskIndex + 1}`}
+              aria-label={t("trial.taskN", { n: currentTaskIndex + 1 })}
             >
               <div className={styles.taskBody}>
                 <TaskStatement task={currentTask} />
                 <div key={`task-controls-${currentTask.id}`} className={styles.answers}>{renderTaskControls(currentTask)}</div>
               </div>
 
-              <nav className={styles.taskFooter} aria-label="Сұрақтар арасында өту">
+              <nav className={styles.taskFooter} aria-label={t("trial.navAria")}>
                 <button
                   type="button"
                   onClick={() => setCurrentTaskIndexAndRef(Math.max(0, currentTaskIndex - 1))}
                   disabled={currentTaskIndex === 0}
                   className={styles.previousButton}
                 >
-                  <Icon name="arrowLeft" /> Алдыңғы
+                  <Icon name="arrowLeft" /> {t("footer.prev")}
                 </button>
                 <button
                   type="button"
                   onClick={() => report.open(currentTask.id)}
                   className={styles.reportButton}
                 >
-                  <Icon name="report" /> Шағым
+                  <Icon name="report" /> {t("footer.report")}
                 </button>
                 <button
                   type="button"
@@ -547,7 +550,7 @@ export default function TrialTestPage() {
                   disabled={currentTaskIndex >= test.tasks.length - 1}
                   className={styles.nextButton}
                 >
-                  Келесі <Icon name="arrowRight" />
+                  {t("common.next")} <Icon name="arrowRight" />
                 </button>
               </nav>
             </article>

@@ -12,6 +12,8 @@ import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { getModulesMap } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import type { Module } from "@/types";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 const DEBUG_UI = process.env.NEXT_PUBLIC_DEBUG_UI === "true";
 
@@ -30,6 +32,7 @@ function ModuleCardSkeleton() {
 
 export default function ModulesPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export default function ModulesPage() {
       if (process.env.NODE_ENV === "development" || DEBUG_UI) {
         console.error("Error fetching modules:", requestError);
       }
-      setError("Модульдерді жүктеу қатесі");
+      setError(tr("modules.loadError"));
       setModules([]);
     } finally {
       setLoading(false);
@@ -103,13 +106,13 @@ export default function ModulesPage() {
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-                Модуль картасы
+                {t("modules.mapTitle")}
               </h1>
             </div>
 
             <div className="min-h-[360px]">
               {loading ? (
-                <div className={MODULE_GRID_CLASSES} role="status" aria-label="Модульдер жүктелуде">
+                <div className={MODULE_GRID_CLASSES} role="status" aria-label={t("modules.loadingAria")}>
                   {[0, 1, 2].map((index) => (
                     <ModuleCardSkeleton key={index} />
                   ))}
@@ -122,12 +125,12 @@ export default function ModulesPage() {
                     onClick={retry}
                     className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-700"
                   >
-                    Қайта жүктеу
+                    {t("profile.reload")}
                   </button>
                 </div>
               ) : modules.length === 0 ? (
                 <div className="rounded-2xl border border-white/60 bg-white/60 px-6 py-16 text-center font-semibold text-slate-500">
-                  Модульдер әлі қосылмаған.
+                  {t("modules.empty")}
                 </div>
               ) : (
                 <div className={MODULE_GRID_CLASSES}>
@@ -147,7 +150,7 @@ export default function ModulesPage() {
                             />
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {`${module.progress?.completed_sections || 0} / ${module.progress?.total_sections || 0} бөлім`}
+                            {t("modules.sectionsProgress", { done: module.progress?.completed_sections || 0, count: module.progress?.total_sections || 0 })}
                           </div>
                         </div>
                       </div>

@@ -4,6 +4,9 @@ import Icon from "@/components/ui/Icon";
 import ProfileHeader from "./_components/ProfileHeader";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
 import StreakReminderCard from "./_components/StreakReminderCard";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import MobileNav from "@/components/MobileNav";
@@ -22,6 +25,7 @@ export const dynamic = "force-dynamic";
 
 export default function ProfilePage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -34,13 +38,13 @@ export default function ProfilePage() {
   const sessionEmail = session?.user?.email || "";
 
   const weekDays = [
-    { short: "Дс", weekDay: 1 }, // Monday
-    { short: "Сс", weekDay: 2 }, // Tuesday
-    { short: "Ср", weekDay: 3 }, // Wednesday
-    { short: "Бс", weekDay: 4 }, // Thursday
-    { short: "Жм", weekDay: 5 }, // Friday
-    { short: "Сб", weekDay: 6 }, // Saturday
-    { short: "Жс", weekDay: 0 }, // Sunday
+    { short: t("week.short.1"), weekDay: 1 }, // Monday
+    { short: t("week.short.2"), weekDay: 2 }, // Tuesday
+    { short: t("week.short.3"), weekDay: 3 }, // Wednesday
+    { short: t("week.short.4"), weekDay: 4 }, // Thursday
+    { short: t("week.short.5"), weekDay: 5 }, // Friday
+    { short: t("week.short.6"), weekDay: 6 }, // Saturday
+    { short: t("week.short.0"), weekDay: 0 }, // Sunday
   ];
   const streakDaysSet = getProfileWeekActivityDaysSet({
     recentActivityTimestamps: userData?.recent_activity_timestamps,
@@ -53,8 +57,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (userData?.streak && userData.streak > 0) {
       setStreakAnimated(true);
-      const t = setTimeout(() => setStreakAnimated(false), 1500);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setStreakAnimated(false), 1500);
+      return () => clearTimeout(timer);
     }
   }, [userData?.streak]);
 
@@ -75,7 +79,7 @@ export default function ProfilePage() {
         if (process.env.NODE_ENV === "development") {
           console.error("Failed to fetch user data:", error);
         }
-        setFetchError(error || "Профиль деректерін жүктеу мүмкін болмады");
+        setFetchError(error || tr("profile.loadFailed"));
       } else {
         setUserData(data);
         setNickname(data.nickname || "");
@@ -84,7 +88,7 @@ export default function ProfilePage() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching user data:", err);
       }
-      setFetchError("Профиль деректерін жүктеу мүмкін болмады");
+      setFetchError(tr("profile.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -113,7 +117,7 @@ export default function ProfilePage() {
     if (error) {
       setMessage({ type: "error", text: error });
     } else {
-      setMessage({ type: "success", text: "Никнейм сәтті жаңартылды!" });
+      setMessage({ type: "success", text: t("profile.nicknameSaved") });
       if (userData) {
         setUserData({ ...userData, nickname: nickname.trim() });
       }
@@ -176,6 +180,20 @@ export default function ProfilePage() {
 
               {sessionEmail && <StreakReminderCard email={sessionEmail} />}
 
+              <section
+                aria-labelledby="language-title"
+                className="glass flex flex-wrap items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl"
+              >
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
+                  <Icon name="globe" className="h-6 w-6" />
+                </span>
+                <div className="min-w-0 flex-1 basis-48">
+                  <h2 id="language-title" className="text-lg font-bold text-gray-900">{t("language.title")}</h2>
+                  <p className="text-sm text-gray-600">{t("language.hint")}</p>
+                </div>
+                <LanguageSwitcher className="w-full sm:w-auto" />
+              </section>
+
               <Link
                 href="/achievements"
                 className="glass flex items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl transition-colors hover:border-purple-300"
@@ -184,9 +202,11 @@ export default function ProfilePage() {
                   <Icon name="trophy" className="h-6 w-6" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold text-gray-900">Жетістіктер</span>
+                  <span className="block text-lg font-bold text-gray-900">{t("profile.achievements")}</span>
                   <span className="block text-sm text-gray-500">
-                    {totalAchievements > 0 ? `${unlockedAchievements} / ${totalAchievements} ашылды` : "Барлық жетістіктерді көру"}
+                    {totalAchievements > 0
+                      ? t("profile.achievementsUnlocked", { unlocked: unlockedAchievements, total: totalAchievements })
+                      : t("profile.achievementsAll")}
                   </span>
                 </span>
                 <Icon name="chevronRight" className="h-5 w-5 shrink-0 text-gray-400" />
@@ -200,7 +220,7 @@ export default function ProfilePage() {
                 >
                   <div className="flex items-center justify-center gap-2">
                     <Icon name="logOut" className="w-5 h-5" />
-                    Аккаунттан шығу
+                    {t("profile.signOut")}
                   </div>
                 </button>
               </div>
@@ -211,7 +231,7 @@ export default function ProfilePage() {
                 <Icon name="info" className="w-16 h-16 mx-auto" />
               </div>
               <div role="alert" className="text-gray-700 text-lg">
-                {fetchError || "Профиль деректерін жүктеу мүмкін болмады"}
+                {fetchError || t("profile.loadFailed")}
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -219,14 +239,14 @@ export default function ProfilePage() {
                   onClick={() => void fetchUserData()}
                   className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors"
                 >
-                  Қайта жүктеу
+                  {t("profile.reload")}
                 </button>
                 <button
                   type="button"
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="px-6 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold transition-colors"
                 >
-                  Аккаунттан шығу
+                  {t("profile.signOut")}
                 </button>
               </div>
             </div>

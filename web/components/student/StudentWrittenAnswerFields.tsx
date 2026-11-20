@@ -4,6 +4,7 @@ import { useRef } from "react";
 import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "./StudentMathAnswerInput";
 import { parseWrittenAnswerSlots, serializeWrittenAnswerSlots } from "@/lib/written-answer";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface StudentWrittenAnswerFieldsProps {
   value: string | undefined;
@@ -23,6 +24,7 @@ export default function StudentWrittenAnswerFields({
   disabled = false,
   labels = [],
 }: StudentWrittenAnswerFieldsProps) {
+  const { t } = useI18n();
   const slots = parseWrittenAnswerSlots(value, count);
   const slotsRef = useRef<string[]>(slots);
   slotsRef.current = slots;
@@ -45,8 +47,8 @@ export default function StudentWrittenAnswerFields({
               onChange(serializeWrittenAnswerSlots(next));
             }}
             disabled={disabled}
-            ariaLabel={labels[index] ? `${labels[index].prefix} ${labels[index].text}` : slots.length > 1 ? `Жауап ${index + 1}` : "Математикалық жауап"}
-            placeholder={slots.length > 1 ? `${index + 1}-жауап` : "Жауапты жазыңыз"}
+            ariaLabel={labels[index] ? `${labels[index].prefix} ${labels[index].text}` : slots.length > 1 ? t("answer.answerN", { n: index + 1 }) : t("answer.mathAria")}
+            placeholder={slots.length > 1 ? t("answer.answerNth", { n: index + 1 }) : t("answer.placeholder")}
           />
         </div>
       ))}

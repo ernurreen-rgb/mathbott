@@ -15,6 +15,8 @@ import {
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
 import { completeQuizParticipant } from "@/lib/api/quizzes";
+import { useI18n } from "@/lib/i18n/provider";
+import type { Translate } from "@/lib/i18n/translate";
 
 interface PageProps {
   params: Promise<{ sessionId: string }>;
@@ -61,14 +63,15 @@ const MCQ_THEMES = [
 
 function formatQuizCorrectAnswer(
   question: { question_type: string; options?: Array<{ id: string; text: string }> } | null | undefined,
-  rawAnswer: string
+  rawAnswer: string,
+  t: Translate
 ): string {
   const trimmed = rawAnswer.trim();
   if (!trimmed || !question) return trimmed;
   if (question.question_type === "tf") {
     const upper = trimmed.toUpperCase();
-    if (upper === "A" || upper === "TRUE" || upper === "1") return "\\text{Шын (True)}";
-    if (upper === "B" || upper === "FALSE" || upper === "0") return "\\text{Жалған (False)}";
+    if (upper === "A" || upper === "TRUE" || upper === "1") return `\\text{${t("quizPlay.true")} (True)}`;
+    if (upper === "B" || upper === "FALSE" || upper === "0") return `\\text{${t("quizPlay.false")} (False)}`;
   }
   if (
     (question.question_type === "mcq" || question.question_type === "multi_select") &&
@@ -94,6 +97,7 @@ export default function PlayQuizPage({ params }: PageProps) {
   const sessionId = Number.isInteger(rawSessionId) && rawSessionId > 0 ? rawSessionId : 0;
 
   const game = useQuizPlayer(sessionId);
+  const { t, intlLocale } = useI18n();
   const {
     credentials,
     progress,
@@ -145,7 +149,7 @@ export default function PlayQuizPage({ params }: PageProps) {
 
   const handleMultiSubmit = () => {
     if (selectedMulti.length === 0) {
-      toast.error("Кем дегенде бір нұсқаны таңдаңыз");
+      toast.error(t("quizPlay.pickAtLeastOne"));
       return;
     }
     submitAnswer([...selectedMulti].sort().join(","));
@@ -162,7 +166,7 @@ export default function PlayQuizPage({ params }: PageProps) {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800">
         <div className="text-center">
           <div className="w-14 h-14 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="font-bold">Ойын жүктелуде...</p>
+          <p className="font-bold">{t("quizPlay.gameLoading")}</p>
         </div>
       </div>
     );
@@ -173,15 +177,15 @@ export default function PlayQuizPage({ params }: PageProps) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800 p-4">
         <div className="bg-white p-8 rounded-3xl border border-gray-200 text-center max-w-sm shadow-xl">
-          <h2 className="text-xl font-bold mb-2">Ойынға қосылыңыз</h2>
+          <h2 className="text-xl font-bold mb-2">{t("quizPlay.joinTitle")}</h2>
           <p className="text-xs text-gray-500 mb-6">
-            Ойнау үшін алдымен PIN-код пен атыңызды енгізу қажет.
+            {t("quizPlay.joinBody")}
           </p>
           <Link
             href={`/join?pin=${sessionData?.pin_code || ""}`}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-sm block shadow-md shadow-purple-500/20"
           >
-            Қосылу бетіне өту
+            {t("quizPlay.goToJoin")}
           </Link>
         </div>
       </div>
@@ -212,7 +216,7 @@ export default function PlayQuizPage({ params }: PageProps) {
 
             <h2 className="text-2xl font-black text-gray-900 mt-2 mb-1">{nickname}</h2>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 mb-4">
-              <Icon name="check" /> Ойынға дайынсыз
+              <Icon name="check" /> {t("quizPlay.ready")}
             </span>
 
             {/* Toggle Avatar Customizer */}
@@ -222,7 +226,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               className="mb-5 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5"
             >
               <span><Icon name="palette" /></span>
-              <span>{editingAvatar ? "Дайын (Жабу)" : "Аватарды өзгерту"}</span>
+              <span>{editingAvatar ? t("quizPlay.avatarDone") : t("quizPlay.changeAvatar")}</span>
             </button>
 
             {editingAvatar && (
@@ -243,15 +247,15 @@ export default function PlayQuizPage({ params }: PageProps) {
                 <Icon name="loader" className="animate-spin" />
               </div>
               <h3 className="text-sm font-bold text-gray-800 mb-1">
-                Мұғалім ойынды бастаған сәтте...
+                {t("quizPlay.waitTeacher")}
               </h3>
               <p className="text-xs text-gray-500">
-                Сұрақтар автоматты түрде экраныңызда пайда болады. Тақтаға назар аударыңыз!
+                {t("quizPlay.waitBody")}
               </p>
             </div>
 
             <div className="text-xs text-gray-500">
-              PIN коды:{" "}
+              {t("quizPlay.pinLabel")}{" "}
               <strong className="text-purple-700 font-mono text-sm">
                 {sessionData.pin_code}
               </strong>
@@ -263,15 +267,15 @@ export default function PlayQuizPage({ params }: PageProps) {
             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
               <div>
                 <h3 className="text-xl font-black text-gray-900">
-                  Лоббидегі оқушылар
+                  {t("quizPlay.lobbyTitle")}
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Қосылған сыныптастарыңыз нақты уақытта көрінеді
+                  {t("quizPlay.lobbyHint")}
                 </p>
               </div>
               <div className="px-3.5 py-1.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-800 font-extrabold text-sm flex items-center gap-2 shadow-sm">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                <span>{lobbyParticipants.length} ойыншы</span>
+                <span>{t("quizPlay.playersCount", { count: lobbyParticipants.length })}</span>
               </div>
             </div>
 
@@ -300,7 +304,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                         </span>
                         {isMe && (
                           <span className="px-1.5 py-0.5 rounded-md bg-purple-600 text-white text-[9px] font-black uppercase shrink-0">
-                            Сіз
+                            {t("quizPlay.you")}
                           </span>
                         )}
                       </div>
@@ -335,18 +339,18 @@ export default function PlayQuizPage({ params }: PageProps) {
             <span className="absolute -top-2 -right-2 text-2xl animate-bounce"><Icon name="sparkles" /></span>
           </div>
           <h1 className="text-3xl font-black text-gray-900 mb-1">
-            Тамаша нәтиже!
+            {t("quizPlay.greatResult")}
           </h1>
-          <p className="text-xs text-gray-500 mb-6">Викторина сәтті аяқталды</p>
+          <p className="text-xs text-gray-500 mb-6">{t("quizPlay.finished")}</p>
 
           {/* Rank Badge */}
           {rank && (
             <div className="w-full bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 shadow-sm">
               <span className="text-xs font-bold uppercase tracking-wider text-amber-800 block mb-0.5">
-                Сіздің орныңыз
+                {t("quizPlay.yourPlace")}
               </span>
               <div className="text-3xl font-black text-amber-700">
-                <Icon name="trophy" /> #{rank}-орын
+                <Icon name="trophy" /> {t("quizPlay.rankPlace", { rank })}
               </div>
             </div>
           )}
@@ -355,15 +359,15 @@ export default function PlayQuizPage({ params }: PageProps) {
           <div className="w-full grid grid-cols-2 gap-3 mb-6">
             <div className="bg-purple-50/60 rounded-2xl p-4 border border-purple-100 text-center">
               <span className="text-[11px] font-bold uppercase text-gray-500 block mb-1">
-                Жалпы ұпай
+                {t("quizPlay.totalScore")}
               </span>
               <span className="text-2xl font-black font-mono text-purple-700">
-                {totalScore.toLocaleString()}
+                {totalScore.toLocaleString(intlLocale)}
               </span>
             </div>
             <div className="bg-purple-50/60 rounded-2xl p-4 border border-purple-100 text-center">
               <span className="text-[11px] font-bold uppercase text-gray-500 block mb-1">
-                Дәлдік
+                {t("quizPlay.accuracy")}
               </span>
               <span className="text-2xl font-black font-mono text-emerald-600">
                 {accuracy}%
@@ -372,19 +376,19 @@ export default function PlayQuizPage({ params }: PageProps) {
           </div>
 
           <div className="text-xs text-gray-500 mb-6">
-            Дұрыс жауаптар: <strong className="text-gray-900">{correctCount}</strong> / {questionCount}
+            {t("quizPlay.correctAnswers")}: <strong className="text-gray-900">{correctCount}</strong> / {questionCount}
           </div>
 
           <Link
             href={`/quiz/review/${sessionId}?participant=${participantId}`}
             className="mb-3 w-full rounded-2xl bg-purple-600 py-3.5 text-center text-sm font-bold text-white"
-          >Қателермен жұмыс</Link>
-          <Link href="/quiz/history" className="mb-4 text-sm font-semibold text-purple-700">Менің ойындарым · Нәтижелерді сақтау</Link>
+          >{t("quizPlay.mistakesReview")}</Link>
+          <Link href="/quiz/history" className="mb-4 text-sm font-semibold text-purple-700">{t("quizPlay.myGamesSave")}</Link>
           <Link
             href="/quizzes"
             className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-2xl font-extrabold text-sm shadow-xl shadow-purple-600/25 transition-all text-center"
           >
-            Квиздер каталогына қайту
+            {t("quizPlay.backToCatalog")}
           </Link>
         </div>
       </div>
@@ -395,9 +399,9 @@ export default function PlayQuizPage({ params }: PageProps) {
   const currentQ = progress?.current_question;
   if (!currentQ) return (
     <div className="p-8 text-center">
-      <p>{game.error || "Сұрақ жүктелуде..."}</p>
-      <button onClick={() => void game.refresh()} className="mt-4 rounded bg-purple-600 px-4 py-2 text-white">Қайта жүктеу</button>
-      <Link className="block mt-4" href="/join">Ойынға қайта қосылу</Link>
+      <p>{game.error || t("quizPlay.questionLoading")}</p>
+      <button onClick={() => void game.refresh()} className="mt-4 rounded bg-purple-600 px-4 py-2 text-white">{t("quizPlay.reload")}</button>
+      <Link className="block mt-4" href="/join">{t("quizPlay.rejoin")}</Link>
     </div>
   );
   const timerPercent = timerTotal > 0 ? (timeLeft / timerTotal) * 100 : 0;
@@ -414,7 +418,7 @@ export default function PlayQuizPage({ params }: PageProps) {
           />
           <div>
             <span className="text-xs font-bold text-gray-800 block">
-              Сұрақ {currentQIndex + 1} / {questionCount}
+              {t("quizPlay.questionOf", { n: currentQIndex + 1, total: questionCount })}
             </span>
             <span className="text-[10px] text-gray-500">{nickname}</span>
           </div>
@@ -431,10 +435,10 @@ export default function PlayQuizPage({ params }: PageProps) {
           {/* Current Score */}
           <div className="text-right">
             <span className="text-base font-black font-mono text-purple-700">
-              {totalScore.toLocaleString()}
+              {totalScore.toLocaleString(intlLocale)}
             </span>
             <span className="text-[9px] uppercase tracking-wider text-gray-500 block -mt-1">
-              ұпай
+              {t("quizPlay.pointsUnit")}
             </span>
           </div>
         </div>
@@ -455,7 +459,7 @@ export default function PlayQuizPage({ params }: PageProps) {
             }
             className="mt-2 rounded bg-purple-600 px-4 py-2 text-white disabled:opacity-50"
           >
-            {isAnswered || game.hasPendingAnswer ? "Қайта жіберу" : "Қайта жүктеу"}
+            {isAnswered || game.hasPendingAnswer ? t("quizPlay.resend") : t("quizPlay.reload")}
           </button>
         </div>
       )}
@@ -485,7 +489,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               <div className="flex justify-center">
                 <Image
                   src={apiPath(`images/${currentQ.image_filename}`)}
-                  alt="Сұрақ суреті"
+                  alt={t("quizPlay.questionImage")}
                   width={1280}
                   height={720}
                   unoptimized
@@ -509,19 +513,19 @@ export default function PlayQuizPage({ params }: PageProps) {
               {lastResult.is_correct ? <><Icon name="sparkles" /></> : <><Icon name="closeCircle" /></>}
             </div>
             <h3 className="text-2xl font-black mb-1">
-              {lastResult.is_correct ? "Дұрыс! Өте жақсы!" : "Қате жауап"}
+              {lastResult.is_correct ? t("quizPlay.correctGreat") : t("quizPlay.wrongAnswer")}
             </h3>
 
             {lastResult.points_awarded > 0 && (
               <div className="text-lg font-mono font-black text-amber-700 mb-2">
-                +{lastResult.points_awarded} ұпай!
+                {t("quizPlay.pointsAwarded", { count: lastResult.points_awarded })}
               </div>
             )}
 
             {!lastResult.is_correct && lastResult.correct_answer && (
               <div className="my-2 p-3 bg-white/90 rounded-xl text-xs text-gray-800 border border-gray-200 flex flex-wrap items-center justify-center gap-2">
-                <span className="font-bold">Дұрыс жауап:</span>
-                <MathRender inline latex={formatQuizCorrectAnswer(currentQ, lastResult.correct_answer)} />
+                <span className="font-bold">{t("quizPlay.correctAnswerLabel")}</span>
+                <MathRender inline latex={formatQuizCorrectAnswer(currentQ, lastResult.correct_answer, t)} />
               </div>
             )}
 
@@ -534,7 +538,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               disabled={submitting}
               className="mt-4 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black text-sm shadow-xl hover:scale-105 active:scale-95 transition-all"
             >
-              Келесі сұраққа өту <Icon name="arrowRight" />
+              {t("quizPlay.nextQuestion")} <Icon name="arrowRight" />
             </button>
           </div>
         )}
@@ -575,7 +579,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   className="h-28 rounded-2xl bg-blue-600 hover:bg-blue-500 border-b-4 border-blue-800 text-white font-black text-xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
                 >
                   <span className="text-2xl"><Icon name="check" /></span>
-                  <span>Шын (True)</span>
+                  <span>{t("quizPlay.true")} (True)</span>
                 </button>
                 <button
                   onClick={() => submitAnswer("B")}
@@ -583,7 +587,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   className="h-28 rounded-2xl bg-amber-600 hover:bg-amber-500 border-b-4 border-amber-800 text-white font-black text-xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
                 >
                   <span className="text-2xl"><Icon name="close" /></span>
-                  <span>Жалған (False)</span>
+                  <span>{t("quizPlay.false")} (False)</span>
                 </button>
               </div>
             )}
@@ -628,7 +632,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   disabled={submitting || selectedMulti.length === 0}
                   className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-2xl font-black text-base shadow-xl disabled:opacity-50 transition-all active:scale-95"
                 >
-                  Жауапты растау ({selectedMulti.length} таңдалды)
+                  {t("quizPlay.confirmMulti", { count: selectedMulti.length })}
                 </button>
               </div>
             )}
@@ -638,7 +642,7 @@ export default function PlayQuizPage({ params }: PageProps) {
               <div className="bg-white rounded-3xl p-5 border border-purple-100 shadow-md space-y-4">
                 <input
                   type="text"
-                  placeholder="Математикалық жауапты жазыңыз..."
+                  placeholder={t("quizPlay.mathPlaceholder")}
                   value={inputAnswer}
                   onChange={(e) => setInputAnswer(e.target.value)}
                   onKeyDown={(e) => {
@@ -656,7 +660,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   disabled={submitting || !inputAnswer.trim()}
                   className="w-full py-4 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-2xl font-black text-base shadow-xl disabled:opacity-50 transition-all active:scale-95"
                 >
-                  Жауапты жіберу <Icon name="rocket" />
+                  {t("quizPlay.submitAnswer")} <Icon name="rocket" />
                 </button>
               </div>
             )}

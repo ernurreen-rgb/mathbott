@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Icon from "@/components/ui/Icon";
 import { Quiz } from "@/types/quiz";
+import { useI18n } from "@/lib/i18n/provider";
 
 // The grade tile is the fastest thing to scan in a long list, so school stages get their own colour.
 function gradeTone(grade?: number | null): string {
@@ -30,14 +31,15 @@ export interface QuizRowProps {
 const TITLE = "line-clamp-2 font-semibold text-slate-900 after:absolute after:inset-0 focus:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-purple-500 sm:line-clamp-1";
 
 export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, onPickTopic, onTogglePrivacy, onDelete, onFork, selection }: QuizRowProps) {
+  const { t } = useI18n();
   const selectable = Boolean(selection && quiz.can_manage);
   const minutes = Math.max(1, Math.round((quiz.duration_seconds || 0) / 60));
   const questions = quiz.question_count || 0;
   const canFork = !quiz.can_manage && quiz.is_public && signedIn;
   const facts = [
-    `${questions} сұрақ`,
-    questions > 0 ? `≈ ${minutes} мин` : null,
-    quiz.play_count ? `${quiz.play_count} рет ойналды` : null,
+    t("catalog.questionsCount", { count: questions }),
+    questions > 0 ? t("catalog.minutes", { count: minutes }) : null,
+    quiz.play_count ? t("catalog.playedTimes", { count: quiz.play_count }) : null,
   ].filter(Boolean);
 
   return (
@@ -55,7 +57,7 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
         {quiz.grade ? (
           <>
             <span className="text-base font-bold leading-none">{quiz.grade}</span>
-            <span className="mt-0.5 text-[9px] font-semibold leading-none">сынып</span>
+            <span className="mt-0.5 text-[9px] font-semibold leading-none">{t("catalog.gradeUnit")}</span>
           </>
         ) : (
           <Icon name="quiz" className="h-5 w-5" />
@@ -79,7 +81,7 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
           {quiz.topic && (selection ? (
             <span className="max-w-full truncate font-semibold text-purple-700">{quiz.topic}</span>
           ) : (
-            <button type="button" onClick={() => onPickTopic(quiz.topic!)} title="Осы тақырыптағы квиздер"
+            <button type="button" onClick={() => onPickTopic(quiz.topic!)} title={t("catalog.topicQuizzes")}
               className="relative z-10 max-w-full truncate font-semibold text-purple-700 hover:underline">
               {quiz.topic}
             </button>
@@ -87,9 +89,9 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
           {facts.map((fact) => <span key={fact}>{fact}</span>)}
           {!quiz.is_public && (
             // From sm up the switch on the right says "Жеке" itself; a phone only has room for its track.
-            <span className={`items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ${quiz.can_manage && !selection ? "inline-flex sm:hidden" : "inline-flex"}`} title="Тек сізге көрінетін жеке квиз">
+            <span className={`items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ${quiz.can_manage && !selection ? "inline-flex sm:hidden" : "inline-flex"}`} title={t("catalog.privateBadgeHint")}>
               <Icon name="lock" className="h-3 w-3" />
-              Жеке
+              {t("catalog.private")}
             </span>
           )}
         </div>
@@ -99,7 +101,7 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
       {!selection && (
         <span aria-hidden className="hidden shrink-0 items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-sm font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:inline-flex">
           <Icon name="play" className="h-3.5 w-3.5" />
-          Ашу
+          {t("catalog.open")}
         </span>
       )}
 
@@ -109,14 +111,14 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
           type="button"
           role="switch"
           aria-checked={quiz.is_public}
-          aria-label={`«${quiz.title}» каталогта ашық`}
-          title={quiz.is_public ? "Каталогта бәріне көрінеді. Жасыру үшін басыңыз" : "Тек сізге көрінеді. Каталогқа шығару үшін басыңыз"}
+          aria-label={t("catalog.publicAria", { title: quiz.title })}
+          title={quiz.is_public ? t("catalog.publicHint") : t("catalog.privateHint")}
           onClick={onTogglePrivacy}
           disabled={busy}
           className="relative z-10 inline-flex shrink-0 items-center gap-2 rounded-xl px-2 py-2 text-xs font-bold transition-colors hover:bg-slate-200/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
         >
           <span className={`hidden w-9 text-right sm:inline ${quiz.is_public ? "text-emerald-700" : "text-amber-700"}`}>
-            {quiz.is_public ? "Ашық" : "Жеке"}
+            {quiz.is_public ? t("catalog.public") : t("catalog.private")}
           </span>
           <span aria-hidden className={`flex h-5 w-9 items-center rounded-full p-0.5 transition-colors ${quiz.is_public ? "bg-emerald-500" : "bg-slate-300"}`}>
             <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${quiz.is_public ? "translate-x-4" : ""}`} />
@@ -132,7 +134,7 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
             disabled={busy}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            aria-label={`«${quiz.title}» әрекеттері`}
+            aria-label={t("catalog.actionsAria", { title: quiz.title })}
             className={`flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${menuOpen ? "bg-slate-200/70 text-slate-700" : ""}`}
           >
             <Icon name={busy ? "loader" : "more"} className={`h-5 w-5 ${busy ? "animate-spin" : ""}`} />
@@ -143,17 +145,17 @@ export default function QuizRow({ quiz, busy, signedIn, menuOpen, onToggleMenu, 
                 <>
                   <Link role="menuitem" href={`/quizzes/${quiz.id}/edit`} className={`${MENU_ITEM} text-slate-700`}>
                     <Icon name="edit" className="h-4 w-4 text-slate-400" />
-                    Өңдеу
+                    {t("common.edit")}
                   </Link>
                   <button role="menuitem" type="button" onClick={onDelete} className={`${MENU_ITEM} border-t border-slate-100 text-red-600 hover:bg-red-50`}>
                     <Icon name="trash" className="h-4 w-4" />
-                    Өшіру
+                    {t("catalog.delete")}
                   </button>
                 </>
               ) : (
                 <button role="menuitem" type="button" onClick={onFork} className={`${MENU_ITEM} text-slate-700`}>
                   <Icon name="copy" className="h-4 w-4 text-slate-400" />
-                  Өзіме көшіріп алу
+                  {t("catalog.fork")}
                 </button>
               )}
             </div>

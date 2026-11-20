@@ -18,6 +18,7 @@ import { QuizSession, QuizParticipant, QuizSessionStats } from "@/types/quiz";
 import { QuizAvatar, parseQuizAvatar } from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
 import toast from "react-hot-toast";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface PageProps {
   params: Promise<{ sessionId: string }>;
@@ -34,6 +35,7 @@ export default function HostQuizPage({ params }: PageProps) {
   const [participants, setParticipants] = useState<QuizParticipant[]>([]);
   const [stats, setStats] = useState<QuizSessionStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t, intlLocale } = useI18n();
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
@@ -85,7 +87,7 @@ export default function HostQuizPage({ params }: PageProps) {
 
   const handleStartGame = async () => {
     if (participants.length === 0) {
-      if (!confirm("Ойыншылар әлі қосылмады. Бәрібір ойынды бастайсыз ба?")) return;
+      if (!confirm(t("host.confirmStartEmpty"))) return;
     }
     setActionLoading(true);
     try {
@@ -94,26 +96,26 @@ export default function HostQuizPage({ params }: PageProps) {
         shuffle_questions: shuffleQuestions,
       });
       if (error || !data) {
-        toast.error(error || "Ойынды бастау мүмкін болмады");
+        toast.error(error || t("host.startFailed"));
         return;
       }
       setQuizSession(data);
-      toast.success("Ойын басталды!");
+      toast.success(t("host.started"));
     } catch {
-      toast.error("Қате орын алды");
+      toast.error(t("error.title"));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleFinishGame = async () => {
-    if (!confirm("Ойынды тоқтатып, жеңімпаздар тұғырын ашқыңыз келе ме?")) return;
+    if (!confirm(t("host.confirmFinish"))) return;
     setActionLoading(true);
     try {
       const email = session?.user?.email || undefined;
       const { data, error } = await finishQuizSession(sessionId, email);
       if (error || !data) {
-        toast.error(error || "Ойынды аяқтау мүмкін болмады");
+        toast.error(error || t("host.finishFailed"));
         return;
       }
       setStats(data);
@@ -121,9 +123,9 @@ export default function HostQuizPage({ params }: PageProps) {
         setParticipants(data.leaderboard);
       }
       setQuizSession((prev) => (prev ? { ...prev, status: "finished" } : null));
-      toast.success("Ойын аяқталды! Жеңімпаздар анықталды!");
+      toast.success(t("host.finished"));
     } catch {
-      toast.error("Қате орын алды");
+      toast.error(t("error.title"));
     } finally {
       setActionLoading(false);
     }
@@ -132,16 +134,16 @@ export default function HostQuizPage({ params }: PageProps) {
   const copyPin = () => {
     if (!quizSession) return;
     void navigator.clipboard?.writeText(quizSession.pin_code).then(
-      () => toast.success("PIN көшірілді!"),
-      () => toast.error("PIN көшіру мүмкін болмады")
+      () => toast.success(t("host.pinCopied")),
+      () => toast.error(t("host.pinCopyFailed"))
     );
   };
 
   const copyJoinLink = () => {
     if (!joinUrl) return;
     void navigator.clipboard?.writeText(joinUrl).then(
-      () => toast.success("Сілтеме көшірілді!"),
-      () => toast.error("Сілтемені көшіру мүмкін болмады")
+      () => toast.success(t("host.linkCopied")),
+      () => toast.error(t("host.linkCopyFailed"))
     );
   };
 
@@ -153,7 +155,7 @@ export default function HostQuizPage({ params }: PageProps) {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="font-bold text-lg">Ойын бөлмесі жүктелуде...</p>
+          <p className="font-bold text-lg">{t("host.roomLoading")}</p>
         </div>
       </div>
     );
@@ -163,12 +165,12 @@ export default function HostQuizPage({ params }: PageProps) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-gray-800 p-4">
         <div className="bg-white p-8 rounded-3xl border border-gray-200 text-center max-w-md shadow-lg">
-          <h2 className="text-2xl font-bold mb-3">Сессия табылмады</h2>
+          <h2 className="text-2xl font-bold mb-3">{t("host.sessionNotFound")}</h2>
           <Link
             href="/quizzes"
             className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold inline-block"
           >
-            Квиздерге қайту
+            {t("host.backToQuizzes")}
           </Link>
         </div>
       </div>
@@ -184,9 +186,9 @@ export default function HostQuizPage({ params }: PageProps) {
     <div className="min-h-screen bg-slate-50 text-gray-900 flex flex-col select-none">
       {refreshError && (
         <div role="alert" className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs font-semibold text-amber-900 flex items-center justify-between gap-2">
-          <span>Байланыс уақытша үзілді: {refreshError}</span>
+          <span>{t("host.connectionLost", { error: refreshError })}</span>
           <button type="button" onClick={() => void refreshSession()} className="underline font-bold">
-            Қайталау
+            {t("common.retry")}
           </button>
         </div>
       )}
@@ -196,13 +198,13 @@ export default function HostQuizPage({ params }: PageProps) {
           <Link
             href={`/quizzes/${quizSession.quiz_id}`}
             className="p-2.5 rounded-2xl bg-gray-50 border border-gray-200 hover:border-purple-300 text-gray-600 hover:text-gray-900 transition-colors"
-            title="Квизге оралу"
+            title={t("host.backToQuiz")}
           >
             <Icon name="arrowLeft" className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
-              <span>{quizSession.quiz_title || "Квиз ойыны"}</span>
+              <span>{quizSession.quiz_title || t("host.quizGame")}</span>
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                   quizSession.status === "lobby"
@@ -213,14 +215,14 @@ export default function HostQuizPage({ params }: PageProps) {
                 }`}
               >
                 {quizSession.status === "lobby"
-                  ? "Лобби (Күтуде)"
+                  ? t("host.statusLobby")
                   : quizSession.status === "in_progress"
-                  ? "Ойын жүріп жатыр"
-                  : "Аяқталды"}
+                  ? t("host.statusInProgress")
+                  : t("host.statusFinished")}
               </span>
             </h1>
             <p className="text-xs text-gray-500">
-              Қатысушылар саны: <strong className="text-gray-900 font-bold">{participants.length}</strong>
+              {t("host.participantsCount")}: <strong className="text-gray-900 font-bold">{participants.length}</strong>
             </p>
           </div>
         </div>
@@ -230,7 +232,7 @@ export default function HostQuizPage({ params }: PageProps) {
           {quizSession.status === "lobby" && (
             <>
               <label
-                title="Оқушылар ойын ойнағанда әрқайсысында сұрақтар реті әртүрлі болып шығады"
+                title={t("host.shuffleHint")}
                 className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-white border border-purple-200/90 shadow-sm cursor-pointer hover:bg-purple-50/60 transition-colors select-none"
               >
                 <input
@@ -241,7 +243,7 @@ export default function HostQuizPage({ params }: PageProps) {
                 />
                 <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
                   <Icon name="dice" className="w-4 h-4 text-purple-600" />
-                  Сұрақтарды араластыру (әр оқушыға әртүрлі)
+                  {t("host.shuffle")}
                 </span>
               </label>
 
@@ -251,7 +253,7 @@ export default function HostQuizPage({ params }: PageProps) {
                 className="px-8 py-3.5 rounded-2xl font-black text-base bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2.5 disabled:opacity-50"
               >
                 <Icon name="play" className="w-5 h-5 " />
-                Ойынды бастау!
+                {t("host.start")}
               </button>
             </>
           )}
@@ -263,7 +265,7 @@ export default function HostQuizPage({ params }: PageProps) {
               className="px-6 py-3 rounded-2xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-xl shadow-red-500/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
             >
               <Icon name="stop" className="w-5 h-5" />
-              Ойынды аяқтау (Finish)
+              {t("host.finish")}
             </button>
           )}
 
@@ -272,7 +274,7 @@ export default function HostQuizPage({ params }: PageProps) {
               href="/quizzes"
               className="px-6 py-3 rounded-2xl font-bold text-sm bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 transition-all shadow-sm"
             >
-              Каталогқа қайту
+              {t("host.backToCatalog")}
             </Link>
           )}
         </div>
@@ -284,23 +286,23 @@ export default function HostQuizPage({ params }: PageProps) {
           {/* Join Instructions Card */}
           <div className="w-full lg:w-[460px] bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-xl flex flex-col items-center text-center">
             <span className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
-              Телефоннан немесе планшеттен қосылыңыз
+              {t("host.joinFromDevice")}
             </span>
 
             {/* Huge PIN Display */}
             <div
               onClick={copyPin}
-              title="PIN көшіру үшін басыңыз"
+              title={t("host.clickToCopyPin")}
               className="w-full bg-gradient-to-b from-purple-50 via-indigo-50/60 to-purple-50 border-2 border-purple-300 rounded-3xl py-6 px-4 my-4 cursor-pointer hover:border-purple-500 transition-all group shadow-sm"
             >
               <span className="text-xs font-bold text-purple-800 block mb-1">
-                ОЙЫН PIN-КОДЫ
+                {t("host.gamePin")}
               </span>
               <div className="text-6xl sm:text-7xl font-black font-mono tracking-widest text-purple-700 group-hover:scale-105 transition-transform">
                 {quizSession.pin_code}
               </div>
               <span className="text-[11px] text-purple-600 font-semibold block mt-2">
-                Көшіру үшін басыңыз <Icon name="test" />
+                {t("host.clickToCopy")} <Icon name="test" />
               </span>
             </div>
 
@@ -312,7 +314,7 @@ export default function HostQuizPage({ params }: PageProps) {
             )}
 
             <p className="text-xs text-gray-500 mt-3">
-              Немесе браузерде ашыңыз:{" "}
+              {t("host.orOpenInBrowser")}{" "}
               <strong className="text-purple-700 font-mono">/join</strong>
             </p>
 
@@ -321,7 +323,7 @@ export default function HostQuizPage({ params }: PageProps) {
               className="mt-4 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 transition-colors flex items-center gap-1.5"
             >
               <Icon name="copy" className="w-3.5 h-3.5" />
-              Тікелей сілтемені көшіру
+              {t("host.copyLink")}
             </button>
           </div>
 
@@ -329,14 +331,14 @@ export default function HostQuizPage({ params }: PageProps) {
           <div className="flex-1 w-full bg-white/90 backdrop-blur-xl rounded-3xl p-8 border border-purple-100 shadow-xl flex flex-col h-[560px]">
             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-6">
               <div>
-                <h2 className="text-2xl font-black text-gray-900">Қатысушылар алаңы</h2>
+                <h2 className="text-2xl font-black text-gray-900">{t("host.participantsArea")}</h2>
                 <p className="text-xs text-gray-500">
-                  Оқушылар өз құрылғылары арқылы қосылуда
+                  {t("host.studentsJoining")}
                 </p>
               </div>
               <div className="px-4 py-2 rounded-2xl bg-purple-50 border border-purple-200 text-purple-800 font-extrabold text-lg flex items-center gap-2 shadow-sm">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-                {participants.length} адам
+                {t("host.peopleCount", { count: participants.length })}
               </div>
             </div>
 
@@ -346,10 +348,10 @@ export default function HostQuizPage({ params }: PageProps) {
                   <Icon name="users" className="w-10 h-10" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-800 mb-1">
-                  Қатысушыларды күтуде...
+                  {t("host.waiting")}
                 </h3>
                 <p className="text-xs text-gray-500 max-w-xs">
-                  Студенттер телефондарынан экрандағы PIN-кодты енгізген кезде, олардың кейіпкерлері мен есімдері осында шығады.
+                  {t("host.waitingHint")}
                 </p>
               </div>
             ) : (
@@ -390,20 +392,20 @@ export default function HostQuizPage({ params }: PageProps) {
             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-6">
               <div>
                 <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-                  <span>Тікелей көшбасшылар тақтасы</span>
+                  <span>{t("host.liveLeaderboard")}</span>
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Ұпайлар оқушылар жауап берген сайын нақты уақытта жаңарады
+                  {t("host.liveLeaderboardHint")}
                 </p>
               </div>
 
               <div className="text-right">
                 <span className="text-xs font-semibold text-gray-500 block">
-                  Аяқтағандар:
+                  {t("host.finishedLabel")}
                 </span>
                 <span className="text-sm font-extrabold text-purple-700">
-                  {participants.filter((p) => p.is_finished).length} / {participants.length} оқушы
+                  {t("host.finishedOfStudents", { done: participants.filter((p) => p.is_finished).length, total: participants.length })}
                 </span>
               </div>
             </div>
@@ -471,12 +473,12 @@ export default function HostQuizPage({ params }: PageProps) {
                           )}
                           {p.is_finished && (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
-                              Аяқтады <Icon name="check" />
+                              {t("host.finishedBadge")} <Icon name="check" />
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {p.correct_count} дұрыс / {p.total_answered} жауап
+                          {t("host.correctOfAnswered", { correct: p.correct_count, answered: p.total_answered })}
                         </div>
                       </div>
                     </div>
@@ -484,10 +486,10 @@ export default function HostQuizPage({ params }: PageProps) {
                     {/* Points */}
                     <div className="text-right relative z-10">
                       <div className="text-2xl font-black font-mono text-purple-700">
-                        {p.score.toLocaleString()}
+                        {p.score.toLocaleString(intlLocale)}
                       </div>
                       <span className="text-[11px] uppercase font-bold tracking-wider text-gray-500">
-                        ұпай
+                        {t("quizPlay.pointsUnit")}
                       </span>
                     </div>
                   </div>
@@ -511,7 +513,7 @@ export default function HostQuizPage({ params }: PageProps) {
                   : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
               }`}
             >
-              <Icon name="trophy" /> Жеңімпаздар тұғыры (Podium)
+              <Icon name="trophy" /> {t("host.podium")}
             </button>
             <button
               onClick={() => setActiveTab("questions")}
@@ -521,7 +523,7 @@ export default function HostQuizPage({ params }: PageProps) {
                   : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
               }`}
             >
-              <Icon name="chart" /> Сұрақтар талдауы (Analytics)
+              <Icon name="chart" /> {t("host.analytics")}
             </button>
           </div>
 
@@ -529,7 +531,7 @@ export default function HostQuizPage({ params }: PageProps) {
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-xl flex-1 flex flex-col justify-center items-center">
               <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8 sm:mb-10 text-center flex items-center justify-center gap-2 flex-wrap">
                 <Icon name="sparkles" className="text-amber-500" />
-                <span>Құттықтаймыз! Викторина аяқталды!</span>
+                <span>{t("host.congrats")}</span>
                 <Icon name="sparkles" className="text-amber-500" />
               </h2>
 
@@ -549,7 +551,7 @@ export default function HostQuizPage({ params }: PageProps) {
                         {sortedLeaderboard[1].nickname}
                       </div>
                       <div className="text-xs font-mono font-bold text-gray-500">
-                        {sortedLeaderboard[1].score} ұпай
+                        {t("host.points", { count: sortedLeaderboard[1].score })}
                       </div>
                     </div>
                   )}
@@ -574,7 +576,7 @@ export default function HostQuizPage({ params }: PageProps) {
                         {sortedLeaderboard[0].nickname}
                       </div>
                       <div className="text-sm font-mono font-extrabold text-amber-700">
-                        {sortedLeaderboard[0].score} ұпай
+                        {t("host.points", { count: sortedLeaderboard[0].score })}
                       </div>
                     </div>
                   )}
@@ -598,7 +600,7 @@ export default function HostQuizPage({ params }: PageProps) {
                         {sortedLeaderboard[2].nickname}
                       </div>
                       <div className="text-xs font-mono font-bold text-gray-500">
-                        {sortedLeaderboard[2].score} ұпай
+                        {t("host.points", { count: sortedLeaderboard[2].score })}
                       </div>
                     </div>
                   )}
@@ -613,7 +615,7 @@ export default function HostQuizPage({ params }: PageProps) {
             /* Questions Analytics View */
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-xl space-y-4">
               <h3 className="text-xl font-bold text-gray-900 mb-4">
-                Сұрақтар бойынша дәлдік пен нәтижелер
+                {t("host.accuracyByQuestion")}
               </h3>
 
               {stats?.question_stats?.map((qStat, idx) => {
@@ -632,7 +634,7 @@ export default function HostQuizPage({ params }: PageProps) {
                           #{idx + 1}
                         </span>
                         <span className="text-xs font-semibold text-gray-500">
-                          {qStat.avg_time ? `Орташа уақыт: ${qStat.avg_time}с` : ""}
+                          {qStat.avg_time ? t("host.avgTime", { seconds: qStat.avg_time }) : ""}
                         </span>
                       </div>
                       <div className="text-sm font-medium text-gray-800">
@@ -643,7 +645,7 @@ export default function HostQuizPage({ params }: PageProps) {
                     <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                       <div className="text-right">
                         <span className="text-xs text-gray-500 block">
-                          {correct} / {total} дұрыс
+                          {t("host.correctOfTotal", { correct, total })}
                         </span>
                         <span
                           className={`text-lg font-black font-mono ${

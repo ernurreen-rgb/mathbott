@@ -9,6 +9,7 @@ import {
   type McqOptionLabel,
 } from "@/lib/question-options";
 import type { LessonTask } from "@/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface StudentChoiceAnswerFieldsProps {
   task: LessonTask;
@@ -42,6 +43,7 @@ export default function StudentChoiceAnswerFields({
   correctAnswer,
   selectedAnswer,
 }: StudentChoiceAnswerFieldsProps) {
+  const { t } = useI18n();
   const options = task.options || [];
   const optionLayoutClass = layout === "stack"
     ? "grid grid-cols-1 gap-2.5"
@@ -61,7 +63,7 @@ export default function StudentChoiceAnswerFields({
             <div key={`${task.id}-select-${index}`} className="space-y-2">
               <div className="text-base font-semibold text-gray-800">
                 {String.fromCharCode(65 + index)}){" "}
-                <MathRender inline latex={task.subquestions?.[index]?.text || `Қосымша сұрақ ${index + 1}`} />
+                <MathRender inline latex={task.subquestions?.[index]?.text || t("answer.subquestionN", { n: index + 1 })} />
               </div>
               <div className={optionLayoutClass}>
                 {options.map((option) => {
@@ -126,7 +128,7 @@ export default function StudentChoiceAnswerFields({
                       )}
                       {isAnswered && !isSelected && isCorrectOption && (
                         <span className="text-xs text-green-700 font-bold shrink-0 ml-2 flex items-center gap-1">
-                          <Icon name="check" className="w-3.5 h-3.5" /> Дұрыс
+                          <Icon name="check" className="w-3.5 h-3.5" /> {t("answer.correctBadge")}
                         </span>
                       )}
                     </button>
@@ -211,7 +213,7 @@ export default function StudentChoiceAnswerFields({
               )}
               {isAnswered && !isSelected && isCorrectOption && (
                 <span className="text-xs text-green-700 font-bold shrink-0 ml-2 flex items-center gap-1">
-                  <Icon name="check" className="w-3.5 h-3.5" /> Дұрыс
+                  <Icon name="check" className="w-3.5 h-3.5" /> {t("answer.correctBadge")}
                 </span>
               )}
             </button>

@@ -19,6 +19,8 @@ import { isTaskAnswerComplete } from "@/lib/task-answer";
 import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import type { LessonTask, MiniLessonReview, MiniLessonReviewAnswerResult, MiniLessonReviewTask } from "@/types";
 import LessonTaskFooter from "../../_components/LessonTaskFooter";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr, type Translate } from "@/lib/i18n/translate";
 
 const toLessonTask = (task: MiniLessonReviewTask): LessonTask => ({
   id: task.bank_task_id,
@@ -34,10 +36,10 @@ const toLessonTask = (task: MiniLessonReviewTask): LessonTask => ({
 });
 
 /** Readable form of the graded answer: option texts for choices, slots for written answers. */
-function correctAnswerParts(task: LessonTask, raw: string): string[] {
+function correctAnswerParts(task: LessonTask, raw: string, t: Translate): string[] {
   if (task.question_type === "tf") {
     const lowered = raw.trim().toLowerCase();
-    return [lowered === "false" || lowered === "0" ? "\\text{Жалған}" : "\\text{Дұрыс}"];
+    return [`\\text{${lowered === "false" || lowered === "0" ? t("footer.tfFalse") : t("footer.tfTrue")}}`];
   }
   if ((task.question_type === "mcq" || task.question_type === "mcq6") && getTaskAnswerMode(task) === "choices") {
     return parseMcqAnswerLabels(raw).map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || label);
@@ -55,6 +57,7 @@ function correctAnswerParts(task: LessonTask, raw: string): string[] {
 
 export default function MiniLessonReviewPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const rawLessonId = Number(params.id);
@@ -85,7 +88,7 @@ export default function MiniLessonReviewPage() {
 
   const load = useCallback(async () => {
     if (!isValidRoute) {
-      setError("Қателер талдауы табылмады.");
+      setError(tr("mreview.notFound"));
       setLoading(false);
       return;
     }
@@ -117,7 +120,7 @@ export default function MiniLessonReviewPage() {
         setReview((previous) => previous && { ...previous, summary: data.summary });
         playLessonCue(data.correct ? "correct" : "wrong");
       }
-      else setError(err || "Жауапты тексеру мүмкін болмады.");
+      else setError(err || tr("mreview.checkFailed"));
     } finally {
       submittingRef.current = false;
       setChecking(false);
@@ -166,25 +169,25 @@ export default function MiniLessonReviewPage() {
 
   return shell(<>
     <section className="glass shrink-0 rounded-3xl shadow-2xl p-4 md:p-6 border border-white/30">
-      <button type="button" onClick={returnToLesson} className="text-gray-700 hover:text-gray-900 inline-flex items-center gap-1.5"><Icon name="arrowLeft" /> Сабаққа оралу</button>
-      <h1 className="mt-2 text-xl font-extrabold text-gray-900 md:mt-4 md:text-2xl">Қателерді талдау</h1>
+      <button type="button" onClick={returnToLesson} className="text-gray-700 hover:text-gray-900 inline-flex items-center gap-1.5"><Icon name="arrowLeft" /> {t("mreview.backToLesson")}</button>
+      <h1 className="mt-2 text-xl font-extrabold text-gray-900 md:mt-4 md:text-2xl">{t("lesson.reviewMistakes")}</h1>
       {summary && summary.mistakes > 0 && (
-        <div className="mt-4 h-2 rounded-full bg-white/60 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={summary.mistakes} aria-valuenow={done} aria-label="Талдау барысы">
+        <div className="mt-4 h-2 rounded-full bg-white/60 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={summary.mistakes} aria-valuenow={done} aria-label={t("mreview.progressAria")}>
           <div className="h-2 rounded-full bg-purple-600 transition-all" style={{ width: `${(done / summary.mistakes) * 100}%` }} />
         </div>
       )}
     </section>
 
     {error && <div role="alert" className="shrink-0 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-800">
-      {error} <button type="button" onClick={() => void load()} className="ml-2 font-semibold underline">Қайта жүктеу</button>
+      {error} <button type="button" onClick={() => void load()} className="ml-2 font-semibold underline">{t("profile.reload")}</button>
     </div>}
 
     {current && task ? <section className="glass flex min-h-0 flex-1 flex-col rounded-3xl shadow-2xl border border-white/30 md:block md:flex-none">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 md:overflow-visible md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
-          <span>Қате {current.position} / {summary?.mistakes ?? current.position}{current.attempt > 1 ? ` · ${current.attempt}-әрекет` : ""}</span>
+          <span>{t("mreview.mistakeOf", { n: current.position, total: summary?.mistakes ?? current.position })}{current.attempt > 1 ? ` · ${t("mreview.attemptN", { n: current.attempt })}` : ""}</span>
           <span className={`rounded-full px-3 py-1 font-semibold ${current.kind === "twin" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-700"}`}>
-            {current.kind === "twin" ? "Ұқсас есеп · сандары өзгертілген" : "Сол есеп · ұқсас нұсқасы әлі жоқ"}
+            {current.kind === "twin" ? t("mreview.twin") : t("mreview.sameTask")}
           </span>
         </div>
         <div className="bg-white/70 rounded-2xl p-4 border border-white/40 space-y-4">
@@ -197,11 +200,11 @@ export default function MiniLessonReviewPage() {
         {/* The solution stays with the task, so the footer panel keeps to one compact block on phones. */}
         {result && !result.correct && (
           <div className="space-y-3 rounded-2xl border border-red-200 bg-white/80 p-4 text-red-800">
-            {result.solution_filename && <Image src={apiPath(`images/${result.solution_filename}`)} alt="Шешуі" width={1280} height={720} unoptimized
+            {result.solution_filename && <Image src={apiPath(`images/${result.solution_filename}`)} alt={t("mreview.solutionAlt")} width={1280} height={720} unoptimized
               className="max-h-80 w-auto max-w-full rounded-lg border border-red-200 bg-white object-contain" />}
             <p className="text-sm">{result.has_next_twin
-              ? "Шешуін қарап шығып, тағы бір ұқсас есепті шығарып көріңіз."
-              : "Бұл есеп әлсіз тұстар тізіміне қосылды. Сабақ түсіндірмесін қайта қарап шығыңыз."}</p>
+              ? t("mreview.seeSolution")
+              : t("mreview.addedToWeak")}</p>
           </div>
         )}
       </div>
@@ -210,11 +213,11 @@ export default function MiniLessonReviewPage() {
         taskId={task.id}
         questionType={task.question_type}
         verdict={result ? (result.correct ? "correct" : "wrong") : null}
-        correctMath={result && !result.correct && result.correct_answer ? correctAnswerParts(task, result.correct_answer) : []}
-        detail={result?.correct ? "Бұл қате түзетілді." : undefined}
+        correctMath={result && !result.correct && result.correct_answer ? correctAnswerParts(task, result.correct_answer, t) : []}
+        detail={result?.correct ? t("mreview.fixed") : undefined}
         hasPrev={false}
         canGoNext={!!result}
-        nextLabel={after === "twin" ? "Тағы бір ұқсас есеп" : after === "mistake" ? "Келесі қате" : "Жалғастыру"}
+        nextLabel={after === "twin" ? t("mreview.anotherTwin") : after === "mistake" ? t("mreview.nextMistake") : t("mreview.continue")}
         showCheck={task.question_type !== "tf"}
         checkDisabled={!isTaskAnswerComplete(task, answer)}
         checking={checking}
@@ -223,8 +226,8 @@ export default function MiniLessonReviewPage() {
       />
     </section>
     : review && <section className="glass min-h-0 overflow-y-auto rounded-3xl shadow-2xl p-6 border border-white/30 text-center space-y-3 md:overflow-visible">
-      <p className="text-gray-700">Бұл мини-сабақта талдайтын қате жоқ. Талдау мини-сабақтың есептері шешілгеннен кейін ашылады.</p>
-      <button type="button" onClick={returnToLesson} className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg">Сабаққа оралу <Icon name="arrowRight" /></button>
+      <p className="text-gray-700">{t("mreview.nothing")}</p>
+      <button type="button" onClick={returnToLesson} className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-5 rounded-lg">{t("mreview.backToLesson")} <Icon name="arrowRight" /></button>
     </section>}
   </>);
 }

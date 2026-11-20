@@ -1,6 +1,8 @@
 """
 Pydantic models for API requests
 """
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -15,6 +17,11 @@ class TaskCheckRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError('Answer cannot be empty')
         return v.strip()
+
+
+class LanguageUpdateRequest(BaseModel):
+    email: EmailStr = Field(..., description="Valid email address required")
+    language: Literal["kk", "ru"] = Field(..., description="Student interface language")
 
 
 class NicknameUpdateRequest(BaseModel):

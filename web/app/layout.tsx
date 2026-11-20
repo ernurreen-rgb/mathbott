@@ -3,32 +3,37 @@ import "./globals.css";
 import "mathlive/static.css";
 import { Providers } from "./providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { getServerT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = {
-  title: "QazMath - математикаға дайындық платформасы",
-  description: "Математикалық есептерді шығарып, сынақ тесттерін өтіп, прогресіңізді бақылаңыз.",
-  applicationName: "QazMath",
-  // "default" keeps the iOS status bar opaque so content never slides under it.
-  appleWebApp: { capable: true, title: "QazMath", statusBarStyle: "default" },
-  icons: {
-    icon: [{ url: "/favicon.ico", sizes: "any" }],
-    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-  },
-  // Next only emits the unprefixed mobile-web-app-capable; iOS < 16.4 still needs this one.
-  other: { "apple-mobile-web-app-capable": "yes" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getServerT();
+  return {
+    title: t("meta.title"),
+    description: t("meta.description"),
+    applicationName: "QazMath",
+    // "default" keeps the iOS status bar opaque so content never slides under it.
+    appleWebApp: { capable: true, title: "QazMath", statusBarStyle: "default" },
+    icons: {
+      icon: [{ url: "/favicon.ico", sizes: "any" }],
+      apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    // Next only emits the unprefixed mobile-web-app-capable; iOS < 16.4 still needs this one.
+    other: { "apple-mobile-web-app-capable": "yes" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#7c3aed",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { locale } = await getServerT();
   return (
-    <html lang="kk">
+    <html lang={locale}>
       <body suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
@@ -37,7 +42,7 @@ export default function RootLayout({
           }}
         />
         <ErrorBoundary>
-          <Providers>
+          <Providers locale={locale}>
             {children}
           </Providers>
         </ErrorBoundary>

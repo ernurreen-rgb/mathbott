@@ -6,6 +6,7 @@ import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { TrialTestDetails } from "@/types";
 import type { ReviewAnswer } from "@/lib/trial-test-review";
+import { useI18n } from "@/lib/i18n/provider";
 
 type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
 
@@ -31,7 +32,7 @@ const normalizeTfValue = (value?: string | null): "true" | "false" | "" => {
   return "";
 };
 
-const renderMathOrText = (value: string, emptyLabel = "Жауап берілмеді") => {
+const renderMathOrText = (value: string, emptyLabel: string) => {
   if (!value) return <span>{emptyLabel}</span>;
   return <MathRender inline latex={value} />;
 };
@@ -44,11 +45,12 @@ export const isReviewResultActuallyCorrect = (
 const renderSelectChoice = (
   options: NonNullable<TrialTestDetails["tasks"][number]["options"]>,
   label: string,
+  noAnswer: string,
   preferWritten = false
 ) => {
   const trimmed = label.trim();
   const upper = trimmed.toUpperCase();
-  if (!upper) return <span>Жауап берілмеді</span>;
+  if (!upper) return <span>{noAnswer}</span>;
   if (preferWritten) return <MathRender inline latex={trimmed} />;
   const option = options.find((item) => (item.label || "").trim().toUpperCase() === upper);
   if (!option) return <MathRender inline latex={trimmed} />;
@@ -68,9 +70,11 @@ export function ReviewAnswerBlock({
   task: TrialTestDetails["tasks"][number];
   result?: TrialTestReviewAnswer | null;
 }) {
+  const { t } = useI18n();
+  const noAnswer = t("review.noAnswer");
   const resultAnswer = result && typeof result === "object" ? result : undefined;
   const userAnswerRaw = resultAnswer?.answer ?? "";
-  const userAnswer = userAnswerRaw || "Жауап берілмеді";
+  const userAnswer = userAnswerRaw || noAnswer;
   const correctAnswer = resultAnswer?.correct_answer ?? task.answer ?? "";
   const qt: QuestionType = (task.question_type || "input") as QuestionType;
   const isCorrect = isReviewResultActuallyCorrect(task, resultAnswer);
@@ -98,14 +102,14 @@ export function ReviewAnswerBlock({
                     : "border-red-500 bg-red-100"
               }`}
             >
-              <div className="mb-1 text-sm font-semibold text-gray-700">Жауабыңыз</div>
+              <div className="mb-1 text-sm font-semibold text-gray-700">{t("reviewBlock.yourAnswer")}</div>
               <div className="flex flex-wrap gap-3">
                 {writtenAnswers.length > 0 ? (
                   writtenAnswers.map((answer, index) => (
                     <MathRender key={`written-review-${index}`} inline latex={answer} />
                   ))
                 ) : (
-                  <span className="text-sm text-gray-600">Жауап берілмеді</span>
+                  <span className="text-sm text-gray-600">{noAnswer}</span>
                 )}
               </div>
             </div>
@@ -138,8 +142,8 @@ export function ReviewAnswerBlock({
 
     if (qt === "tf") {
       const options = [
-        { label: "Дұрыс", value: "true" },
-        { label: "Жалған", value: "false" },
+        { label: t("footer.tfTrue"), value: "true" },
+        { label: t("footer.tfFalse"), value: "false" },
       ] as const;
       const userTf = normalizeTfValue(userAnswerRaw);
       const correctTf = normalizeTfValue(correctAnswer);
@@ -197,18 +201,18 @@ export function ReviewAnswerBlock({
               <div key={`select-${task.id}-${index}`} className="rounded-lg border border-gray-200 bg-white/80 p-3">
                 <div className="text-sm font-semibold text-gray-700 mb-2">
                   {String.fromCharCode(65 + index)}.{" "}
-                  {subquestion?.text ? <MathRender inline latex={subquestion.text} /> : `${index + 1}-сұрақ`}
+                  {subquestion?.text ? <MathRender inline latex={subquestion.text} /> : t("reviewBlock.questionNth", { n: index + 1 })}
                 </div>
                 <div className="text-sm">
-                  <span className="font-semibold text-gray-700">Жауабыңыз: </span>
+                  <span className="font-semibold text-gray-700">{t("reviewBlock.yourAnswer")}: </span>
                   <span className={rowCorrect ? "text-green-700" : "text-red-700"}>
-                    {renderSelectChoice(options, userChoice, isWrittenSelectAnswer)}
+                    {renderSelectChoice(options, userChoice, noAnswer, isWrittenSelectAnswer)}
                   </span>
                 </div>
                 {!rowCorrect && correctChoice && (
                   <div className="text-sm mt-1">
-                    <span className="font-semibold text-gray-700">Дұрыс жауап: </span>
-                    <span className="text-green-700">{renderSelectChoice(options, correctChoice, isWrittenSelectAnswer && !correctOptionText)}</span>
+                    <span className="font-semibold text-gray-700">{t("quizPlay.correctAnswerLabel")} </span>
+                    <span className="text-green-700">{renderSelectChoice(options, correctChoice, noAnswer, isWrittenSelectAnswer && !correctOptionText)}</span>
                   </div>
                 )}
               </div>
@@ -225,13 +229,13 @@ export function ReviewAnswerBlock({
             isCorrect ? "bg-green-100 border-green-500 text-green-800" : "bg-red-100 border-red-500 text-red-800"
           }`}
         >
-          <span className="font-semibold">Жауабыңыз: </span>
+          <span className="font-semibold">{t("reviewBlock.yourAnswer")}: </span>
           {renderMathOrText(userAnswerRaw, userAnswer)}
         </div>
         {!isCorrect && correctAnswer && (
           <div className="rounded-lg p-3 border-2 bg-green-100 border-green-400 text-green-800">
-            <span className="font-semibold">Дұрыс жауап: </span>
-            {renderMathOrText(correctAnswer)}
+            <span className="font-semibold">{t("quizPlay.correctAnswerLabel")} </span>
+            {renderMathOrText(correctAnswer, noAnswer)}
           </div>
         )}
       </div>

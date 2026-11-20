@@ -10,9 +10,12 @@ import DesktopNav from "@/components/DesktopNav";
 import { UserData } from "@/types";
 import { getUserData } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-require-auth";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 export default function AchievementsPage() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const sessionEmail = session?.user?.email || null;
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +42,7 @@ export default function AchievementsPage() {
         console.error("Error fetching user data:", err);
       }
       setUserData(null);
-      setError("Жетістіктерді жүктеу қатесі");
+      setError(tr("achievements.loadError"));
     } finally {
       setLoading(false);
     }
@@ -58,7 +61,7 @@ export default function AchievementsPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center pb-20 md:pb-0">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-gray-600 font-medium">Жүктелуде...</div>
+          <div className="text-gray-600 font-medium">{t("common.loading")}</div>
         </div>
       </div>
     );
@@ -83,11 +86,11 @@ export default function AchievementsPage() {
             className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-purple-50 hover:text-purple-700 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
           >
             <Icon name="arrowLeft" />
-            <span>Артқа</span>
+            <span>{t("common.back")}</span>
           </Link>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">Барлық жетістіктер</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">{t("achievements.all")}</h1>
           <p className="text-gray-700 font-semibold text-lg">
-            Ашық: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
+            {t("achievements.unlocked")}: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
           </p>
         </div>
 
@@ -102,7 +105,7 @@ export default function AchievementsPage() {
               onClick={() => void fetchUserData()}
               className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700"
             >
-              Қайта жүктеу
+              {t("profile.reload")}
             </button>
           </div>
         ) : userData?.achievements && userData.achievements.length > 0 ? (
@@ -140,7 +143,7 @@ export default function AchievementsPage() {
             <div className="text-gray-400 mb-4">
               <Icon name="award" className="w-16 h-16 mx-auto" />
             </div>
-            <div className="text-gray-600 text-lg">Жетістіктер әлі жүктеліп тұрған жоқ</div>
+            <div className="text-gray-600 text-lg">{t("achievements.notLoaded")}</div>
           </div>
         )}
         </div>

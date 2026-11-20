@@ -12,6 +12,8 @@ import { getQuiz, getQuizQuestions, forkQuiz } from "@/lib/api/quizzes";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { Quiz, QuizQuestion } from "@/types/quiz";
 import toast from "react-hot-toast";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 interface EditQuizPageProps {
   params: Promise<{ id: string }>;
@@ -21,6 +23,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
   const router = useRouter();
   const routeParams = useParams();
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
 
   const [quizId, setQuizId] = useState<number | null>(() => {
     if (routeParams?.id) {
@@ -56,7 +59,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
     if (!session?.user?.email) return;
     if (quizId === null) return;
     if (quizId <= 0) {
-      setError("Жарамсыз квиз идентификаторы");
+      setError(tr("edit.badId"));
       setLoading(false);
       return;
     }
@@ -75,16 +78,16 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
         if (!isMounted) return;
 
         if (quizRes.error || !quizRes.data) {
-          setError(quizRes.error || "Квиз табылмады");
+          setError(quizRes.error || tr("quiz.notFound"));
         } else if (questionsRes.error || !Array.isArray(questionsRes.data)) {
-          setError(questionsRes.error || "Квиз сұрақтарын жүктеу мүмкін болмады");
+          setError(questionsRes.error || tr("edit.questionsFailed"));
         } else {
           setQuiz(quizRes.data);
           setQuestions(questionsRes.data);
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err?.message || "Квиз мәліметтерін жүктеу мүмкін болмады");
+          setError(err?.message || tr("edit.dataFailed"));
         }
       } finally {
         if (isMounted) {
@@ -103,7 +106,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
   const handleForkAndEdit = async () => {
     if (!quizId) return;
     if (!session?.user) {
-      toast.error("Квизді көшіру үшін жүйеге кіріңіз");
+      toast.error(t("quiz.signInToFork"));
       return;
     }
     setForking(true);
@@ -111,14 +114,14 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
       const email = session?.user?.email || undefined;
       const { data: forked, error: forkErr } = await forkQuiz(quizId, email);
       if (forkErr || !forked) {
-        toast.error(forkErr || "Квизді көшіру сәтсіз аяқталды");
+        toast.error(forkErr || t("catalog.forkFailed"));
         setForking(false);
         return;
       }
-      toast.success("Квиз жеке парақшаңызға көшірілді! Енді өңдей аласыз.");
+      toast.success(t("edit.forked"));
       router.push(`/quizzes/${forked.id}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || "Көшіру кезінде қате орын алды");
+      toast.error(err?.message || t("edit.forkError"));
       setForking(false);
     }
   };
@@ -132,7 +135,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-gray-600">Квиз деректері жүктелуде...</p>
+          <p className="text-sm font-semibold text-gray-600">{t("edit.loading")}</p>
         </div>
       </div>
     );
@@ -144,20 +147,20 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
         <DesktopNav currentPage="quizzes" />
         <MobileNav currentPage="quizzes" />
         <div className="text-center p-8 bg-white rounded-3xl shadow-md border border-gray-100 max-w-sm">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Квизді жүктеу мүмкін болмады</h2>
-          <p role="alert" className="text-sm text-gray-500 mb-4">{error || "Сілтеме қате болуы мүмкін."}</p>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">{t("edit.loadFailed")}</h2>
+          <p role="alert" className="text-sm text-gray-500 mb-4">{error || t("edit.badLink")}</p>
           <div className="flex flex-col gap-3">
             <button
               onClick={() => setLoadAttempt((attempt) => attempt + 1)}
               className="px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm"
             >
-              Қайта жүктеу
+              {t("profile.reload")}
             </button>
             <Link
               href="/quizzes"
               className="inline-block px-5 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm"
             >
-              Барлық квиздерге оралу
+              {t("quiz.backToAll")}
             </Link>
           </div>
         </div>
@@ -175,11 +178,11 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
           <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
             <Icon name="lock" />
           </div>
-          <h2 className="text-xl font-extrabold text-gray-900 mb-2">Өңдеуге рұқсат жоқ</h2>
+          <h2 className="text-xl font-extrabold text-gray-900 mb-2">{t("edit.noAccess")}</h2>
           <p className="text-sm text-gray-600 mb-6">
             {quiz.is_public
-              ? "Бұл квизді басқа автор жасағандықтан оны тікелей өзгерте алмайсыз. Бірақ оны өзіңіздің парақшаңызға көшіріп алып, қалағаныңызша өңдей аласыз!"
-              : "Бұл жеке квиз және оны тек оның авторы ғана өңдей алады."}
+              ? t("edit.otherAuthor")
+              : t("edit.privateOnlyAuthor")}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -187,7 +190,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
               href={`/quizzes/${quiz.id}`}
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors"
             >
-              Квизге оралу
+              {t("host.backToQuiz")}
             </Link>
             {quiz.is_public && (
               <button
@@ -200,7 +203,7 @@ export default function EditQuizPage({ params }: EditQuizPageProps) {
                 ) : (
                   <Icon name="copy" className="w-4 h-4" />
                 )}
-                <span>Өзіме көшіріп өңдеу</span>
+                <span>{t("quiz.forkEdit")}</span>
               </button>
             )}
           </div>

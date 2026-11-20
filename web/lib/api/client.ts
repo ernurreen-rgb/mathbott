@@ -1,4 +1,5 @@
 import { API_URL } from "../constants";
+import { tr } from "../i18n/translate";
 
 const DEBUG_API = process.env.NEXT_PUBLIC_DEBUG_API === "true";
 export const debugLog = (...args: any[]) => {
@@ -103,7 +104,7 @@ export async function fetchWithErrorHandling<T>(
           return {
             data: null,
             error:
-              "Серверден жауапты оқу қатесі. Байланыс үзілген немесе деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
+              tr("api.readError"),
             status: response.status,
           };
         }
@@ -123,7 +124,7 @@ export async function fetchWithErrorHandling<T>(
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
-            error: `Сервер JSON орнына HTML бетін қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
+            error: tr("api.htmlInsteadOfJson", { url }),
             status: response.status,
           };
         }
@@ -147,7 +148,7 @@ export async function fetchWithErrorHandling<T>(
         } else if (errorData && typeof errorData === "object" && Object.keys(errorData).length > 0) {
           errorMessage = JSON.stringify(errorData);
         } else {
-          errorMessage = `Сервер қатесі: ${response.status} ${response.statusText}`.trim();
+          errorMessage = tr("api.serverError", { status: response.status, statusText: response.statusText }).trim();
         }
 
         debugLog("Error response:", { status: response.status, errorData, errorMessage });
@@ -164,13 +165,13 @@ export async function fetchWithErrorHandling<T>(
         if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
           return {
             data: null,
-            error: `Сервер JSON орнына HTML қайтарды. Бұл прокси қатесі болуы мүмкін. URL мекенжайын тексеріңіз: ${url}`,
+            error: tr("api.htmlInsteadOfJson", { url }),
             status: response.status,
           };
         }
         return {
           data: null,
-          error: `Сервер JSON емес жауап қайтарды (${contentType}). Бэкенд іске қосылғанын және қолжетімді екенін тексеріңіз.`,
+          error: tr("api.notJson", { contentType: String(contentType) }),
           status: response.status,
         };
       }
@@ -182,7 +183,7 @@ export async function fetchWithErrorHandling<T>(
         debugLog("JSON parse error. Response text:", responseText.substring(0, 500));
         return {
           data: null,
-          error: `JSON жауабын талдау қатесі: ${jsonError.message}. Жауап басы: ${responseText.substring(0, 100)}`,
+          error: tr("api.jsonParse", { message: jsonError.message, head: responseText.substring(0, 100) }),
           status: response.status,
         };
       }
@@ -192,14 +193,14 @@ export async function fetchWithErrorHandling<T>(
       if (process.env.NODE_ENV === "development") {
         console.error("Fetch error:", error);
       }
-      const errorMessage = error?.message || "Серверге қосылу қатесі";
+      const errorMessage = error?.message || tr("api.connectError");
 
       if (error?.name === "AbortError") {
         return {
           data: null,
           error: timedOut
-            ? `Серверден жауап күту уақыты асып кетті (${Math.round(timeoutMs / 1000)} секунд)`
-            : "Сұрау тоқтатылды",
+            ? tr("api.timeout", { count: Math.round(timeoutMs / 1000) })
+            : tr("api.aborted"),
         };
       }
 
@@ -210,7 +211,7 @@ export async function fetchWithErrorHandling<T>(
         return {
           data: null,
           error:
-            "Серверден деректерді алу қатесі. Деректер толық емес болуы мүмкін. Бетті жаңартып көріңіз.",
+            tr("api.fetchError"),
         };
       }
 
@@ -222,7 +223,7 @@ export async function fetchWithErrorHandling<T>(
       ) {
         return {
           data: null,
-          error: `Серверге қосылу мүмкін болмады. Бэкенд 8000 портында іске қосылғанын және ${API_URL} мекенжайы бойынша қолжетімді екенін тексеріңіз`,
+          error: tr("api.unreachable", { url: API_URL }),
         };
       }
       return { data: null, error: errorMessage };

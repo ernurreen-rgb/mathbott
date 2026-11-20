@@ -3,6 +3,7 @@ import Icon from "@/components/ui/Icon";
 
 import { UserData } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
+import { useI18n } from "@/lib/i18n/provider";
 
 type Props = {
   userData: UserData | null;
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export default function ProfileHeader({ userData, isEditingNickname, handleSaveNickname, nickname, setNickname, saving, setIsEditingNickname, setMessage, message }: Props) {
+  const { t } = useI18n();
   return (
     <>
       <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 rounded-3xl shadow-2xl p-8 mb-6 text-white relative overflow-hidden">
@@ -33,7 +35,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                     type="text"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
-                    placeholder="Никнейміңізді енгізіңіз"
+                    placeholder={t("profile.nicknamePlaceholder")}
                     maxLength={50}
                     className="w-full px-4 py-2 bg-white/90 text-gray-800 rounded-lg border-2 border-white/50 focus:ring-2 focus:ring-white focus:border-white transition-all outline-none text-xl font-bold"
                     autoFocus
@@ -41,7 +43,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                   <div className="flex items-center gap-2">
                     <button
                       type="submit"
-                      aria-label="Никнеймді сақтау"
+                      aria-label={t("profile.saveNickname")}
                       disabled={saving || !nickname.trim() || nickname.trim() === (userData?.nickname || "")}
                       className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                     >
@@ -49,7 +51,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                     </button>
                     <button
                       type="button"
-                      aria-label="Өңдеуден бас тарту"
+                      aria-label={t("profile.cancelEdit")}
                       onClick={() => {
                         setIsEditingNickname(false);
                         setNickname(userData?.nickname || "");
@@ -64,7 +66,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
               ) : (
                 <div className="flex flex-col gap-2">
                   <h2 className="text-3xl font-bold mb-1">
-                    {userData?.nickname || userData?.email || "Пайдаланушы"}
+                    {userData?.nickname || userData?.email || t("profile.user")}
                   </h2>
                   <button
                     onClick={() => {
@@ -73,7 +75,8 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                       setMessage(null);
                     }}
                     className="inline-flex items-center justify-center w-9 h-9 bg-white/20 hover:bg-white/30 rounded-lg transition-all backdrop-blur-sm"
-                    title="Никнеймді өзгерту"
+                    title={t("profile.changeNickname")}
+                    aria-label={t("profile.changeNickname")}
                   >
                     <Icon name="edit" className="w-5 h-5 text-white" />
                   </button>

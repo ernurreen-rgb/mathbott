@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 from fastapi import HTTPException, Query, Request
 from slowapi import Limiter
-from models.requests import NicknameUpdateRequest
+from models.requests import LanguageUpdateRequest, NicknameUpdateRequest
 from settings import get_settings
 from utils.cache import cache
 from utils.timezone import today_almaty
@@ -17,6 +17,7 @@ _ALLOWED_USER_WEB_FIELDS = frozenset(
         "id",
         "email",
         "nickname",
+        "language",
         "total_solved",
         "streak",
         "last_streak_date",
@@ -144,6 +145,7 @@ def setup_users_routes(app, db, limiter: Limiter):
             "id": user["id"],
             "email": user["email"],
             "nickname": user.get("nickname"),
+            "language": user.get("language"),
             "total_solved": user["total_solved"],
             "streak": streak_value,
             "last_streak_date": last_streak_date_value,
@@ -263,5 +265,14 @@ def setup_users_routes(app, db, limiter: Limiter):
         """Update user nickname"""
         normalized_email = nickname_request.email.strip().lower()
         await db.users.update_user_nickname(normalized_email, nickname_request.nickname)
+        cache.invalidate_pattern(f"user:stats:{normalized_email}")
+        return {"success": True}
+
+    @app.post("/api/user/web/language")
+    @limiter.limit("20/minute")
+    async def update_language(request: Request, language_request: LanguageUpdateRequest):
+        """Remember the student's interface language so it follows them to other devices."""
+        normalized_email = language_request.email.strip().lower()
+        await db.users.update_user_language(normalized_email, language_request.language)
         cache.invalidate_pattern(f"user:stats:{normalized_email}")
         return {"success": True}

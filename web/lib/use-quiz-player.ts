@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { tr } from "@/lib/i18n/translate";
 import { activateQuizQuestion, getQuizLeaderboard, getQuizProgress, getQuizSession, submitQuizAnswer, updateQuizParticipantAvatar } from "@/lib/api/quizzes";
 import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
 import { useQuizConnection } from "@/lib/use-quiz-connection";
@@ -65,7 +66,7 @@ export function useQuizPlayer(sessionId: number) {
     try {
       const state = await getQuizProgress(sessionId, auth);
       if (!live.current || version !== mutationVersion.current) return;
-      if (!state.data) { setError(state.error || "Ойын күйін жүктеу мүмкін болмады"); return; }
+      if (!state.data) { setError(state.error || tr("quizPlay.stateFailed")); return; }
       let data = state.data;
       if (data.status === "in_progress" && !data.participant.is_finished && !data.current_question) {
         const activated = await activateQuizQuestion(sessionId, auth);
@@ -122,7 +123,7 @@ export function useQuizPlayer(sessionId: number) {
           participant: { ...p.participant, score: result.data!.total_score, streak: result.data!.streak } } : p);
       } else {
         recover = true;
-        setError(result.error || "Жауап сақталмады. Қайта жіберіңіз.");
+        setError(result.error || tr("quizPlay.answerNotSaved"));
       }
     } finally {
       if (activeSession.current === sessionId && version === mutationVersion.current) {
@@ -149,7 +150,7 @@ export function useQuizPlayer(sessionId: number) {
         timeoutAttempt.current = null;
         return true;
       }
-      setError(result.error || "Келесі сұрақ жүктелмеді");
+      setError(result.error || tr("quizPlay.nextFailed"));
       void refresh();
       return false;
     } finally {

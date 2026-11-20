@@ -15,9 +15,12 @@ import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr } from "@/lib/i18n/translate";
 
 function TrialTestListPageContent() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname() || "/trial-test";
   const searchParams = useSearchParams();
@@ -72,7 +75,7 @@ function TrialTestListPageContent() {
       if (process.env.NODE_ENV === "development") {
         console.error("Error fetching trial tests:", err);
       }
-      setError("Тесттерді жүктеу қатесі");
+      setError(tr("trial.loadError"));
       setTests([]);
     } finally {
       setLoading(false);
@@ -121,7 +124,7 @@ function TrialTestListPageContent() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
                 <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-                  Сынақ тесті
+                  {t("trial.title")}
                 </h1>
               </div>
               {selectedFolder === null && (
@@ -129,7 +132,7 @@ function TrialTestListPageContent() {
                   href="/trial-test/history"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-semibold border border-purple-200 shadow-sm transition-all whitespace-nowrap self-start sm:self-auto"
                 >
-                  <span>Өту тарихы</span>
+                  <span>{t("trial.history")}</span>
                   <span className="text-lg"><Icon name="arrowRight" /></span>
                 </Link>
               )}
@@ -142,21 +145,21 @@ function TrialTestListPageContent() {
             )}
 
             {selectedFolder !== null && !loading && <div className="mb-6 border-b border-slate-200/80 pb-4">
-              <nav aria-label="Мазмұн жолы" className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 break-words">
-                <button type="button" className="text-purple-700 hover:underline" onClick={() => navigateFolder(null)}>Сынақ тесттері</button>
+              <nav aria-label={t("trial.breadcrumbAria")} className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 break-words">
+                <button type="button" className="text-purple-700 hover:underline" onClick={() => navigateFolder(null)}>{t("trial.allTests")}</button>
                 {ancestors.map((folder, index) => <span key={folder.id} className="inline-flex min-w-0 items-center gap-2">
                   <span>/</span>{index === ancestors.length - 1 ? <span aria-current="page">{folder.name}</span> : <button type="button" className="text-purple-700 hover:underline" onClick={() => navigateFolder(folder.id)}>{folder.name}</button>}
                 </span>)}
               </nav>
               <button type="button" onClick={() => navigateFolder(currentFolder?.parent_id ?? null)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-purple-50 text-gray-700 text-sm font-bold border border-slate-200 shadow-sm">
-                <Icon name="arrowLeft" />Артқа
+                <Icon name="arrowLeft" />{t("common.back")}
               </button>
             </div>}
-            {loading ? <div className="text-center py-16 text-gray-600"><Icon name="loader" className="animate-spin" />Тесттер жүктелуде...</div>
-              : error ? <button type="button" onClick={() => void fetchTests()} className="text-purple-700">Қайта жүктеу</button>
-              : selectedFolder !== null && !currentFolder ? <div className="text-center py-12 text-gray-600">Папка табылмады</div>
+            {loading ? <div className="text-center py-16 text-gray-600"><Icon name="loader" className="animate-spin" />{t("trial.listLoading")}</div>
+              : error ? <button type="button" onClick={() => void fetchTests()} className="text-purple-700">{t("profile.reload")}</button>
+              : selectedFolder !== null && !currentFolder ? <div className="text-center py-12 text-gray-600">{t("trial.folderNotFound")}</div>
               : <>
-                {folders.length > 0 && <ul aria-label="Папкалар" className={selectedFolder === null
+                {folders.length > 0 && <ul aria-label={t("trial.foldersAria")} className={selectedFolder === null
                   ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
                   : "overflow-hidden rounded-xl border border-slate-200/80 bg-white/60 divide-y divide-slate-200/70"}>
                   {folders.map((folder) => <li key={folder.id} className="min-w-0">
@@ -166,13 +169,13 @@ function TrialTestListPageContent() {
                       {selectedFolder === null ? <>
                         <div className="flex w-full items-center justify-between gap-3">
                           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white"><Icon name="folder" size={24} /></span>
-                          <span className="shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{folder.test_count} тест</span>
+                          <span className="shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{t("trial.testsCount", { count: folder.test_count })}</span>
                         </div>
                         <h2 className="line-clamp-2 break-words text-lg font-semibold text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
                       </> : <>
                         <Icon name="folder" size={20} className="shrink-0 text-purple-500" />
                         <h2 className="min-w-0 flex-1 break-words text-sm font-medium leading-5 text-slate-800 group-hover:text-purple-700">{folder.name}</h2>
-                        <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{folder.test_count} тест</span>
+                        <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{t("trial.testsCount", { count: folder.test_count })}</span>
                         <Icon name="arrowRight" size={16} className="shrink-0 text-slate-400" />
                       </>}
                     </button>
@@ -199,7 +202,7 @@ function TrialTestListPageContent() {
                         </div>
                         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
                           <span className="text-sm text-gray-500">
-                            {test.task_count || 0} тапсырма
+                            {t("trial.tasksCount", { count: test.task_count || 0 })}
                           </span>
                           <span
                             className={`px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center gap-1.5 transition-colors ${
@@ -209,16 +212,16 @@ function TrialTestListPageContent() {
                             }`}
                           >
                             {draftTestIds.has(test.id) ? (
-                              <>Жалғастыру <Icon name="arrowRight" /></>
+                              <>{t("mreview.continue")} <Icon name="arrowRight" /></>
                             ) : (
-                              <>Бастау <Icon name="arrowRight" /></>
+                              <>{t("journey.start")} <Icon name="arrowRight" /></>
                             )}
                           </span>
                         </div>
                       </Link>
                     ))}
                 </div>}
-                {folders.length === 0 && currentFolderTests.length === 0 && <div className="text-center py-12 text-gray-600">Сынақ тесттері әлі құрылмаған</div>}
+                {folders.length === 0 && currentFolderTests.length === 0 && <div className="text-center py-12 text-gray-600">{t("trial.empty")}</div>}
               </>}
 
           </div>

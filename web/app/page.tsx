@@ -5,10 +5,12 @@ import { useSession, signIn } from "next-auth/react";
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DEFAULT_AUTHENTICATED_PATH, resolveSafeCallbackPath } from "@/lib/use-require-auth";
+import { useI18n } from "@/lib/i18n/provider";
 
 function HomeContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const callbackUrl = resolveSafeCallbackPath(
     searchParams?.get("callbackUrl"),
@@ -24,7 +26,7 @@ function HomeContent() {
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Жүктелуде...</div>
+        <div className="text-xl">{t("common.loading")}</div>
       </div>
     );
   }
@@ -41,14 +43,14 @@ function HomeContent() {
                 Mathbot
               </h1>
               <p className="text-gray-700 text-lg font-medium">
-                Математикалық есептерді шешу платформасы
+                {t("home.tagline")}
               </p>
             </div>
             <button
               onClick={() => signIn("google", { callbackUrl })}
               className="w-full bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 hover:from-purple-700 hover:via-pink-700 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-glow-pink transform hover:scale-105 text-lg"
             >
-              Google арқылы кіру
+              {t("home.signInGoogle")}
             </button>
           </div>
         </div>
@@ -58,17 +60,22 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="text-xl">Басқа бетке өтілуде...</div>
+      <div className="text-xl">{t("home.redirecting")}</div>
     </div>
   );
 }
 
 export default function Home() {
+  return <HomeWithFallback />;
+}
+
+function HomeWithFallback() {
+  const { t } = useI18n();
   return (
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="text-xl">Жүктелуде...</div>
+          <div className="text-xl">{t("common.loading")}</div>
         </div>
       }
     >

@@ -15,16 +15,19 @@ import { getTrialTestDetails, getTrialTestResults } from "@/lib/api";
 import { getReviewStatus, getReviewTasks, type ReviewStatus } from "@/lib/trial-test-review";
 import { TrialTestDetails, TrialTestResult } from "@/types";
 import styles from "../TrialTestWorkspace.module.css";
+import { useI18n } from "@/lib/i18n/provider";
+import { tr, type MessageKey } from "@/lib/i18n/translate";
 
-const STATUS_LABEL: Record<ReviewStatus, string> = {
-  correct: "Дұрыс",
-  partial: "Ішінара дұрыс",
-  wrong: "Қате",
-  skipped: "Жауап берілмеді",
+const STATUS_LABEL: Record<ReviewStatus, MessageKey> = {
+  correct: "results.status.correct",
+  partial: "results.status.partial",
+  wrong: "results.status.wrong",
+  skipped: "results.status.skipped",
 };
 
 /** One attempt, shown like the exam screen: coloured task numbers on top, one task at a time. */
 function AttemptReview({ test, result }: { test: TrialTestDetails; result: TrialTestResult }) {
+  const { t } = useI18n();
   const tasks = useMemo(() => getReviewTasks(test.tasks, result.answers), [test.tasks, result.answers]);
   const [index, setIndex] = useState(0);
   const current = Math.min(index, Math.max(tasks.length - 1, 0));
@@ -55,7 +58,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
   }, [tasks.length]);
 
   if (!tasks.length) {
-    return <div className={styles.resultStrip}>Тапсырмалар табылмады</div>;
+    return <div className={styles.resultStrip}>{t("results.noTasks")}</div>;
   }
 
   const task = tasks[current];
@@ -63,17 +66,17 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
   const currentAnswer = result.answers[task.id];
   const scoreBadgeText =
     typeof currentAnswer?.score === "number" && typeof currentAnswer?.max_score === "number"
-      ? `${STATUS_LABEL[status]} · ${currentAnswer.score}/${currentAnswer.max_score} балл`
+      ? t("results.statusScore", { status: t(STATUS_LABEL[status]), score: currentAnswer.score, max: currentAnswer.max_score })
       : STATUS_LABEL[status];
 
   return (
     <>
-      <section className={styles.resultStrip} aria-label="Тапсырма нөмірлері">
+      <section className={styles.resultStrip} aria-label={t("trial.taskNumbersAria")}>
         <div className={styles.legend}>
-          <span><i data-status="correct" />Дұрыс: {counts.correct}</span>
-          {counts.partial > 0 && <span><i data-status="partial" />Ішінара: {counts.partial}</span>}
-          <span><i data-status="wrong" />Қате: {counts.wrong}</span>
-          <span><i data-status="skipped" />Жауапсыз: {counts.skipped}</span>
+          <span><i data-status="correct" />{t("results.count.correct", { count: counts.correct })}</span>
+          {counts.partial > 0 && <span><i data-status="partial" />{t("results.count.partial", { count: counts.partial })}</span>}
+          <span><i data-status="wrong" />{t("results.count.wrong", { count: counts.wrong })}</span>
+          <span><i data-status="skipped" />{t("results.count.skipped", { count: counts.skipped })}</span>
         </div>
         <div className={styles.resultNumbers}>
           {tasks.map((item, i) => (
@@ -84,7 +87,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
               className={styles.resultNumber}
               data-status={statuses[i]}
               aria-current={i === current ? "step" : undefined}
-              aria-label={`Тапсырма ${i + 1}: ${STATUS_LABEL[statuses[i]]}`}
+              aria-label={`${t("trial.taskN", { n: i + 1 })}: ${t(STATUS_LABEL[statuses[i]])}`}
             >
               {i + 1}
             </button>
@@ -92,9 +95,9 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
         </div>
       </section>
 
-      <article key={`${task.id}-${current}`} className={`${styles.taskCard} ${styles.reviewCard}`} aria-label={`Тапсырма ${current + 1}`}>
+      <article key={`${task.id}-${current}`} className={`${styles.taskCard} ${styles.reviewCard}`} aria-label={t("trial.taskN", { n: current + 1 })}>
         <div className={styles.reviewHeader}>
-          <span>Тапсырма <strong>{current + 1} / {tasks.length}</strong></span>
+          <span>{t("trial.task")} <strong>{current + 1} / {tasks.length}</strong></span>
           <span className={styles.statusPill} data-status={status}>{scoreBadgeText}</span>
         </div>
         <div className={styles.taskBody}>
@@ -103,14 +106,14 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
             <ReviewAnswerBlock task={task} result={result.answers[task.id]} />
           </div>
         </div>
-        <nav className={styles.reviewFooter} aria-label="Тапсырмалар арасында өту">
+        <nav className={styles.reviewFooter} aria-label={t("results.navAria")}>
           <button
             type="button"
             onClick={() => setIndex(Math.max(0, current - 1))}
             disabled={current === 0}
             className={styles.previousButton}
           >
-            <Icon name="arrowLeft" /> Алдыңғы
+            <Icon name="arrowLeft" /> {t("footer.prev")}
           </button>
           <span>{current + 1} / {tasks.length}</span>
           <button
@@ -119,7 +122,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
             disabled={current >= tasks.length - 1}
             className={styles.nextButton}
           >
-            Келесі <Icon name="arrowRight" />
+            {t("common.next")} <Icon name="arrowRight" />
           </button>
         </nav>
       </article>
@@ -129,6 +132,7 @@ function AttemptReview({ test, result }: { test: TrialTestDetails; result: Trial
 
 function TrialTestResultsPageContent() {
   const { data: session, status } = useRequireAuth();
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -153,7 +157,7 @@ function TrialTestResultsPageContent() {
 
   useEffect(() => {
     if (!isValidTestId) {
-      setError("Тест табылмады");
+      setError(tr("results.testNotFound"));
       setLoading(false);
       return;
     }
@@ -186,7 +190,7 @@ function TrialTestResultsPageContent() {
         }
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error && e.message ? e.message : "Деректерді жүктеу қатесі");
+          setError(e instanceof Error && e.message ? e.message : tr("results.dataLoadError"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -205,7 +209,7 @@ function TrialTestResultsPageContent() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Нәтижелер жүктелуде...</div>
+        <div className="text-xl">{t("review.loading")}</div>
       </div>
     );
   }
@@ -214,7 +218,7 @@ function TrialTestResultsPageContent() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error || "Нәтижелерді жүктеу мүмкін болмады"}
+          {error || t("history.loadFailed")}
         </div>
       </div>
     );
@@ -238,14 +242,14 @@ function TrialTestResultsPageContent() {
                 type="button"
                 onClick={() => router.push("/trial-test")}
                 className={styles.backButton}
-                aria-label="Сынақ тесттері"
-                title="Сынақ тесттері"
+                aria-label={t("trial.allTests")}
+                title={t("trial.allTests")}
               >
                 <Icon name="arrowLeft" />
               </button>
               <div className={styles.testTitle}>
                 <h1 title={test.title}>{test.title}</h1>
-                <p>Тест нәтижесі</p>
+                <p>{t("results.title")}</p>
               </div>
             </div>
             {selectedResult && (
@@ -256,20 +260,20 @@ function TrialTestResultsPageContent() {
                 </span>
                 {orderedResults.length > 1 && (
                   <select
-                    aria-label="Тапсыру әрекеті"
+                    aria-label={t("results.attemptAria")}
                     value={selectedResult.id}
                     onChange={(event) => router.replace(`/trial-test/${testId}/results?attempt=${event.target.value}`)}
                     className={styles.attemptSelect}
                   >
                     {orderedResults.map((result, index) => (
                       <option key={result.id} value={result.id}>
-                        {orderedResults.length - index}-әрекет — {result.score}/{result.total} ({result.percentage.toFixed(1)}%)
+                        {t("results.attemptOption", { n: orderedResults.length - index, score: result.score, total: result.total, percent: result.percentage.toFixed(1) })}
                       </option>
                     ))}
                   </select>
                 )}
                 <Link href={`/trial-test/${testId}`} className={`${styles.finishButton} ${styles.retakeLink}`}>
-                  Қайта өту
+                  {t("results.retake")}
                 </Link>
               </div>
             )}
@@ -277,7 +281,7 @@ function TrialTestResultsPageContent() {
               <div
                 className={styles.progress}
                 role="progressbar"
-                aria-label="Нәтиже"
+                aria-label={t("results.resultAria")}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(displayPercentage)}
@@ -292,12 +296,12 @@ function TrialTestResultsPageContent() {
           ) : (
             <div className={styles.taskCard}>
               <div className={styles.taskBody} style={{ textAlign: "center" }}>
-                <div>Нәтижелер табылмады</div>
+                <div>{t("results.notFound")}</div>
                 <Link
                   href={`/trial-test/${testId}`}
                   className="mx-auto inline-block bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
                 >
-                  Тестті бастау
+                  {t("results.startTest")}
                 </Link>
               </div>
             </div>
@@ -310,11 +314,12 @@ function TrialTestResultsPageContent() {
 }
 
 export default function TrialTestResultsPage() {
+  const { t } = useI18n();
   return (
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="text-xl">Нәтижелер жүктелуде...</div>
+          <div className="text-xl">{t("review.loading")}</div>
         </div>
       }
     >
