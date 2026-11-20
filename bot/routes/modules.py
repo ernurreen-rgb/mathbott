@@ -167,21 +167,37 @@ def setup_modules_routes(app, db, limiter):
         # Admins open every lesson so they can check content; students wait for their mistake review.
         locks = (await db.module_review.get_lesson_gate(user_id, module_id))["locks"] if user_id and not is_admin else {}
 
-        # Get sections with lessons (new curriculum)
-        sections = await db.curriculum.get_sections_by_module(module_id)
-        sections_data = []
-        
-        for section in sections:
-            section_progress = await db.progress.calculate_section_completion(user_id, section["id"]) if user_id else None
+        # The whole module in a few queries: it used to take one or more per section, lesson and
+        # mini-lesson, about 230 for a module of 30 lessons, and two seconds per page.
+        outline = await db.curriculum.get_module_outline(module_id)
+        if user_id:
+            # As calculate_lesson_completion does: a lesson always has its four default mini-lessons.
+            short = [
+                lesson["id"]
+                for lessons in outline["lessons_by_section"].values()
+                for lesson in lessons
+                if len(outline["minis_by_lesson"].get(int(lesson["id"]), [])) < 4
+            ]
+            for lesson_id in short:
+                await db.curriculum.ensure_default_mini_lessons(lesson_id)
+            if short:
+                outline = await db.curriculum.get_module_outline(module_id)
+        progress = await db.progress.calculate_module_page_progress(user_id, module_id) if user_id else None
 
-            lessons = await db.curriculum.get_lessons_by_section(section["id"])
+        sections = outline["sections"]
+        sections_data = []
+
+        for section in sections:
+            section_progress = progress["sections"].get(int(section["id"])) if progress else None
+
+            lessons = outline["lessons_by_section"].get(int(section["id"]), [])
             lessons_data = []
             for lesson in lessons:
-                lesson_progress = await db.calculate_lesson_completion(user_id, lesson["id"]) if user_id else None
-                mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson["id"])
+                lesson_progress = progress["lessons"].get(int(lesson["id"])) if progress else None
+                mini_lessons = outline["minis_by_lesson"].get(int(lesson["id"]), [])
                 mini_data = []
                 for ml in mini_lessons:
-                    ml_progress = await db.progress.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
+                    ml_progress = progress["minis"].get(int(ml["id"])) if progress else None
                     mini_data.append({
                         "id": ml["id"],
                         "mini_index": ml["mini_index"],

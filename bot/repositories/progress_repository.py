@@ -223,6 +223,87 @@ class ProgressRepository(BaseRepository):
                 "progress": completed_count / total if total else 0.0
             }
 
+    async def calculate_module_page_progress(self, user_id: int, module_id: int) -> Dict[str, Dict[int, Dict[str, Any]]]:
+        """Progress of every mini-lesson, lesson and section of a module, for the module page.
+
+        One query instead of one per item; the results equal calculate_mini_lesson_completion,
+        calculate_lesson_completion and calculate_section_completion (tests/test_module_page.py).
+        Call it after missing default mini-lessons exist, as calculate_lesson_completion creates them.
+        """
+        async with self._connection() as db:
+            async with db.execute(
+                """
+                SELECT s.id, l.id, ml.id,
+                       COUNT(t.id),
+                       COUNT(t.id) FILTER (WHERE up.status = 'completed')
+                FROM sections s
+                LEFT JOIN lessons l ON l.section_id = s.id
+                LEFT JOIN mini_lessons ml ON ml.lesson_id = l.id
+                LEFT JOIN tasks t ON t.mini_lesson_id = ml.id AND t.deleted_at IS NULL
+                LEFT JOIN user_progress up ON up.task_id = t.id AND up.user_id = ?
+                WHERE s.module_id = ?
+                GROUP BY s.id, l.id, ml.id
+                """,
+                (user_id, module_id),
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        minis: Dict[int, Dict[str, Any]] = {}
+        lesson_minis: Dict[int, List[bool]] = {}
+        section_lessons: Dict[int, List[int]] = {}
+        for section_id, lesson_id, mini_id, total, completed_count in rows:
+            section_lessons.setdefault(int(section_id), [])
+            if lesson_id is None:
+                continue
+            if int(lesson_id) not in section_lessons[int(section_id)]:
+                section_lessons[int(section_id)].append(int(lesson_id))
+            lesson_minis.setdefault(int(lesson_id), [])
+            if mini_id is None:
+                continue
+            total, completed_count = int(total or 0), int(completed_count or 0)
+            done = total > 0 and completed_count == total
+            minis[int(mini_id)] = {
+                "completed": done,
+                "total": total,
+                "completed_count": completed_count,
+                "progress": completed_count / total if total else 0.0,
+            }
+            lesson_minis[int(lesson_id)].append(done)
+
+        lessons: Dict[int, Dict[str, Any]] = {}
+        for lesson_id, done_flags in lesson_minis.items():
+            if not done_flags:
+                lessons[lesson_id] = {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}
+                continue
+            completed_mini = sum(done_flags)
+            lessons[lesson_id] = {
+                "completed": completed_mini == len(done_flags),
+                "total_mini_lessons": len(done_flags),
+                "completed_mini_lessons": completed_mini,
+                "progress": completed_mini / len(done_flags),
+            }
+
+        sections: Dict[int, Dict[str, Any]] = {}
+        for section_id, lesson_ids in section_lessons.items():
+            if not lesson_ids:
+                # A section without lessons is scored on its legacy section tasks; rare, so as before.
+                sections[section_id] = await self.calculate_section_completion(user_id, section_id)
+                continue
+            completed_lessons = sum(
+                1 for lesson_id in lesson_ids
+                if lessons[lesson_id]["total_mini_lessons"] > 0 and lessons[lesson_id]["completed"]
+            )
+            total_lessons = len(lesson_ids)
+            sections[section_id] = {
+                "completed": completed_lessons == total_lessons,
+                "total": total_lessons,
+                "completed_count": completed_lessons,
+                "progress": completed_lessons / total_lessons if total_lessons else 0.0,
+                "total_lessons": total_lessons,
+                "completed_lessons": completed_lessons,
+            }
+        return {"minis": minis, "lessons": lessons, "sections": sections}
+
     async def calculate_module_completion(self, user_id: int, module_id: int, curriculum_repo) -> Dict[str, Any]:
         """Calculate module completion status"""
         sections = await curriculum_repo.get_sections_by_module(module_id)

@@ -253,6 +253,39 @@ class CurriculumRepository(BaseRepository):
             await db.commit()
 
     # Mini-lessons
+    async def get_module_outline(self, module_id: int) -> Dict[str, Any]:
+        """Sections, their lessons and the lessons' mini-lessons in three queries, in the same order
+        as get_sections_by_module, get_lessons_by_section and get_mini_lessons_by_lesson."""
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                "SELECT * FROM sections WHERE module_id = ? ORDER BY sort_order ASC, id ASC", (module_id,)
+            ) as cursor:
+                sections = [dict(row) for row in await cursor.fetchall()]
+            async with db.execute(
+                """SELECT l.* FROM lessons l JOIN sections s ON s.id = l.section_id
+                   WHERE s.module_id = ?
+                   ORDER BY l.section_id, l.sort_order ASC, l.lesson_number ASC, l.id ASC""",
+                (module_id,),
+            ) as cursor:
+                lessons = [dict(row) for row in await cursor.fetchall()]
+            async with db.execute(
+                """SELECT ml.* FROM mini_lessons ml
+                   JOIN lessons l ON l.id = ml.lesson_id JOIN sections s ON s.id = l.section_id
+                   WHERE s.module_id = ?
+                   ORDER BY ml.lesson_id, ml.mini_index ASC""",
+                (module_id,),
+            ) as cursor:
+                minis = [dict(row) for row in await cursor.fetchall()]
+
+        lessons_by_section: Dict[int, List[Dict[str, Any]]] = {}
+        for lesson in lessons:
+            lessons_by_section.setdefault(int(lesson["section_id"]), []).append(lesson)
+        minis_by_lesson: Dict[int, List[Dict[str, Any]]] = {}
+        for mini in minis:
+            minis_by_lesson.setdefault(int(mini["lesson_id"]), []).append(mini)
+        return {"sections": sections, "lessons_by_section": lessons_by_section, "minis_by_lesson": minis_by_lesson}
+
     async def get_mini_lessons_by_lesson(self, lesson_id: int) -> List[Dict[str, Any]]:
         """Get 4 mini-lessons for a lesson ordered by mini_index."""
         async with self._connection() as db:
