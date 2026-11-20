@@ -1,13 +1,17 @@
 import type { MetadataRoute } from "next";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { translate } from "@/lib/i18n/translate";
 
-// Served at /manifest.webmanifest; Next adds the <link rel="manifest"> tag.
-export default function manifest(): MetadataRoute.Manifest {
+// Served at /manifest.webmanifest; Next adds the <link rel="manifest"> tag. The browser sends the
+// language cookie with this same-origin request, so the installed app is described in that language.
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const locale = await getRequestLocale();
   return {
     id: "/",
     name: "QazMath",
     short_name: "QazMath",
-    description: "Математикаға дайындық платформасы",
-    lang: "kk",
+    description: translate(locale, "meta.manifestDescription"),
+    lang: locale,
     start_url: "/modules",
     scope: "/",
     display: "standalone",

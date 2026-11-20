@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, type Locale } from "./config";
+import { DEFAULT_LOCALE, localeFromCookieString, type Locale } from "./config";
 import { messages, type MessageKey } from "./messages";
 
 export type { MessageKey };
@@ -53,3 +53,10 @@ export function getRuntimeLocale(): Locale {
  * after an event or effect: on the server it always answers in Kazakh. Components use useI18n().t.
  */
 export const tr: Translate = (key, params) => translate(runtimeLocale, key, params);
+
+/**
+ * Translation in the viewer's own language (the cookie), ignoring LocaleOverride. For the few
+ * messages a student sees on an admin page, such as "no access" before the redirect. Browser only.
+ */
+export const trViewer: Translate = (key, params) =>
+  translate(localeFromCookieString(typeof document === "undefined" ? "" : document.cookie), key, params);

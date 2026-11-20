@@ -10,6 +10,7 @@ import MobileNav from "@/components/MobileNav";
 import { checkAdminStatus } from "@/lib/api";
 import { isAllowedForPage, type AdminPageKey } from "@/lib/admin-access";
 import { showToast } from "@/lib/toast";
+import { trViewer } from "@/lib/i18n/translate";
 import type { AdminCheckResponse } from "@/types";
 
 type AdminCardConfig = {
@@ -41,7 +42,7 @@ export default function AdminPage() {
       if (cancelled) return;
 
       if (error || !data?.is_admin) {
-        showToast.error("Қолжетім жоқ");
+        showToast.error(trViewer("common.noAccess"));
         router.push("/");
         setAdminCheck(null);
         setAccessLoading(false);

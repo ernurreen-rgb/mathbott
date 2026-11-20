@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { checkAdminStatus } from "@/lib/api";
 import { isAllowedForPage, type AdminPageKey } from "@/lib/admin-access";
 import { showToast } from "@/lib/toast";
+import { trViewer } from "@/lib/i18n/translate";
 import type { AdminCheckResponse } from "@/types";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -48,7 +49,8 @@ export function useAdminPageAccess(
       if (cancelled) return;
 
       if (error || !data?.is_admin) {
-        showToast.error("Қолжетім жоқ");
+        // Not an admin: a student who opened an admin link, so answer in their language.
+        showToast.error(trViewer("common.noAccess"));
         router.push("/");
         setAccess(data ?? null);
         setLoading(false);
