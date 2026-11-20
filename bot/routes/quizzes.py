@@ -7,9 +7,15 @@ from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter
 
-from dependencies import get_db, require_internal_identity, optional_internal_identity
+from dependencies import (
+    CAPABILITY_CONTENT_MANAGE,
+    get_db,
+    has_admin_capability,
+    optional_internal_identity,
+    require_internal_identity,
+)
 from database import Database
-from utils.quiz import public_question
+from utils.quiz import QuizError, public_question
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +88,13 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Setup Quizzes CRUD routes."""
 
     def can_manage(quiz, user):
-        return bool(user and (user['id'] == quiz['created_by'] or user.get('is_admin')))
+        if not user:
+            return False
+        if user['id'] == quiz['created_by']:
+            return True
+        return bool(user.get('is_admin')) and has_admin_capability(
+            user.get('admin_role'), CAPABILITY_CONTENT_MANAGE
+        )
 
     def ensure_visible(quiz, user):
         if not quiz or (not quiz['is_public'] and not can_manage(quiz, user)):
@@ -254,13 +266,20 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        if not quiz["is_public"] and not can_manage(quiz, current_user):
+        caller_can_manage = can_manage(quiz, current_user)
+        if not quiz["is_public"] and not caller_can_manage:
             raise HTTPException(status_code=403, detail="Тек ашық квиздерді көшіріп алуға болады")
 
-        cloned = await db.quizzes.fork_quiz(
-            quiz_id=quiz_id,
-            user_id=current_user["id"],
-        )
+        try:
+            cloned = await db.quizzes.fork_quiz(
+                quiz_id=quiz_id,
+                user_id=current_user["id"],
+                allow_during_active_session=caller_can_manage,
+            )
+        except QuizError as exc:
+            if exc.kind == "conflict":
+                raise HTTPException(status_code=409, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc))
         if not cloned:
             raise HTTPException(status_code=400, detail="Квизді көшіру мүмкін болмады")
         return {**cloned, 'is_public': bool(cloned['is_public']), 'can_manage': True}

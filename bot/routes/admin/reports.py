@@ -104,6 +104,15 @@ async def _update_task_from_report_common(
 
     _validate_trial_like_payload(question_type, options_list, subquestions_list)
     answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
+    if question_type == "tf":
+        normalized_tf = str(answer or "").strip().lower()
+        if normalized_tf not in {"true", "false"}:
+            raise HTTPException(status_code=400, detail="tf answer must be 'true' or 'false'")
+        answer = normalized_tf
+    if question_type not in {"mcq", "mcq6", "select"}:
+        options_list = []
+    if question_type != "select":
+        subquestions_list = []
     text_scale_value = _normalize_text_scale(text_scale)
     image_filename = await save_image_upload(image) if image else None
 
@@ -117,8 +126,8 @@ async def _update_task_from_report_common(
             answer=answer.strip() if answer.strip() else None,
             question_type=question_type,
             text_scale=text_scale_value,
-            options=options_list if options is not None else None,
-            subquestions=subquestions_list if subquestions is not None else None,
+            options=options_list,
+            subquestions=subquestions_list,
             image_filename=image_filename,
             solution_filename=None,
             actor_user_id=admin_user["id"],

@@ -39,6 +39,7 @@ class ConnectionPool:
         self._created = 0
         self._cond = asyncio.Condition()
         self._closed = False
+        self._bg_tasks: set[asyncio.Task] = set()
 
     @staticmethod
     def _is_alive(conn: db_driver.Connection) -> bool:
@@ -56,12 +57,42 @@ class ConnectionPool:
         except Exception:
             pass
 
+    def _spawn_bg(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+
+        def _done(done_task: asyncio.Task) -> None:
+            self._bg_tasks.discard(done_task)
+            if not done_task.cancelled():
+                done_task.exception()
+
+        task.add_done_callback(_done)
+        return task
+
+    async def _notify_slot_freed(self, *, notify_all: bool = False) -> None:
+        async with self._cond:
+            if notify_all:
+                self._cond.notify_all()
+            else:
+                self._cond.notify()
+
+    async def _free_slot_safe(self, count: int = 1, *, notify_all: bool = False) -> None:
+        """Decrement _created synchronously and wake waiters even under cancellation."""
+        self._created = max(0, self._created - count)
+        notify_task = self._spawn_bg(self._notify_slot_freed(notify_all=notify_all))
+        try:
+            await asyncio.shield(notify_task)
+        except BaseException:
+            # notify_task keeps running on the event loop so waiters still wake up.
+            pass
+
     async def acquire(self) -> db_driver.Connection:
         """Acquire a live connection from the pool."""
         deadline = time.monotonic() + self.timeout
 
         while True:
             need_create = False
+            dead_idle: list[db_driver.Connection] = []
             async with self._cond:
                 while True:
                     if self._closed:
@@ -71,10 +102,12 @@ class ConnectionPool:
                         conn = self._idle.popleft()
                         if self._is_alive(conn):
                             self._reset_connection_state(conn)
+                            for dead in dead_idle:
+                                self._spawn_bg(self._close_quietly(dead))
                             return conn
                         # Discard broken idle connection and free its slot.
                         self._created = max(0, self._created - 1)
-                        await self._close_quietly(conn)
+                        dead_idle.append(conn)
 
                     if self._created < self.max_size:
                         # Reserve the slot before opening outside the lock.
@@ -84,26 +117,44 @@ class ConnectionPool:
 
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
+                        for dead in dead_idle:
+                            self._spawn_bg(self._close_quietly(dead))
                         raise TimeoutError("Timed out waiting for a database connection")
                     try:
                         await asyncio.wait_for(self._cond.wait(), timeout=remaining)
                     except asyncio.TimeoutError as exc:
+                        for dead in dead_idle:
+                            self._spawn_bg(self._close_quietly(dead))
                         raise TimeoutError("Timed out waiting for a database connection") from exc
 
+            for dead in dead_idle:
+                self._spawn_bg(self._close_quietly(dead))
+
             if need_create:
+                connect_task = self._spawn_bg(
+                    db_driver.connect(self.database_url, timeout=self.timeout)
+                )
                 try:
-                    conn = await db_driver.connect(self.database_url, timeout=self.timeout)
-                except Exception:
-                    async with self._cond:
-                        self._created = max(0, self._created - 1)
-                        self._cond.notify()
+                    conn = await asyncio.shield(connect_task)
+                except asyncio.CancelledError:
+                    def _cleanup_stray(done_task: asyncio.Task) -> None:
+                        if done_task.cancelled():
+                            return
+                        if done_task.exception() is None:
+                            self._spawn_bg(self._close_quietly(done_task.result()))
+
+                    connect_task.add_done_callback(_cleanup_stray)
+                    if not connect_task.done():
+                        connect_task.cancel()
+                    await self._free_slot_safe()
+                    raise
+                except BaseException:
+                    await self._free_slot_safe()
                     raise
 
                 if self._closed:
-                    await self._close_quietly(conn)
-                    async with self._cond:
-                        self._created = max(0, self._created - 1)
-                        self._cond.notify_all()
+                    self._spawn_bg(self._close_quietly(conn))
+                    await self._free_slot_safe(notify_all=True)
                     raise RuntimeError("Connection pool is closed")
 
                 logger.debug("Created new connection (total: %s)", self._created)
@@ -113,43 +164,63 @@ class ConnectionPool:
     async def release(self, conn: db_driver.Connection) -> None:
         """Release a connection back to the pool, waking any waiting acquirer."""
         if self._closed:
-            await self._close_quietly(conn)
-            async with self._cond:
-                self._created = max(0, self._created - 1)
-                self._cond.notify_all()
+            close_task = self._spawn_bg(self._close_quietly(conn))
+            try:
+                await asyncio.shield(close_task)
+            finally:
+                await self._free_slot_safe(notify_all=True)
             return
 
         # Roll back any transaction left open by a handler that errored before
         # commit, so the connection is not reused with uncommitted state.
         healthy = self._is_alive(conn)
         if healthy:
+            rollback_task = self._spawn_bg(conn.rollback())
             try:
-                await conn.rollback()
+                await asyncio.shield(rollback_task)
                 self._reset_connection_state(conn)
+            except asyncio.CancelledError:
+                async def _close_after_rollback() -> None:
+                    try:
+                        await rollback_task
+                    except BaseException:
+                        pass
+                    await self._close_quietly(conn)
+
+                self._spawn_bg(_close_after_rollback())
+                await self._free_slot_safe()
+                raise
             except Exception:
                 healthy = False
 
         if not healthy:
-            await self._close_quietly(conn)
-            async with self._cond:
-                self._created = max(0, self._created - 1)
-                # Immediately wake a waiter so it can open a fresh connection
-                # instead of waiting until timeout.
-                self._cond.notify()
+            close_task = self._spawn_bg(self._close_quietly(conn))
+            try:
+                await asyncio.shield(close_task)
+            finally:
+                await self._free_slot_safe()
             return
 
-        async with self._cond:
-            if self._closed or len(self._idle) >= self.max_size:
-                self._created = max(0, self._created - 1)
-                self._cond.notify_all()
-                should_close = True
-            else:
-                self._idle.append(conn)
-                self._cond.notify()
-                should_close = False
+        should_close = False
+        returned = False
+        try:
+            async with self._cond:
+                if self._closed or len(self._idle) >= self.max_size:
+                    self._created = max(0, self._created - 1)
+                    self._cond.notify_all()
+                    should_close = True
+                else:
+                    self._idle.append(conn)
+                    self._cond.notify()
+                returned = True
+        except BaseException:
+            if not returned:
+                self._spawn_bg(self._close_quietly(conn))
+                await self._free_slot_safe()
+            raise
 
         if should_close:
-            await self._close_quietly(conn)
+            await asyncio.shield(self._spawn_bg(self._close_quietly(conn)))
 
     async def initialize(self) -> None:
         """Initialize pool with minimum connections"""
@@ -162,18 +233,33 @@ class ConnectionPool:
                 self._created += 1
                 to_create += 1
 
+        remaining = to_create
         for _ in range(to_create):
+            connect_task = self._spawn_bg(
+                db_driver.connect(self.database_url, timeout=self.timeout)
+            )
             try:
-                conn = await db_driver.connect(self.database_url, timeout=self.timeout)
-            except Exception:
-                async with self._cond:
-                    self._created = max(0, self._created - 1)
-                    self._cond.notify_all()
+                conn = await asyncio.shield(connect_task)
+            except asyncio.CancelledError:
+                def _cleanup_stray(done_task: asyncio.Task) -> None:
+                    if done_task.cancelled():
+                        return
+                    if done_task.exception() is None:
+                        self._spawn_bg(self._close_quietly(done_task.result()))
+
+                connect_task.add_done_callback(_cleanup_stray)
+                if not connect_task.done():
+                    connect_task.cancel()
+                await self._free_slot_safe(count=remaining, notify_all=True)
                 raise
+            except BaseException:
+                await self._free_slot_safe(count=remaining, notify_all=True)
+                raise
+            remaining -= 1
             async with self._cond:
                 if self._closed:
                     self._created = max(0, self._created - 1)
-                    await self._close_quietly(conn)
+                    self._spawn_bg(self._close_quietly(conn))
                 else:
                     self._reset_connection_state(conn)
                     self._idle.append(conn)

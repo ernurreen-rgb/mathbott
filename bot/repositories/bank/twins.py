@@ -265,19 +265,57 @@ class BankTaskTwinsMixin:
         task = await self.get_task_by_id(twin_id, include_deleted=True)
         return task or {}
 
-    async def _trash_twins_of(self, db: db_driver.Connection, source_task_ids: List[int]) -> int:
-        """Move active twins to trash before their sources disappear for good."""
+    async def _trash_twins_of(
+        self,
+        db: db_driver.Connection,
+        source_task_ids: List[int],
+        *,
+        actor_user_id: Optional[int] = None,
+        source: str = "admin_bank_source_hard_delete",
+    ) -> int:
+        """Move active twins to trash and record soft_delete versions before sources disappear."""
         if not source_task_ids:
             return 0
         placeholders = ",".join(["?"] * len(source_task_ids))
-        cursor = await db.execute(
+        async with db.execute(
             f"""
-            UPDATE bank_tasks
-            SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
-            WHERE deleted_at IS NULL AND id IN (
+            SELECT bt.id
+            FROM bank_tasks bt
+            WHERE bt.deleted_at IS NULL AND bt.id IN (
                 SELECT twin_bank_task_id FROM bank_task_twins WHERE source_bank_task_id IN ({placeholders})
             )
             """,
             source_task_ids,
+        ) as cursor:
+            twin_ids = [int(row[0]) for row in await cursor.fetchall()]
+        if not twin_ids:
+            return 0
+
+        twin_placeholders = ",".join(["?"] * len(twin_ids))
+        cursor = await db.execute(
+            f"""
+            UPDATE bank_tasks
+            SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
+            WHERE deleted_at IS NULL AND id IN ({twin_placeholders})
+            """,
+            twin_ids,
         )
-        return int(cursor.rowcount or 0)
+        trashed_count = int(cursor.rowcount or 0)
+        for twin_id in twin_ids:
+            updated = await self._fetch_task_row(db, twin_id)
+            if not updated:
+                continue
+            updated_topics = await self._fetch_topics_for_task(db, twin_id)
+            updated_snapshot = self._build_snapshot(updated, updated_topics)
+            await self._record_version_event(
+                db,
+                task_id=twin_id,
+                event_type="soft_delete",
+                snapshot=updated_snapshot,
+                changed_fields=["deleted_at"],
+                source=source,
+                actor_user_id=actor_user_id,
+                reason="Source bank task permanently deleted",
+                initial=False,
+            )
+        return trashed_count

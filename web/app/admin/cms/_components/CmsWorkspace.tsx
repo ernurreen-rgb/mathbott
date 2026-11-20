@@ -25,6 +25,7 @@ import {
   McqOptionLabel
 } from "@/lib/question-options";
 import { normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { normalizeSelectOptions, normalizeSelectSubquestions, normalizeTfAnswer } from "@/lib/task-type-transition";
 import { normalizeMathFieldValueForStorage } from "@/lib/math-normalize";
 import { AnswerMode, TaskTextScale } from "@/types";
 import { useSession } from "next-auth/react";
@@ -561,17 +562,14 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                                 answer = taskData.answer || "";
                                 formData.append("options", JSON.stringify((taskData.options || []).map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
                               } else if (taskData.question_type === "tf") {
-                                answer = taskData.answer || "true";
+                                answer = normalizeTfAnswer(taskData.answer);
                                 formData.append("options", "");
                               } else if (taskData.question_type === "select") {
-                                if (taskData.subquestions) {
-                                  const correctAnswers = taskData.subquestions.map((sq: any) => sq.correct || "A");
-                                  answer = JSON.stringify(correctAnswers);
-                                }
-                                formData.append("options", JSON.stringify((taskData.options || []).map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
-                                if (taskData.subquestions) {
-                                  formData.append("subquestions", JSON.stringify(taskData.subquestions.map((sub) => ({ ...sub, text: normalizeMathFieldValueForStorage(sub.text) }))));
-                                }
+                                const normalizedSelectOptions = normalizeSelectOptions(taskData.options);
+                                const normalizedSubs = normalizeSelectSubquestions(taskData.subquestions);
+                                answer = JSON.stringify(normalizedSubs.map((sq) => sq.correct));
+                                formData.append("options", JSON.stringify(normalizedSelectOptions.map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
+                                formData.append("subquestions", JSON.stringify(normalizedSubs.map((sub) => ({ ...sub, text: normalizeMathFieldValueForStorage(sub.text) }))));
                               } else {
                                 formData.append("options", "");
                               }

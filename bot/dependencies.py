@@ -75,6 +75,8 @@ async def _resolve_authenticated_email(
             raise HTTPException(status_code=401, detail="Invalid trusted proxy signature.")
         if not proxy_email:
             raise HTTPException(status_code=401, detail="Authenticated proxy user is missing.")
+        if isinstance(email, str) and email.strip() and email.strip().lower() != proxy_email:
+            raise HTTPException(status_code=403, detail="Client email does not match authenticated user.")
         return proxy_email
 
     if settings.is_production:
@@ -84,6 +86,15 @@ async def _resolve_authenticated_email(
     if not fallback_email:
         raise HTTPException(status_code=401, detail="Authenticated user identity is required.")
     return fallback_email
+
+
+async def resolve_authenticated_email(
+    *,
+    request: Optional[Request] = None,
+    email: Optional[str] = None,
+) -> str:
+    """Resolve and verify the caller's authenticated email from signed proxy headers (or legacy dev fallback)."""
+    return await _resolve_authenticated_email(request=request, email=email)
 
 
 def _normalize_admin_role(role: Optional[str]) -> Optional[str]:
@@ -128,11 +139,28 @@ async def optional_internal_identity(request: Request, db: Database = Depends(ge
         valid, email, _ = verify_proxy_signature(request)
         if not valid:
             raise HTTPException(status_code=401, detail="Invalid trusted proxy signature.")
-        return await db.users.get_user_by_email(email) if email else None
+        if not email:
+            return None
+        query_email = (request.query_params.get("email") or "").strip().lower()
+        if query_email and query_email != email:
+            raise HTTPException(status_code=403, detail="Client email does not match authenticated user.")
+        user = await db.users.get_user_by_email(email)
+        if not user:
+            return None
+        enriched = dict(user)
+        enriched["email"] = email
+        return enriched
     if get_settings().is_production:
         return None
     email = _resolve_legacy_email(email=None, request=request)
-    return await db.users.get_user_by_email(email) if email else None
+    if not email:
+        return None
+    user = await db.users.get_user_by_email(email)
+    if not user:
+        return None
+    enriched = dict(user)
+    enriched["email"] = email
+    return enriched
 
 
 async def _require_admin_with_capability(

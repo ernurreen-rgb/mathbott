@@ -130,39 +130,34 @@ class Database:
         bank_topics: Optional[List[str]] = None,
         bank_difficulty: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create a placement task in mini-lesson, creating bank content when needed."""
-        resolved_bank_task_id = bank_task_id
-        if not resolved_bank_task_id:
-            bank_task = await self.bank_tasks.create_task(
-                text=text,
-                answer=answer,
-                question_type=question_type,
-                accepted_answers=accepted_answers,
-                text_scale=text_scale,
-                difficulty=(bank_difficulty or "B"),
-                topics=bank_topics or [],
-                options=options,
-                subquestions=subquestions,
-                image_filename=image_filename,
-                solution_filename=solution_filename,
-                created_by=created_by,
-            )
-            resolved_bank_task_id = bank_task.get("id")
+        """Create a placement task in mini-lesson, creating bank content atomically when needed."""
+        async with self.curriculum._write_transaction() as conn:
+            resolved_bank_task_id = bank_task_id
+            if not resolved_bank_task_id:
+                resolved_bank_task_id = await self.bank_tasks._insert_bank_task(
+                    conn,
+                    text=text,
+                    answer=answer,
+                    question_type=question_type,
+                    accepted_answers=accepted_answers,
+                    text_scale=text_scale,
+                    difficulty=(bank_difficulty or "B"),
+                    topics=bank_topics or [],
+                    options=options,
+                    subquestions=subquestions,
+                    image_filename=image_filename,
+                    solution_filename=solution_filename,
+                    created_by=created_by,
+                )
 
-        return await self.curriculum.create_task_in_mini_lesson(
-            mini_lesson_id=mini_lesson_id,
-            text=text,
-            answer=answer,
-            question_type=question_type,
-            options=None,
-            subquestions=None,
-            image_filename=image_filename,
-            solution_filename=solution_filename,
-            created_by=created_by,
-            task_type=task_type,
-            sort_order=sort_order,
-            bank_task_id=resolved_bank_task_id,
-        )
+            return await self.curriculum.create_task_in_mini_lesson(
+                mini_lesson_id=mini_lesson_id,
+                created_by=created_by,
+                task_type=task_type,
+                sort_order=sort_order,
+                bank_task_id=resolved_bank_task_id,
+                conn=conn,
+            )
 
     async def create_task_in_section(
         self,
@@ -185,41 +180,37 @@ class Database:
         bank_topics: Optional[List[str]] = None,
         bank_difficulty: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create placement task in section, creating bank content when needed."""
+        """Create placement task in section, creating bank content atomically when needed."""
         resolved_question_type = question_type or "input"
         resolved_options = options
         if questions and len(questions) > 0 and resolved_options is None:
             # Legacy: questions list was passed via "questions"
             resolved_options = questions
 
-        resolved_bank_task_id = bank_task_id
-        if not resolved_bank_task_id:
-            bank_task = await self.bank_tasks.create_task(
-                text=text,
-                answer=answer,
-                question_type=resolved_question_type,
-                accepted_answers=accepted_answers,
-                text_scale=text_scale,
-                difficulty=(bank_difficulty or "B"),
-                topics=bank_topics or [],
-                options=resolved_options,
-                subquestions=subquestions,
-                image_filename=image_filename,
-                solution_filename=solution_filename,
-                created_by=created_by,
-            )
-            resolved_bank_task_id = bank_task.get("id")
+        async with self.curriculum._write_transaction() as conn:
+            resolved_bank_task_id = bank_task_id
+            if not resolved_bank_task_id:
+                resolved_bank_task_id = await self.bank_tasks._insert_bank_task(
+                    conn,
+                    text=text,
+                    answer=answer,
+                    question_type=resolved_question_type,
+                    accepted_answers=accepted_answers,
+                    text_scale=text_scale,
+                    difficulty=(bank_difficulty or "B"),
+                    topics=bank_topics or [],
+                    options=resolved_options,
+                    subquestions=subquestions,
+                    image_filename=image_filename,
+                    solution_filename=solution_filename,
+                    created_by=created_by,
+                )
 
-        return await self.curriculum.create_task_in_section(
-            section_id=section_id,
-            text=text,
-            answer=answer,
-            question_type=resolved_question_type,
-            options=None,
-            image_filename=image_filename,
-            solution_filename=solution_filename,
-            created_by=created_by,
-            task_type=task_type,
-            sort_order=sort_order,
-            bank_task_id=resolved_bank_task_id,
-        )
+            return await self.curriculum.create_task_in_section(
+                section_id=section_id,
+                created_by=created_by,
+                task_type=task_type,
+                sort_order=sort_order,
+                bank_task_id=resolved_bank_task_id,
+                conn=conn,
+            )

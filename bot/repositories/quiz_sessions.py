@@ -47,6 +47,17 @@ class QuizSessionsMixin:
                 raise QuizError("not_found", "Quiz or host not found")
             if not quiz['is_public'] and quiz['created_by'] != host_id and not host['is_admin']:
                 raise QuizError("forbidden", "Private quiz is not available")
+            if quiz['created_by'] != host_id and not host['is_admin']:
+                active_player = await self._row(
+                    db,
+                    """SELECT 1 FROM quiz_participants p
+                       JOIN quiz_sessions s ON s.id = p.session_id
+                       WHERE s.quiz_id = ? AND s.status IN ('lobby', 'in_progress') AND p.user_id = ?
+                       LIMIT 1""",
+                    (quiz_id, host_id),
+                )
+                if active_player:
+                    raise QuizError("forbidden", "Cannot host a quiz while participating in an active session of it")
             async with db.execute("SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY sort_order, id", (quiz_id,)) as cursor:
                 questions = [dict(row) for row in await cursor.fetchall()]
             if not questions:

@@ -3,7 +3,8 @@ Routes for modules, sections, and lessons
 """
 import logging
 from typing import Optional, Dict, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from dependencies import optional_internal_identity
 from utils.cache import cache
 from utils.public_payload import public_options, public_subquestions
 from utils.validation import get_mcq_answer_count, normalize_answer_mode
@@ -17,55 +18,16 @@ def setup_modules_routes(app, db, limiter):
     """Setup module routes"""
     
     @app.get("/api/modules/map")
-    async def get_modules_map(email: Optional[str] = Query(None)):
+    async def get_modules_map(
+        email: Optional[str] = Query(None),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
+    ):
         """
         Get modules map with user progress (Карта Модулей) - optimized with batch queries and caching
-        
-        Returns a list of modules with their sections and progress information.
-        
-        **Example Request:**
-        ```
-        GET /api/modules/map?email=user@example.com
-        ```
-        
-        **Example Response:**
-        ```json
-        [
-          {
-            "id": 1,
-            "name": "Алгебра",
-            "description": "Основы алгебры",
-            "icon": "📐",
-            "sort_order": 1,
-            "progress": {
-              "completed": false,
-              "total_lessons": 50,
-              "completed_lessons": 10,
-              "progress": 0.2
-            },
-            "sections": [
-              {
-                "id": 1,
-                "name": "Раздел 1",
-                "sort_order": 1,
-                "progress": {
-                  "completed": false,
-                  "total": 10,
-                  "completed_count": 2,
-                  "progress": 0.2
-                }
-              }
-            ]
-          }
-        ]
-        ```
-        
-        **Error Codes:**
-        - 200: Success
-        - 500: Internal server error
         """
-        # Cache key includes email for user-specific progress
-        cache_key = f"modules:map:{email or 'anonymous'}"
+        user_id = current_user["id"] if current_user else None
+        cache_identity = current_user["email"] if current_user and current_user.get("email") else "anonymous"
+        cache_key = f"modules:map:{cache_identity}"
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             return cached_result
@@ -79,12 +41,6 @@ def setup_modules_routes(app, db, limiter):
             cache.set(cache_key_modules, modules, ttl=300)
         else:
             modules = cached_modules
-        
-        user_id = None
-        if email:
-            user = await db.users.get_user_by_email(email)
-            if user:
-                user_id = user["id"]
         
         # Optimized: batch fetch all sections for all modules
         # Group sections by module_id
@@ -149,20 +105,16 @@ def setup_modules_routes(app, db, limiter):
     async def get_module_details(
         module_id: int, 
         email: Optional[str] = Query(None),
-        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,name,sections')")
+        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,name,sections')"),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
     ):
         """Get module details with sections and tasks (Страница Модуля)"""
         module = await db.curriculum.get_module_by_id(module_id)
         if not module:
             raise HTTPException(status_code=404, detail="Module not found")
         
-        user_id = None
-        is_admin = False
-        if email:
-            user = await db.users.get_user_by_email(email)
-            if user:
-                user_id = user["id"]
-                is_admin = bool(user.get("is_admin"))
+        user_id = current_user["id"] if current_user else None
+        is_admin = bool(current_user.get("is_admin")) if current_user else False
 
         # Admins open every lesson so they can check content; students wait for their mistake review.
         locks = (await db.module_review.get_lesson_gate(user_id, module_id))["locks"] if user_id and not is_admin else {}
@@ -170,18 +122,6 @@ def setup_modules_routes(app, db, limiter):
         # The whole module in a few queries: it used to take one or more per section, lesson and
         # mini-lesson, about 230 for a module of 30 lessons, and two seconds per page.
         outline = await db.curriculum.get_module_outline(module_id)
-        if user_id:
-            # As calculate_lesson_completion does: a lesson always has its four default mini-lessons.
-            short = [
-                lesson["id"]
-                for lessons in outline["lessons_by_section"].values()
-                for lesson in lessons
-                if len(outline["minis_by_lesson"].get(int(lesson["id"]), [])) < 4
-            ]
-            for lesson_id in short:
-                await db.curriculum.ensure_default_mini_lessons(lesson_id)
-            if short:
-                outline = await db.curriculum.get_module_outline(module_id)
         progress = await db.progress.calculate_module_page_progress(user_id, module_id) if user_id else None
 
         sections = outline["sections"]
@@ -249,8 +189,12 @@ def setup_modules_routes(app, db, limiter):
         return result
 
     @app.get("/api/lessons/{lesson_id}")
-    async def get_lesson_details(lesson_id: int, email: Optional[str] = Query(None)):
-        """Get lesson details with 4 mini-lessons and tasks + user progress."""
+    async def get_lesson_details(
+        lesson_id: int,
+        email: Optional[str] = Query(None),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
+    ):
+        """Get lesson details with mini-lessons and tasks + user progress."""
         lesson = await db.curriculum.get_lesson_by_id(lesson_id)
         if not lesson:
             raise HTTPException(status_code=404, detail="Lesson not found")
@@ -258,20 +202,14 @@ def setup_modules_routes(app, db, limiter):
         section = await db.curriculum.get_section_by_id(lesson["section_id"])
         module_id = section["module_id"] if section else None
 
-        user_id = None
-        is_admin = False
-        if email:
-            user = await db.users.get_user_by_email(email)
-            if user:
-                user_id = user["id"]
-                is_admin = bool(user.get("is_admin"))
+        user_id = current_user["id"] if current_user else None
+        is_admin = bool(current_user.get("is_admin")) if current_user else False
 
-        # Ensure defaults exist
-        await db.curriculum.ensure_default_mini_lessons(lesson_id)
         mini_lessons = await db.curriculum.get_mini_lessons_by_lesson(lesson_id)
 
         lock = None
         next_lesson = None
+        guest_tasks_restricted = False
         if module_id:
             gate = (
                 await db.module_review.get_lesson_gate(user_id, module_id)
@@ -280,9 +218,18 @@ def setup_modules_routes(app, db, limiter):
             )
             lock = gate["locks"].get(lesson_id)
             order = [item["id"] for item in gate["lessons"]]
+            if user_id is None and (not order or order[0] != lesson_id):
+                # Guests may only preview the first lesson of a module; later lessons require sign-in
+                # so calling GET /api/lessons/{id} without identity can never bypass the Lesson Gate.
+                guest_tasks_restricted = True
             if lesson_id in order and order.index(lesson_id) + 1 < len(order):
                 following = gate["lessons"][order.index(lesson_id) + 1]
-                next_lesson = {**following, "locked": following["id"] in gate["locks"]}
+                next_lesson = {
+                    **following,
+                    "locked": (following["id"] in gate["locks"]) or (user_id is None),
+                }
+        elif user_id is None:
+            guest_tasks_restricted = True
 
         lesson_progress = await db.calculate_lesson_completion(user_id, lesson_id) if user_id else None
         review_summaries = (
@@ -291,8 +238,8 @@ def setup_modules_routes(app, db, limiter):
 
         result_mini = []
         for ml in mini_lessons:
-            # A closed lesson shows only its outline until the review before it is done.
-            tasks = [] if lock else await db.tasks.get_tasks_by_mini_lesson(ml["id"])
+            # A closed lesson (or unauthenticated access past lesson 1) shows only its outline.
+            tasks = [] if (lock or guest_tasks_restricted) else await db.tasks.get_tasks_by_mini_lesson(ml["id"])
             task_progress = await db.progress.get_user_progress_for_mini_lesson(user_id, ml["id"]) if user_id else {}
 
             tasks_data = []

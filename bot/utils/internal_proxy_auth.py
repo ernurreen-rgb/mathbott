@@ -87,11 +87,7 @@ def _build_canonical_from_request(
     body_sha256: Optional[str],
     content_type: Optional[str],
 ) -> bytes:
-    raw_query = ""
-    try:
-        raw_query = (request.scope.get("query_string") or b"").decode("utf-8")
-    except Exception:
-        raw_query = request.url.query or ""
+    raw_query = (request.scope.get("query_string") or b"").decode("latin-1")
     return build_canonical_proxy_payload(
         method=request.method,
         path=get_scope_path(request),

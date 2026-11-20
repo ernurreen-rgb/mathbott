@@ -14,9 +14,10 @@ import StudentTaskPreview from "@/components/admin/StudentTaskPreview";
 import MathFieldInput from "@/components/ui/MathFieldInput";
 import MathRender from "@/components/ui/MathRender";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
-import { getMcqCorrectOptionLimit, getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
+import { getMcqEditorLabels, getMcqEditorQuestionType, isMcqQuestionType, parseMcqAnswerLabels, serializeMcqAnswerLabels } from "@/lib/question-options";
 import { createCroppedImageFile } from "@/lib/imageCrop";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
+import { normalizeSelectOptions, normalizeSelectSubquestions, normalizeTaskForQuestionType, normalizeTfAnswer } from "@/lib/task-type-transition";
 import { LessonTask, QuestionType } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -239,14 +240,22 @@ export default function VisualTaskEditor({
       taskToSave.removeImage = true;
     }
 
-    // For select, answer should be JSON array of correct answers
-    if (taskToSave.question_type === "select" && taskToSave.subquestions) {
-      const correctAnswers = taskToSave.subquestions.map((sq: any) => sq.correct || "A");
-      taskToSave.answer = JSON.stringify(correctAnswers);
+    // For select, clamp to 4 options (A-D) and derive answer from normalized subquestions
+    if (taskToSave.question_type === "select") {
+      taskToSave.options = normalizeSelectOptions(taskToSave.options);
+      const normalizedSubs = normalizeSelectSubquestions(taskToSave.subquestions);
+      taskToSave.subquestions = normalizedSubs;
+      taskToSave.answer = JSON.stringify(normalizedSubs.map((sq) => sq.correct));
+    } else if (taskToSave.question_type === "tf") {
+      taskToSave.answer = normalizeTfAnswer(taskToSave.answer);
+      taskToSave.options = undefined;
+      taskToSave.subquestions = undefined;
+    } else if (!isMcqQuestionType(taskToSave.question_type)) {
+      taskToSave.options = undefined;
+      taskToSave.subquestions = undefined;
+    } else {
+      taskToSave.subquestions = undefined;
     }
-
-    // For TF, answer is "true" or "false"
-    // For input, answer is the text value
 
     setSaving(true);
     try {
@@ -770,21 +779,7 @@ export default function VisualTaskEditor({
             onChange={(e) => {
               const questionType = e.target.value as QuestionType;
               setLegacyOptionCount(null); setValidationError(null); setEditingField(null);
-              updateTempTask({
-                question_type: questionType,
-                ...(isMcqQuestionType(questionType) ? (() => {
-                  const allowedLabels = getMcqEditorLabels(questionType);
-                  const keptAnswers = parseMcqAnswerLabels(tempTaskData.answer)
-                    .filter((label) => allowedLabels.includes(label))
-                    .slice(0, getMcqCorrectOptionLimit(questionType));
-                  return {
-                    options: allowedLabels.map((label) => ({ label, text: tempTaskData.options?.find((option) => option.label === label)?.text || "" })),
-                    answer: serializeMcqAnswerLabels(keptAnswers.length > 0 ? keptAnswers : [allowedLabels[0]]),
-                  };
-                })() : {}),
-                ...(questionType !== "select" ? { subquestions: undefined } : {}),
-                answer_mode: getTaskAnswerMode({ question_type: questionType }),
-              });
+              updateTempTask(normalizeTaskForQuestionType(tempTaskData, questionType));
             }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2"
           >

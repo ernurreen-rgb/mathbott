@@ -3,9 +3,14 @@ import ast
 import re
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
-from math import isqrt
+from math import gcd, isqrt
 from typing import Dict, Optional
-from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_TOTAL_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_rationals, _negate_polynomial, _power_rational, _variable_polynomial
+from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_TOTAL_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_polynomials, _multiply_rationals, _negate_polynomial, _power_rational, _variable_polynomial
+
+_RADICAL_VAR_RE = re.compile(r"^__root_(\d+)_(\d+)__$")
+_MAX_IRRATIONAL_RADICAND_BITS = 64
+_MAX_RADICAL_TRIAL_DIVISOR = 10_000
+_MAX_RADICAL_PRIME_FACTORS = 4
 
 
 def looks_like_comma_collection(value: str) -> bool:
@@ -205,6 +210,181 @@ def _fraction_from_numeric_literal(literal: str) -> Fraction:
     return _ensure_number_size(Fraction(decimal_value))
 
 
+def _extract_nth_power(value: int, degree: int) -> tuple[int, int]:
+    """Factor a positive integer into (outer, inner) where value == outer**degree * inner."""
+    if value <= 1 or degree <= 1:
+        return value, 1
+    exact = _integer_nth_root_exact(value, degree)
+    if exact is not None:
+        return exact, 1
+    outer = 1
+    inner = value
+    divisor = 2
+    step = 1
+    while divisor <= _MAX_RADICAL_TRIAL_DIVISOR and divisor ** degree <= inner:
+        power = divisor ** degree
+        while inner % power == 0:
+            inner //= power
+            outer *= divisor
+        divisor += step
+        if divisor == 3:
+            step = 2
+    rem_exact = _integer_nth_root_exact(inner, degree)
+    if rem_exact is not None:
+        outer *= rem_exact
+        inner = 1
+    return outer, inner
+
+
+def _factor_small_primes(value: int, *, max_divisor: int = 1000) -> list[tuple[int, int]]:
+    """Split a positive integer into small prime powers plus an optional leftover cofactor."""
+    factors: list[tuple[int, int]] = []
+    remaining = value
+    divisor = 2
+    step = 1
+    while divisor <= max_divisor and divisor * divisor <= remaining:
+        if remaining % divisor == 0:
+            count = 0
+            while remaining % divisor == 0:
+                remaining //= divisor
+                count += 1
+            factors.append((divisor, count))
+            if len(factors) >= _MAX_RADICAL_PRIME_FACTORS:
+                break
+        divisor += step
+        if divisor == 3:
+            step = 2
+    if remaining > 1:
+        factors.append((remaining, 1))
+    return factors
+
+
+def _reduce_radical_polynomial(polynomial: Polynomial) -> Polynomial:
+    """Apply (__root_d_b__)**d == b across all monomials in a polynomial."""
+    if not polynomial:
+        return {}
+    reduced: Polynomial = {}
+    for monomial, coefficient in polynomial.items():
+        if not coefficient:
+            continue
+        next_coeff = coefficient
+        powers: Dict[str, int] = {}
+        for variable, exponent in monomial:
+            match = _RADICAL_VAR_RE.match(variable)
+            if match and exponent >= int(match.group(1)):
+                degree = int(match.group(1))
+                base = int(match.group(2))
+                quotient, remainder = divmod(exponent, degree)
+                next_coeff = _ensure_number_size(next_coeff * (base ** quotient))
+                if remainder:
+                    powers[variable] = powers.get(variable, 0) + remainder
+            elif exponent:
+                powers[variable] = powers.get(variable, 0) + exponent
+        normalized = tuple(sorted((var, exp) for var, exp in powers.items() if exp))
+        reduced[normalized] = _ensure_number_size(reduced.get(normalized, Fraction(0)) + next_coeff)
+    return _clean_polynomial(reduced)
+
+
+def _rationalize_monomial_radical_denominator(
+    numerator: Polynomial, denominator: Polynomial
+) -> tuple[Polynomial, Polynomial]:
+    """Rationalize a single-monomial denominator containing symbolic radicals (e.g. 1/sqrt(2) -> sqrt(2)/2)."""
+    if len(denominator) != 1:
+        return numerator, denominator
+    denom_monomial = next(iter(denominator))
+    factor_parts: list[tuple[str, int]] = []
+    for variable, exponent in denom_monomial:
+        match = _RADICAL_VAR_RE.match(variable)
+        if not match:
+            continue
+        degree = int(match.group(1))
+        rem = exponent % degree
+        if rem:
+            factor_parts.append((variable, degree - rem))
+    if not factor_parts:
+        return numerator, denominator
+    factor_poly: Polynomial = {tuple(sorted(factor_parts)): Fraction(1)}
+    next_num = _reduce_radical_polynomial(_multiply_polynomials(numerator, factor_poly))
+    next_den = _reduce_radical_polynomial(_multiply_polynomials(denominator, factor_poly))
+    return next_num, next_den
+
+
+def _reduce_radical_rational(value: _RationalPolynomial) -> _RationalPolynomial:
+    num = _reduce_radical_polynomial(value.numerator)
+    den = _reduce_radical_polynomial(value.denominator)
+    num, den = _rationalize_monomial_radical_denominator(num, den)
+    return _RationalPolynomial(num, den)
+
+
+def _build_radical_rational(
+    radicand: Fraction, degree: int, variables: set[str]
+) -> _RationalPolynomial:
+    """Evaluate root(radicand, degree) exactly when rational, or as reduced symbolic radicals."""
+    if radicand == 0:
+        return _RationalPolynomial({}, _constant_polynomial(Fraction(1)))
+    negative = radicand < 0
+    if negative and degree % 2 == 0:
+        raise ValueError("even root of negative number")
+
+    abs_num = abs(radicand.numerator)
+    den = radicand.denominator
+    exact_num = _integer_nth_root_exact(abs_num, degree)
+    exact_den = _integer_nth_root_exact(den, degree)
+    if exact_num is not None and exact_den is not None:
+        value = Fraction(-exact_num if negative else exact_num, exact_den)
+        return _RationalPolynomial(_constant_polynomial(value), _constant_polynomial(Fraction(1)))
+
+    if (
+        abs_num.bit_length() > _MAX_IRRATIONAL_RADICAND_BITS
+        or den.bit_length() > _MAX_IRRATIONAL_RADICAND_BITS
+    ):
+        raise ValueError("irrational root radicand is too large")
+
+    p_out, p_in = _extract_nth_power(abs_num, degree)
+    q_out, q_in = _extract_nth_power(den, degree)
+    outer_coeff = _ensure_number_size(Fraction(-p_out if negative else p_out, q_out))
+
+    if q_in > 1:
+        if q_in.bit_length() * (degree - 1) > _MAX_IRRATIONAL_RADICAND_BITS * 2:
+            raise ValueError("irrational root denominator is too large")
+        rationalized_radicand = p_in * (q_in ** (degree - 1))
+        outer_coeff = _ensure_number_size(outer_coeff / q_in)
+        extra_out, inner = _extract_nth_power(rationalized_radicand, degree)
+        outer_coeff = _ensure_number_size(outer_coeff * extra_out)
+    else:
+        inner = p_in
+
+    if inner == 1:
+        return _RationalPolynomial(_constant_polynomial(outer_coeff), _constant_polynomial(Fraction(1)))
+
+    monomial_powers: Dict[str, int] = {}
+    for base, multiplicity in _factor_small_primes(inner):
+        common = gcd(degree, multiplicity)
+        eff_degree = degree // common
+        eff_mult = multiplicity // common
+        # Collapse exact k-th powers on leftover cofactors (e.g. root(1009**2, 4) -> root(1009, 2)).
+        if eff_mult == 1 and eff_degree > 2:
+            for divisor in range(eff_degree, 1, -1):
+                if eff_degree % divisor == 0:
+                    reduced_base = _integer_nth_root_exact(base, divisor)
+                    if reduced_base is not None:
+                        base = reduced_base
+                        eff_degree //= divisor
+                        break
+        if eff_degree == 1:
+            outer_coeff = _ensure_number_size(outer_coeff * (base ** eff_mult))
+            continue
+        symbol = f"__root_{eff_degree}_{base}__"
+        variables.add(symbol)
+        if len(variables) > _MAX_VARIABLES:
+            raise ValueError("too many variables")
+        monomial_powers[symbol] = monomial_powers.get(symbol, 0) + eff_mult
+
+    monomial = tuple(sorted((var, exp) for var, exp in monomial_powers.items() if exp))
+    poly = _reduce_radical_polynomial({monomial: outer_coeff})
+    return _RationalPolynomial(poly, _constant_polynomial(Fraction(1)))
+
+
 def _evaluate_ast(node: ast.AST, variables: set[str], source: str) -> _RationalPolynomial:
     if isinstance(node, ast.Expression):
         return _evaluate_ast(node.body, variables, source)
@@ -232,19 +412,19 @@ def _evaluate_ast(node: ast.AST, variables: set[str], source: str) -> _RationalP
         left = _evaluate_ast(node.left, variables, source)
         right = _evaluate_ast(node.right, variables, source)
         if isinstance(node.op, ast.Add):
-            return _add_rationals(left, right)
+            return _reduce_radical_rational(_add_rationals(left, right))
         if isinstance(node.op, ast.Sub):
             right.numerator = _negate_polynomial(right.numerator)
-            return _add_rationals(left, right)
+            return _reduce_radical_rational(_add_rationals(left, right))
         if isinstance(node.op, ast.Mult):
-            return _multiply_rationals(left, right)
+            return _reduce_radical_rational(_multiply_rationals(left, right))
         if isinstance(node.op, ast.Div):
-            return _divide_rationals(left, right)
+            return _reduce_radical_rational(_divide_rationals(left, right))
         if isinstance(node.op, ast.Pow):
             exponent = _constant_value(right)
             if exponent is None or exponent.denominator != 1:
                 raise ValueError("exponent must be an integer")
-            return _power_rational(left, exponent.numerator)
+            return _reduce_radical_rational(_power_rational(left, exponent.numerator))
         raise ValueError("unsupported operator")
     if (
         isinstance(node, ast.Call)
@@ -260,15 +440,7 @@ def _evaluate_ast(node: ast.AST, variables: set[str], source: str) -> _RationalP
         degree = degree_value.numerator
         if degree < 2 or degree > _MAX_ROOT_DEGREE:
             raise ValueError("unsupported root degree")
-        negative = radicand < 0
-        if negative and degree % 2 == 0:
-            raise ValueError("even root of negative number")
-        numerator = _integer_nth_root_exact(abs(radicand.numerator), degree)
-        denominator = _integer_nth_root_exact(radicand.denominator, degree)
-        if numerator is None or denominator is None:
-            raise ValueError("irrational root")
-        value = Fraction(-numerator if negative else numerator, denominator)
-        return _RationalPolynomial(_constant_polynomial(value), _constant_polynomial(Fraction(1)))
+        return _build_radical_rational(radicand, degree, variables)
     raise ValueError("unsupported expression")
 
 
@@ -386,7 +558,13 @@ def _normalize_rational(value: _RationalPolynomial) -> _RationalPolynomial:
     if not value.denominator:
         raise ValueError("division by zero")
 
-    numerator, denominator = _cancel_univariate_gcd(value.numerator, value.denominator)
+    reduced = _reduce_radical_rational(value)
+    if not reduced.numerator:
+        return _RationalPolynomial({}, _constant_polynomial(Fraction(1)))
+    if not reduced.denominator:
+        raise ValueError("division by zero")
+
+    numerator, denominator = _cancel_univariate_gcd(reduced.numerator, reduced.denominator)
     if numerator == denominator:
         return _RationalPolynomial(
             _constant_polynomial(Fraction(1)),

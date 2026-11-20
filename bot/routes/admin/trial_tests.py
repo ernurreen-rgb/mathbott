@@ -505,6 +505,10 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         logger.info("Parsed subquestions (trial test %s): %s", source_label, subquestions_list)
 
         _validate_trial_like_payload(question_type, options_list, subquestions_list)
+        if question_type not in {*MCQ_QUESTION_TYPES, "select"}:
+            options_list = []
+        if question_type != "select":
+            subquestions_list = []
         answer_mode_value = (
             _normalize_answer_mode_or_raise(answer_mode, question_type)
             if answer_mode is not None
@@ -516,6 +520,11 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
             else None
         )
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
+        if question_type == "tf":
+            normalized_tf = str(answer or "").strip().lower()
+            if normalized_tf not in {"true", "false"}:
+                raise HTTPException(status_code=400, detail="tf answer must be 'true' or 'false'")
+            answer = normalized_tf
 
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
         text_scale_value = _normalize_text_scale(text_scale)
@@ -547,8 +556,8 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     answer_mode=answer_mode_value,
                     accepted_answers=accepted_answers_value,
                     text_scale=text_scale_value,
-                    options=options_list if options is not None else None,
-                    subquestions=subquestions_list if subquestions is not None else None,
+                    options=options_list,
+                    subquestions=subquestions_list,
                     image_filename=image_filename,
                     solution_filename=None,
                     difficulty=difficulty_value,

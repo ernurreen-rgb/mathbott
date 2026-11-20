@@ -486,7 +486,32 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                     if saved:
                         await db.rollback()
                         return {"result": dict(saved), "recorded_any": False,
-                                "streak_milestone": None, "reused": True}
+                                "streak_milestone": None, "streak_updated": False, "reused": True}
+
+                    # Tasks whose correct_answer was already revealed in an earlier attempt of this
+                    # trial test must not award global completions, total_solved, streak or achievements
+                    # on subsequent retake attempts.
+                    async with db.execute(
+                        """SELECT answers FROM trial_test_results
+                           WHERE user_id = ? AND trial_test_id = ?""",
+                        (user_id, trial_test_id),
+                    ) as prior_cursor:
+                        prior_rows = await prior_cursor.fetchall()
+
+                    revealed_task_ids: set[int] = set()
+                    for prior_row in prior_rows:
+                        raw_prior = prior_row["answers"] if hasattr(prior_row, "keys") else prior_row[0]
+                        try:
+                            parsed_prior = json.loads(raw_prior) if isinstance(raw_prior, str) else (raw_prior or {})
+                        except Exception:
+                            parsed_prior = {}
+                        if isinstance(parsed_prior, dict):
+                            for tid_key, item in parsed_prior.items():
+                                if isinstance(item, dict) and item.get("correct_answer") is not None:
+                                    try:
+                                        revealed_task_ids.add(int(tid_key))
+                                    except (TypeError, ValueError):
+                                        pass
 
                     answers_json = json.dumps(answers)
                     cursor = await db.execute(
@@ -500,9 +525,14 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                     )
                     result_id = int(cursor.lastrowid)
 
+                    eligible_completions = [
+                        completion
+                        for completion in completions
+                        if int(completion.get("source_ref_id") or 0) not in revealed_task_ids
+                    ]
                     recorded_any = False
                     recorded_count = 0
-                    for completion in completions:
+                    for completion in eligible_completions:
                         if await insert_task_completion(db, user_id=user_id, **completion):
                             recorded_any = True
                             recorded_count += 1
@@ -518,8 +548,16 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                             (recorded_count, user_id),
                         )
 
+                    effective_should_update_streak = bool(
+                        should_update_streak
+                        and any(
+                            int(task_id) not in revealed_task_ids
+                            for task_id, item in answers.items()
+                            if isinstance(item, dict) and (item.get("score") or 0) > 0
+                        )
+                    )
                     streak_milestone = None
-                    if should_update_streak:
+                    if effective_should_update_streak:
                         async with db.execute(
                             "SELECT streak, last_streak_date FROM users WHERE id = ?",
                             (user_id,),
@@ -557,6 +595,7 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                         "result": dict(result_row) if result_row else {"id": result_id},
                         "recorded_any": recorded_any,
                         "streak_milestone": streak_milestone,
+                        "streak_updated": effective_should_update_streak,
                     }
                 except Exception:
                     await db.rollback()

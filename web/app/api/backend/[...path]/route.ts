@@ -9,6 +9,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { normalizeProxyRequestBody } from "@/lib/proxy-request-body";
 import {
+  pathRequiresProxyUserEmail,
+  pathSupportsOptionalProxyIdentity,
+} from "@/lib/proxy-auth-paths";
+import {
   isQuizEntryRequest, quizEntryClientKey, quizEntryClientSignature,
   QUIZ_ENTRY_KEY_HEADER, QUIZ_ENTRY_SIGNATURE_HEADER,
 } from "@/lib/quiz-entry-identity";
@@ -290,28 +294,6 @@ function isJsonContentType(mediaType: string): boolean {
     (mediaType.startsWith("application/") && mediaType.endsWith("+json"));
 }
 
-function pathRequiresProxyUserEmail(pathSegments: string[]): boolean {
-  const path = `/api/${pathSegments.join("/")}`;
-  const sensitivePrefixes = [
-    "/api/admin/",
-    "/api/export/admin/",
-    "/api/export/user/",
-    "/api/mini-lessons",
-    "/api/presence",
-    "/api/push/",
-    "/api/reports",
-    "/api/task/check",
-    "/api/trial-test-reports",
-    "/api/trial-tests",
-    "/api/user/web",
-  ];
-
-  return (
-    sensitivePrefixes.some((prefix) => path.startsWith(prefix)) ||
-    (path.startsWith("/api/tasks/") && path.endsWith("/questions/check"))
-  );
-}
-
 function redactPath(pathname: string): string {
   return pathname
     .split("/")
@@ -388,7 +370,7 @@ async function proxyRequest(
 
     const preliminaryRequiresProxyUserEmail =
       isAdminPath ||
-      pathRequiresProxyUserEmail(effectivePathSegments) ||
+      pathRequiresProxyUserEmail(effectivePathSegments, request.method, searchParams) ||
       hasPrivatePathEmail ||
       hasEmailSearchParam(searchParams);
 
@@ -457,8 +439,8 @@ async function proxyRequest(
     const requiresProxyUserEmail = preliminaryRequiresProxyUserEmail || bodyHasEmail;
 
     let proxyUserEmail = "";
-    const hasOptionalQuizIdentity = ["quizzes", "quiz-sessions"].includes(effectivePathSegments[0]);
-    if (requiresProxyUserEmail || hasOptionalQuizIdentity) {
+    const hasOptionalIdentity = pathSupportsOptionalProxyIdentity(effectivePathSegments);
+    if (requiresProxyUserEmail || hasOptionalIdentity) {
       const sessionEmail = sessionEmailResolved
         ? cachedSessionEmail
         : await getProxyUserEmail(request);

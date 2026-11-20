@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 from .base import BaseRepository
 from .quiz_sessions import QuizSessionsMixin
 from .quiz_entry_limits import QuizEntryLimitsMixin
+from utils.quiz import QuizError
 
 logger = logging.getLogger(__name__)
 
@@ -122,11 +123,22 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
 
         return await self.get_quiz_by_id(quiz_id)
 
+    async def has_active_session(self, quiz_id: int) -> bool:
+        """Return True if any live session for this quiz is currently in lobby or in_progress."""
+        async with self._connection() as db:
+            async with db.execute(
+                "SELECT 1 FROM quiz_sessions WHERE quiz_id = ? AND status IN ('lobby', 'in_progress') LIMIT 1",
+                (quiz_id,),
+            ) as cursor:
+                return bool(await cursor.fetchone())
+
     async def fork_quiz(
         self,
         quiz_id: int,
         user_id: int,
         title_override: Optional[str] = None,
+        *,
+        allow_during_active_session: bool = False,
     ) -> Optional[Dict[str, Any]]:
         quiz = await self.get_quiz_by_id(quiz_id)
         if not quiz:
@@ -135,6 +147,16 @@ class QuizRepository(QuizSessionsMixin, QuizEntryLimitsMixin, BaseRepository):
 
         title = title_override or f"{quiz['title']} (Көшірме)"
         async with self._write_transaction() as db:
+            if not allow_during_active_session:
+                async with db.execute(
+                    "SELECT 1 FROM quiz_sessions WHERE quiz_id = ? AND status IN ('lobby', 'in_progress') LIMIT 1",
+                    (quiz_id,),
+                ) as cursor:
+                    if await cursor.fetchone():
+                        raise QuizError(
+                            "conflict",
+                            "Белсенді ойын жүріп жатқан кезде бұл квизді көшіруге болмайды.",
+                        )
             cursor = await db.execute(
                 """
                 INSERT INTO quizzes (title, description, cover_image, created_by, is_public, grade, topic)

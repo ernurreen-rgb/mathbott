@@ -73,12 +73,8 @@ class ProgressRepository(BaseRepository):
         }
 
     async def calculate_lesson_completion(self, user_id: int, lesson_id: int, curriculum_repo) -> Dict[str, Any]:
-        """Calculate lesson completion (based on 4 mini-lessons)."""
+        """Calculate lesson completion across non-empty mini-lessons (pure read; matches StatisticsRepository)."""
         mini_lessons = await curriculum_repo.get_mini_lessons_by_lesson(lesson_id)
-        if len(mini_lessons) < 4:
-            await curriculum_repo.ensure_default_mini_lessons(lesson_id)
-            mini_lessons = await curriculum_repo.get_mini_lessons_by_lesson(lesson_id)
-
         if not mini_lessons:
             return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}
 
@@ -107,19 +103,25 @@ class ProgressRepository(BaseRepository):
                     completed_count = int(r[2] or 0)
                     counts_by_mini[mini_id] = {"total": total, "completed_count": completed_count}
 
+        active_minis = [
+            ml for ml in mini_lessons
+            if counts_by_mini.get(int(ml["id"]), {}).get("total", 0) > 0
+        ]
+        if not active_minis:
+            return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}
+
         completed_mini = 0
-        for ml in mini_lessons:
-            c = counts_by_mini.get(int(ml["id"]), {"total": 0, "completed_count": 0})
-            total = c["total"]
-            completed_count = c["completed_count"]
-            if total > 0 and completed_count == total:
+        for ml in active_minis:
+            c = counts_by_mini[int(ml["id"])]
+            if c["completed_count"] == c["total"]:
                 completed_mini += 1
 
+        total_active = len(active_minis)
         return {
-            "completed": completed_mini == len(mini_lessons),
-            "total_mini_lessons": len(mini_lessons),
+            "completed": completed_mini == total_active,
+            "total_mini_lessons": total_active,
             "completed_mini_lessons": completed_mini,
-            "progress": completed_mini / len(mini_lessons) if mini_lessons else 0.0,
+            "progress": completed_mini / total_active,
         }
 
     async def calculate_section_completion(self, user_id: int, section_id: int) -> Dict[str, Any]:
@@ -140,7 +142,12 @@ class ProgressRepository(BaseRepository):
                     """
                     SELECT
                         l.id AS lesson_id,
-                        COUNT(DISTINCT ml.id) AS total_mini_lessons,
+                        COUNT(DISTINCT CASE
+                            WHEN ml.id IS NOT NULL AND
+                                 EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL)
+                            THEN ml.id
+                            ELSE NULL
+                        END) AS total_mini_lessons,
                         COUNT(DISTINCT CASE 
                             WHEN ml.id IS NOT NULL AND
                                  EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL) AND
@@ -268,7 +275,8 @@ class ProgressRepository(BaseRepository):
                 "completed_count": completed_count,
                 "progress": completed_count / total if total else 0.0,
             }
-            lesson_minis[int(lesson_id)].append(done)
+            if total > 0:
+                lesson_minis[int(lesson_id)].append(done)
 
         lessons: Dict[int, Dict[str, Any]] = {}
         for lesson_id, done_flags in lesson_minis.items():
@@ -331,7 +339,12 @@ class ProgressRepository(BaseRepository):
                     l.section_id,
                     l.sort_order,
                     l.lesson_number,
-                    COUNT(DISTINCT ml.id) AS total_mini_lessons,
+                    COUNT(DISTINCT CASE
+                        WHEN ml.id IS NOT NULL AND
+                             EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL)
+                        THEN ml.id
+                        ELSE NULL
+                    END) AS total_mini_lessons,
                     COUNT(DISTINCT CASE 
                         WHEN ml.id IS NOT NULL AND
                                  EXISTS (SELECT 1 FROM tasks active_task WHERE active_task.mini_lesson_id = ml.id AND active_task.deleted_at IS NULL) AND

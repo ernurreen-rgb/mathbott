@@ -36,8 +36,8 @@ class QuizCatalogTests(PostgresTestCase):
                 SELECT 3, 'q' || n, '1', 20 FROM generate_series(1, 4) AS n
             """)
             await connection.execute("""
-                INSERT INTO quiz_sessions (quiz_id, host_id, pin_code)
-                SELECT CASE WHEN n <= 3 THEN 42 ELSE 17 END, ?, 'pin' || n FROM generate_series(1, 5) AS n
+                INSERT INTO quiz_sessions (quiz_id, host_id, pin_code, status)
+                SELECT CASE WHEN n <= 3 THEN 42 ELSE 17 END, ?, 'pin' || n, 'finished' FROM generate_series(1, 5) AS n
             """, (self.author["id"],))
 
     async def test_pages_are_stable_and_only_public_quizzes_are_listed(self):

@@ -132,7 +132,8 @@ class BaseRepository:
             query = f"INSERT INTO {safe_table} ({columns_str}) VALUES ({placeholders})"
 
             await conn.executemany(query, values)
-            await conn.commit()
+            if not use_external_conn:
+                await conn.commit()
         finally:
             if not use_external_conn:
                 await self._release_connection(conn)
@@ -193,7 +194,8 @@ class BaseRepository:
 
                     params = [set_values[col] for col in sorted_cols] + [where_value]
                     await conn.execute(query, params)
-            await conn.commit()
+            if not use_external_conn:
+                await conn.commit()
         finally:
             if not use_external_conn:
                 await self._release_connection(conn)

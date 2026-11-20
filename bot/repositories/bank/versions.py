@@ -10,6 +10,27 @@ from utils.validation import normalize_answer_mode
 class BankTaskVersionConflictError(Exception):
     """Raised when an optimistic-locking version check fails."""
 
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        *,
+        task_id: Optional[int] = None,
+        expected_version: Optional[int] = None,
+        current_version: Optional[int] = None,
+        current_task: Optional[Dict[str, Any]] = None,
+    ):
+        self.task_id = task_id
+        self.expected_version = expected_version
+        self.current_version = current_version
+        self.current_task = current_task
+        if message is None:
+            message = (
+                f"VERSION_CONFLICT:{current_version}"
+                if current_version is not None
+                else "VERSION_CONFLICT"
+            )
+        super().__init__(message)
+
 
 class BankTaskVersionDeleteError(Exception):
     """Raised when a version cannot be deleted (e.g. the only/current one)."""

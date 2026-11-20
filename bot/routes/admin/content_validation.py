@@ -298,13 +298,19 @@ def _build_similar_conflict_payload(similar_tasks: List[dict]) -> dict:
 
 
 def _raise_version_conflict_from_exception(exc: Exception) -> HTTPException:
-    current_version: Optional[int] = None
-    text = str(exc or "")
-    if text.startswith("VERSION_CONFLICT:"):
+    current_version: Optional[int] = getattr(exc, "current_version", None)
+    if current_version is not None:
         try:
-            current_version = int(text.split(":", 1)[1])
+            current_version = int(current_version)
         except Exception:
             current_version = None
+    if current_version is None:
+        text = str(exc or "")
+        if text.startswith("VERSION_CONFLICT:"):
+            try:
+                current_version = int(text.split(":", 1)[1])
+            except Exception:
+                current_version = None
     return HTTPException(
         status_code=409,
         detail={

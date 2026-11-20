@@ -65,6 +65,32 @@ def _summarize(items: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
+def _compute_lesson_gate_locks(
+    lessons: List[Dict[str, Any]],
+    pending: Dict[int, Dict[int, int]],
+    minis: Dict[int, Dict[str, int]],
+    started: set[int],
+) -> Dict[int, Dict[str, Any]]:
+    """Lock every subsequent unstarted lesson in journey order behind the earliest pending review."""
+    locks: Dict[int, Dict[str, Any]] = {}
+    active_blocker: Optional[Dict[str, Any]] = None
+    for lesson in lessons:
+        lesson_id = lesson["id"]
+        if active_blocker is not None and lesson_id not in started:
+            locks[lesson_id] = dict(active_blocker)
+        by_mini = pending.get(lesson_id)
+        if by_mini and active_blocker is None:
+            first_mini = min(by_mini, key=lambda mini_id: (minis[mini_id]["mini_index"], mini_id))
+            active_blocker = {
+                "lesson_id": lesson_id,
+                "lesson_title": lesson["title"],
+                "lesson_number": lesson["lesson_number"],
+                "mini_lesson_id": first_mini,
+                "pending": sum(by_mini.values()),
+            }
+    return locks
+
+
 def _public_review_task(row: Dict[str, Any]) -> Dict[str, Any]:
     question_type = row.get("question_type") or "input"
 
@@ -195,12 +221,12 @@ class ModuleReviewRepository(BaseRepository):
             return await self._module_lessons(db, module_id)
 
     async def get_lesson_gate(self, user_id: int, module_id: int) -> Dict[str, Any]:
-        """Lessons of a module that wait for the mistake review of the lesson before them.
+        """Lessons of a module that wait for the mistake review of an earlier lesson.
 
-        Only the lesson right after one with pending review items waits; lessons further on stay
-        reachable. A lesson the student has already answered in never closes, and only completed
+        Every subsequent unstarted lesson waits until pending review items in an earlier lesson
+        are completed. A lesson the student has already answered in never closes, and only completed
         mini-lessons count, because that is when their review is offered.
-        Returns the module's lessons in journey order and ``locks`` keyed by the waiting lesson.
+        Returns the module's lessons in journey order and ``locks`` keyed by each waiting lesson.
         """
         async with self._connection() as db:
             lessons = await self._module_lessons(db, module_id)
@@ -246,9 +272,10 @@ class ModuleReviewRepository(BaseRepository):
             if not pending:
                 return {"lessons": lessons, "locks": {}}
 
-            candidates = [
-                lessons[index + 1]["id"] for index, lesson in enumerate(lessons[:-1]) if lesson["id"] in pending
-            ]
+            first_pending_index = min(
+                index for index, lesson in enumerate(lessons[:-1]) if lesson["id"] in pending
+            )
+            candidates = [lesson["id"] for lesson in lessons[first_pending_index + 1:]]
             started = set()
             for chunk in _chunks(candidates):
                 async with db.execute(
@@ -263,20 +290,7 @@ class ModuleReviewRepository(BaseRepository):
                 ) as cursor:
                     started.update(int(row[0]) for row in await cursor.fetchall())
 
-        locks: Dict[int, Dict[str, Any]] = {}
-        for index, lesson in enumerate(lessons[:-1]):
-            by_mini = pending.get(lesson["id"])
-            waiting = lessons[index + 1]["id"]
-            if not by_mini or waiting in started:
-                continue
-            first_mini = min(by_mini, key=lambda mini_id: (minis[mini_id]["mini_index"], mini_id))
-            locks[waiting] = {
-                "lesson_id": lesson["id"],
-                "lesson_title": lesson["title"],
-                "lesson_number": lesson["lesson_number"],
-                "mini_lesson_id": first_mini,
-                "pending": sum(by_mini.values()),
-            }
+        locks = _compute_lesson_gate_locks(lessons, pending, minis, started)
         return {"lessons": lessons, "locks": locks}
 
     async def get_lesson_lock(self, user_id: int, lesson_id: int) -> Optional[Dict[str, Any]]:

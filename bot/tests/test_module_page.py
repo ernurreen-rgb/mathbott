@@ -138,9 +138,12 @@ class ModulePageTests(PostgresTestCase):
         self.assertEqual([lesson["id"] for lesson in sections[20]["lessons"]], [202, 201])
         self.assertTrue(lessons[101]["progress"]["completed"])
         self.assertEqual(lessons[102]["progress"]["completed_mini_lessons"], 1)
-        # The two missing default mini-lessons were added, empty.
-        self.assertEqual([mini["mini_index"] for mini in lessons[102]["mini_lessons"]], [1, 2, 3, 4])
+        self.assertEqual(lessons[102]["progress"]["total_mini_lessons"], 2)
+        # GET requests must remain read-only and never auto-insert missing mini-lessons.
+        self.assertEqual([mini["mini_index"] for mini in lessons[102]["mini_lessons"]], [1, 2])
         self.assertFalse(lessons[202]["progress"]["completed"])
+        self.assertEqual(lessons[202]["progress"]["total_mini_lessons"], 2)
+        self.assertEqual(lessons[202]["progress"]["completed_mini_lessons"], 1)
         self.assertEqual((sections[10]["progress"]["completed_lessons"], sections[20]["progress"]["completed_lessons"]),
                          (1, 1))
         self.assertEqual(sections[30]["progress"]["completed_count"], 1)

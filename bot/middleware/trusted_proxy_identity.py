@@ -6,10 +6,11 @@ from __future__ import annotations
 import json
 import hashlib
 import logging
+import re
 from typing import Iterable, Optional
 from urllib.parse import parse_qs, unquote
 
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, QueryParams
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -26,6 +27,11 @@ logger = logging.getLogger(__name__)
 MAX_IDENTITY_BODY_BYTES = 1024 * 1024
 MAX_SIGNED_BODY_BYTES = 10 * 1024 * 1024
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_PUBLIC_TRIAL_TEST_CATALOG_RE = re.compile(r"^/api/trial-tests(?:/(?:folders|categories|\d+))?/?$")
+
+
+class _IdentityParseError(ValueError):
+    """Raised when request query/body cannot be parsed safely for identity inspection."""
 
 
 def _get_environment() -> str:
@@ -55,7 +61,7 @@ def _private_email_from_path(path: str, method: str = "GET") -> Optional[str]:
         and parts[2] == "web"
     ):
         segment = _normalize_email(parts[3])
-        if segment == "nickname" and str(method or "").upper() != "GET":
+        if segment in {"nickname", "language"} and str(method or "").upper() != "GET":
             return None
         if _is_email_path_segment(segment) or str(method or "").upper() == "GET":
             return segment
@@ -69,7 +75,13 @@ def _private_email_from_path(path: str, method: str = "GET") -> Optional[str]:
     return None
 
 
-def _is_sensitive_identity_path(path: str) -> bool:
+def _is_public_trial_test_catalog_path(path: str, method: str) -> bool:
+    return str(method or "GET").upper() == "GET" and bool(_PUBLIC_TRIAL_TEST_CATALOG_RE.fullmatch(path))
+
+
+def _is_sensitive_identity_path(path: str, method: str = "GET") -> bool:
+    if _is_public_trial_test_catalog_path(path, method):
+        return False
     sensitive_prefixes = (
         "/api/admin/",
         "/api/export/admin/",
@@ -88,13 +100,20 @@ def _is_sensitive_identity_path(path: str) -> bool:
 
 
 def _extract_query_emails(scope: Scope) -> list[str]:
-    try:
-        raw_query = (scope.get("query_string") or b"").decode("utf-8")
-    except Exception:
+    raw_bytes = scope.get("query_string") or b""
+    if not raw_bytes:
         return []
-    values = parse_qs(raw_query, keep_blank_values=True)
+    try:
+        # Match Starlette/FastAPI QueryParams decoding (latin-1) so raw non-UTF-8
+        # bytes in query_string can never silently disable email extraction.
+        raw_query = raw_bytes.decode("latin-1")
+        values = parse_qs(raw_query, keep_blank_values=True)
+        starlette_emails = QueryParams(raw_bytes).getlist("email")
+    except Exception as exc:
+        raise _IdentityParseError("Malformed query string.") from exc
+    combined = [*values.get("email", []), *starlette_emails]
     # Validate every value: FastAPI uses the last repeated query parameter.
-    return [_normalize_email(value) or "" for value in values.get("email", [])]
+    return [_normalize_email(value) or "" for value in combined]
 
 
 def _is_json_content_type(media_type: str) -> bool:
@@ -103,6 +122,12 @@ def _is_json_content_type(media_type: str) -> bool:
         not media_type
         or media_type == "application/json"
         or (media_type.startswith("application/") and media_type.endswith("+json"))
+    )
+
+
+def _is_explicit_json_content_type(media_type: str) -> bool:
+    return media_type == "application/json" or (
+        media_type.startswith("application/") and media_type.endswith("+json")
     )
 
 
@@ -117,7 +142,9 @@ def _extract_body_emails(media_type: str, body: bytes) -> list[str]:
             # Use the same bytes parser as Request.json(), including BOMs and
             # UTF-16/32, so identity checks cannot disagree with the endpoint.
             payload = json.loads(body)
-        except Exception:
+        except Exception as exc:
+            if _is_explicit_json_content_type(media_type):
+                raise _IdentityParseError("Malformed JSON request body.") from exc
             return []
         if isinstance(payload, dict) and "email" in payload:
             return [_normalize_email(payload["email"]) or ""]
@@ -125,9 +152,10 @@ def _extract_body_emails(media_type: str, body: bytes) -> list[str]:
 
     if media_type == "application/x-www-form-urlencoded":
         try:
-            values = parse_qs(body.decode("utf-8"), keep_blank_values=True)
-        except Exception:
-            return []
+            # Match Starlette's form parser (latin-1) and fail closed on parse errors.
+            values = parse_qs(body.decode("latin-1"), keep_blank_values=True)
+        except Exception as exc:
+            raise _IdentityParseError("Malformed form request body.") from exc
         return [_normalize_email(value) or "" for value in values.get("email", [])]
 
     return []
@@ -160,7 +188,12 @@ class TrustedProxyIdentityMiddleware:
         is_valid_proxy = False
         proxy_email: Optional[str] = None
 
-        explicit_query_emails = _extract_query_emails(scope)
+        try:
+            explicit_query_emails = _extract_query_emails(scope)
+        except _IdentityParseError as exc:
+            response = JSONResponse({"detail": str(exc)}, status_code=400)
+            await response(scope, receive, send)
+            return
         explicit_path_email = _private_email_from_path(path, request.method)
 
         should_inspect_body = request.method.upper() in _MUTATING_METHODS and (
@@ -239,14 +272,21 @@ class TrustedProxyIdentityMiddleware:
                 await response(scope, replay_receive, send)
                 return
 
+        try:
+            body_emails = _extract_body_emails(media_type, body)
+        except _IdentityParseError as exc:
+            response = JSONResponse({"detail": str(exc)}, status_code=400)
+            await response(scope, replay_receive, send)
+            return
+
         explicit_emails = [
             *explicit_query_emails,
             explicit_path_email,
-            *_extract_body_emails(media_type, body),
+            *body_emails,
         ]
         has_explicit_email = any(email is not None for email in explicit_emails)
 
-        if get_settings().is_production and (_is_sensitive_identity_path(path) or has_explicit_email):
+        if get_settings().is_production and (_is_sensitive_identity_path(path, request.method) or has_explicit_email):
             if not is_valid_proxy or not proxy_email:
                 response = JSONResponse(
                     {"detail": "Trusted proxy authentication required."},

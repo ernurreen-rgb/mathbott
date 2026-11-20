@@ -2,9 +2,10 @@
 Routes for tasks
 """
 import logging
-import asyncio
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
+from database import Database
+from dependencies import get_db, require_internal_identity
 from models.requests import TaskCheckRequest
 from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from utils.public_payload import public_options, strip_solution_fields
@@ -42,65 +43,34 @@ def setup_tasks_routes(app, db, limiter: Limiter):
 
     @app.post("/api/task/check")
     @limiter.limit("30/minute")
-    async def check_task_answer(request: Request, task_check_request: TaskCheckRequest):
+    async def check_task_answer(
+        request: Request,
+        task_check_request: TaskCheckRequest,
+        db: Database = Depends(get_db),
+    ):
         """
         Check task answer - optimized version
         
         Validates user's answer against the correct answer and updates progress.
-        
-        **Example Request:**
-        ```json
-        POST /api/task/check
-        {
-          "task_id": 123,
-          "answer": "42",
-          "email": "user@example.com"
-        }
-        ```
-        
-        **Example Response (Correct):**
-        ```json
-        {
-          "correct": true,
-          "correct_answer": null
-        }
-        ```
-        
-        **Example Response (Incorrect):**
-        ```json
-        {
-          "correct": false,
-          "correct_answer": "42"
-        }
-        ```
-        
-        **Error Codes:**
-        - 200: Success
-        - 404: User or task not found
-        - 429: Rate limit exceeded (30 requests per minute)
-        - 500: Internal server error
         """
         try:
-            logger.info(f"Received check request: task_id={task_check_request.task_id}, email={task_check_request.email}, answer_length={len(task_check_request.answer)}")
-            
-            # Get user and task in parallel
-            user_task, task_task = await asyncio.gather(
-                db.users.get_user_by_email(task_check_request.email),
-                db.tasks.get_task_by_id(task_check_request.task_id),
-                return_exceptions=True
+            user = await require_internal_identity(
+                request=request,
+                email=str(task_check_request.email),
+                db=db,
             )
-            
-            logger.info(f"Fetched user and task: user={user_task is not None and not isinstance(user_task, Exception)}, task={task_task is not None and not isinstance(task_task, Exception)}")
-            
-            if isinstance(user_task, Exception) or not user_task:
-                logger.warning(f"User not found: {task_check_request.email}")
-                raise HTTPException(status_code=404, detail="User not found")
-            user = user_task
-            
-            if isinstance(task_task, Exception) or not task_task:
+            user_email = user["email"]
+            logger.info(
+                "Received check request: task_id=%s, user_id=%s, answer_length=%s",
+                task_check_request.task_id,
+                user["id"],
+                len(task_check_request.answer),
+            )
+
+            task = await db.tasks.get_task_by_id(task_check_request.task_id)
+            if not task:
                 logger.warning(f"Task not found: {task_check_request.task_id}")
                 raise HTTPException(status_code=404, detail="Task not found")
-            task = task_task
             
             # Check if task is deleted
             if task.get("deleted_at"):
@@ -113,7 +83,6 @@ def setup_tasks_routes(app, db, limiter: Limiter):
                     raise HTTPException(status_code=423, detail=LESSON_LOCKED_MESSAGE)
 
             # Check answer directly using already fetched task (no extra DB query)
-            correct_answer = (task.get("answer") or "").strip()
             qt = (task.get("question_type") or "input").strip().lower()
             user_answer_norm = normalize_task_answer_for_compare(task, task_check_request.answer)
             is_correct = is_task_answer_correct(task, task_check_request.answer)
@@ -121,7 +90,6 @@ def setup_tasks_routes(app, db, limiter: Limiter):
             logger.info(
                 f"Answer check: correct={is_correct}, "
                 f"question_type={qt}, "
-                f"correct_answer={correct_answer[:20] if correct_answer else 'None'}, "
                 f"user_answer={str(user_answer_norm)[:20]}"
             )
 
@@ -135,15 +103,16 @@ def setup_tasks_routes(app, db, limiter: Limiter):
                     task_snapshot=task,
                 )
                 # Invalidate cache for user stats and modules map
-                cache.invalidate_pattern(f"user:stats:{task_check_request.email}")
-                cache.invalidate_pattern(f"modules:map:{task_check_request.email}")
+                cache.invalidate_pattern(f"user:stats:{user_email}")
+                cache.invalidate_pattern(f"modules:map:{user_email}")
             except Exception as e:
                 logger.error(f"Failed to record_solution: {e}", exc_info=True)
                 raise HTTPException(status_code=503, detail="Could not save the answer. Please retry.")
 
+            # Never reveal the correct answer on a wrong attempt while the task remains retryable.
             result = {
                 "correct": is_correct,
-                "correct_answer": task["answer"] if not is_correct else None
+                "correct_answer": None,
             }
             logger.info(f"Returning result: {result}")
             return result

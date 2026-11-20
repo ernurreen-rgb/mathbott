@@ -84,6 +84,30 @@ class OpsRepository(BaseRepository):
                 item["metadata"] = self._parse_json(item.pop("metadata_json", None))
                 return item
 
+    async def list_recent_health_samples(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Return the most recent health samples (newest first) for stateless streak evaluation."""
+        safe_limit = max(1, min(int(limit or 10), 100))
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                """
+                SELECT
+                    service_status, database_status, requests_5m, errors_5m,
+                    error_rate_5m, p95_ms_5m, avg_ms_5m, metadata_json, collected_at
+                FROM ops_health_samples
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                items: List[Dict[str, Any]] = []
+                for row in rows:
+                    item = dict(row)
+                    item["metadata"] = self._parse_json(item.pop("metadata_json", None))
+                    items.append(item)
+                return items
+
     async def list_health_timeseries(self, *, range_sql: str, step_seconds: int) -> List[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row

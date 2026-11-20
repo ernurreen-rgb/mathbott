@@ -80,7 +80,7 @@ class LessonGateTests(PostgresTestCase):
         self.assertEqual(await self._locks(), {})
         await self._answer(self.student, 101, "0", "1")
         locks = await self._locks()
-        self.assertEqual(list(locks), [2])
+        self.assertEqual(list(locks), [2, 3, 4])
         self.assertEqual(locks[2], {
             "lesson_id": 1, "lesson_title": "Сабақ 1", "lesson_number": 1, "mini_lesson_id": 1, "pending": 1,
         })
@@ -98,18 +98,21 @@ class LessonGateTests(PostgresTestCase):
         await review.submit_answer(self.student["id"], 2, 102, self.bank_ids[102], "9")
         self.assertEqual(await self._locks(), {})
 
-    async def test_only_the_next_lesson_waits_even_across_sections(self):
+    async def test_all_subsequent_unstarted_lessons_wait_even_across_sections(self):
         await self._answer(self.student, 201, "0", "4")
         locks = await self._locks()
-        self.assertEqual(list(locks), [3])
+        self.assertEqual(list(locks), [3, 4])
         self.assertEqual(locks[3]["lesson_id"], 2)
-        self.assertIsNone(await self.db.module_review.get_lesson_lock(self.student["id"], 4))
+        self.assertEqual(locks[4]["lesson_id"], 2)
+        self.assertEqual((await self.db.module_review.get_lesson_lock(self.student["id"], 4))["lesson_id"], 2)
         self.assertEqual((await self.db.module_review.get_mini_lesson_lock(self.student["id"], 4))["lesson_id"], 2)
 
     async def test_a_started_lesson_never_closes(self):
         await self._answer(self.student, 201, "0")
         await self._answer(self.student, 101, "0", "1")
-        self.assertEqual(await self._locks(), {})
+        locks = await self._locks()
+        self.assertNotIn(2, locks)
+        self.assertEqual(list(locks), [3, 4])
         self.assertIsNone(await self.db.module_review.get_lesson_lock(self.student["id"], 2))
 
     async def test_routes_close_the_lesson_for_students_only(self):
@@ -126,7 +129,13 @@ class LessonGateTests(PostgresTestCase):
             self.assertEqual(module.status_code, 200, module.text)
             lessons = [lesson for section in module.json()["sections"] for lesson in section["lessons"]]
             self.assertEqual([lesson["id"] for lesson in lessons], [1, 2, 3, 4])
-            self.assertEqual([lesson["id"] for lesson in lessons if lesson["lock"]], [2])
+            self.assertEqual([lesson["id"] for lesson in lessons if lesson["lock"]], [2, 3, 4])
+
+            # Unauthenticated call to lesson 2+ must not expose tasks to bypass Lesson Gate.
+            anon_lesson2 = (await client.get("/api/lessons/2")).json()
+            self.assertFalse(any(mini["tasks"] for mini in anon_lesson2["mini_lessons"]))
+            anon_lesson1 = (await client.get("/api/lessons/1")).json()
+            self.assertTrue(any(mini["tasks"] for mini in anon_lesson1["mini_lessons"]))
 
             closed = (await client.get("/api/lessons/2", params={"email": STUDENT})).json()
             self.assertEqual(closed["lock"]["mini_lesson_id"], 1)

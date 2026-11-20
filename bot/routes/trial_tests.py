@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Body, Depends, Request
 from slowapi import Limiter
 
-from dependencies import get_db
+from dependencies import get_db, optional_internal_identity, require_internal_identity
 from database import Database
 from utils.cache import cache
 from utils.public_payload import public_options, public_review_answers, public_subquestions, task_review_snapshot
@@ -37,6 +37,21 @@ def _answer_to_string(value) -> str:
     return "" if value is None else str(value)
 
 
+def _has_meaningful_trial_answer(user_answer: str) -> bool:
+    """Return True only when the student actually supplied a non-empty answer."""
+    cleaned = (user_answer or "").strip()
+    if not cleaned:
+        return False
+    if cleaned.startswith("["):
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                return any(item is not None and str(item).strip() != "" for item in parsed)
+        except (ValueError, TypeError):
+            pass
+    return True
+
+
 def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Настроить trial tests роуты"""
 
@@ -50,15 +65,15 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         attempted_only: Optional[bool] = Query(False),
         category: Optional[str] = Query(None),
         folder_id: Optional[int] = Query(None, gt=0),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
         db: Database = Depends(get_db)
     ):
-        """Get all trial tests, or only those the user has attempted when attempted_only=true and email is provided"""
+        """Get all trial tests, or only those the user has attempted when attempted_only=true"""
         try:
-            if attempted_only and email:
-                user = await db.users.get_user_by_email(email)
-                if not user:
-                    raise HTTPException(status_code=404, detail="User not found")
-                results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=None)
+            if attempted_only:
+                if not current_user:
+                    raise HTTPException(status_code=401, detail="Authenticated user identity is required.")
+                results = await db.trial_tests.get_user_trial_test_results(current_user["id"], trial_test_id=None)
                 attempted_ids = {r["trial_test_id"] for r in results}
                 if not attempted_ids:
                     return []
@@ -83,15 +98,13 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/trial-tests/drafts")
     async def get_trial_test_draft_ids(
-        email: str = Query(...),
+        email: Optional[str] = Query(None),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Return list of trial_test_id for which the user has a draft (for «Продолжить» on list page)."""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-            test_ids = await db.trial_tests.get_user_trial_test_draft_ids(user["id"])
+            test_ids = await db.trial_tests.get_user_trial_test_draft_ids(current_user["id"])
             return {"test_ids": test_ids}
         except HTTPException:
             raise
@@ -103,6 +116,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_trial_test_details(
         test_id: int,
         email: Optional[str] = Query(None),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Get trial test details with tasks (without correct answers)"""
@@ -192,21 +206,23 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Submit trial test answers and get results"""
         try:
-            email = payload.get("email")
+            raw_email = payload.get("email")
             answers = payload.get("answers", {})
+            if not isinstance(answers, dict):
+                raise HTTPException(status_code=400, detail="answers must be an object")
             attempt_id = payload.get("attempt_id")
             if attempt_id is not None and (
                 not isinstance(attempt_id, str)
                 or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", attempt_id) is None
             ):
                 raise HTTPException(status_code=400, detail="Invalid attempt_id")
-            
-            if not email:
-                raise HTTPException(status_code=400, detail="Email is required")
-            
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+
+            user = await require_internal_identity(
+                request=request,
+                email=raw_email if isinstance(raw_email, str) else None,
+                db=db,
+            )
+            user_email = user["email"]
             
             test = await db.trial_tests.get_trial_test_by_id(test_id)
             if not test:
@@ -227,6 +243,7 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     user_answer = _answer_to_string(
                         answers.get(str(task_id), answers.get(int(task_id), ""))
                     ).strip()
+                    has_answer = _has_meaningful_trial_answer(user_answer)
 
                     earned_score, max_score = grade_task_answer(task, user_answer)
                     is_correct = earned_score >= max_score and max_score > 0
@@ -236,12 +253,14 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     if earned_score > 0:
                         had_any_correct = True
 
+                    # Only reveal correct_answer for tasks the student actually attempted,
+                    # so submitting an empty test never leaks all 40 answer keys.
                     results[int(task_id)] = {
                         "answer": user_answer,
                         "correct": is_correct,
                         "score": earned_score,
                         "max_score": max_score,
-                        "correct_answer": task.get("answer"),
+                        "correct_answer": task.get("answer") if has_answer else None,
                         "task": task_review_snapshot(task)
                     }
 
@@ -277,13 +296,13 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
                 logger.info(f"[draft] draft deleted after submit user_id={user['id']} test_id={test_id}")
 
-                if submit_result.get("recorded_any") or had_any_correct:
+                if submit_result.get("recorded_any") or submit_result.get("streak_updated"):
                     try:
                         await db.check_and_unlock_achievements(user["id"])
                     except Exception as e:
                         logger.error(f"Failed to unlock achievements after trial submit: {e}", exc_info=True)
 
-                cache.invalidate_pattern(f"user:stats:{email}")
+                cache.invalidate_pattern(f"user:stats:{user_email}")
 
                 saved_result = submit_result["result"]
                 saved_answers = saved_result.get("answers") or "{}"
@@ -304,25 +323,22 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.get("/api/trial-tests/{test_id}/draft")
     async def get_trial_test_draft(
         test_id: int,
-        email: str = Query(...),
+        email: Optional[str] = Query(None),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Get user's draft (answers + current_task_index) for this trial test"""
         try:
-            logger.info(f"[draft] GET draft test_id={test_id} email={email}")
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                logger.warning(f"[draft] GET draft user not found email={email}")
-                raise HTTPException(status_code=404, detail="User not found")
-            draft = await db.trial_tests.get_trial_test_draft(user["id"], test_id)
+            logger.info(f"[draft] GET draft test_id={test_id} user_id={current_user['id']}")
+            draft = await db.trial_tests.get_trial_test_draft(current_user["id"], test_id)
             if not draft:
-                logger.info(f"[draft] GET draft no draft for user_id={user['id']} test_id={test_id}")
+                logger.info(f"[draft] GET draft no draft for user_id={current_user['id']} test_id={test_id}")
                 return {"answers": {}, "current_task_index": 0}
             answers_raw = draft.get("answers") or "{}"
             answers = json.loads(answers_raw) if isinstance(answers_raw, str) else answers_raw
             answers_int = {int(k): v for k, v in answers.items()}
             idx = draft.get("current_task_index") or 0
-            logger.info(f"[draft] GET draft found user_id={user['id']} test_id={test_id} answers_count={len(answers_int)} current_task_index={idx}")
+            logger.info(f"[draft] GET draft found user_id={current_user['id']} test_id={test_id} answers_count={len(answers_int)} current_task_index={idx}")
             return {"answers": answers_int, "current_task_index": idx}
         except HTTPException:
             raise
@@ -340,17 +356,17 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         """Save draft (answers + current_task_index). Called on change with debounce."""
         try:
-            email = payload.get("email")
+            raw_email = payload.get("email")
             answers = payload.get("answers", {})
+            if not isinstance(answers, dict):
+                raise HTTPException(status_code=400, detail="answers must be an object")
             current_task_index = payload.get("current_task_index", 0)
-            logger.info(f"[draft] PUT draft test_id={test_id} email={email} answers_keys={list(answers.keys()) if answers else []} current_task_index={current_task_index}")
-            if not email:
-                logger.warning("[draft] PUT draft missing email")
-                raise HTTPException(status_code=400, detail="Email is required")
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                logger.warning(f"[draft] PUT draft user not found email={email}")
-                raise HTTPException(status_code=404, detail="User not found")
+            user = await require_internal_identity(
+                request=request,
+                email=raw_email if isinstance(raw_email, str) else None,
+                db=db,
+            )
+            logger.info(f"[draft] PUT draft test_id={test_id} user_id={user['id']} answers_keys={list(answers.keys()) if answers else []} current_task_index={current_task_index}")
             answers_int = {}
             for k, v in answers.items():
                 try:
@@ -372,16 +388,13 @@ def setup_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
     @app.get("/api/trial-tests/{test_id}/results")
     async def get_trial_test_results(
         test_id: int,
-        email: str = Query(...),
+        email: Optional[str] = Query(None),
+        current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Get user's trial test results for a specific test"""
         try:
-            user = await db.users.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-            
-            results = await db.trial_tests.get_user_trial_test_results(user["id"], trial_test_id=test_id)
+            results = await db.trial_tests.get_user_trial_test_results(current_user["id"], trial_test_id=test_id)
             
             for result in results:
                 if result.get("answers"):

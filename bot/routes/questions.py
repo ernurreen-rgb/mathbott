@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Form, Request, Depends
 from slowapi import Limiter
 
-from dependencies import get_db, require_internal_identity
+from dependencies import get_db, optional_internal_identity, require_internal_identity
 from database import Database
 from repositories.module_review_repository import LESSON_LOCKED_MESSAGE
 from utils.cache import cache
@@ -22,14 +22,11 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
     async def get_task_questions(
         task_id: int,
         email: Optional[str] = Query(None),
+        current_user: Optional[dict] = Depends(optional_internal_identity),
         db: Database = Depends(get_db)
     ):
         """Get all questions for a task with user progress"""
-        user_id = None
-        if email:
-            user = await db.users.get_user_by_email(email)
-            if user:
-                user_id = user["id"]
+        user_id = current_user["id"] if current_user else None
         
         questions = await db.progress.get_task_questions(task_id)
         user_progress = {}
@@ -116,14 +113,10 @@ def setup_questions_routes(app: FastAPI, db: Database, limiter: Limiter):
                     except Exception as e:
                         logger.error(f"Failed to check achievements: {e}", exc_info=True)
             
-            questions = await db.progress.get_task_questions(task_id)
-            correct_answer = None
-            if not is_correct and 0 <= question_index < len(questions):
-                correct_answer = questions[question_index].get("answer")
-            
+            # Never leak the correct answer on a wrong attempt while the question remains retryable.
             result = {
                 "correct": is_correct,
-                "correct_answer": correct_answer,
+                "correct_answer": None,
                 "all_completed": all_completed
             }
             logger.info(f"Returning question check result: {result}")

@@ -3,12 +3,15 @@ Routes for users
 """
 import logging
 from typing import Optional
-from fastapi import HTTPException, Query, Request
+from fastapi import Depends, HTTPException, Query, Request
 from slowapi import Limiter
+from database import Database
+from dependencies import get_db, require_internal_identity, resolve_authenticated_email
 from models.requests import LanguageUpdateRequest, NicknameUpdateRequest
 from settings import get_settings
 from utils.cache import cache
 from utils.timezone import today_almaty
+from utils.validation import validate_email
 
 logger = logging.getLogger(__name__)
 
@@ -32,51 +35,25 @@ def setup_users_routes(app, db, limiter: Limiter):
     """Setup user routes"""
     
     @app.get("/api/user/web/{email}")
+    @limiter.limit("60/minute")
     async def get_user_web(
+        request: Request,
         email: str, 
         refresh_achievements: bool = Query(False),
-        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,email,nickname')")
+        fields: Optional[str] = Query(None, description="Comma-separated list of fields to include (e.g., 'id,email,nickname')"),
+        db: Database = Depends(get_db),
     ):
         """
         Get user statistics for web - creates user if doesn't exist
         
         Returns user progress and achievements.
-        
-        **Example Request:**
-        ```
-        GET /api/user/web/user@example.com?refresh_achievements=true
-        ```
-        
-        **Example Response:**
-        ```json
-        {
-          "id": 1,
-          "email": "user@example.com",
-          "nickname": "TestUser",
-          "total_solved": 50,
-          "streak": 3,
-          "last_streak_date": "2024-01-15",
-          "is_admin": false,
-          "achievements": [
-            {
-              "id": 1,
-              "name": "First Solve",
-              "unlocked": true,
-              "unlocked_at": "2024-01-10T10:00:00Z"
-            }
-          ]
-        }
-        ```
-        
-        **Query Parameters:**
-        - `refresh_achievements` (bool): If true, recalculates achievements before returning (default: false)
-        
-        **Error Codes:**
-        - 200: Success (user created if didn't exist)
-        - 500: Internal server error
         """
-        # Cache user stats (TTL 10 seconds as per plan); allowlist field names to prevent cache key bloat.
-        normalized_email = email.strip().lower()
+        authenticated_email = await resolve_authenticated_email(request=request, email=email)
+        try:
+            normalized_email = validate_email(authenticated_email)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
         requested_fields = None
         if fields:
             requested_fields = sorted(
@@ -261,18 +238,36 @@ def setup_users_routes(app, db, limiter: Limiter):
 
     @app.post("/api/user/web/nickname")
     @limiter.limit("5/minute")
-    async def update_nickname(request: Request, nickname_request: NicknameUpdateRequest):
+    async def update_nickname(
+        request: Request,
+        nickname_request: NicknameUpdateRequest,
+        db: Database = Depends(get_db),
+    ):
         """Update user nickname"""
-        normalized_email = nickname_request.email.strip().lower()
+        user = await require_internal_identity(
+            request=request,
+            email=str(nickname_request.email),
+            db=db,
+        )
+        normalized_email = user["email"]
         await db.users.update_user_nickname(normalized_email, nickname_request.nickname)
         cache.invalidate_pattern(f"user:stats:{normalized_email}")
         return {"success": True}
 
     @app.post("/api/user/web/language")
     @limiter.limit("20/minute")
-    async def update_language(request: Request, language_request: LanguageUpdateRequest):
+    async def update_language(
+        request: Request,
+        language_request: LanguageUpdateRequest,
+        db: Database = Depends(get_db),
+    ):
         """Remember the student's interface language so it follows them to other devices."""
-        normalized_email = language_request.email.strip().lower()
+        user = await require_internal_identity(
+            request=request,
+            email=str(language_request.email),
+            db=db,
+        )
+        normalized_email = user["email"]
         await db.users.update_user_language(normalized_email, language_request.language)
         cache.invalidate_pattern(f"user:stats:{normalized_email}")
         return {"success": True}

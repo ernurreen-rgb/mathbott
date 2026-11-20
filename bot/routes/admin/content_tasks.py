@@ -292,6 +292,11 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 effective_options if isinstance(effective_options, list) else None,
             )
             answer = effective_answer
+        elif effective_question_type == "tf":
+            normalized_tf = str(effective_answer or "").strip().lower()
+            if normalized_tf not in {"true", "false"}:
+                raise HTTPException(status_code=400, detail="tf answer must be 'true' or 'false'")
+            answer = normalized_tf
 
         text_scale_value = _normalize_text_scale(text_scale) if text_scale is not None else None
         difficulty_value = _validate_bank_difficulty(bank_difficulty) if bank_difficulty and bank_difficulty.strip() else None
@@ -320,8 +325,8 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
                 answer_mode=effective_answer_mode,
                 accepted_answers=accepted_answers_value,
                 text_scale=text_scale_value,
-                options=options_list if options is not None else None,
-                subquestions=subquestions_list if subquestions is not None else None,
+                options=options_list,
+                subquestions=subquestions_list,
                 difficulty=difficulty_value,
                 topics=topics_value,
                 image_filename=image_filename_value,

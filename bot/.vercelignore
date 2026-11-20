@@ -5,6 +5,11 @@ __pycache__/
 tests/
 .pytest_cache/
 .env*
+*.env
+!.env.example
+!*.env.example
+.vercel/
 *.db*
 *.sqlite*
+*.dump
 scripts/

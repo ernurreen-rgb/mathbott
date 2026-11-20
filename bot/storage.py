@@ -162,18 +162,27 @@ class PostgresConnection:
     async def _open(self):
         if self._conn is None:
             import psycopg
-            self._conn = await asyncio.to_thread(
+            conn = await asyncio.to_thread(
                 psycopg.connect, self._target, connect_timeout=int(self._timeout),
                 prepare_threshold=None, options=postgres_options(self._target),
             )
-            def tables():
-                with self._conn.cursor() as cursor:
-                    cursor.execute("SELECT table_name FROM information_schema.columns "
-                                   "WHERE table_schema = current_schema() AND column_name = 'id'")
-                    result = {row[0] for row in cursor.fetchall()}
-                self._conn.rollback()
-                return result
-            self._id_tables = await asyncio.to_thread(tables)
+            self._conn = conn
+            try:
+                def tables():
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT table_name FROM information_schema.columns "
+                                       "WHERE table_schema = current_schema() AND column_name = 'id'")
+                        result = {row[0] for row in cursor.fetchall()}
+                    conn.rollback()
+                    return result
+                self._id_tables = await asyncio.to_thread(tables)
+            except BaseException:
+                self._conn = None
+                try:
+                    await asyncio.to_thread(conn.close)
+                except Exception:
+                    pass
+                raise
         return self
 
     def __await__(self):

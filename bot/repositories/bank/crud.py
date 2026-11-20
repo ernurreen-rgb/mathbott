@@ -655,7 +655,12 @@ class BankTaskCrudMixin:
                     return False
 
                 existing_topics = await self._fetch_topics_for_task(db, task_id)
-                twins_trashed = await self._trash_twins_of(db, [task_id])
+                twins_trashed = await self._trash_twins_of(
+                    db,
+                    [task_id],
+                    actor_user_id=actor_user_id,
+                    source="admin_bank_source_hard_delete",
+                )
                 module_update_cursor = await db.execute(
                     """
                     UPDATE tasks
@@ -670,6 +675,16 @@ class BankTaskCrudMixin:
                     SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now')
                     WHERE bank_task_id = ? AND deleted_at IS NULL
                     """,
+                    (task_id,),
+                )
+                # Detach historical placements before deleting the bank_tasks row so student
+                # solutions, progress, review attempts, and reports are preserved.
+                await db.execute(
+                    "UPDATE tasks SET bank_task_id = NULL WHERE bank_task_id = ?",
+                    (task_id,),
+                )
+                await db.execute(
+                    "UPDATE trial_test_tasks SET bank_task_id = NULL WHERE bank_task_id = ?",
                     (task_id,),
                 )
                 delete_cursor = await db.execute(
@@ -735,7 +750,32 @@ class BankTaskCrudMixin:
             task_ids = [int(row["id"]) for row in rows]
             placeholders = ",".join(["?"] * len(task_ids))
 
-            twins_trashed = await self._trash_twins_of(db, task_ids)
+            twins_trashed = await self._trash_twins_of(
+                db,
+                task_ids,
+                actor_user_id=None,
+                source="system_bank_trash_cleanup",
+            )
+            await db.execute(
+                f"""
+                UPDATE tasks
+                SET deleted_at = COALESCE(deleted_at, mathbot_datetime('now')),
+                    bank_task_id = NULL,
+                    updated_at = mathbot_datetime('now')
+                WHERE bank_task_id IN ({placeholders})
+                """,
+                task_ids,
+            )
+            await db.execute(
+                f"""
+                UPDATE trial_test_tasks
+                SET deleted_at = COALESCE(deleted_at, mathbot_datetime('now')),
+                    bank_task_id = NULL,
+                    updated_at = mathbot_datetime('now')
+                WHERE bank_task_id IN ({placeholders})
+                """,
+                task_ids,
+            )
             delete_cursor = await db.execute(
                 f"DELETE FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NOT NULL",
                 task_ids,

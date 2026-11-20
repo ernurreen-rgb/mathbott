@@ -327,11 +327,20 @@ class CurriculumRepository(BaseRepository):
                 await db.execute(f"UPDATE mini_lessons SET {', '.join(updates)} WHERE id = ?", params)
                 await db.commit()
 
+    @staticmethod
+    def _require_bank_task_id(bank_task_id: Optional[int]) -> int:
+        if isinstance(bank_task_id, bool) or not isinstance(bank_task_id, int) or bank_task_id <= 0:
+            raise ValueError(
+                "bank_task_id must be a positive integer when creating a task placement; "
+                "use Database.create_task_in_mini_lesson or Database.create_task_in_section for inline content."
+            )
+        return bank_task_id
+
     async def create_task_in_mini_lesson(
         self,
         mini_lesson_id: int,
-        text: str,
-        answer: str,
+        text: str = "",
+        answer: str = "",
         question_type: str = "input",
         options: Optional[str] = None,
         subquestions: Optional[str] = None,
@@ -341,27 +350,34 @@ class CurriculumRepository(BaseRepository):
         task_type: str = "standard",
         sort_order: int = 0,
         bank_task_id: Optional[int] = None,
+        conn: Optional[db_driver.Connection] = None,
     ) -> Dict[str, Any]:
-        """Create a task placement in a mini-lesson."""
-        async with self._connection() as db:
+        """Create a task placement in a mini-lesson (requires an existing bank_task_id)."""
+        resolved_bank_task_id = self._require_bank_task_id(bank_task_id)
+
+        async def _insert(db: db_driver.Connection) -> Dict[str, Any]:
             db.row_factory = db_driver.Row
             inserted = await db.execute(
                 """INSERT INTO tasks (mini_lesson_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",
-                (mini_lesson_id, bank_task_id, task_type, sort_order, created_by),
+                (mini_lesson_id, resolved_bank_task_id, task_type, sort_order, created_by),
             )
-            await db.commit()
             async with db.execute(
                 "SELECT * FROM tasks WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)
 
+        if conn is not None:
+            return await _insert(conn)
+        async with self._write_transaction() as db:
+            return await _insert(db)
+
     async def create_task_in_section(
         self,
         section_id: int,
-        text: str,
-        answer: str,
+        text: str = "",
+        answer: str = "",
         question_type: str = "input",
         options: Optional[str] = None,
         image_filename: Optional[str] = None,
@@ -370,19 +386,26 @@ class CurriculumRepository(BaseRepository):
         task_type: str = "standard",
         sort_order: int = 0,
         bank_task_id: Optional[int] = None,
+        conn: Optional[db_driver.Connection] = None,
     ) -> Dict[str, Any]:
-        """Create a task placement in a section (legacy endpoint support)."""
-        async with self._connection() as db:
+        """Create a task placement in a section (requires an existing bank_task_id)."""
+        resolved_bank_task_id = self._require_bank_task_id(bank_task_id)
+
+        async def _insert(db: db_driver.Connection) -> Dict[str, Any]:
             db.row_factory = db_driver.Row
             inserted = await db.execute(
                 """INSERT INTO tasks (section_id, bank_task_id, task_type, sort_order, created_by)
                    VALUES (?, ?, ?, ?, ?)""",
-                (section_id, bank_task_id, task_type, sort_order, created_by),
+                (section_id, resolved_bank_task_id, task_type, sort_order, created_by),
             )
-            await db.commit()
             async with db.execute(
                 "SELECT * FROM tasks WHERE id = ?", (inserted.lastrowid,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return dict(row)
+
+        if conn is not None:
+            return await _insert(conn)
+        async with self._write_transaction() as db:
+            return await _insert(db)
 
