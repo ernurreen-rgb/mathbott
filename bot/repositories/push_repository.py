@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from .base import BaseRepository
 
-_CLAIM_COLUMNS = ("id", "user_id", "endpoint", "p256dh", "auth", "streak", "last_streak_date")
+_CLAIM_COLUMNS = ("id", "user_id", "endpoint", "p256dh", "auth", "streak", "last_streak_date", "language")
 
 
 def _chunks(values: List[Any], size: int = 500) -> List[List[Any]]:
@@ -80,7 +80,8 @@ class PushRepository(BaseRepository):
                        ORDER BY s.id
                        LIMIT ?
                    )
-                   RETURNING ps.id, ps.user_id, ps.endpoint, ps.p256dh, ps.auth, u.streak, u.last_streak_date""",
+                   RETURNING ps.id, ps.user_id, ps.endpoint, ps.p256dh, ps.auth, u.streak, u.last_streak_date,
+                             u.language""",
                 (today, today, today, limit),
             ) as cursor:
                 rows = await cursor.fetchall()

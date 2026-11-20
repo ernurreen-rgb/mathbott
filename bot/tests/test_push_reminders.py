@@ -19,7 +19,7 @@ from slowapi.util import get_remote_address
 
 from postgres_test_db import PostgresTestCase
 from routes.push import setup_push_routes
-from services.streak_reminders import build_reminder, is_allowed_push_endpoint, send_streak_reminders
+from services.streak_reminders import build_confirmation, build_reminder, is_allowed_push_endpoint, send_streak_reminders
 
 TODAY = date(2026, 11, 15)
 STUDENT = "push-student@example.com"
@@ -55,6 +55,20 @@ class ReminderTextTests(unittest.TestCase):
     def test_without_a_live_streak_the_student_is_invited_to_start_one(self):
         for streak, last in [(0, None), (5, "2026-11-12"), (0, "2026-11-14")]:
             self.assertEqual(build_reminder(streak, last, TODAY)["title"], "📚 Бүгінгі сабақ", (streak, last))
+
+    def test_a_student_who_chose_russian_gets_russian_texts(self):
+        self.assertEqual(build_reminder(5, "2026-11-14", TODAY, "ru")["title"], "🔥 Серия 5 дней")
+        self.assertEqual(build_reminder(1, "2026-11-14", TODAY, "ru")["title"], "🔥 Серия 1 день")
+        self.assertEqual(build_reminder(3, "2026-11-14", TODAY, "ru")["title"], "🔥 Серия 3 дня")
+        self.assertEqual(build_reminder(12, "2026-11-14", TODAY, "ru")["title"], "🔥 Серия 12 дней")
+        self.assertEqual(build_reminder(21, "2026-11-14", TODAY, "ru")["title"], "🔥 Серия 21 день")
+        self.assertEqual(build_reminder(0, None, TODAY, "ru")["title"], "📚 Урок на сегодня")
+        self.assertEqual(build_confirmation("ru")["title"], "🔔 Напоминание включено")
+
+    def test_kazakh_stays_the_default(self):
+        for language in (None, "kk", "en"):
+            self.assertEqual(build_reminder(5, "2026-11-14", TODAY, language)["title"], "🔥 5 күндік серия")
+            self.assertEqual(build_confirmation(language)["title"], "🔔 Еске салу қосылды")
 
     def test_only_real_push_services_are_accepted(self):
         for endpoint in [
@@ -122,6 +136,33 @@ class PushReminderTests(PostgresTestCase):
                 self.assertEqual(response.json(), {"subscribed": True, "confirmation": None})
         confirm.assert_awaited_once()
         self.assertEqual(await self._endpoints(), {_subscription("a")["endpoint"]: (self.other["id"], None)})
+
+    async def test_the_confirmation_and_errors_follow_the_profile_language(self):
+        async with self.seed() as connection:
+            await connection.execute("UPDATE users SET language = 'ru' WHERE id = ?", (self.student["id"],))
+        confirm = AsyncMock(return_value="gone")
+        with patch("routes.push.send_confirmation", confirm):
+            async with self._client() as client:
+                response = await client.post("/api/push/subscriptions", params={"email": STUDENT}, json=_subscription("a"))
+        self.assertEqual(confirm.await_args.kwargs["language"], "ru")
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["detail"], "Подписка на уведомления недействительна")
+
+    async def test_the_cron_sends_each_student_their_language(self):
+        await self._set_streak(self.student["id"], 5, "2026-11-14")
+        await self._set_streak(self.other["id"], 5, "2026-11-14")
+        async with self.seed() as connection:
+            await connection.execute("UPDATE users SET language = 'ru' WHERE id = ?", (self.student["id"],))
+        await self.db.push.save_subscription(self.student["id"], **_flat(_subscription("ru-phone")))
+        await self.db.push.save_subscription(self.other["id"], **_flat(_subscription("kk-phone")))
+        sent = {}
+
+        async def sender(device, payload, **_):
+            sent[device["endpoint"].rsplit("/", 1)[1]] = payload["title"]
+            return "sent"
+
+        await send_streak_reminders(self.db, today=TODAY, sender=sender)
+        self.assertEqual(sent, {"ru-phone": "🔥 Серия 5 дней", "kk-phone": "🔥 5 күндік серия"})
 
     async def test_a_device_the_push_service_rejects_is_not_kept(self):
         with patch("routes.push.send_confirmation", AsyncMock(return_value="gone")):

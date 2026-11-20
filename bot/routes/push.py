@@ -5,7 +5,7 @@ import base64
 import binascii
 import hmac
 import logging
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 
 # A student rarely has more than a phone and a computer; this only stops a runaway client.
 MAX_DEVICES_PER_USER = 10
+
+# The profile shows these errors under the reminder switch, in the student's interface language.
+_MESSAGES = {
+    "unavailable": ("Еске салу әзірге қолжетімсіз", "Напоминания пока недоступны"),
+    "too_many_devices": ("Құрылғылар саны тым көп", "Слишком много устройств"),
+    "subscription_gone": ("Хабарландыру жазылымы жарамсыз", "Подписка на уведомления недействительна"),
+}
+
+
+def _message(key: str, language: Optional[str]) -> str:
+    kk, ru = _MESSAGES[key]
+    return ru if language == "ru" else kk
 
 
 def _decoded_length(value: str) -> int:
@@ -95,19 +107,20 @@ def setup_push_routes(app: FastAPI, db: Database, limiter: Limiter):
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
     ):
+        language = current_user.get("language")
         if not push_enabled():
-            raise HTTPException(status_code=503, detail="Еске салу әзірге қолжетімсіз")
+            raise HTTPException(status_code=503, detail=_message("unavailable", language))
         user_id = int(current_user["id"])
         if await db.push.count_other_devices(user_id, payload.endpoint) >= MAX_DEVICES_PER_USER:
-            raise HTTPException(status_code=409, detail="Құрылғылар саны тым көп")
+            raise HTTPException(status_code=409, detail=_message("too_many_devices", language))
         device = {"endpoint": payload.endpoint, "p256dh": payload.keys.p256dh, "auth": payload.keys.auth}
         await db.push.save_subscription(user_id, **device)
         if not payload.confirm:
             return {"subscribed": True, "confirmation": None}
-        outcome = await send_confirmation(device)
+        outcome = await send_confirmation(device, language=language)
         if outcome == "gone":
             await db.push.delete_endpoints([payload.endpoint])
-            raise HTTPException(status_code=410, detail="Хабарландыру жазылымы жарамсыз")
+            raise HTTPException(status_code=410, detail=_message("subscription_gone", language))
         return {"subscribed": True, "confirmation": outcome}
 
     @app.post("/api/push/unsubscribe")

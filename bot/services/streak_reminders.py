@@ -112,26 +112,55 @@ def _streak_at_risk(streak: Any, last_streak_date: Any, today: date) -> bool:
     return str(last_streak_date)[:10] == (today - timedelta(days=1)).isoformat()
 
 
-def build_reminder(streak: Any, last_streak_date: Any, today: date) -> Dict[str, str]:
+def _ru_days(count: int) -> str:
+    """Russian noun form after a number: 1 день, 3 дня, 5 дней, 11 дней, 21 день."""
+    if count % 10 == 1 and count % 100 != 11:
+        return "день"
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return "дня"
+    return "дней"
+
+
+def _is_russian(language: Optional[str]) -> bool:
+    """The student picked Russian in the profile; anything else (or nothing) is Kazakh, the default."""
+    return language == "ru"
+
+
+def build_reminder(streak: Any, last_streak_date: Any, today: date, language: Optional[str] = None) -> Dict[str, str]:
+    russian = _is_russian(language)
     if _streak_at_risk(streak, last_streak_date, today):
+        days = int(streak)
         return {
-            "title": f"🔥 {int(streak)} күндік серия",
-            "body": "Серия үзілмеуі үшін бүгін бір есеп шығарыңыз.",
+            "title": f"🔥 Серия {days} {_ru_days(days)}" if russian else f"🔥 {days} күндік серия",
+            "body": (
+                "Решите сегодня одну задачу, чтобы серия не прервалась."
+                if russian
+                else "Серия үзілмеуі үшін бүгін бір есеп шығарыңыз."
+            ),
             "url": REMINDER_URL,
             "tag": REMINDER_TAG,
         }
     return {
-        "title": "📚 Бүгінгі сабақ",
-        "body": "Бүгін бірнеше есеп шығарып, жаңа серия бастаңыз.",
+        "title": "📚 Урок на сегодня" if russian else "📚 Бүгінгі сабақ",
+        "body": (
+            "Решите сегодня несколько задач и начните новую серию."
+            if russian
+            else "Бүгін бірнеше есеп шығарып, жаңа серия бастаңыз."
+        ),
         "url": REMINDER_URL,
         "tag": REMINDER_TAG,
     }
 
 
-def build_confirmation() -> Dict[str, str]:
+def build_confirmation(language: Optional[str] = None) -> Dict[str, str]:
+    russian = _is_russian(language)
     return {
-        "title": "🔔 Еске салу қосылды",
-        "body": "Бүгін есеп шығармасаңыз, кешке еске саламыз.",
+        "title": "🔔 Напоминание включено" if russian else "🔔 Еске салу қосылды",
+        "body": (
+            "Если сегодня не решите ни одной задачи, напомним вечером."
+            if russian
+            else "Бүгін есеп шығармасаңыз, кешке еске саламыз."
+        ),
         "url": REMINDER_URL,
         "tag": REMINDER_TAG,
     }
@@ -187,12 +216,15 @@ async def send_push(
         return "failed"
 
 
-async def send_confirmation(subscription: Dict[str, Any], sender: Optional[Sender] = None) -> str:
+async def send_confirmation(
+    subscription: Dict[str, Any], sender: Optional[Sender] = None, language: Optional[str] = None
+) -> str:
     """Show a notification right away, so the student sees that reminders work on this device."""
     sender = sender or send_push
     async with _NoRedirectSession() as session:
         return await sender(
-            subscription, build_confirmation(), session=session, vapid=_vapid_key(), ttl=CONFIRMATION_TTL_SECONDS,
+            subscription, build_confirmation(language), session=session, vapid=_vapid_key(),
+            ttl=CONFIRMATION_TTL_SECONDS,
         )
 
 
@@ -218,7 +250,7 @@ async def send_streak_reminders(
 
     async with _NoRedirectSession() as session:
         async def deliver(device: Dict[str, Any]) -> None:
-            payload = build_reminder(device["streak"], device["last_streak_date"], today)
+            payload = build_reminder(device["streak"], device["last_streak_date"], today, device.get("language"))
             async with limit:
                 outcome = await sender(device, payload, session=session, vapid=vapid, ttl=REMINDER_TTL_SECONDS)
             counts[outcome] += 1
