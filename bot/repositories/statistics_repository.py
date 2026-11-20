@@ -16,7 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import storage as db_driver
 from settings import get_settings
-from utils.timezone import today_almaty
+from utils.timezone import APP_TZ
 
 from .base import BaseRepository
 
@@ -630,7 +630,7 @@ class StatisticsRepository(BaseRepository):
 
         current = activity.totals(window.start, window.today)
         previous = activity.totals(window.previous_start, window.previous_end) if window.days else _Totals()
-        almaty_today = today_almaty()
+        almaty_today = window.now.replace(tzinfo=timezone.utc).astimezone(APP_TZ).date()
 
         students = []
         for row in user_rows:
