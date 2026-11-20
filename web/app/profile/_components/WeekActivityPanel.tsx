@@ -15,15 +15,15 @@ export default function WeekActivityPanel({ streakAnimated, userData, weekDays, 
   const { t } = useI18n();
   return (
     <>
-      <div className="rounded-3xl shadow-xl p-4 border border-white/20 bg-slate-900/90 backdrop-blur-md text-white">
+      <div className="glass rounded-3xl shadow-xl p-4 border border-white/30 bg-slate-900/80 text-white">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center shadow-glow ${streakAnimated ? "animate-bounce" : ""}`}>
               <Icon name="flame" className="w-5 h-5 text-white" />
             </div>
             <div className={`flex items-baseline gap-1 ${streakAnimated ? "animate-pulse" : ""}`}>
-              <span className="text-2xl font-extrabold text-orange-400">{userData?.streak || 0}</span>
-              <span className="text-xs font-semibold uppercase tracking-wide text-orange-300">{t("profile.streakDays", { count: userData?.streak || 0 })}</span>
+              <span className="text-2xl font-extrabold text-orange-500">{userData?.streak || 0}</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-orange-500">{t("profile.streakDays", { count: userData?.streak || 0 })}</span>
             </div>
           </div>
         </div>
@@ -40,7 +40,7 @@ export default function WeekActivityPanel({ streakAnimated, userData, weekDays, 
                 >
                   <Icon name="flame" className={`w-3 h-3 ${isActive ? "text-white" : "text-slate-400"}`} />
                 </div>
-                <span className="text-[11px] font-semibold text-slate-200">{day.short}</span>
+                <span className="text-[11px] font-semibold text-black">{day.short}</span>
               </div>
             );
           })}
