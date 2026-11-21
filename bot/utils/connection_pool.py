@@ -57,6 +57,11 @@ class ConnectionPool:
         except Exception:
             pass
 
+    async def _open_connection(self) -> db_driver.Connection:
+        # storage.connect returns an awaitable connection, not a coroutine, and
+        # asyncio.create_task only takes coroutines.
+        return await db_driver.connect(self.database_url, timeout=self.timeout)
+
     def _spawn_bg(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
         self._bg_tasks.add(task)
@@ -132,7 +137,7 @@ class ConnectionPool:
 
             if need_create:
                 connect_task = self._spawn_bg(
-                    db_driver.connect(self.database_url, timeout=self.timeout)
+                    self._open_connection()
                 )
                 try:
                     conn = await asyncio.shield(connect_task)
@@ -236,7 +241,7 @@ class ConnectionPool:
         remaining = to_create
         for _ in range(to_create):
             connect_task = self._spawn_bg(
-                db_driver.connect(self.database_url, timeout=self.timeout)
+                self._open_connection()
             )
             try:
                 conn = await asyncio.shield(connect_task)
