@@ -72,11 +72,47 @@ class ProgressRepository(BaseRepository):
             "progress": completed_count / total if total else 0.0,
         }
 
+    async def get_user_progress_for_mini_lessons(self, user_id: int, mini_lesson_ids: List[int]) -> Dict[int, str]:
+        """get_user_progress_for_mini_lesson for several mini-lessons in one query (task_id -> status)."""
+        if not mini_lesson_ids:
+            return {}
+        placeholders = ",".join("?" * len(mini_lesson_ids))
+        async with self._connection() as db:
+            async with db.execute(
+                f"""SELECT task_id, status FROM user_progress
+                    WHERE user_id = ? AND task_id IN (
+                        SELECT id FROM tasks WHERE mini_lesson_id IN ({placeholders}) AND deleted_at IS NULL
+                    )""",
+                (user_id, *mini_lesson_ids),
+            ) as cursor:
+                return {row[0]: row[1] for row in await cursor.fetchall()}
+
+    async def calculate_lesson_page_progress(self, user_id: int, lesson_id: int, mini_lessons: List[Dict[str, Any]]):
+        """For the lesson page: calculate_lesson_completion, and calculate_mini_lesson_completion for each of
+        the lesson's mini-lessons, from the one grouped query the lesson needs anyway."""
+        lesson_progress, counts_by_mini = await self._lesson_completion(user_id, lesson_id, mini_lessons)
+        minis: Dict[int, Dict[str, Any]] = {}
+        for ml in mini_lessons:
+            counts = counts_by_mini.get(int(ml["id"]), {"total": 0, "completed_count": 0})
+            total, completed_count = counts["total"], counts["completed_count"]
+            minis[int(ml["id"])] = {
+                "completed": total > 0 and completed_count == total,
+                "total": total,
+                "completed_count": completed_count,
+                "progress": completed_count / total if total else 0.0,
+            }
+        return lesson_progress, minis
+
     async def calculate_lesson_completion(self, user_id: int, lesson_id: int, curriculum_repo) -> Dict[str, Any]:
         """Calculate lesson completion across non-empty mini-lessons (pure read; matches StatisticsRepository)."""
         mini_lessons = await curriculum_repo.get_mini_lessons_by_lesson(lesson_id)
+        lesson_progress, _counts = await self._lesson_completion(user_id, lesson_id, mini_lessons)
+        return lesson_progress
+
+    async def _lesson_completion(self, user_id: int, lesson_id: int, mini_lessons: List[Dict[str, Any]]):
+        """Lesson progress and the per-mini-lesson task counts it is made of."""
         if not mini_lessons:
-            return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}
+            return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}, {}
 
         counts_by_mini: Dict[int, Dict[str, int]] = {}
         async with self._connection() as db:
@@ -108,7 +144,7 @@ class ProgressRepository(BaseRepository):
             if counts_by_mini.get(int(ml["id"]), {}).get("total", 0) > 0
         ]
         if not active_minis:
-            return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}
+            return {"completed": False, "total_mini_lessons": 0, "completed_mini_lessons": 0, "progress": 0.0}, counts_by_mini
 
         completed_mini = 0
         for ml in active_minis:
@@ -122,7 +158,7 @@ class ProgressRepository(BaseRepository):
             "total_mini_lessons": total_active,
             "completed_mini_lessons": completed_mini,
             "progress": completed_mini / total_active,
-        }
+        }, counts_by_mini
 
     async def calculate_section_completion(self, user_id: int, section_id: int) -> Dict[str, Any]:
         """Calculate section completion status - optimized with single query"""

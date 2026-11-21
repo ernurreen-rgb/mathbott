@@ -131,7 +131,9 @@ class UserRepository(BaseRepository):
                     users = [dict(row) for row in await cursor.fetchall()]
                 await db.commit()
                 return users
-        return await self._run_with_write_lock(operation)
+        # Not behind the process write lock: every student sends this every 25 seconds, and it only
+        # touches the student's own row and visit log, so it must not queue behind answer checks.
+        return await operation()
 
     async def cleanup_old_page_visits(self, retention_days: int) -> int:
         """Delete page visits older than the retention period; users.last_seen_path stays."""

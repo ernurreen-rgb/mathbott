@@ -231,16 +231,21 @@ def setup_modules_routes(app, db, limiter):
         elif user_id is None:
             guest_tasks_restricted = True
 
-        lesson_progress = await db.calculate_lesson_completion(user_id, lesson_id) if user_id else None
-        review_summaries = (
-            await db.module_review.get_lesson_summaries(user_id, [ml["id"] for ml in mini_lessons]) if user_id else {}
+        # The lesson is reloaded after every answer, so the mini-lessons share each query instead of
+        # asking for their tasks, progress and completion one by one (about 25 queries before).
+        mini_ids = [int(ml["id"]) for ml in mini_lessons]
+        lesson_progress, mini_progress = (
+            await db.progress.calculate_lesson_page_progress(user_id, lesson_id, mini_lessons)
+            if user_id else (None, {})
         )
+        review_summaries = await db.module_review.get_lesson_summaries(user_id, mini_ids) if user_id else {}
+        # A closed lesson (or unauthenticated access past lesson 1) shows only its outline.
+        tasks_by_mini = {} if (lock or guest_tasks_restricted) else await db.tasks.get_tasks_by_mini_lessons(mini_ids)
+        task_progress = await db.progress.get_user_progress_for_mini_lessons(user_id, mini_ids) if user_id else {}
 
         result_mini = []
         for ml in mini_lessons:
-            # A closed lesson (or unauthenticated access past lesson 1) shows only its outline.
-            tasks = [] if (lock or guest_tasks_restricted) else await db.tasks.get_tasks_by_mini_lesson(ml["id"])
-            task_progress = await db.progress.get_user_progress_for_mini_lesson(user_id, ml["id"]) if user_id else {}
+            tasks = tasks_by_mini.get(int(ml["id"]), [])
 
             tasks_data = []
             for t in tasks:
@@ -277,7 +282,7 @@ def setup_modules_routes(app, db, limiter):
                     "answer": t.get("answer") if task_progress.get(t["id"]) == "completed" else None,
                 })
 
-            ml_progress = await db.progress.calculate_mini_lesson_completion(user_id, ml["id"]) if user_id else None
+            ml_progress = mini_progress.get(int(ml["id"])) if user_id else None
             result_mini.append({
                 "id": ml["id"],
                 "mini_index": ml["mini_index"],

@@ -101,14 +101,17 @@ class PushRepository(BaseRepository):
         return ready
 
     async def record_prompt_event(self, user_id: int, device_state: str, action: str) -> bool:
-        """Note what the device could do when the reminder was offered and what the student chose."""
-        async with self._write_transaction() as db:
+        """Note what the device could do when the reminder was offered and what the student chose.
+
+        A lone insert that nothing reads before writing, so it skips the application write lock."""
+        async with self._connection() as db:
             if not await self._has_prompt_events(db):
                 return False
             await db.execute(
                 "INSERT INTO reminder_prompt_events (user_id, device_state, action) VALUES (?, ?, ?)",
                 (user_id, device_state, action),
             )
+            await db.commit()
         return True
 
     async def cleanup_old_prompt_events(self, retention_days: int) -> int:

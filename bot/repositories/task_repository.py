@@ -409,6 +409,25 @@ class TaskRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
+    async def get_tasks_by_mini_lessons(self, mini_lesson_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+        """get_tasks_by_mini_lesson for several mini-lessons in one query, keyed by mini-lesson."""
+        tasks: Dict[int, List[Dict[str, Any]]] = {int(mini_id): [] for mini_id in mini_lesson_ids}
+        if not mini_lesson_ids:
+            return tasks
+        placeholders = ",".join("?" * len(mini_lesson_ids))
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                f"{self._TASK_SELECT} "
+                f"WHERE t.mini_lesson_id IN ({placeholders}) AND t.deleted_at IS NULL "
+                "ORDER BY t.mini_lesson_id, t.sort_order, t.id",
+                tuple(mini_lesson_ids),
+            ) as cursor:
+                for row in await cursor.fetchall():
+                    task = dict(row)
+                    tasks[int(task["mini_lesson_id"])].append(task)
+        return tasks
+
     async def check_answer(self, task_id: int, user_answer: str) -> bool:
         task = await self.get_task_by_id(task_id)
         if not task:
