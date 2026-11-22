@@ -52,9 +52,9 @@ function Breakdown({ groups, label, limit }: { groups: StatisticsBreakdown[]; la
   );
 }
 
-type Props = { data: StatisticsTasks; initialFilter?: TaskFilter };
+type Props = { data: StatisticsTasks; initialFilter?: TaskFilter; canManageContent?: boolean };
 
-export default function TasksTab({ data, initialFilter = "all" }: Props) {
+export default function TasksTab({ data, initialFilter = "all", canManageContent = false }: Props) {
   const { summary, thresholds, period } = data;
   const [filter, setFilter] = useState<TaskFilter>(initialFilter);
   const [search, setSearch] = useState("");
@@ -184,7 +184,7 @@ export default function TasksTab({ data, initialFilter = "all" }: Props) {
                       {task.is_hard && <><span className={styles.badge} data-tone="bad" title={hardRule}>тым қиын</span>{" "}</>}
                       {task.pending_reports > 0 && <><Link href="/admin/reports" className={styles.badge} data-tone="warn">{task.pending_reports} хабарлама</Link>{" "}</>}
                       {task.deleted && <><span className={styles.badge}>жойылған</span>{" "}</>}
-                      {task.bank_task_id && <Link href={`/admin/bank?task=${task.bank_task_id}`}>Банкте ашу</Link>}
+                      {canManageContent && task.bank_task_id && <Link href={`/admin/bank?task=${task.bank_task_id}`}>Банкте ашу</Link>}
                     </div>
                   </td>
                   <td className={styles.num}>{formatNumber(task.attempts)}</td>

@@ -4,27 +4,30 @@ import styles from "../CmsWorkspace.module.css";
 
 type Props = {
   trashOpen: boolean;
+  canEmptyTrash?: boolean;
   emptyTrash: () => Promise<void>;
   trashLoading: boolean;
   trashTasks: TrashTask[];
   restoreTaskFromTrash: (taskId: number) => Promise<void>;
 };
 
-export default function TrashPanel({ trashOpen, emptyTrash, trashLoading, trashTasks, restoreTaskFromTrash }: Props) {
+export default function TrashPanel({ trashOpen, canEmptyTrash = false, emptyTrash, trashLoading, trashTasks, restoreTaskFromTrash }: Props) {
   return (
     <>
       {trashOpen && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="font-semibold text-gray-800">Жуырда жойылған тапсырмалар</div>
-            <button
-              type="button"
-              onClick={emptyTrash}
-              disabled={trashLoading || trashTasks.length === 0}
-              className={`${styles.dangerButton} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              Себетті тазалау
-            </button>
+            {canEmptyTrash && (
+              <button
+                type="button"
+                onClick={emptyTrash}
+                disabled={trashLoading || trashTasks.length === 0}
+                className={`${styles.dangerButton} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Себетті тазалау
+              </button>
+            )}
           </div>
           {trashLoading ? (
             <div className="text-sm text-gray-600">Жүктелуде...</div>

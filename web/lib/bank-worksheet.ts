@@ -10,6 +10,12 @@ export type WorksheetTask = Pick<BankTask, 'id' | 'text' | 'question_type' | 'an
   subquestions: { text: string }[];
 };
 
+export function hasWorksheetTaskContent(task: BankPlacementTask): boolean {
+  const text = (task.text || task.bank_task?.text || '').trim();
+  const image = (task.image_filename || task.bank_task?.image_filename || '').trim();
+  return text.length > 0 || image.length > 0;
+}
+
 export function trialPlacementToWorksheetTask(task: BankPlacementTask): WorksheetTask {
   const text = task.text || task.bank_task?.text || '';
   const questionType = task.question_type || task.bank_task?.question_type || 'input';

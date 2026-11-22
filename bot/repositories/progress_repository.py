@@ -348,6 +348,151 @@ class ProgressRepository(BaseRepository):
             }
         return {"minis": minis, "lessons": lessons, "sections": sections}
 
+    async def calculate_modules_map_progress(
+        self,
+        user_id: int,
+        sections_by_module: Dict[int, List[Dict[str, Any]]],
+    ) -> tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
+        """Compute module and section completion maps for all modules in 1-2 batched queries (H-28)."""
+        EXPECTED_LESSONS_PER_SECTION = 10
+        all_section_ids = [
+            int(section["id"])
+            for sections in sections_by_module.values()
+            for section in sections
+        ]
+        if not all_section_ids:
+            module_map = {
+                int(mid): {"completed": False, "total_sections": 0, "completed_sections": 0, "progress": 0.0}
+                for mid in sections_by_module
+            }
+            return module_map, {}
+
+        placeholders = ",".join("?" * len(all_section_ids))
+        async with self._connection() as db:
+            async with db.execute(
+                f"""
+                SELECT s.id, l.id, ml.id,
+                       COUNT(t.id),
+                       COUNT(t.id) FILTER (WHERE up.status = 'completed')
+                FROM sections s
+                LEFT JOIN lessons l ON l.section_id = s.id
+                LEFT JOIN mini_lessons ml ON ml.lesson_id = l.id
+                LEFT JOIN tasks t ON t.mini_lesson_id = ml.id AND t.deleted_at IS NULL
+                LEFT JOIN user_progress up ON up.task_id = t.id AND up.user_id = ?
+                WHERE s.id IN ({placeholders})
+                GROUP BY s.id, l.id, ml.id
+                """,
+                (user_id, *all_section_ids),
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        section_lessons: Dict[int, set[int]] = {sid: set() for sid in all_section_ids}
+        lesson_minis: Dict[int, List[bool]] = {}
+        for section_id, lesson_id, mini_id, total, completed_count in rows:
+            sid = int(section_id)
+            if lesson_id is None:
+                continue
+            lid = int(lesson_id)
+            section_lessons[sid].add(lid)
+            lesson_minis.setdefault(lid, [])
+            if mini_id is None:
+                continue
+            total_i, completed_i = int(total or 0), int(completed_count or 0)
+            if total_i > 0:
+                lesson_minis[lid].append(completed_i == total_i)
+
+        lesson_done: Dict[int, bool] = {
+            lid: (bool(flags) and all(flags))
+            for lid, flags in lesson_minis.items()
+        }
+
+        legacy_section_ids = [sid for sid in all_section_ids if not section_lessons[sid]]
+        legacy_counts: Dict[int, tuple[int, int]] = {}
+        if legacy_section_ids:
+            leg_placeholders = ",".join("?" * len(legacy_section_ids))
+            async with self._connection() as db:
+                async with db.execute(
+                    f"""
+                    SELECT t.section_id,
+                           COUNT(t.id) AS total,
+                           COUNT(t.id) FILTER (WHERE up.status = 'completed') AS completed_count
+                    FROM tasks t
+                    LEFT JOIN user_progress up ON up.task_id = t.id AND up.user_id = ?
+                    WHERE t.section_id IN ({leg_placeholders}) AND t.deleted_at IS NULL
+                    GROUP BY t.section_id
+                    """,
+                    (user_id, *legacy_section_ids),
+                ) as cursor:
+                    for r in await cursor.fetchall():
+                        legacy_counts[int(r[0])] = (int(r[1] or 0), int(r[2] or 0))
+
+        section_progress_map: Dict[int, Dict[str, Any]] = {}
+        for sid in all_section_ids:
+            lids = section_lessons[sid]
+            if lids:
+                total_lessons = len(lids)
+                completed_lessons = sum(1 for lid in lids if lesson_done.get(lid, False))
+                section_progress_map[sid] = {
+                    "completed": completed_lessons == total_lessons,
+                    "total": total_lessons,
+                    "completed_count": completed_lessons,
+                    "progress": completed_lessons / total_lessons if total_lessons else 0.0,
+                    "total_lessons": total_lessons,
+                    "completed_lessons": completed_lessons,
+                }
+            else:
+                total_tasks, completed_tasks = legacy_counts.get(sid, (0, 0))
+                if total_tasks == 0:
+                    section_progress_map[sid] = {
+                        "completed": False,
+                        "total": EXPECTED_LESSONS_PER_SECTION,
+                        "completed_count": 0,
+                        "progress": 0.0,
+                        "total_lessons": EXPECTED_LESSONS_PER_SECTION,
+                        "completed_lessons": 0,
+                    }
+                else:
+                    section_progress_map[sid] = {
+                        "completed": completed_tasks == total_tasks,
+                        "total": total_tasks,
+                        "completed_count": completed_tasks,
+                        "progress": completed_tasks / total_tasks,
+                    }
+
+        module_progress_map: Dict[int, Dict[str, Any]] = {}
+        for raw_module_id, sections in sections_by_module.items():
+            mid = int(raw_module_id)
+            if not sections:
+                module_progress_map[mid] = {
+                    "completed": False,
+                    "total_sections": 0,
+                    "completed_sections": 0,
+                    "progress": 0.0,
+                }
+                continue
+            total_lessons = 0
+            completed_lessons = 0
+            completed_sections = 0
+            for section in sections:
+                lids = section_lessons.get(int(section["id"]), set())
+                if not lids:
+                    continue
+                sec_total = len(lids)
+                sec_done = sum(1 for lid in lids if lesson_done.get(lid, False))
+                total_lessons += sec_total
+                completed_lessons += sec_done
+                if sec_total > 0 and sec_done == sec_total:
+                    completed_sections += 1
+            module_progress_map[mid] = {
+                "completed": completed_lessons >= total_lessons and total_lessons > 0,
+                "total_sections": len(sections),
+                "completed_sections": completed_sections,
+                "total_lessons": total_lessons,
+                "completed_lessons": completed_lessons,
+                "progress": completed_lessons / total_lessons if total_lessons > 0 else 0.0,
+            }
+        return module_progress_map, section_progress_map
+
     async def calculate_module_completion(self, user_id: int, module_id: int, curriculum_repo) -> Dict[str, Any]:
         """Calculate module completion status"""
         sections = await curriculum_repo.get_sections_by_module(module_id)

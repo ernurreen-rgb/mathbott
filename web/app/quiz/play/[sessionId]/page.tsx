@@ -13,6 +13,7 @@ import {
   parseQuizAvatar,
 } from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
+import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import toast from "react-hot-toast";
 import { completeQuizParticipant } from "@/lib/api/quizzes";
 import { useI18n } from "@/lib/i18n/provider";
@@ -644,30 +645,37 @@ export default function PlayQuizPage({ params }: PageProps) {
 
             {/* 4. OPEN INPUT (Numeric / Math Formula) */}
             {currentQ.question_type === "input" && (
-              <div className="bg-white rounded-3xl p-5 border border-purple-100 shadow-md space-y-4">
-                <input
-                  type="text"
-                  placeholder={t("quizPlay.mathPlaceholder")}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!submitting && inputAnswer.trim()) {
+                    submitAnswer(inputAnswer.trim());
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !submitting && inputAnswer.trim()) {
+                    e.preventDefault();
+                    submitAnswer(inputAnswer.trim());
+                  }
+                }}
+                className="bg-white rounded-3xl p-5 border border-purple-100 shadow-md space-y-4"
+              >
+                <StudentMathAnswerInput
                   value={inputAnswer}
-                  onChange={(e) => setInputAnswer(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && inputAnswer.trim()) {
-                      submitAnswer(inputAnswer.trim());
-                    }
-                  }}
-                  className="w-full bg-gray-50 border-2 border-gray-200 focus:bg-white rounded-2xl px-4 py-3.5 text-lg font-mono text-center text-gray-900 focus:outline-none focus:border-purple-600 placeholder-gray-400"
+                  onChange={setInputAnswer}
+                  disabled={submitting}
+                  placeholder={t("quizPlay.mathPlaceholder")}
                   autoFocus
                 />
 
                 <button
-                  type="button"
-                  onClick={() => inputAnswer.trim() && submitAnswer(inputAnswer.trim())}
+                  type="submit"
                   disabled={submitting || !inputAnswer.trim()}
                   className="w-full py-4 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-2xl font-black text-base shadow-xl disabled:opacity-50 transition-all active:scale-95"
                 >
                   {t("quizPlay.submitAnswer")} <Icon name="rocket" />
                 </button>
-              </div>
+              </form>
             )}
           </div>
         )}

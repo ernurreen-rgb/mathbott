@@ -1,4 +1,4 @@
-import { apiPath, fetchWithErrorHandling, FileDownloadResult } from "./client";
+import { apiPath, clearApiGetCache, fetchWithErrorHandling, FileDownloadResult } from "./client";
 import type { AiTwinCheck, AiTwinDraftsResponse, AiTwinStatus, BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
 import { BankDifficulty, BankTask, BankTaskListResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
@@ -14,6 +14,7 @@ async function mutateBankTask(
   method: "POST" | "PUT",
   formData: FormData
 ): Promise<{ data: BankTask | null; error: string | null; conflict: BankMutationConflict | null }> {
+  clearApiGetCache();
   try {
     const response = await fetch(endpoint, {
       method,
@@ -69,6 +70,8 @@ async function mutateBankTask(
     return { data: parsed as BankTask, error: null, conflict: null };
   } catch (error: any) {
     return { data: null, error: error?.message || "Network error", conflict: null };
+  } finally {
+    clearApiGetCache();
   }
 }
 
@@ -361,6 +364,8 @@ export async function importAdminBankTasks(
   conflict: SimilarConflictPayload | null;
   validation: BankImportValidationErrorPayload | null;
 }> {
+  const mutates = params.mode !== "dry_run";
+  if (mutates) clearApiGetCache();
   try {
     const response = await fetch(apiPath("admin/bank/tasks/import"), {
       method: "POST",
@@ -466,6 +471,8 @@ export async function importAdminBankTasks(
       conflict: null,
       validation: null,
     };
+  } finally {
+    if (mutates) clearApiGetCache();
   }
 }
 
@@ -595,6 +602,7 @@ export async function rollbackAdminBankTask(
     expected_current_version?: number;
   }
 ): Promise<{ data: BankTask | null; error: string | null; conflict: BankMutationConflict | null }> {
+  clearApiGetCache();
   try {
     const response = await fetch(apiPath(`admin/bank/tasks/${taskId}/rollback`), {
       method: "POST",
@@ -628,6 +636,8 @@ export async function rollbackAdminBankTask(
     return { data: parsed as BankTask, error: null, conflict: null };
   } catch (error: any) {
     return { data: null, error: error?.message || "Network error", conflict: null };
+  } finally {
+    clearApiGetCache();
   }
 }
 

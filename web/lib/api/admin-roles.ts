@@ -1,4 +1,4 @@
-import { apiPath, fetchWithErrorHandling } from "./client";
+import { apiPath, clearApiGetCache, fetchWithErrorHandling } from "./client";
 import { AdminCheckResponse, AdminRole, AdminRoleListResponse, AdminRoleUpdateRequest, AdminRoleUpdateResponse, AdminRoleRestoreRequest, AdminRoleRestoreResponse } from "@/types";
 
 
@@ -47,6 +47,7 @@ export async function restoreAdminRoleFromAudit(
   email: string,
   payload: AdminRoleRestoreRequest
 ): Promise<{ data: AdminRoleRestoreResponse | null; error: string | null }> {
+  clearApiGetCache();
   try {
     const response = await fetch(`${apiPath("admin/roles/restore")}?email=${encodeURIComponent(email)}`, {
       method: "POST",
@@ -85,5 +86,7 @@ export async function restoreAdminRoleFromAudit(
     return { data: parsed as AdminRoleRestoreResponse, error: null };
   } catch (error: any) {
     return { data: null, error: error?.message || "Network error" };
+  } finally {
+    clearApiGetCache();
   }
 }

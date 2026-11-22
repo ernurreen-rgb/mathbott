@@ -2,6 +2,7 @@ import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEdit
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import {
   deleteAdminBankTaskVersion,
+  getAdminBankTask,
   getAdminBankTaskUsage,
   getAdminBankTaskVersion,
   getAdminBankTaskVersions,
@@ -159,7 +160,7 @@ export function createVersionActions({
 
       setJsonEdit((prev) => (prev ? { ...prev, saving: true, error: null, canForceSave: false } : prev));
 
-      const { error: err, conflict } = await updateAdminBankTask(jsonEdit.task.id, formData, email);
+      const { data: updatedTask, error: err, conflict } = await updateAdminBankTask(jsonEdit.task.id, formData, email);
       if (conflict?.code === "SIMILAR_TASKS_FOUND") {
         setJsonEdit((prev) =>
           prev
@@ -185,6 +186,10 @@ export function createVersionActions({
             : prev
         );
         await fetchTasks();
+        if (historyTask && historyTask.id === jsonEdit.task.id) {
+          const fresh = await getAdminBankTask(jsonEdit.task.id, email);
+          await openHistory(fresh.data ?? jsonEdit.task);
+        }
         return;
       }
       if (err) {
@@ -196,7 +201,7 @@ export function createVersionActions({
       setSnapshotView(null);
       await fetchTasks();
       if (historyTask && historyTask.id === jsonEdit.task.id) {
-        await openHistory(jsonEdit.task);
+        await openHistory(updatedTask ?? jsonEdit.task);
       }
     } catch (err: any) {
       setJsonEdit((prev) =>
@@ -209,7 +214,7 @@ export function createVersionActions({
     if (!email) return;
     if (!confirm(`Тапсырма #${task.id} нұсқасын v${versionNo} дейін қайтару керек пе?`)) return;
     setRollbackLoading(true);
-    const { error: err, conflict } = await rollbackAdminBankTask(task.id, {
+    const { data: updatedTask, error: err, conflict } = await rollbackAdminBankTask(task.id, {
       email,
       target_version: versionNo,
       expected_current_version: task.current_version,
@@ -218,7 +223,10 @@ export function createVersionActions({
     if (conflict?.code === "VERSION_CONFLICT") {
       setError(conflict.message || "Нұсқа қайшылығы. Тапсырма деректерін қайта жүктеңіз.");
       await fetchTasks();
-      if (historyTask && historyTask.id === task.id) await openHistory(task);
+      if (historyTask && historyTask.id === task.id) {
+        const fresh = await getAdminBankTask(task.id, email);
+        await openHistory(fresh.data ?? task);
+      }
       return;
     }
     if (err) {
@@ -227,7 +235,7 @@ export function createVersionActions({
     }
     await fetchTasks();
     if (historyTask && historyTask.id === task.id) {
-      await openHistory(task);
+      await openHistory(updatedTask ?? task);
     }
   };
 
@@ -247,7 +255,8 @@ export function createVersionActions({
     }
     await fetchTasks();
     if (historyTask && historyTask.id === task.id) {
-      await openHistory(task);
+      const fresh = await getAdminBankTask(task.id, email);
+      await openHistory(fresh.data ?? task);
     }
   };
 

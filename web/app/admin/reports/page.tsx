@@ -19,6 +19,7 @@ import {
   toggleMcqAnswerLabel,
 } from "@/lib/question-options";
 import { showToast } from "@/lib/toast";
+import { hasContentAccess } from "@/lib/admin-access";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,8 @@ function ReportsPageContent() {
   const { data: session, status } = useSession();
   const sessionEmail = session?.user?.email || null;
   const router = useRouter();
-  const { loading: accessLoading, allowed } = useAdminPageAccess("review", status, sessionEmail);
+  const { access, loading: accessLoading, allowed } = useAdminPageAccess("review", status, sessionEmail);
+  const canManageContent = hasContentAccess(access?.role);
   const searchParams = useSearchParams();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -516,10 +518,10 @@ function ReportsPageContent() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Шағымдар</h1>
           <Link
-            href="/admin/cms"
+            href={canManageContent ? "/admin/cms" : "/admin"}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base w-full sm:w-auto text-center"
           >
-            CMS-ке қайту
+            {canManageContent ? "CMS-ке қайту" : "Әкімші панеліне қайту"}
           </Link>
         </div>
 

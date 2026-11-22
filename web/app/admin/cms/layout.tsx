@@ -17,7 +17,7 @@ function CmsAccessBoundary({ children }: { children: ReactNode }) {
   if (!session || !access?.is_admin || !isAllowedForPage("content", access.role)) {
     return <p className={styles.hint}>CMS-ке қолжетімділік жоқ.</p>;
   }
-  return <CmsCacheProvider>{children}</CmsCacheProvider>;
+  return <CmsCacheProvider adminRole={access.role ?? null}>{children}</CmsCacheProvider>;
 }
 
 export default function CmsLayout({ children }: { children: ReactNode }) {

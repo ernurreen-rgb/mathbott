@@ -42,23 +42,34 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                 return (
                   <div key={label}>
                     {isEditingOption ? (
-                      <MathFieldInput
-                        value={optionText}
-                        onChange={(value) => {
-                          const newOptions = [...(taskData.options || [])];
-                          const existingIndex = newOptions.findIndex((o: any) => o.label === label);
-                          if (existingIndex >= 0) {
-                            newOptions[existingIndex] = { label, text: value };
-                          } else {
-                            newOptions.push({ label, text: value });
-                          }
-                          updateTempTask({ options: newOptions });
-                        }}
-                        onBlur={() => setEditingField(null)}
-                        className="w-full border-2 border-purple-500 rounded px-2 py-1"
-                        placeholder={`Нұсқа ${label}`}
-                        autoFocus
-                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-gray-700">Нұсқа {label}</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingField(null)}
+                            className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            Дайын
+                          </button>
+                        </div>
+                        <MathFieldInput
+                          value={optionText}
+                          onChange={(value) => {
+                            const newOptions = [...(taskData.options || [])];
+                            const existingIndex = newOptions.findIndex((o: any) => o.label === label);
+                            if (existingIndex >= 0) {
+                              newOptions[existingIndex] = { label, text: value };
+                            } else {
+                              newOptions.push({ label, text: value });
+                            }
+                            updateTempTask({ options: newOptions });
+                          }}
+                          className="w-full border-2 border-purple-500 rounded px-2 py-1"
+                          placeholder={`Нұсқа ${label}`}
+                          autoFocus
+                        />
+                      </div>
                     ) : (
                       <div
                         onClick={() => {
@@ -95,6 +106,15 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                 <div className="flex-1">
                   {isEditingSub ? (
                     <div className="space-y-2">
+                      <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setEditingField(null)}
+                          className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50"
+                        >
+                          Дайын
+                        </button>
+                      </div>
                       <MathFieldInput
                         value={subText}
                         onChange={(value) => {
@@ -105,7 +125,6 @@ export default function MatchingAnswerFields({ qt, taskData, isEditing, editingF
                             }),
                           });
                         }}
-                        onBlur={() => setEditingField(null)}
                         className="w-full border-2 border-purple-500 rounded-lg px-3 py-2"
                         placeholder="Қосымша сұрақ мәтіні"
                         autoFocus

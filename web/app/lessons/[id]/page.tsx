@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
-import { apiPath, getLessonDetails, reportLessonTask } from "@/lib/api";
+import { apiPath, clearApiGetCache, getLessonDetails, reportLessonTask } from "@/lib/api";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
@@ -44,6 +44,7 @@ export default function LessonPage() {
   const [lesson, setLesson] = useState<LessonDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshingSummary, setRefreshingSummary] = useState(false);
+  const [summaryRefreshError, setSummaryRefreshError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedMiniId, setSelectedMiniId] = useState<number | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
@@ -102,6 +103,7 @@ export default function LessonPage() {
     setShowCongrats(false);
     setCongratsReviewMiniId(null);
     setRefreshingSummary(false);
+    setSummaryRefreshError(null);
   }, [lessonId]);
 
   const toggleSound = () => {
@@ -124,15 +126,20 @@ export default function LessonPage() {
       setLoading(true);
       setError(null);
     } else {
+      setSummaryRefreshError(null);
       setRefreshingSummary(true);
     }
     const { data, error: err } = await getLessonDetails(lessonId, email);
     if (gen !== fetchGenerationRef.current) return;
     if (err) {
       if (!silent) setError(err);
-      else console.error("Failed to fetch lesson:", err);
+      else {
+        console.error("Failed to fetch lesson:", err);
+        setSummaryRefreshError(err);
+      }
     }
     if (data) {
+      setSummaryRefreshError(null);
       setLesson((prev) => {
         if (!prev || prev.id !== data.id) return data;
         // Preserve any tasks completed locally
@@ -288,6 +295,12 @@ export default function LessonPage() {
     if (refreshingSummary && selectedMini && !selectedMini.progress?.completed) {
       return { label: t("lesson.resultLoading"), onClick: () => {}, disabled: true };
     }
+    if (summaryRefreshError && selectedMini && !selectedMini.progress?.completed) {
+      return {
+        label: t("common.retry"),
+        onClick: () => void fetchLesson({ silent: true }),
+      };
+    }
     const pending = selectedMini?.review?.pending ?? 0;
     if (selectedMini && pending > 0) {
       return { label: t("lesson.reviewMistakesN", { count: pending }), onClick: () => openReview(selectedMini.id) };
@@ -366,13 +379,23 @@ export default function LessonPage() {
   const goToNextTaskOrMini = (currentTaskId: number) => {
     const idx = orderedMiniTasks.findIndex((t) => t.id === currentTaskId);
     if (idx < 0) return;
+    const allSolved = orderedMiniTasks.every((t) => t.status === "completed");
+    // In an already-completed mini-lesson, allow stepping sequentially through solved tasks (H-33).
+    const browseCompleted =
+      allSolved &&
+      !!selectedMini?.progress?.completed &&
+      !feedback[currentTaskId];
     const nextId = pickNextTaskId(
       orderedMiniTasks.map((t) => ({ id: t.id, solved: t.status === "completed" })),
-      idx
+      idx,
+      { browseCompleted }
     );
     if (nextId === null) {
       // Every task is solved: stop on the summary, which offers the mistake review or the next step.
       setActiveTaskId(null);
+      if (selectedMini && !selectedMini.progress?.completed && !refreshingSummary) {
+        void fetchLesson({ silent: true });
+      }
       playLessonCue("complete");
       return;
     }
@@ -406,6 +429,7 @@ export default function LessonPage() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20_000);
     try {
+      clearApiGetCache();
       const res = await fetch(apiPath("task/check"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -487,6 +511,7 @@ export default function LessonPage() {
           : t("lesson.networkError");
       setFeedback((m) => ({ ...m, [task.id]: { ok: false, error: true, text: message } }));
     } finally {
+      clearApiGetCache();
       clearTimeout(timeoutId);
       checkingTasksRef.current.delete(task.id);
       setChecking((m) => ({ ...m, [task.id]: false }));
@@ -535,10 +560,34 @@ export default function LessonPage() {
 
   if (error || !lesson) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error || t("lesson.loadFailed")}
-        </div>
+      <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0">
+        <DesktopNav />
+        <main className="md:ml-64 min-h-screen flex items-center justify-center px-4 py-8">
+          <div className="w-full max-w-md glass rounded-3xl shadow-2xl border border-white/30 p-6 text-center space-y-4">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
+              {error || t("lesson.loadFailed")}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              {isValidLessonId && (
+                <button
+                  type="button"
+                  onClick={() => void fetchLesson()}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm transition-colors"
+                >
+                  {t("common.retry")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => router.push("/modules")}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-sm transition-colors"
+              >
+                {t("module.backToModules")}
+              </button>
+            </div>
+          </div>
+        </main>
+        <MobileNav currentPage="modules" />
       </div>
     );
   }
@@ -735,16 +784,30 @@ export default function LessonPage() {
                 {orderedMiniTasks.length === 0 ? (
                   <div className="text-gray-600">{t("lesson.noTasks")}</div>
                 ) : !activeTask ? (
-                  <MiniLessonSummary
-                    miniIndex={selectedMini.mini_index}
-                    totalTasks={orderedMiniTasks.length}
-                    mistakes={selectedMini.progress?.completed && selectedMini.review ? selectedMini.review.mistakes : null}
-                    pendingReview={selectedMini.review?.pending ?? 0}
-                    primary={summaryPrimary}
-                    onPrevTask={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
-                    onBackToSection={"backToSection" in summaryPrimary ? null : () => router.push(sectionHref)}
-                    email={email}
-                  />
+                  <div className="space-y-3">
+                    {summaryRefreshError && !selectedMini.progress?.completed && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                        <span>{summaryRefreshError}</span>
+                        <button
+                          type="button"
+                          onClick={() => void fetchLesson({ silent: true })}
+                          className="font-bold text-purple-700 hover:underline"
+                        >
+                          {t("common.retry")}
+                        </button>
+                      </div>
+                    )}
+                    <MiniLessonSummary
+                      miniIndex={selectedMini.mini_index}
+                      totalTasks={orderedMiniTasks.length}
+                      mistakes={selectedMini.progress?.completed && selectedMini.review ? selectedMini.review.mistakes : null}
+                      pendingReview={selectedMini.review?.pending ?? 0}
+                      primary={summaryPrimary}
+                      onPrevTask={() => setActiveTaskId(orderedMiniTasks[orderedMiniTasks.length - 1].id)}
+                      onBackToSection={"backToSection" in summaryPrimary ? null : () => router.push(sectionHref)}
+                      email={email}
+                    />
+                  </div>
                 ) : (
                   <div className="space-y-2 md:space-y-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">

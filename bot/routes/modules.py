@@ -42,27 +42,28 @@ def setup_modules_routes(app, db, limiter):
         else:
             modules = cached_modules
         
-        # Optimized: batch fetch all sections for all modules
-        # Group sections by module_id
-        sections_by_module: Dict[int, List[Dict]] = {}
-        for module in modules:
-            sections = await db.curriculum.get_sections_by_module(module["id"])
-            sections_by_module[module["id"]] = sections
-        
+        # Batch fetch all sections in a single query (H-28).
+        cache_key_sections = "modules:sections:all"
+        cached_sections = cache.get(cache_key_sections)
+        if cached_sections is None:
+            all_sections = await db.curriculum.get_all_sections()
+            cache.set(cache_key_sections, all_sections, ttl=300)
+        else:
+            all_sections = cached_sections
+
+        sections_by_module: Dict[int, List[Dict]] = {module["id"]: [] for module in modules}
+        for section in all_sections:
+            mid = section.get("module_id")
+            if mid in sections_by_module:
+                sections_by_module[mid].append(section)
+
         result = []
-        
-        # Batch calculate progress for all modules and sections if user is logged in
+
+        # Batch calculate progress for all modules and sections in 1-2 queries when signed in.
         if user_id:
-            # Calculate all module progress
-            module_progress_map = {}
-            for module in modules:
-                module_progress_map[module["id"]] = await db.calculate_module_completion(user_id, module["id"])
-            
-            # Calculate all section progress
-            section_progress_map = {}
-            for sections_list in sections_by_module.values():
-                for section in sections_list:
-                    section_progress_map[section["id"]] = await db.progress.calculate_section_completion(user_id, section["id"])
+            module_progress_map, section_progress_map = await db.progress.calculate_modules_map_progress(
+                user_id, sections_by_module
+            )
         else:
             module_progress_map = {}
             section_progress_map = {}

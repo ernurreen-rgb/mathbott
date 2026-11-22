@@ -44,7 +44,12 @@ from utils.validation import (
     validate_string_length,
     sanitize_html,
 )
-from utils.file_storage import delete_image_file, normalize_stored_image_filename, save_image_upload
+from utils.file_storage import (
+    delete_image_file,
+    delete_image_file_async,
+    normalize_stored_image_filename,
+    save_image_upload,
+)
 from utils.metrics import metrics
 
 from .content_validation import (

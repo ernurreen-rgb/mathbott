@@ -171,9 +171,35 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       }, delayMs);
     };
 
+    const sendVisit = async (opts?: { force?: boolean }) => {
+      if (closed || !isTabVisible()) return;
+      const currentPath = pathnameRef.current || "/";
+      if (!opts?.force && currentPath === lastSentPathRef.current) return;
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: "visit", path: currentPath }));
+          lastSentPathRef.current = currentPath;
+          return;
+        } catch {
+          // Fall back to HTTP heartbeat below if sending on the socket fails.
+        }
+      }
+      // Fallback so route visits are still persisted while WS is connecting or unavailable (H-31).
+      const { error } = await heartbeatPresence(email, currentPath);
+      if (!closed && !error) {
+        lastSentPathRef.current = currentPath;
+      }
+    };
+    pollingRefreshRef.current = sendVisit;
+
     const connect = async () => {
       const wsBase = resolveWebSocketBase();
-      if (!wsBase || closed || !isTabVisible() || connecting || wsRef.current) {
+      if (!wsBase) {
+        void sendVisit({ force: true });
+        return;
+      }
+      if (closed || !isTabVisible() || connecting || wsRef.current) {
         return;
       }
 
@@ -192,8 +218,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         if (attempt === generation) connecting = false;
       }
 
+      const initialPath = pathnameRef.current || "/";
       const ws = new WebSocket(
-        `${wsBase}/ws/presence?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`
+        `${wsBase}/ws/presence?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&path=${encodeURIComponent(initialPath)}`
       );
       wsRef.current = ws;
 
@@ -203,9 +230,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           return;
         }
         reconnectAttempts = 0;
+        lastSentPathRef.current = initialPath;
+        const latestPath = pathnameRef.current || "/";
+        if (latestPath !== initialPath) {
+          void sendVisit({ force: true });
+        }
         pingTimer = setInterval(() => {
           if (isTabVisible() && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }));
+            ws.send(JSON.stringify({ type: "ping", path: pathnameRef.current || "/" }));
           }
         }, HEARTBEAT_INTERVAL_MS);
       };
@@ -246,6 +278,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     return () => {
       closed = true;
+      pollingRefreshRef.current = null;
       document.removeEventListener("visibilitychange", onVisibilityChange);
       disconnect();
     };

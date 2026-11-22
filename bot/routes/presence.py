@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -198,8 +199,33 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
             return
         connection_id, was_offline, public_user = connected
         user_id = int(user["id"])
+        initial_path = (websocket.query_params.get("path") or "").strip()[:200] or None
+        last_recorded_path: Optional[str] = None
+        last_recorded_at = 0.0
+
+        async def _record_ws_activity(raw_path: Optional[str], *, force_on_change: bool = True) -> None:
+            nonlocal last_recorded_path, last_recorded_at
+            clean = raw_path.strip()[:200] if isinstance(raw_path, str) and raw_path.strip() else None
+            now_mono = time.monotonic()
+            path_changed = clean is not None and clean != last_recorded_path
+            min_gap = 1.0 if (force_on_change and path_changed) else 15.0
+            if last_recorded_at > 0.0 and (now_mono - last_recorded_at) < min_gap:
+                return
+            try:
+                recorder = getattr(db.users, "record_presence_activity", None)
+                if callable(recorder):
+                    await recorder(user_id, path=clean)
+                else:
+                    await db.users.heartbeat_presence(user_id, path=clean)
+                if clean is not None:
+                    last_recorded_path = clean
+                last_recorded_at = now_mono
+            except Exception as telemetry_exc:
+                logger.debug("Presence WS telemetry write failed: %s", telemetry_exc)
+
         try:
             await manager.send_snapshot(websocket)
+            await _record_ws_activity(initial_path)
             if was_offline:
                 await manager.broadcast(
                     {
@@ -225,9 +251,14 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
 
                 if not isinstance(payload, dict):
                     continue
-                if payload.get("type") == "ping":
+                msg_type = payload.get("type")
+                msg_path = payload.get("path") if isinstance(payload.get("path"), str) else None
+                if msg_type == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
-                elif payload.get("type") == "snapshot":
+                    await _record_ws_activity(msg_path)
+                elif msg_type == "visit":
+                    await _record_ws_activity(msg_path, force_on_change=True)
+                elif msg_type == "snapshot":
                     await manager.send_snapshot(websocket)
         except asyncio.TimeoutError:
             try:

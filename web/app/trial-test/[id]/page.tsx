@@ -394,11 +394,36 @@ export default function TrialTestPage() {
   }
 
   if (error || !test) {
+    const canRetry = Number.isInteger(testId) && testId > 0;
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded max-w-md">
-          {error || t("trial.testLoadFailed")}
-        </div>
+      <div className="min-h-screen bg-gradient-math animate-gradient pb-20 md:pb-0">
+        <DesktopNav />
+        <main className="md:ml-64 min-h-screen flex items-center justify-center px-4 py-8">
+          <div className="w-full max-w-md glass rounded-3xl shadow-2xl border border-white/30 p-6 text-center space-y-4">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
+              {error || t("trial.testLoadFailed")}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              {canRetry && (
+                <button
+                  type="button"
+                  onClick={() => void fetchTest()}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm transition-colors"
+                >
+                  {t("common.retry")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => router.push("/trial-test")}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-sm transition-colors"
+              >
+                {t("trialHistory.goToTests")}
+              </button>
+            </div>
+          </div>
+        </main>
+        <MobileNav currentPage="trial-test" />
       </div>
     );
   }

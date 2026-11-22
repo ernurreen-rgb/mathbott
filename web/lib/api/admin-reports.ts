@@ -1,4 +1,4 @@
-import { apiPath } from "./client";
+import { apiPath, clearApiGetCache } from "./client";
 
 
 export async function updateAdminReportTask(
@@ -28,6 +28,7 @@ export async function updateAdminReportTask(
     return { ok: response.ok, status: response.status, statusText: response.statusText, parsed };
   };
 
+  clearApiGetCache();
   try {
     const result = await request(primaryUrl);
 
@@ -52,5 +53,7 @@ export async function updateAdminReportTask(
     return { data: result.parsed as { success: boolean; message?: string }, error: null };
   } catch (error: any) {
     return { data: null, error: error?.message || "Network error" };
+  } finally {
+    clearApiGetCache();
   }
 }

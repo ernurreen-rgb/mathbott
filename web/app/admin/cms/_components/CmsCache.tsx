@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useRef, type ReactNode } from "react";
+import type { AdminRole } from "@/types";
 
 const MAX_ENTRIES = 100;
 const MAX_AGE_MS = 60_000;
@@ -21,11 +22,26 @@ function createCmsCache() {
 }
 
 const CmsCacheContext = createContext<ReturnType<typeof createCmsCache> | null>(null);
+const CmsRoleContext = createContext<AdminRole | null>(null);
 
-export function CmsCacheProvider({ children }: { children: ReactNode }) {
+export function CmsCacheProvider({
+  children,
+  adminRole = null,
+}: {
+  children: ReactNode;
+  adminRole?: AdminRole | null;
+}) {
   const cache = useRef<ReturnType<typeof createCmsCache> | null>(null);
   if (!cache.current) cache.current = createCmsCache();
-  return <CmsCacheContext.Provider value={cache.current}>{children}</CmsCacheContext.Provider>;
+  return (
+    <CmsRoleContext.Provider value={adminRole}>
+      <CmsCacheContext.Provider value={cache.current}>{children}</CmsCacheContext.Provider>
+    </CmsRoleContext.Provider>
+  );
+}
+
+export function useCmsAdminRole(): AdminRole | null {
+  return useContext(CmsRoleContext);
 }
 
 export function useCmsCache(email: string | null) {

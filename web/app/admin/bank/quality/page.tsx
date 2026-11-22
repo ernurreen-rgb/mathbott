@@ -365,7 +365,7 @@ export default function AdminBankQualityPage() {
         Ұқсастар
       </button>
       <Link
-        href="/admin/bank"
+        href={`/admin/bank?task=${task.id}`}
         className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded-lg"
       >
         Банкте ашу

@@ -6,25 +6,37 @@ import type { TrialTest } from "@/types";
 import CmsDialog from "../../cms/_components/CmsDialog";
 import styles from "../../cms/CmsWorkspace.module.css";
 import { useTrialTests } from "./TrialTestsProvider";
-import { folderLabel, sortFolders } from "@/lib/trial-folders";
+import { folderLabel, resolveInitialTrialTestFolderId, sortFolders } from "@/lib/trial-folders";
 
 export default function TrialTestFormDialog({ test, folderId, onClose }: {
   test?: TrialTest; folderId?: number; onClose: () => void;
 }) {
   const { email, folders, refreshTests } = useTrialTests();
   const leaves = folders.filter((f) => f.child_count === 0).sort(sortFolders);
-  const [form, setForm] = useState({ title: test?.title || "", description: test?.description || "",
-    folderId: test?.folder_id ?? folderId ?? leaves[0]?.id ?? "", sort_order: test?.sort_order || 0,
-    expected_tasks_count: test?.expected_tasks_count || 40 });
+  const isEditingRootTest = Boolean(test && test.folder_id == null);
+  const [form, setForm] = useState<{
+    title: string;
+    description: string;
+    folderId: number | "";
+    sort_order: number;
+    expected_tasks_count: number;
+  }>({
+    title: test?.title || "",
+    description: test?.description || "",
+    folderId: resolveInitialTrialTestFolderId(test, folderId, leaves),
+    sort_order: test?.sort_order || 0,
+    expected_tasks_count: test?.expected_tasks_count || 40,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!email || saving || !form.folderId) return;
+    if (!email || saving || (!isEditingRootTest && !form.folderId)) return;
     setSaving(true); setError(null);
     try {
-      const args = [form.title.trim(), form.description, form.sort_order, form.expected_tasks_count, email, undefined, Number(form.folderId)] as const;
+      const targetFolderId = form.folderId === "" ? undefined : Number(form.folderId);
+      const args = [form.title.trim(), form.description, form.sort_order, form.expected_tasks_count, email, undefined, targetFolderId] as const;
       const result = test ? await updateTrialTest(test.id, ...args) : await createTrialTest(...args);
       if (result.error) { setError(result.error); return; }
       await refreshTests(); onClose();
@@ -36,8 +48,8 @@ export default function TrialTestFormDialog({ test, folderId, onClose }: {
     <form onSubmit={submit} className={styles.taskForm}>
       <fieldset disabled={saving} className="grid min-w-0 gap-4">
         <label className={styles.field}>Атауы<input autoFocus required maxLength={200} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-        <label className={styles.field}>Папка<select required value={form.folderId} onChange={(e) => setForm({ ...form, folderId: Number(e.target.value) })}>
-          <option value="" disabled>Папканы таңдаңыз</option>
+        <label className={styles.field}>Папка<select required={!isEditingRootTest} value={form.folderId} onChange={(e) => setForm({ ...form, folderId: e.target.value === "" ? "" : Number(e.target.value) })}>
+          <option value="" disabled={!isEditingRootTest}>{isEditingRootTest ? "Папкасыз (түбірде)" : "Папканы таңдаңыз"}</option>
           {leaves.map((folder) => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}
         </select></label>
         {leaves.length === 0 && <p>Алдымен папка қосыңыз.</p>}

@@ -205,3 +205,8 @@ def delete_image_file(filename: str) -> None:
             logger.info("Image file deleted: %s", file_path.name)
         except Exception as e:
             logger.warning("Failed to delete image file %s: %s", filename, e)
+
+
+async def delete_image_file_async(filename: str) -> None:
+    """Offload image deletion (S3 or local filesystem) off the asyncio event loop (H-29)."""
+    await asyncio.to_thread(delete_image_file, filename)

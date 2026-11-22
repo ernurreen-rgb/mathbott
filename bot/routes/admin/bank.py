@@ -779,11 +779,11 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
         except BankTaskVersionConflictError as exc:
             if uploaded_filename:
-                delete_image_file(uploaded_filename)
+                await delete_image_file_async(uploaded_filename)
             raise _raise_version_conflict_from_exception(exc)
         if not updated:
             if uploaded_filename:
-                delete_image_file(uploaded_filename)
+                await delete_image_file_async(uploaded_filename)
             raise HTTPException(status_code=404, detail="Bank task not found")
         return updated
 

@@ -233,8 +233,33 @@ export default function VisualTaskEditor({
     }
     setValidationError(null);
     taskToSave.accepted_answers = normalizeAcceptedAnswers(taskToSave.accepted_answers);
-    if (tempImageFile) {
-      taskToSave.imageFile = tempImageFile;
+    let effectiveImageFile = tempImageFile;
+    if (inlineCropActive && inlineCropSrc && cropImageRef.current) {
+      // Auto-apply pending inline crop on Save so user adjustments are never silently discarded (H-35).
+      setInlineCropApplying(true);
+      try {
+        const img = cropImageRef.current;
+        const pixelCrop = {
+          x: (cropPercent.left / 100) * img.naturalWidth,
+          y: (cropPercent.top / 100) * img.naturalHeight,
+          width: (cropPercent.width / 100) * img.naturalWidth,
+          height: (cropPercent.height / 100) * img.naturalHeight,
+        };
+        effectiveImageFile = await createCroppedImageFile(inlineCropSrc, pixelCrop, 0);
+        setTempImageFile(effectiveImageFile);
+        setRemoveImage(false);
+        setInlineCropActive(false);
+        setInlineCropSrc(null);
+      } catch (cropErr) {
+        console.error("Failed to apply pending crop before save:", cropErr);
+        setValidationError("Суретті қиюды қолдану мүмкін болмады. Алдымен қиюды қолданыңыз немесе бас тартыңыз.");
+        return;
+      } finally {
+        setInlineCropApplying(false);
+      }
+    }
+    if (effectiveImageFile) {
+      taskToSave.imageFile = effectiveImageFile;
       taskToSave.removeImage = false;
     } else if (removeImage) {
       taskToSave.removeImage = true;
@@ -266,6 +291,8 @@ export default function VisualTaskEditor({
       setEditingField(null);
       setTempImageFile(null);
       setRemoveImage(false);
+      setInlineCropActive(false);
+      setInlineCropSrc(null);
       setBankTopicInput("");
       // Refresh tasks list after save
       await onAdd();
@@ -411,14 +438,24 @@ export default function VisualTaskEditor({
           {/* Question Text */}
           <div className="mb-4">
             {isEditing && editingField === "text" ? (
-              <MathFieldInput
-                ariaLabel="Тапсырма мәтіні"
-                value={taskData.text || ""}
-                onChange={(value) => updateTempTask({ text: value })}
-                onBlur={() => setEditingField(null)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-semibold text-gray-900"
-                autoFocus
-              />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingField(null)}
+                    className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    Дайын
+                  </button>
+                </div>
+                <MathFieldInput
+                  ariaLabel="Тапсырма мәтіні"
+                  value={taskData.text || ""}
+                  onChange={(value) => updateTempTask({ text: value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-semibold text-gray-900"
+                  autoFocus
+                />
+              </div>
             ) : (
               <div
                 role={isEditing ? "button" : undefined}
@@ -499,15 +536,25 @@ export default function VisualTaskEditor({
           {qt === "input" && (
             <div>
               {isEditing && editingField === "answer" ? (
-                <MathFieldInput
-                  ariaLabel="Дұрыс жауап"
-                  value={taskData.answer || ""}
-                  onChange={(value) => updateTempTask({ answer: value })}
-                  onBlur={() => setEditingField(null)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-                  placeholder="Дұрыс жауап"
-                  autoFocus
-                />
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setEditingField(null)}
+                      className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      Дайын
+                    </button>
+                  </div>
+                  <MathFieldInput
+                    ariaLabel="Дұрыс жауап"
+                    value={taskData.answer || ""}
+                    onChange={(value) => updateTempTask({ answer: value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                    placeholder="Дұрыс жауап"
+                    autoFocus
+                  />
+                </div>
               ) : (
                 <div
                   role={isEditing ? "button" : undefined}

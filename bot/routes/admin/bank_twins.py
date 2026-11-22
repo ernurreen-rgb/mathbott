@@ -212,5 +212,5 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
         except BankTwinError as exc:
             if image_filename:
-                delete_image_file(image_filename)
+                await delete_image_file_async(image_filename)
             raise HTTPException(status_code=404 if exc.code == "not_found" else 400, detail=str(exc))

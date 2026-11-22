@@ -14,9 +14,12 @@ export type FileDownloadResult = { blob: Blob | null; filename: string | null; e
 const inflightGetRequests = new Map<string, Promise<FetchResult<any>>>();
 const getCache = new Map<string, { expiresAt: number; value: FetchResult<any> }>();
 const GET_CACHE_TTL_MS = 1500;
+let cacheEpoch = 0;
 
 export function clearApiGetCache(): void {
+  cacheEpoch += 1;
   getCache.clear();
+  inflightGetRequests.clear();
 }
 
 function hasCustomAuthHeaders(headers?: HeadersInit): boolean {
@@ -52,9 +55,9 @@ export async function fetchWithErrorHandling<T>(
   const method = (options.method || "GET").toUpperCase();
   const isMutating = method !== "GET" && method !== "HEAD";
 
-  // Invalidate short-lived GET cache on any write so subsequent reads see fresh data.
+  // Invalidate short-lived GET cache and bump epoch on any write so in-flight GETs cannot write stale data (H-32).
   if (isMutating) {
-    getCache.clear();
+    clearApiGetCache();
   }
 
   const doFetch = async (): Promise<FetchResult<T>> => {
@@ -233,7 +236,7 @@ export async function fetchWithErrorHandling<T>(
         externalSignal.removeEventListener("abort", onExternalAbort);
       }
       if (isMutating) {
-        getCache.clear();
+        clearApiGetCache();
       }
     }
   };
@@ -256,21 +259,21 @@ export async function fetchWithErrorHandling<T>(
       return inflight as Promise<FetchResult<T>>;
     }
 
-    const p: Promise<FetchResult<T>> = (async () => {
-      try {
-        return await doFetch();
-      } finally {
-        inflightGetRequests.delete(url);
-      }
-    })();
-
+    const requestEpoch = cacheEpoch;
+    const p: Promise<FetchResult<T>> = doFetch();
     inflightGetRequests.set(url, p as any);
 
-    const result = await p;
-    if (!result.error) {
-      getCache.set(url, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value: result as any });
+    try {
+      const result = await p;
+      if (!result.error && requestEpoch === cacheEpoch) {
+        getCache.set(url, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value: result as any });
+      }
+      return result;
+    } finally {
+      if (inflightGetRequests.get(url) === p) {
+        inflightGetRequests.delete(url);
+      }
     }
-    return result;
   }
 
   return doFetch();

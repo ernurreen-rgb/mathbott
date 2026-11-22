@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import MathRender from '@/components/ui/MathRender';
 import { getAdminTrialTestTasks } from '@/lib/api/admin-trial-tests';
 import {
+  hasWorksheetTaskContent,
   MAX_WORKSHEET_TASKS,
   trialPlacementToWorksheetTask,
   type WorksheetTask,
@@ -60,10 +61,10 @@ export default function TrialTestWorksheetDialog({
           rawTasks = result.data || [];
         }
 
-        // Sort by slot order and filter out completely empty slots
+        // Sort by slot order and keep both text tasks and image-only tasks (H-35).
         const valid = [...rawTasks]
           .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-          .filter((t) => (t.text && t.text.trim().length > 0) || (t.bank_task?.text && t.bank_task.text.trim().length > 0))
+          .filter(hasWorksheetTaskContent)
           .map(trialPlacementToWorksheetTask);
 
         if (active) {
@@ -199,7 +200,11 @@ export default function TrialTestWorksheetDialog({
                   <span className="font-bold">{index + 1}.</span>
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-3 text-sm">
-                      <MathRender latex={task.text} />
+                      {task.text.trim() ? (
+                        <MathRender latex={task.text} />
+                      ) : (
+                        <span className="italic text-gray-500">Суретті тапсырма</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-1">

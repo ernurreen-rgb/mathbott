@@ -21,3 +21,19 @@ export const sortFolders = (a: TrialTestFolder, b: TrialTestFolder) => a.sort_or
 export function folderMoveTargets(folders: TrialTestFolder[], id: number) {
   return folders.filter((folder) => !folder.direct_test_count && !folderAncestors(folders, folder.id).some((f) => f.id === id));
 }
+
+/**
+ * Resolve initial folder selection for TrialTestFormDialog.
+ * When editing an existing root test (`folder_id === null`), preserve `""` so saving
+ * metadata never silently moves the root test into the first leaf folder (H-35).
+ */
+export function resolveInitialTrialTestFolderId(
+  test: { folder_id?: number | null } | undefined,
+  folderId: number | undefined,
+  leaves: Array<{ id: number }>
+): number | "" {
+  if (test) {
+    return test.folder_id ?? "";
+  }
+  return folderId ?? leaves[0]?.id ?? "";
+}

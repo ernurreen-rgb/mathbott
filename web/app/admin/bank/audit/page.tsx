@@ -8,6 +8,7 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import { getAdminBankAuditLogs, restoreAdminRoleFromAudit } from "@/lib/api";
 import { BankAuditAction, BankAuditLogItem } from "@/types";
+import { hasContentAccess } from "@/lib/admin-access";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { showToast } from "@/lib/toast";
 
@@ -186,8 +187,11 @@ export default function AdminBankAuditPage() {
                 >
                   Жаңарту
                 </button>
-                <Link href="/admin/bank" className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
-                  Банкке қайту
+                <Link
+                  href={hasContentAccess(access?.role) ? "/admin/bank" : "/admin"}
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg"
+                >
+                  {hasContentAccess(access?.role) ? "Банкке қайту" : "Әкімші панеліне қайту"}
                 </Link>
               </div>
             </div>

@@ -8,7 +8,8 @@ import SectionsPanel from "./SectionsPanel";
 import TrashPanel from "./TrashPanel";
 import CmsDialog from "./CmsDialog";
 import MiniLessonTabs from "./MiniLessonTabs";
-import { useCmsCache } from "./CmsCache";
+import { useCmsAdminRole, useCmsCache } from "./CmsCache";
+import { hasSuperAccess } from "@/lib/admin-access";
 import CmsSkeleton from "./CmsSkeleton";
 import styles from "../CmsWorkspace.module.css";
 import { createLessonActions } from "./createLessonActions";
@@ -41,6 +42,8 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
 
   const { data: session } = useSession();
   const sessionEmail = session?.user?.email || null;
+  const adminRole = useCmsAdminRole();
+  const canEmptyTrash = hasSuperAccess(adminRole);
   const cache = useCmsCache(sessionEmail);
   const modulesKey = "admin/modules";
   const sectionsKey = `admin/modules/${moduleId}/sections`;
@@ -406,7 +409,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
           </header>
           {error && <div role="alert" className={styles.error}>{error}</div>}
           <CmsDialog open={trashOpen} title="Жойылған тапсырмалар" onClose={() => setTrashOpen(false)} error={error}>
-            <TrashPanel trashOpen={trashOpen} emptyTrash={emptyTrash} trashLoading={trashLoading}
+            <TrashPanel trashOpen={trashOpen} canEmptyTrash={canEmptyTrash} emptyTrash={emptyTrash} trashLoading={trashLoading}
               trashTasks={trashTasks} restoreTaskFromTrash={restoreTaskFromTrash} />
           </CmsDialog>
           {navigationLoading && <CmsSkeleton />}

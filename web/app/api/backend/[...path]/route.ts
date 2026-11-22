@@ -7,7 +7,11 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
-import { normalizeProxyRequestBody } from "@/lib/proxy-request-body";
+import {
+  MAX_PROXY_BODY_BYTES,
+  normalizeProxyRequestBody,
+  readBoundedRequestBody,
+} from "@/lib/proxy-request-body";
 import {
   pathRequiresProxyUserEmail,
   pathSupportsOptionalProxyIdentity,
@@ -29,7 +33,6 @@ export const maxDuration = 60;
 
 const BACKEND_URL = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/+$/, "");
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const MAX_PROXY_BODY_BYTES = 12 * 1024 * 1024;
 const PROXY_FETCH_TIMEOUT_MS = 55_000;
 const INTERNAL_PROXY_SHARED_SECRET =
   process.env.INTERNAL_PROXY_SHARED_SECRET?.trim() ||
@@ -404,10 +407,11 @@ async function proxyRequest(
     let bodyHasEmail = false;
 
     if (isJsonBody && isMutatingMethod(request.method)) {
-      const rawBody = await request.text();
-      if (Buffer.byteLength(rawBody, "utf8") > MAX_PROXY_BODY_BYTES) {
+      const rawBuffer = await readBoundedRequestBody(request, MAX_PROXY_BODY_BYTES);
+      if (rawBuffer === null) {
         return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
       }
+      const rawBody = rawBuffer.toString("utf8");
       if (rawBody) {
         try {
           const payload = JSON.parse(rawBody);
@@ -429,17 +433,34 @@ async function proxyRequest(
         body = rawBody;
       }
     } else if (isMultipartBody) {
-      const formData = await request.formData();
+      const rawBuffer = await readBoundedRequestBody(request, MAX_PROXY_BODY_BYTES);
+      if (rawBuffer === null) {
+        return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
+      }
+      let formData: FormData;
+      try {
+        formData = await new Response(new Uint8Array(rawBuffer), {
+          headers: { "content-type": contentType },
+        }).formData();
+      } catch {
+        return NextResponse.json({ detail: "Invalid multipart request body" }, { status: 400 });
+      }
       bodyHasEmail = formData.has("email");
-      body = formData;
+      // Only re-serialize FormData when email needs rewriting; otherwise forward the bounded buffer directly.
+      body = bodyHasEmail ? formData : rawBuffer;
     } else if (request.method !== "GET" && request.method !== "HEAD") {
       try {
-        const rawBody = await request.text();
-        if (Buffer.byteLength(rawBody, "utf8") > MAX_PROXY_BODY_BYTES) {
+        const rawBuffer = await readBoundedRequestBody(request, MAX_PROXY_BODY_BYTES);
+        if (rawBuffer === null) {
           return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
         }
-        bodyHasEmail = new URLSearchParams(rawBody).has("email");
-        body = rawBody;
+        if (mediaType === "application/x-www-form-urlencoded" || mediaType.startsWith("text/")) {
+          const rawBody = rawBuffer.toString("utf8");
+          bodyHasEmail = new URLSearchParams(rawBody).has("email");
+          body = rawBody;
+        } else {
+          body = rawBuffer;
+        }
       } catch {
         body = undefined;
       }

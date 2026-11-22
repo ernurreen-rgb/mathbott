@@ -108,6 +108,16 @@ class CurriculumRepository(BaseRepository):
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
+    async def get_all_sections(self) -> List[Dict[str, Any]]:
+        """Get all sections across all modules ordered by module and sort_order (H-28 batch)."""
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                "SELECT * FROM sections ORDER BY module_id ASC, sort_order ASC, id ASC"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
     async def get_section_by_id(self, section_id: int) -> Optional[Dict[str, Any]]:
         """Get section by ID"""
         async with self._connection() as db:

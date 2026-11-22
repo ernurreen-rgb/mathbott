@@ -31,7 +31,8 @@ export function createTrashActions({
     setTrashLoading(true);
     try {
       const response = await fetch(
-        `${apiPath("admin/tasks/trash")}?email=${encodeURIComponent(session.user.email)}`
+        `${apiPath("admin/tasks/trash")}?email=${encodeURIComponent(session.user.email)}`,
+        { cache: "no-store" }
       );
       if (!response.ok) {
         throw new Error("Себеттегі тапсырмаларды жүктеу мүмкін болмады");
@@ -49,7 +50,8 @@ export function createTrashActions({
   const toggleTrash = () => {
     const willOpen = !trashOpen;
     setTrashOpen(willOpen);
-    if (willOpen && trashTasks.length === 0) {
+    // Always refresh trash when opening so newly deleted tasks appear immediately (H-35).
+    if (willOpen) {
       void fetchTrashTasks();
     }
   };

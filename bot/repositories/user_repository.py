@@ -98,6 +98,36 @@ def _should_log_page_visit(
 class UserRepository(BaseRepository):
     """Repository for user operations"""
 
+    async def _persist_presence_activity(self, db, user_id: int, clean_path: Optional[str]) -> None:
+        track_pages = await self._has_page_visit_tracking(db)
+        if track_pages and clean_path is not None:
+            await db.execute(
+                "UPDATE users SET last_active = mathbot_datetime('now'), last_seen_path = ? WHERE id = ?",
+                (clean_path, user_id),
+            )
+            async with db.execute(
+                "SELECT path, visited_at FROM user_page_visits WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                (user_id,),
+            ) as visit_cursor:
+                last_visit = await visit_cursor.fetchone()
+            last_path = last_visit["path"] if last_visit else None
+            last_visited_at = last_visit["visited_at"] if last_visit else None
+            if _should_log_page_visit(last_path, last_visited_at, clean_path):
+                await db.execute(
+                    "INSERT INTO user_page_visits (user_id, path) VALUES (?, ?)",
+                    (user_id, clean_path),
+                )
+        else:
+            await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
+
+    async def record_presence_activity(self, user_id: int, path: Optional[str] = None) -> None:
+        """Persist last_active and deduplicated page visit telemetry for WebSocket presence (H-31)."""
+        clean_path = normalize_visit_path(path)
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            await self._persist_presence_activity(db, user_id, clean_path)
+            await db.commit()
+
     async def heartbeat_presence(self, user_id: int, path: Optional[str] = None) -> List[Dict[str, Any]]:
         """Persist activity (and optionally deduplicated page visit) for hosted presence."""
         clean_path = normalize_visit_path(path)
@@ -105,26 +135,7 @@ class UserRepository(BaseRepository):
         async def operation():
             async with self._connection() as db:
                 db.row_factory = db_driver.Row
-                track_pages = await self._has_page_visit_tracking(db)
-                if track_pages and clean_path is not None:
-                    await db.execute(
-                        "UPDATE users SET last_active = mathbot_datetime('now'), last_seen_path = ? WHERE id = ?",
-                        (clean_path, user_id),
-                    )
-                    async with db.execute(
-                        "SELECT path, visited_at FROM user_page_visits WHERE user_id = ? ORDER BY id DESC LIMIT 1",
-                        (user_id,),
-                    ) as visit_cursor:
-                        last_visit = await visit_cursor.fetchone()
-                    last_path = last_visit["path"] if last_visit else None
-                    last_visited_at = last_visit["visited_at"] if last_visit else None
-                    if _should_log_page_visit(last_path, last_visited_at, clean_path):
-                        await db.execute(
-                            "INSERT INTO user_page_visits (user_id, path) VALUES (?, ?)",
-                            (user_id, clean_path),
-                        )
-                else:
-                    await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
+                await self._persist_presence_activity(db, user_id, clean_path)
                 async with db.execute("""SELECT id, nickname FROM users
                     WHERE last_active >= mathbot_datetime('now', '-70 seconds')
                     ORDER BY id""") as cursor:

@@ -7,7 +7,7 @@ import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon, { type IconName } from "@/components/ui/Icon";
 import { getAdminStatistics } from "@/lib/api";
-import { isAllowedForPage } from "@/lib/admin-access";
+import { hasContentAccess, isAllowedForPage } from "@/lib/admin-access";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import type { StatisticsByTab, StatisticsPeriod, StatisticsPeriodKey, StatisticsTab } from "@/types";
 import styles from "../Statistics.module.css";
@@ -215,7 +215,7 @@ export default function StatisticsWorkspace() {
               <div className={styles.panel} data-stale={stale} aria-busy={stale}>
                 {tab === "overview" && <OverviewTab data={data as StatisticsByTab["overview"]} onNavigate={navigate} />}
                 {tab === "students" && <StudentsTab key={tabIntent?.token ?? "students"} data={data as StatisticsByTab["students"]} initialSegment={studentSegment} viewerEmail={email} />}
-                {tab === "tasks" && <TasksTab key={tabIntent?.token ?? "tasks"} data={data as StatisticsByTab["tasks"]} initialFilter={taskFilter} />}
+                {tab === "tasks" && <TasksTab key={tabIntent?.token ?? "tasks"} data={data as StatisticsByTab["tasks"]} initialFilter={taskFilter} canManageContent={hasContentAccess(access?.role)} />}
                 {tab === "modules" && <ModulesTab data={data as StatisticsByTab["modules"]} />}
                 {tab === "trial-tests" && <TrialTestsTab data={data as StatisticsByTab["trial-tests"]} />}
                 {tab === "quizzes" && <QuizzesTab data={data as StatisticsByTab["quizzes"]} />}
