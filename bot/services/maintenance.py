@@ -12,8 +12,10 @@ async def run_maintenance_cycle(db, monitor=None):
     activity_days = get_settings().page_visit_retention_days
     page_visits = await db.users.cleanup_old_page_visits(activity_days)
     prompt_events = await db.push.cleanup_old_prompt_events(activity_days)
+    client_timings = await db.client_timings.cleanup_old(get_settings().client_timing_retention_days)
     retention = await monitor.run_cleanup()
     await monitor.run_cycle()
     return {"tasks_deleted": tasks, "bank_tasks_deleted": bank, "quiz_entry_limits_deleted": entry_limits,
             "page_visits_deleted": page_visits, "reminder_prompt_events_deleted": prompt_events,
+            "client_request_timings_deleted": client_timings,
             "retention": retention}

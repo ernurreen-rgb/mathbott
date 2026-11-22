@@ -17,6 +17,7 @@ const SENSITIVE_PREFIXES = [
 ] as const;
 
 const OPTIONAL_IDENTITY_ROOTS = new Set([
+  "client-timings",
   "quizzes",
   "quiz-sessions",
   "modules",

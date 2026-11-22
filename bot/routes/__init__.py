@@ -19,6 +19,7 @@ from routes import quizzes
 from routes import quiz_game
 from routes import module_review
 from routes import push
+from routes import client_timings
 from routes.maintenance import setup_maintenance_routes
 
 
@@ -48,6 +49,7 @@ def register_routes(app: FastAPI, db: Database, limiter: Limiter):
     quiz_game.setup_quiz_game_routes(app, db, limiter)
     module_review.setup_module_review_routes(app, db, limiter)
     push.setup_push_routes(app, db, limiter)
+    client_timings.setup_client_timings_routes(app, db, limiter)
 
     # Admin роуты (должны быть последними для правильного порядка)
     admin.setup_admin_routes(app, db, limiter)

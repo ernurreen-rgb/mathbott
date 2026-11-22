@@ -21,6 +21,7 @@ import {
 import { TrialTestDetails, LessonTask } from "@/types";
 import styles from "./TrialTestWorkspace.module.css";
 import { useI18n } from "@/lib/i18n/provider";
+import { timedFetch } from "@/lib/request-timing";
 import { tr } from "@/lib/i18n/translate";
 
 
@@ -151,7 +152,7 @@ export default function TrialTestPage() {
       pendingDraftSaveRef.current = save;
 
       try {
-        const res = await fetch(request.url, {
+        const res = await timedFetch(request.url, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request.payload),

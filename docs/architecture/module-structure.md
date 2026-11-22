@@ -66,6 +66,7 @@ Middlewares are registered in [`bot/app.py`](../../bot/app.py). In Starlette/Fas
 | [`quizzes.py`](../../bot/routes/quizzes.py) | Quiz catalog (`GET /api/quizzes`), quiz CRUD, question CRUD (inline or linked from `bank_tasks`), and quiz forking (`POST /api/quizzes/{quiz_id}/fork`). |
 | [`quiz_game.py`](../../bot/routes/quiz_game.py) | Live quiz sessions: creation, PIN lookup, DB-quota-protected join, avatar selection, host controls (`start`, `next`, `current-question`, `finish`), student `progress`/`answers`/`complete`/`review`, and `/ws/quiz/{session_id}` WebSocket. |
 | [`presence.py`](../../bot/routes/presence.py) | Shared DB heartbeat (`POST /api/presence/heartbeat`) and WebSocket presence (`GET /api/presence/ws-token`, `/ws/presence`). |
+| [`client_timings.py`](../../bot/routes/client_timings.py) | `POST /api/client-timings`: request timings from students' devices (`web/lib/request-timing.ts`), stored in `client_request_timings`. |
 | [`reports.py`](../../bot/routes/reports.py) | Student task issue reporting for module tasks (`/api/reports`) and trial test tasks (`/api/trial-test-reports`). |
 | [`export.py`](../../bot/routes/export.py) | Personal user data export (`GET /api/export/user/{email}`) and admin statistics export (`GET /api/export/admin/stats`) in JSON/CSV. |
 | [`maintenance.py`](../../bot/routes/maintenance.py) | `GET /api/maintenance` bearer-authenticated cron endpoint executing `run_Scheduled_maintenance`. |

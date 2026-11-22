@@ -47,6 +47,26 @@ const KNOWN_NEXTAUTH_PLACEHOLDER_SECRETS = new Set([
   "your-secret-key-here",
 ]);
 
+// The first request this function instance serves waited for it to start (a cold start).
+let servedARequest = false;
+
+/**
+ * Server-Timing for students' devices (lib/request-timing.ts): the API's own part ("app",
+ * "api-cold"), this proxy's call to the API ("api") and all of this proxy's time ("proxy").
+ * Whatever a device waited beyond "proxy" was spent on its network.
+ */
+function proxyServerTiming(startedAt: number, upstreamMs: number | null, upstreamTiming: string | null): string {
+  const parts: string[] = [];
+  if (upstreamTiming) parts.push(upstreamTiming.slice(0, 200));
+  if (upstreamMs !== null) parts.push(`api;dur=${upstreamMs.toFixed(1)}`);
+  parts.push(`proxy;dur=${(performance.now() - startedAt).toFixed(1)}`);
+  if (!servedARequest) {
+    servedARequest = true;
+    parts.push("proxy-cold");
+  }
+  return parts.join(", ");
+}
+
 const STRIP_REQUEST_HEADERS = new Set([
   "authorization",
   "connection",
@@ -335,6 +355,8 @@ async function proxyRequest(
   request: NextRequest,
   params: Promise<{ path: string[] }>
 ) {
+  const startedAt = performance.now();
+  let upstreamMs: number | null = null;
   try {
     const resolvedParams = await params;
     const originalPathSegments = [...resolvedParams.path];
@@ -622,6 +644,7 @@ async function proxyRequest(
       }
     }
 
+    const upstreamStartedAt = performance.now();
     const response = await fetch(url, {
       method: request.method,
       headers,
@@ -643,12 +666,14 @@ async function proxyRequest(
     let nextResponse: NextResponse;
     if (isBinary) {
       const buffer = Buffer.from(await response.arrayBuffer());
+      upstreamMs = performance.now() - upstreamStartedAt;
       nextResponse = new NextResponse(buffer, {
         status: response.status,
         statusText: response.statusText,
       });
     } else {
       const data = await response.text();
+      upstreamMs = performance.now() - upstreamStartedAt;
 
       if (!response.ok) {
         console.error(`Backend API error (${response.status}):`, redactBackendUrl(url));
@@ -696,17 +721,22 @@ async function proxyRequest(
       }
       nextResponse.headers.set(key, value);
     });
+    nextResponse.headers.set(
+      "Server-Timing",
+      proxyServerTiming(startedAt, upstreamMs, response.headers.get("server-timing")),
+    );
 
     return nextResponse;
   } catch (error: unknown) {
     console.error("Proxy error:", error);
     const isTimeout =
       error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    const headers = { "Server-Timing": proxyServerTiming(startedAt, upstreamMs, null) };
     if (isTimeout) {
-      return NextResponse.json({ detail: "Backend request timed out" }, { status: 504 });
+      return NextResponse.json({ detail: "Backend request timed out" }, { status: 504, headers });
     }
     const detail =
       !IS_PRODUCTION && error instanceof Error && error.message ? error.message : "Proxy error";
-    return NextResponse.json({ detail }, { status: 500 });
+    return NextResponse.json({ detail }, { status: 500, headers });
   }
 }

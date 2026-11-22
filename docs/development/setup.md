@@ -107,6 +107,7 @@ Defined and validated in [`bot/settings.py`](../../bot/settings.py) (`Settings`)
 | `OPS_HEALTH_SAMPLE_RETENTION_DAYS` | `30` | No | Retention window for `ops_health_samples`. |
 | `OPS_INCIDENT_RETENTION_DAYS` | `365` | No | Retention window for resolved rows in `ops_incidents`. |
 | `PAGE_VISIT_RETENTION_DAYS` | `90` | No | Days of student activity records kept: page visits (`user_page_visits`) for admin statistics and streak reminder offers (`reminder_prompt_events`). The daily `/api/maintenance` run deletes older rows; `users.last_seen_path` is kept. |
+| `CLIENT_TIMING_RETENTION_DAYS` | `30` | No | Days of request timings reported by students' devices (`client_request_timings`) kept; the daily `/api/maintenance` run deletes older rows. See deploy/NEON_VERCEL.md. |
 
 ### 2.2 Frontend Environment Variables (`web/.env.local`)
 

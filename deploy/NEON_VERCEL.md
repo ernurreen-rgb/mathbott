@@ -222,6 +222,42 @@ keys the feature stays off: turning the switch on shows an error and the cron
 sends nothing. `VAPID_SUBJECT` (default `https://qazmath.vercel.app`)
 identifies the sender to the push services.
 
+## Request timings from students' devices
+
+The servers only see their own part of a request. To find where a slow lesson
+loses time, the site times every API request on the student's device
+(`web/lib/request-timing.ts`) and reports to `POST /api/client-timings` the ones
+that took 3 s or more (`slow`), failed or answered 5xx (`failed`), and 10% of the
+rest (`sample`, the baseline). Rows go to `client_request_timings` and are kept
+for `CLIENT_TIMING_RETENTION_DAYS` (30) days. Paths and pages are templates
+(`lessons/:id`); no emails, query strings or answers are stored.
+
+Every proxied response carries a `Server-Timing` header that the device copies
+into its report: `app_ms` is the API's own handling, `api_ms` the proxy's call to
+the API (so `api_ms - app_ms` is the hop between the two functions), and
+`proxy_ms` all of the proxy's time. `duration_ms - proxy_ms` is what the device's
+network added. `api-cold`/`proxy-cold` in `details` mark a function's cold start,
+and `was_hidden` a page that was hidden meanwhile (a locked phone pauses requests).
+
+```sql
+-- Where the time went, per kind of report (hidden pages left out).
+SELECT kind, COUNT(*) AS requests,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) AS device_p50,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms - proxy_ms) AS network_p50,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY proxy_ms) AS proxy_p50,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY app_ms) AS api_p50
+FROM client_request_timings WHERE was_hidden = 0 AND received_at >= '2026-11-23'
+GROUP BY kind;
+
+-- Slow and failed requests one by one, to see whether a class froze at once.
+SELECT received_at, user_id, path, kind, error, duration_ms, proxy_ms, app_ms, effective_type,
+       details->>'rtt_ms' AS rtt, details->>'queued_ms' AS queued, details->>'connect_ms' AS connect
+FROM client_request_timings WHERE kind <> 'sample' ORDER BY received_at DESC LIMIT 100;
+```
+
+PostgreSQL `0019_client_request_timings` adds the table; the API records
+nothing until it is applied.
+
 ## AI twin drafts
 
 Teachers can ask an AI provider for three number-only twin drafts of a bank task.

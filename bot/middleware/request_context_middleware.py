@@ -21,6 +21,19 @@ from utils.request_context import (
 
 logger = logging.getLogger(__name__)
 _SAFE_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+# The first request this process serves waited for it to start (a cold start on Vercel).
+_served_a_request = False
+
+
+def _server_timing(duration_ms: float) -> str:
+    """The API's part of a request for the Server-Timing header: the site's proxy adds its own,
+    and students' devices report all of it (routes/client_timings.py)."""
+    global _served_a_request
+    timing = f"app;dur={duration_ms}"
+    if not _served_a_request:
+        _served_a_request = True
+        timing += ", api-cold"
+    return timing
 
 
 def _sanitize_request_id(raw_value: str | None) -> str:
@@ -81,6 +94,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         response.headers["X-Request-ID"] = request_id
         duration_ms = round((time.perf_counter() - start) * 1000.0, 2)
+        existing_timing = response.headers.get("Server-Timing")
+        timing = _server_timing(duration_ms)
+        response.headers["Server-Timing"] = f"{existing_timing}, {timing}" if existing_timing else timing
         logger.info(
             "request_end",
             extra={

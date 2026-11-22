@@ -22,6 +22,7 @@ import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReport
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
 import { pickNextTaskId, pickStepAfterReview } from "@/lib/lesson-flow";
 import { useI18n } from "@/lib/i18n/provider";
+import { timedFetch } from "@/lib/request-timing";
 import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
 import MiniLessonSummary from "./_components/MiniLessonSummary";
 
@@ -430,7 +431,7 @@ export default function LessonPage() {
     const timeoutId = setTimeout(() => controller.abort(), 20_000);
     try {
       clearApiGetCache();
-      const res = await fetch(apiPath("task/check"), {
+      const res = await timedFetch(apiPath("task/check"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task_id: task.id, answer, email }),

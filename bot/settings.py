@@ -92,6 +92,8 @@ class Settings(BaseSettings):
 
     # Student page visits (admin statistics) are kept for the longest statistics period.
     page_visit_retention_days: int = 90
+    # Request timings reported by students' devices (client_request_timings).
+    client_timing_retention_days: int = 30
 
     @field_validator("environment", mode="before")
     @classmethod
@@ -118,6 +120,7 @@ class Settings(BaseSettings):
         "ops_health_sample_retention_days",
         "ops_incident_retention_days",
         "page_visit_retention_days",
+        "client_timing_retention_days",
         mode="before",
     )
     @classmethod
@@ -128,6 +131,7 @@ class Settings(BaseSettings):
             "ops_health_sample_retention_days": 30,
             "ops_incident_retention_days": 365,
             "page_visit_retention_days": 90,
+            "client_timing_retention_days": 30,
         }
         try:
             return int(str(value).strip())

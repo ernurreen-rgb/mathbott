@@ -1,5 +1,6 @@
 import { API_URL } from "../constants";
 import { tr } from "../i18n/translate";
+import { timedFetch } from "../request-timing";
 
 const DEBUG_API = process.env.NEXT_PUBLIC_DEBUG_API === "true";
 export const debugLog = (...args: any[]) => {
@@ -34,17 +35,7 @@ function hasCustomAuthHeaders(headers?: HeadersInit): boolean {
   });
 }
 
-export const apiPath = (path: string): string => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || API_URL;
-  const baseUrl = apiUrl.replace(/\/$/, "");
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-
-  if (baseUrl.startsWith("/")) {
-    return `${baseUrl}/${cleanPath}`;
-  } else {
-    return `${baseUrl}/api/${cleanPath}`;
-  }
-};
+export { apiPath } from "./api-path";
 
 export async function fetchWithErrorHandling<T>(
   url: string,
@@ -85,7 +76,7 @@ export async function fetchWithErrorHandling<T>(
     try {
       debugLog("Fetching:", url, options);
 
-      const response = await fetch(url, {
+      const response = await timedFetch(url, {
         ...options,
         signal: controller.signal,
       });
