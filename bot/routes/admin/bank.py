@@ -221,10 +221,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         min_count: int = Query(2, ge=1, le=100),
         limit: int = Query(100, ge=1, le=200),
+        min_students: int = Query(2, ge=1, le=100),
     ):
         return await db.bank_tasks.list_unrecognized_answers(
             min_count=min_count,
             limit=limit,
+            min_students=min_students,
         )
 
     @app.post("/api/admin/bank/tasks/{task_id}/accepted-answers")

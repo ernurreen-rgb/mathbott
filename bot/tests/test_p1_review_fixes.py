@@ -192,5 +192,115 @@ class WriteLockKeyTests(unittest.TestCase):
         self.assertTrue(any(sql.startswith("DELETE FROM lessons") for sql in conn.statements))
 
 
+class UnrecognizedAnswerQueueTests(unittest.TestCase):
+    def test_one_student_repeating_an_answer_does_not_reach_the_queue(self):
+        from unittest.mock import patch
+
+        from repositories.bank.unrecognized_answers import _aggregate_unrecognized_answer_rows
+
+        def row(user_id: int, minute: int) -> dict:
+            return {
+                "attempt_user_id": user_id, "student_answer": "\\htmlStyle{position:fixed}{x}",
+                "attempted_at": f"2026-11-10 10:{minute:02d}:00", "source": "lesson", "bank_task_id": 5,
+                "task_text": "?", "correct_answer": "1", "accepted_answers": "[]", "question_type": "input",
+                "answer_mode": "written", "options": None, "subquestions": None, "current_version": 1,
+            }
+
+        with patch("repositories.bank.unrecognized_answers.is_task_answer_correct", return_value=False):
+            one_student = [row(7, minute) for minute in range(5)]
+            items, total = _aggregate_unrecognized_answer_rows(one_student, min_count=2, limit=10, min_students=2)
+            self.assertEqual((items, total), ([], 0))
+
+            two_students = [row(7, 1), row(8, 2)]
+            items, total = _aggregate_unrecognized_answer_rows(two_students, min_count=2, limit=10, min_students=2)
+            self.assertEqual(total, 1)
+            self.assertEqual(items[0]["students_count"], 2)
+
+
+class SignedBodyBufferingTests(unittest.TestCase):
+    """Forged signature headers must not make the middleware buffer a large body."""
+
+    SECRET = "s" * 48
+
+    def _signed_headers(self, body: bytes, *, forge: bool = False) -> list[tuple[bytes, bytes]]:
+        import hmac
+        import time
+
+        from utils.internal_proxy_auth import build_canonical_proxy_payload
+
+        timestamp = str(int(time.time()))
+        nonce = "nonce-review-fix"
+        body_sha256 = hashlib.sha256(body).hexdigest()
+        payload = build_canonical_proxy_payload(
+            method="POST", path="/api/echo", raw_query="", user_email="",
+            timestamp=timestamp, nonce=nonce, body_sha256=body_sha256, content_type="application/json",
+        )
+        signature = hmac.new(self.SECRET.encode(), payload, hashlib.sha256).hexdigest()
+        if forge:
+            signature = "0" * 64
+        return [
+            (b"content-type", b"application/json"),
+            (b"x-proxy-request-ts", timestamp.encode()),
+            (b"x-proxy-request-nonce", nonce.encode()),
+            (b"x-proxy-request-signature-v2", signature.encode()),
+            (b"x-proxy-body-sha256", body_sha256.encode()),
+            (b"x-proxy-content-type", b"application/json"),
+        ]
+
+    def _run(self, headers, chunks):
+        from middleware.trusted_proxy_identity import TrustedProxyIdentityMiddleware
+
+        received_by_app: list[bytes] = []
+        pulled = {"count": 0}
+
+        async def app(scope, receive, send):
+            more = True
+            while more:
+                message = await receive()
+                received_by_app.append(message.get("body", b""))
+                more = message.get("more_body", False)
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        pending = list(chunks)
+
+        async def receive():
+            pulled["count"] += 1
+            chunk = pending.pop(0)
+            return {"type": "http.request", "body": chunk, "more_body": bool(pending)}
+
+        sent: list[dict] = []
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {
+            "type": "http", "method": "POST", "path": "/api/echo", "raw_path": b"/api/echo",
+            "query_string": b"", "headers": headers, "client": ("10.0.0.1", 1), "server": ("t", 80),
+            "scheme": "http", "http_version": "1.1", "asgi": {"version": "3.0"},
+        }
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "INTERNAL_PROXY_SHARED_SECRET": self.SECRET}):
+            asyncio.run(TrustedProxyIdentityMiddleware(app)(scope, receive, send))
+        status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+        return status, pulled["count"], b"".join(received_by_app)
+
+    def test_forged_signature_is_rejected_before_any_body_is_read(self):
+        chunks = [b"x" * 4096] * 512  # 2 MiB, above the unsigned identity limit
+        status, pulled, _ = self._run(self._signed_headers(b"".join(chunks), forge=True), chunks)
+        self.assertEqual(status, 401)
+        self.assertEqual(pulled, 0)
+
+    def test_valid_signature_still_buffers_and_replays_the_whole_body(self):
+        chunks = [b'{"a":"' + b"x" * 4000, b"y" * 4000 + b'"}']
+        body = b"".join(chunks)
+        status, pulled, replayed = self._run(self._signed_headers(body), chunks)
+        self.assertEqual(status, 200)
+        self.assertEqual(pulled, 2)
+        self.assertEqual(replayed, body)
+
+
 if __name__ == "__main__":
     unittest.main()

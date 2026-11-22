@@ -258,6 +258,24 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     """
     Returns: (is_valid, user_email, error_code)
     """
+    return _check_proxy_signature(request, headers_only=False)
+
+
+def precheck_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Check the signed headers before the request body is read.
+
+    The signature covers the claimed body hash, so a forged signature is rejected here and
+    never earns the large signed-body buffer. The body hash itself, the replay check and the
+    result cache are left to verify_proxy_signature once the body has been read.
+    """
+    return _check_proxy_signature(request, headers_only=True)
+
+
+def _check_proxy_signature(
+    request: Request,
+    *,
+    headers_only: bool,
+) -> Tuple[bool, Optional[str], Optional[str]]:
     timestamp = (request.headers.get(PROXY_TS_HEADER) or "").strip()
     nonce_header = (request.headers.get(PROXY_NONCE_HEADER) or "").strip()
     nonce = nonce_header or None
@@ -274,14 +292,15 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     if not timestamp or not signature:
         return False, None, "missing_headers"
 
-    cached_result = _get_cached_proxy_signature_result(
-        request,
-        timestamp=timestamp,
-        nonce=payload_nonce,
-        signature=signature,
-    )
-    if cached_result is not None:
-        return cached_result
+    if not headers_only:
+        cached_result = _get_cached_proxy_signature_result(
+            request,
+            timestamp=timestamp,
+            nonce=payload_nonce,
+            signature=signature,
+        )
+        if cached_result is not None:
+            return cached_result
 
     secret = _get_proxy_secret()
     if not secret:
@@ -303,12 +322,13 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
         if _is_mutating_method(request.method) and not payload_body_sha256:
             return False, None, "body_hash_required"
 
-    actual_body_sha256 = getattr(request.state, "_trusted_proxy_body_sha256", None)
-    if settings.is_production and _is_mutating_method(request.method) and actual_body_sha256 is None:
-        return False, None, "body_hash_unverified"
-    if payload_body_sha256 is not None and actual_body_sha256 is not None:
-        if not hmac.compare_digest(payload_body_sha256, str(actual_body_sha256).lower()):
-            return False, None, "invalid_body_hash"
+    if not headers_only:
+        actual_body_sha256 = getattr(request.state, "_trusted_proxy_body_sha256", None)
+        if settings.is_production and _is_mutating_method(request.method) and actual_body_sha256 is None:
+            return False, None, "body_hash_unverified"
+        if payload_body_sha256 is not None and actual_body_sha256 is not None:
+            if not hmac.compare_digest(payload_body_sha256, str(actual_body_sha256).lower()):
+                return False, None, "invalid_body_hash"
 
     actual_content_type = (request.headers.get("content-type") or "").strip().lower()
     if payload_content_type is not None and not hmac.compare_digest(payload_content_type, actual_content_type):
@@ -326,6 +346,10 @@ def verify_proxy_signature(request: Request) -> Tuple[bool, Optional[str], Optio
     expected_signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_signature):
         return False, None, "invalid_signature"
+
+    if headers_only:
+        # Do not consume the nonce or cache: the full check after the body is read still must.
+        return True, user_email or None, None
 
     if payload_nonce is not None:
         cache_key = f"{timestamp}.{payload_nonce}.{signature}"

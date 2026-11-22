@@ -1,3 +1,5 @@
+import { stripUnsafeLatexCommands } from "@/lib/latex-safety";
+
 const KNOWN_LATEX_ENVIRONMENTS = [
   "smallmatrix",
   "dcases",
@@ -51,12 +53,15 @@ const GENERIC_DOTS_RE = /\\dots(?![A-Za-z])/g;
 export const normalizeLatexForMathDisplay = (value: string): string => {
   if (!value) return "";
 
-  return normalizeMathLiveTextEscapes(value)
-    .replace(GLUED_RELATION_FUNCTION_RE, "\\$1\\$2")
-    .replace(SPACED_ENVIRONMENT_COMMAND_RE, "\\$1{$2}")
-    .replace(REDUNDANT_CASES_WRAPPER_RE, "\\begin{$1}$2\\end{$1}")
-    .replace(LIST_DOTS_RE, "$1\\ldots")
-    .replace(GENERIC_DOTS_RE, "\\cdots");
+  // Strip last: unescaping can turn "\textbackslash htmlStyle" into "\htmlStyle".
+  return stripUnsafeLatexCommands(
+    normalizeMathLiveTextEscapes(value)
+      .replace(GLUED_RELATION_FUNCTION_RE, "\\$1\\$2")
+      .replace(SPACED_ENVIRONMENT_COMMAND_RE, "\\$1{$2}")
+      .replace(REDUNDANT_CASES_WRAPPER_RE, "\\begin{$1}$2\\end{$1}")
+      .replace(LIST_DOTS_RE, "$1\\ldots")
+      .replace(GENERIC_DOTS_RE, "\\cdots")
+  );
 };
 
 export const normalizeMathFieldValueForStorage = (value: string): string => {

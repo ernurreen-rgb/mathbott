@@ -23,6 +23,8 @@ export function resolveSafeCallbackPath(
     }
     const normalizedPath = parsed.pathname;
     if (
+      // Dot segments can collapse into a protocol-relative URL: "/.//evil.example" -> "//evil.example".
+      normalizedPath.startsWith("//") ||
       normalizedPath === "/" ||
       normalizedPath === "/api" ||
       normalizedPath.startsWith("/api/")

@@ -77,8 +77,10 @@ describe("service worker: streak reminder notifications", () => {
     await fire("push", push({ title: "x", url: "/\\evil.example.com" }));
     await fire("push", push({ title: "x", url: "/\t/evil.example.com" }));
     await fire("push", push({ title: "x", url: "/modules/../api/auth/signout" }));
+    await fire("push", push({ title: "x", url: "/.//evil.example.com" }));
     await fire("push", push(null));
     expect(shown.map((notification) => notification.options.data.url)).toEqual([
+      "/modules",
       "/modules",
       "/modules",
       "/modules",
@@ -90,6 +92,11 @@ describe("service worker: streak reminder notifications", () => {
 
   it("opens the app when no QazMath tab is open", async () => {
     await fire("notificationclick", click("/modules"));
+    expect(opened).toEqual([`${ORIGIN}/modules`]);
+  });
+
+  it("never opens another site from a dot-segment link", async () => {
+    await fire("notificationclick", click("/..//evil.example.com"));
     expect(opened).toEqual([`${ORIGIN}/modules`]);
   });
 

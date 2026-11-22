@@ -28,6 +28,13 @@ describe("default landing and auth callback path", () => {
     expect(resolveSafeCallbackPath("/api")).toBe("/modules");
   });
 
+  it("rejects dot-segment paths that normalize into a protocol-relative URL", () => {
+    expect(resolveSafeCallbackPath("/.//evil.example")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/..//evil.example")).toBe("/modules");
+    expect(resolveSafeCallbackPath("/modules/..//evil.example/x")).toBe("/modules");
+    expect(buildLoginRedirectHref("/.//evil.example")).toBe("/");
+  });
+
   it("preserves explicit safe in-app routes for shared links", () => {
     expect(resolveSafeCallbackPath("/modules")).toBe("/modules");
     expect(resolveSafeCallbackPath("/modules/3")).toBe("/modules/3");

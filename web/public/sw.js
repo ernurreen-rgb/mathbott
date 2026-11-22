@@ -160,6 +160,8 @@ function safeAppPath(value) {
   try {
     const parsed = new URL(value, self.location.origin);
     if (parsed.origin !== self.location.origin) return "/modules";
+    // Dot segments can collapse into a protocol-relative URL: "/.//host" -> "//host".
+    if (parsed.pathname.startsWith("//")) return "/modules";
     if (parsed.pathname === "/api" || parsed.pathname.startsWith("/api/")) return "/modules";
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {

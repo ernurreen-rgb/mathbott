@@ -18,10 +18,11 @@ coverage/
 .nyc_output/
 .jest/
 
-# Environment
+# Environment (same rules as bot/.dockerignore and .vercelignore: no env file reaches an image)
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+!.env.example
 
 # IDE
 .vscode/

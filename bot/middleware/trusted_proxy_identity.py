@@ -7,6 +7,7 @@ import json
 import hashlib
 import logging
 import re
+from collections import deque
 from typing import Iterable, Optional
 from urllib.parse import parse_qs, unquote
 
@@ -24,6 +25,7 @@ from settings import get_settings
 from utils.internal_proxy_auth import (
     PROXY_BODY_SHA256_HEADER,
     has_proxy_signature_headers,
+    precheck_proxy_signature,
     verify_proxy_signature,
 )
 
@@ -349,6 +351,20 @@ class TrustedProxyIdentityMiddleware:
                 await response(scope, receive, send)
                 return
 
+        # A body-hash signature can only be fully checked after reading the body, but its headers
+        # can be checked now. Without this, forged signature headers alone would make the server
+        # buffer up to MAX_SIGNED_BODY_BYTES for an unauthenticated client.
+        if should_verify_signed_body:
+            headers_valid, header_email, error_code = precheck_proxy_signature(request)
+            if not headers_valid:
+                logger.warning("Invalid trusted proxy signature: %s %s %s", path, error_code, header_email)
+                response = JSONResponse(
+                    {"detail": "Invalid trusted proxy signature."},
+                    status_code=401,
+                )
+                await response(scope, receive, send)
+                return
+
         body = b""
         replay_receive = receive
         if should_inspect_body or should_verify_signed_body:
@@ -369,31 +385,38 @@ class TrustedProxyIdentityMiddleware:
                 except ValueError:
                     pass
 
-            body_messages: list[Message] = []
+            # bytearray + incremental hash keep buffering linear: `bytes +=` copies the whole body
+            # on every chunk, which a client sending many small chunks turns into seconds of CPU.
+            body_messages: deque[Message] = deque()
+            body_buffer = bytearray()
+            body_hash = hashlib.sha256()
             more_body = True
             while more_body:
                 message = await receive()
                 body_messages.append(message)
                 if message["type"] != "http.request":
                     break
-                body += message.get("body", b"")
-                if len(body) > max_body_bytes:
+                chunk = message.get("body", b"")
+                if len(body_buffer) + len(chunk) > max_body_bytes:
                     response = JSONResponse(
                         {"detail": "Request body is too large for identity validation."},
                         status_code=413,
                     )
                     await response(scope, receive, send)
                     return
+                body_buffer += chunk
+                body_hash.update(chunk)
                 more_body = bool(message.get("more_body", False))
+            body = bytes(body_buffer)
 
             async def _replay_receive() -> Message:
                 if body_messages:
-                    return body_messages.pop(0)
+                    return body_messages.popleft()
                 return {"type": "http.request", "body": b"", "more_body": False}
 
             replay_receive = _replay_receive
 
-            request.state._trusted_proxy_body_sha256 = hashlib.sha256(body).hexdigest()
+            request.state._trusted_proxy_body_sha256 = body_hash.hexdigest()
 
         if has_signature and should_verify_signed_body:
             is_valid_proxy, proxy_email, error_code = verify_proxy_signature(request)

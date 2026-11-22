@@ -43,8 +43,13 @@ def _aggregate_unrecognized_answer_rows(
     *,
     min_count: int,
     limit: int,
+    min_students: int = 1,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """CPU-bound math normalization & grouping (designed to run off the asyncio loop)."""
+    """CPU-bound math normalization & grouping (designed to run off the asyncio loop).
+
+    ``min_students`` keeps one student from pushing an answer into the admin queue just by
+    submitting it repeatedly.
+    """
     tasks_by_id: Dict[int, Dict[str, Any]] = {}
     eval_cache: Dict[Tuple[int, str], Tuple[bool, str]] = {}
     grouped: Dict[Tuple[int, str], Dict[str, Any]] = {}
@@ -126,7 +131,7 @@ def _aggregate_unrecognized_answer_rows(
 
     items: List[Dict[str, Any]] = []
     for item in grouped.values():
-        if int(item["occurrences"]) < min_count:
+        if int(item["occurrences"]) < min_count or len(item["_users"]) < min_students:
             continue
         spellings: Counter = item.pop("_spellings")
         item["student_answer"] = spellings.most_common(1)[0][0]
@@ -162,6 +167,7 @@ class BankTaskUnrecognizedAnswersMixin:
         *,
         min_count: int = 2,
         limit: int = 100,
+        min_students: int = 2,
     ) -> Dict[str, Any]:
         """Aggregate recent incorrect written answers from lessons and trial tests.
 
@@ -278,12 +284,14 @@ class BankTaskUnrecognizedAnswersMixin:
             all_rows,
             min_count=min_count,
             limit=limit,
+            min_students=min_students,
         )
         return {
             "items": page_items,
             "total": total,
             "limit": limit,
             "min_count": min_count,
+            "min_students": min_students,
             "sample_limit_per_source": self._UNRECOGNIZED_EVENT_LIMIT,
         }
 
