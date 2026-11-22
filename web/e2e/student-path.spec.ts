@@ -126,3 +126,32 @@ test("a student takes a trial test and sees the result", async ({ studentPage: p
   await expect(numbers.getByRole("button", { name: "Тапсырма 1: Дұрыс" })).toBeVisible();
   await expect(numbers.getByRole("button", { name: "Тапсырма 2: Дұрыс" })).toBeVisible();
 });
+
+test("a student's menu asks once per tab whether they are an admin, not on every page", async ({ studentPage: page }) => {
+  // Every page renders its own menu; it used to ask the API on each one.
+  const checks: number[] = [];
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname.endsWith("/admin/check")) checks.push(response.status());
+  });
+
+  await page.goto("/modules");
+  await expect(page.getByRole("heading", { name: "Модуль картасы" })).toBeVisible();
+  await expect.poll(() => checks.length).toBeGreaterThan(0);
+  await page.locator('a[href="/modules/1"]').click();
+  await expect(page.getByRole("heading", { name: "Арифметика" })).toBeVisible();
+  await page.locator('a[href="/trial-test"]:visible').first().click();
+  await expect(page).toHaveURL(/\/trial-test$/);
+  await page.locator('a[href="/quizzes"]:visible').first().click();
+  await expect(page).toHaveURL(/\/quizzes$/);
+  // A reload starts the page over; the tab still remembers the answer.
+  await page.reload();
+  await page.locator('a[href="/modules"]:visible').first().click();
+  await expect(page.getByRole("heading", { name: "Модуль картасы" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+
+  // One answer for the whole tab. (A brand-new account may first be asked about before the API has
+  // created it; that "not found" is not remembered, so one more ask is allowed.)
+  expect(checks.filter((status) => status === 200)).toHaveLength(1);
+  expect(checks.length).toBeLessThanOrEqual(2);
+  await expect(page.locator('a[href="/admin/"]')).toHaveCount(0);
+});

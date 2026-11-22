@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { checkAdminStatus } from "@/lib/api";
 import { isAllowedForPage, type AdminPageKey } from "@/lib/admin-access";
+import { rememberAdminFlag } from "@/lib/admin-flag";
 import { showToast } from "@/lib/toast";
 import { trViewer } from "@/lib/i18n/translate";
 import type { AdminCheckResponse } from "@/types";
@@ -47,6 +48,8 @@ export function useAdminPageAccess(
     void (async () => {
       const { data, error } = await checkAdminStatus(email);
       if (cancelled) return;
+      // Admin pages always ask fresh; the menus reuse that answer instead of asking again.
+      if (!error && data) rememberAdminFlag(email, Boolean(data.is_admin));
 
       if (error || !data?.is_admin) {
         // Not an admin: a student who opened an admin link, so answer in their language.

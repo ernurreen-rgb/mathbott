@@ -1,8 +1,9 @@
 """
 Admin auth and admin-check routes.
 """
+from utils.admin_roles import normalize_admin_role
+
 from .common import (
-    ADMIN_ROLES,
     ADMIN_ROLE_SUPER_ADMIN,
     DEFAULT_ADMIN_SECRET,
     Database,
@@ -33,16 +34,20 @@ def register_auth_routes(app: FastAPI, db: Database, limiter: Limiter):
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
     ):
-        """Check admin status for the authenticated proxy user."""
-        email = str(current_user.get("email") or "").strip().lower()
-        is_admin = await db.users.is_admin(email=email)
+        """Check admin status for the authenticated proxy user.
+
+        Every page's menu asks this, so it answers from the user row the identity check already
+        loaded instead of reading that row again.
+        """
+        is_admin = bool(current_user.get("is_admin"))
         role: Optional[str] = None
         if is_admin:
-            role_raw = await db.users.get_admin_role(email=email)
-            if role_raw and role_raw in ADMIN_ROLES:
-                role = role_raw
-            else:
-                logger.warning("Missing or invalid admin role '%s' for user %s", role_raw, email)
+            role_raw = current_user.get("admin_role")
+            role = normalize_admin_role(role_raw)
+            if role is None:
+                logger.warning(
+                    "Missing or invalid admin role '%s' for user id=%s", role_raw, current_user.get("id")
+                )
                 is_admin = False
         return {
             "is_admin": is_admin,

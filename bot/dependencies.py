@@ -141,13 +141,10 @@ async def _require_admin_with_capability(
 ) -> dict:
     authenticated_email = await _resolve_authenticated_email(request=request, email=email)
 
-    is_admin = await db.users.is_admin(email=authenticated_email)
-    if not is_admin:
-        raise HTTPException(status_code=403, detail="Access denied. Admin rights required.")
-
+    # One read of the user row answers both "is this an admin" and "which role".
     user = await db.users.get_user_by_email(authenticated_email)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Access denied. Admin rights required.")
 
     raw_role = user.get("admin_role")
     admin_role = _normalize_admin_role(raw_role)

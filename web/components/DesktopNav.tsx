@@ -5,8 +5,7 @@ import Icon from "@/components/ui/Icon";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
-import { checkAdminStatus } from "@/lib/api";
+import { useIsAdmin } from "@/lib/use-is-admin";
 import { useI18n } from "@/lib/i18n/provider";
 import { useDesktopNav } from "@/lib/desktop-nav-context";
 
@@ -24,40 +23,8 @@ export default function DesktopNav(_props: DesktopNavProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { t } = useI18n();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const isAdmin = useIsAdmin(session?.user?.email);
   const { isCollapsed, toggleNav } = useDesktopNav();
-
-  useEffect(() => {
-    const loadAdminStatus = async () => {
-      const email = session?.user?.email;
-      if (email) {
-        try {
-          const { data, error } = await checkAdminStatus(email);
-          if (error) {
-            // Only log in development, silently fail in production
-            if (process.env.NODE_ENV === "development") {
-              console.error("Failed to check admin status:", error);
-            }
-            setIsAdmin(false);
-          } else {
-            setIsAdmin(!!data?.is_admin);
-          }
-        } catch (error) {
-          // Only log in development
-          if (process.env.NODE_ENV === "development") {
-            console.error("Failed to check admin status:", error);
-          }
-          setIsAdmin(false);
-        }
-      } else {
-        setIsAdmin(false);
-      }
-      setLoading(false);
-    };
-
-    loadAdminStatus();
-  }, [session?.user?.email]);
 
   const navItems = [
     {
@@ -94,7 +61,7 @@ export default function DesktopNav(_props: DesktopNavProps) {
     },
   ];
 
-  if (!loading && isAdmin) {
+  if (isAdmin) {
     navItems.push({
       id: "admin",
       label: t("nav.admin"),
