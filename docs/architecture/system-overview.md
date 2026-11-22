@@ -137,7 +137,7 @@ Admin authorization is enforced in `bot/dependencies.py` and `bot/repositories/u
 The frontend ([`web/lib/websocket-url.ts`](../../web/lib/websocket-url.ts)) selects its transport via `NEXT_PUBLIC_REALTIME_TRANSPORT`:
 - **`polling` (Vercel Production):**
   - Live Quiz players poll `GET /api/quiz-sessions/{id}/progress` every 4 seconds while the tab is visible; hosts poll session/leaderboard/stats endpoints.
-  - User online presence sends `POST /api/presence/heartbeat` every 25 seconds (70-second DB TTL in `users.last_seen_at`).
+  - User online presence sends `POST /api/presence/heartbeat` with the page path every 25 seconds (70-second DB TTL in `users.last_active`). A heartbeat without a path is not activity and records nothing.
 - **`websocket` (Local / Self-Hosted VPS):**
   - Clients obtain a short-lived HMAC token from `.../ws-token` and connect to `/ws/quiz/{session_id}` or `/ws/presence`, with automatic HTTP polling fallback on disconnect.
 

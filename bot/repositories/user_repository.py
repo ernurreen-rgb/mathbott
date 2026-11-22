@@ -99,8 +99,14 @@ class UserRepository(BaseRepository):
     """Repository for user operations"""
 
     async def _persist_presence_activity(self, db, user_id: int, clean_path: Optional[str]) -> None:
+        # Every page of the site sends its path. A heartbeat without one (or with an unusable one)
+        # comes from a tab still running the site from before page tracking (2026-11-18): such a
+        # tab pings from the background for days and made a student who opens nothing look active
+        # every day. It is not activity, so it changes nothing.
+        if clean_path is None:
+            return
         track_pages = await self._has_page_visit_tracking(db)
-        if track_pages and clean_path is not None:
+        if track_pages:
             await db.execute(
                 "UPDATE users SET last_active = mathbot_datetime('now'), last_seen_path = ? WHERE id = ?",
                 (clean_path, user_id),
@@ -129,7 +135,9 @@ class UserRepository(BaseRepository):
             await db.commit()
 
     async def heartbeat_presence(self, user_id: int, path: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Persist activity (and optionally deduplicated page visit) for hosted presence."""
+        """Persist activity and a deduplicated page visit for hosted presence; return who is online.
+
+        A heartbeat without a page path records nothing (see _persist_presence_activity)."""
         clean_path = normalize_visit_path(path)
 
         async def operation():

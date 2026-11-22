@@ -158,7 +158,7 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/presence/heartbeat` | Authenticated | Updates in-memory online presence timestamp for the user. |
+| `POST` | `/api/presence/heartbeat` | Authenticated | With the page `path`, records the student as active (`users.last_active`, 70-second online window) and logs a deduplicated page visit; returns who is online. Without a path (a tab from before 2026-11-18) it records nothing. |
 | `POST` | `/api/client-timings` | Optional Auth | Stores up to 20 request timings reported by the device (slow, failed, sampled). See deploy/NEON_VERCEL.md. |
 | `GET` | `/api/presence/ws-token` | Authenticated | Issues a short-lived HMAC ticket for `/ws/presence`. |
 | `WS` | `/ws/presence` | WS Ticket | Maintains live online presence via periodic WebSocket heartbeats. |
