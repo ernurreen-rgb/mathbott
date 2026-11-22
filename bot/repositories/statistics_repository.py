@@ -397,7 +397,11 @@ class StatisticsRepository(BaseRepository):
         return {row[0]: _int(row[1]) for row in rows if row[0] is not None}
 
     async def _load_mini_progress(
-        self, db: db_driver.Connection, exclude_admins: bool,
+        self,
+        db: db_driver.Connection,
+        exclude_admins: bool,
+        *,
+        user_ids: Optional[Set[int]] = None,
     ) -> Tuple[Dict[int, int], Dict[int, Dict[int, int]]]:
         """Active task counts per mini-lesson and each student's completed tasks in them."""
         totals = {
@@ -409,6 +413,26 @@ class StatisticsRepository(BaseRepository):
             """)
         }
         completed: Dict[int, Dict[int, int]] = {}
+        if user_ids is not None:
+            if not user_ids:
+                return totals, completed
+            sorted_ids = sorted(user_ids)
+            chunk_size = 500
+            for start in range(0, len(sorted_ids), chunk_size):
+                chunk = sorted_ids[start : start + chunk_size]
+                placeholders = ",".join("?" for _ in chunk)
+                for row in await self._rows(db, f"""
+                    SELECT up.user_id, t.mini_lesson_id, COUNT(*)
+                    FROM user_progress up
+                    JOIN tasks t ON t.id = up.task_id
+                    WHERE up.status = 'completed' AND t.deleted_at IS NULL AND t.mini_lesson_id IS NOT NULL
+                          AND up.user_id IN ({placeholders})
+                          {_without_admins("up.user_id", exclude_admins)}
+                    GROUP BY up.user_id, t.mini_lesson_id
+                """, chunk):
+                    completed.setdefault(int(row[0]), {})[int(row[1])] = _int(row[2])
+            return totals, completed
+
         for row in await self._rows(db, f"""
             SELECT up.user_id, t.mini_lesson_id, COUNT(*)
             FROM user_progress up
@@ -453,7 +477,12 @@ class StatisticsRepository(BaseRepository):
         async with self._connection() as db:
             activity = await self._load_activity(db, window, exclude_admins)
             registrations = await self._load_registrations(db, window, exclude_admins)
-            mini_totals, completed = await self._load_mini_progress(db, exclude_admins)
+            cohort = {
+                int(row[0]) for row in await self._rows(db, f"""
+                    SELECT id FROM users WHERE created_at >= ? AND created_at < ?{users_admins}
+                """, current_bounds)
+            }
+            mini_totals, completed = await self._load_mini_progress(db, exclude_admins, user_ids=cohort)
             heatmap_rows = await self._rows(db, f"""
                 SELECT extract(isodow FROM e.local_ts)::int, extract(hour FROM e.local_ts)::int, COUNT(*)
                 FROM (
@@ -471,11 +500,6 @@ class StatisticsRepository(BaseRepository):
                     HAVING COUNT(*) >= ? AND COUNT(*) FILTER (WHERE is_correct = 1) < ? * COUNT(*)
                 ) hard
             """, (*current_bounds, HARD_TASK_MIN_ATTEMPTS, HARD_TASK_MAX_ACCURACY)))[0][0])
-            cohort = {
-                int(row[0]) for row in await self._rows(db, f"""
-                    SELECT id FROM users WHERE created_at >= ? AND created_at < ?{users_admins}
-                """, current_bounds)
-            }
             totals_row = (await self._rows(db, f"""
                 SELECT
                     (SELECT COUNT(*) FROM users WHERE TRUE{users_admins}),
@@ -579,23 +603,36 @@ class StatisticsRepository(BaseRepository):
                 GROUP BY achievement_id
             """)
             quiz_rows = await self._rows(db, f"""
+                WITH period_sessions AS (
+                    SELECT id FROM quiz_sessions
+                    WHERE created_at >= ? AND created_at < ?
+                )
                 SELECT qp.user_id,
                        COUNT(DISTINCT qp.session_id),
                        COALESCE(SUM(qa.answers), 0),
                        COALESCE(SUM(qa.correct), 0)
                 FROM quiz_participants qp
-                JOIN quiz_sessions s ON s.id = qp.session_id
+                JOIN period_sessions s ON s.id = qp.session_id
                 LEFT JOIN (
                     SELECT session_id, participant_id,
                            COUNT(*) AS answers,
                            COUNT(*) FILTER (WHERE is_correct = 1) AS correct
                     FROM quiz_answers
+                    WHERE session_id IN (SELECT id FROM period_sessions)
                     GROUP BY session_id, participant_id
                 ) qa ON qa.session_id = qp.session_id AND qa.participant_id = qp.id
-                WHERE qp.user_id IS NOT NULL
-                  AND s.created_at >= ? AND s.created_at < ?{_without_admins("qp.user_id", exclude_admins)}
+                WHERE qp.user_id IS NOT NULL{_without_admins("qp.user_id", exclude_admins)}
                 GROUP BY qp.user_id
             """, (window.start_utc, window.end_utc))
+            previous_quiz_users = {
+                int(row[0]) for row in await self._rows(db, f"""
+                    SELECT DISTINCT qp.user_id
+                    FROM quiz_participants qp
+                    JOIN quiz_sessions s ON s.id = qp.session_id
+                    WHERE qp.user_id IS NOT NULL
+                      AND s.created_at >= ? AND s.created_at < ?{_without_admins("qp.user_id", exclude_admins)}
+                """, (window.previous_start_utc, window.start_utc))
+            } if window.days else set()
             ever_quiz = {
                 int(row[0]) for row in await self._rows(db, f"""
                     SELECT DISTINCT user_id FROM quiz_participants
@@ -666,10 +703,15 @@ class StatisticsRepository(BaseRepository):
                 "total_solved": _int(row[5]),
                 "streak": effective_streak(row[6], row[7], almaty_today),
                 "is_admin": bool(row[8]),
-                "is_active": cell is not None,
+                "is_active": (cell is not None) or (quiz_sessions > 0),
                 "is_new": row[9] is not None and (window.start is None or row[9] >= window.start),
-                "is_churned": bool(window.days) and cell is None and user_id in previous.users,
-                "never_active": user_id not in ever_active,
+                "is_churned": (
+                    bool(window.days)
+                    and cell is None
+                    and quiz_sessions == 0
+                    and (user_id in previous.users or user_id in previous_quiz_users)
+                ),
+                "never_active": (user_id not in ever_active) and (user_id not in ever_quiz),
             }
             if include_email:
                 student["email"] = row[2]
@@ -856,9 +898,14 @@ class StatisticsRepository(BaseRepository):
                     FROM solutions s
                     WHERE s.created_at >= ? AND s.created_at < ?{_without_admins("s.user_id", exclude_admins)}
                 ), firsts AS (
-                    SELECT DISTINCT ON (user_id, task_id) id
-                    FROM solutions
-                    ORDER BY user_id, task_id, id
+                    SELECT (
+                        SELECT s2.id
+                        FROM solutions s2
+                        WHERE s2.user_id = pair.user_id AND s2.task_id = pair.task_id
+                        ORDER BY s2.id ASC
+                        LIMIT 1
+                    ) AS id
+                    FROM (SELECT DISTINCT user_id, task_id FROM answers) pair
                 ), stats AS (
                     SELECT a.task_id,
                            COUNT(*) AS attempts,
@@ -984,19 +1031,28 @@ class StatisticsRepository(BaseRepository):
                          l.sort_order, COALESCE(l.lesson_number, 0), l.id, ml.mini_index, ml.id
             """)
             mini_totals, completed = await self._load_mini_progress(db, exclude_admins)
-            answer_rows = await self._rows(db, f"""
+            period_rows = await self._rows(db, f"""
                 SELECT s.user_id, t.mini_lesson_id,
-                       COUNT(*) FILTER (WHERE s.created_at >= ? AND s.created_at < ?),
-                       COUNT(*) FILTER (WHERE s.created_at >= ? AND s.created_at < ? AND s.is_correct = 1)
+                       COUNT(*),
+                       COUNT(*) FILTER (WHERE s.is_correct = 1)
+                FROM solutions s
+                JOIN tasks t ON t.id = s.task_id
+                WHERE s.created_at >= ? AND s.created_at < ?
+                  AND t.mini_lesson_id IS NOT NULL{_without_admins("s.user_id", exclude_admins)}
+                GROUP BY s.user_id, t.mini_lesson_id
+            """, bounds)
+            started_rows = await self._rows(db, f"""
+                SELECT DISTINCT s.user_id, t.mini_lesson_id
                 FROM solutions s
                 JOIN tasks t ON t.id = s.task_id
                 WHERE t.mini_lesson_id IS NOT NULL{_without_admins("s.user_id", exclude_admins)}
-                GROUP BY s.user_id, t.mini_lesson_id
-            """, bounds * 2)
+            """)
 
         started: Dict[int, Set[int]] = {}
         period: Dict[int, Dict[int, Tuple[int, int]]] = {}
-        for user_id, mini_id, attempts, correct in answer_rows:
+        for user_id, mini_id in started_rows:
+            started.setdefault(int(mini_id), set()).add(int(user_id))
+        for user_id, mini_id, attempts, correct in period_rows:
             started.setdefault(int(mini_id), set()).add(int(user_id))
             if attempts:
                 period.setdefault(int(mini_id), {})[int(user_id)] = (_int(attempts), _int(correct))
@@ -1130,7 +1186,7 @@ class StatisticsRepository(BaseRepository):
                           AND left(btrim(r.answers), 1) = '{{'
                     ) filtered
                     CROSS JOIN LATERAL jsonb_each(
-                        CASE WHEN left(btrim(filtered.answers), 1) = '{{' THEN filtered.answers::jsonb ELSE '{{}}'::jsonb END
+                        mathbot_try_jsonb_object(filtered.answers)
                     ) AS entry(key, value)
                     GROUP BY entry.key
                 ) stats ON stats.task_key = ttt.id::text
@@ -1239,22 +1295,30 @@ class StatisticsRepository(BaseRepository):
         """Live quiz usage. Hosts are teachers, so admin accounts are never filtered out here."""
         async with self._connection() as db:
             session_rows = await self._rows(db, f"""
+                WITH period_sessions AS (
+                    SELECT s.id, s.quiz_id, s.host_id, s.status, s.created_at
+                    FROM quiz_sessions s
+                    WHERE s.created_at >= ? AND s.created_at < ?
+                )
                 SELECT s.id, s.quiz_id, q.title, s.host_id, host.nickname, s.status, s.created_at,
                        {window.local_day("s.created_at")},
                        COALESCE(p.participants, 0), COALESCE(p.guests, 0),
                        COALESCE(a.answers, 0), COALESCE(a.correct, 0)
-                FROM quiz_sessions s
+                FROM period_sessions s
                 JOIN quizzes q ON q.id = s.quiz_id
                 LEFT JOIN users host ON host.id = s.host_id
                 LEFT JOIN (
                     SELECT session_id, COUNT(*) AS participants, COUNT(*) FILTER (WHERE user_id IS NULL) AS guests
-                    FROM quiz_participants GROUP BY session_id
+                    FROM quiz_participants
+                    WHERE session_id IN (SELECT id FROM period_sessions)
+                    GROUP BY session_id
                 ) p ON p.session_id = s.id
                 LEFT JOIN (
                     SELECT session_id, COUNT(*) AS answers, COUNT(*) FILTER (WHERE is_correct = 1) AS correct
-                    FROM quiz_answers GROUP BY session_id
+                    FROM quiz_answers
+                    WHERE session_id IN (SELECT id FROM period_sessions)
+                    GROUP BY session_id
                 ) a ON a.session_id = s.id
-                WHERE s.created_at >= ? AND s.created_at < ?
                 ORDER BY s.id
             """, (window.previous_start_utc, window.end_utc))
             quizzes_total = _int((await self._rows(db, "SELECT COUNT(*) FROM quizzes"))[0][0])

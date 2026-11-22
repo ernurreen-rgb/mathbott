@@ -11,7 +11,7 @@ MIGRATION_LOCK_ID = 724831922
 
 def run_postgres_migrations(url: str) -> None:
     import psycopg
-    from storage import postgres_options
+    from storage import clear_id_tables_cache, postgres_options
 
     with psycopg.connect(url, prepare_threshold=None, options=postgres_options(url)) as connection:
         with connection.cursor() as cursor:
@@ -33,3 +33,4 @@ def run_postgres_migrations(url: str) -> None:
                 cursor.execute(source)
                 cursor.execute("INSERT INTO mathbot_schema_migrations (version, checksum) VALUES (%s, %s)",
                                (migration.stem, checksum))
+    clear_id_tables_cache()

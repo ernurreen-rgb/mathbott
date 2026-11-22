@@ -538,17 +538,18 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         else:
             image_filename = None
 
-        await db.trial_tests.update_trial_test_task(
-            task_id=task_id,
-            sort_order=sort_order,
-            text_scale=text_scale_value,
-        )
+        if sort_order is not None:
+            await db.trial_tests.update_trial_test_task(
+                task_id=task_id,
+                sort_order=sort_order,
+            )
 
         bank_task_id = task.get("bank_task_id")
+        updated_bank = None
         if isinstance(bank_task_id, int) and bank_task_id > 0:
             bank_task = await db.bank_tasks.get_task_by_id(bank_task_id, include_deleted=True)
             if bank_task:
-                await db.bank_tasks.update_task(
+                updated_bank = await db.bank_tasks.update_task(
                     task_id=bank_task_id,
                     text=text if text else None,
                     answer=answer if answer else None,
@@ -565,6 +566,28 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                     actor_user_id=admin_user["id"],
                     source="admin_trial_task_update",
                 )
+
+        if updated_bank is None:
+            created_bank = await db.bank_tasks.create_task(
+                text=text or "",
+                answer=answer or "",
+                question_type=question_type,
+                answer_mode=answer_mode_value or "choices",
+                accepted_answers=accepted_answers_value,
+                text_scale=text_scale_value,
+                difficulty=difficulty_value or "B",
+                topics=topics_value or [],
+                options=options_list,
+                subquestions=subquestions_list,
+                image_filename=image_filename or None,
+                solution_filename=None,
+                created_by=admin_user["id"],
+                source="admin_trial_task_relink",
+            )
+            new_bank_id = created_bank.get("id") if isinstance(created_bank, dict) else None
+            if not isinstance(new_bank_id, int) or new_bank_id <= 0:
+                raise HTTPException(status_code=500, detail="Failed to persist trial test task content")
+            await db.trial_tests.update_trial_test_task(task_id=task_id, bank_task_id=new_bank_id)
 
         return {"success": True}
 

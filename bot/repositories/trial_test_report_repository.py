@@ -19,7 +19,7 @@ class TrialTestReportRepository(BaseRepository):
         trial_test_task_id: int,
         message: str,
     ) -> Dict[str, Any]:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="trial_test_reports") as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 """INSERT INTO trial_test_reports (user_id, trial_test_id, trial_test_task_id, message, status)
@@ -27,7 +27,6 @@ class TrialTestReportRepository(BaseRepository):
                 (user_id, trial_test_id, trial_test_task_id, message),
             ) as cursor:
                 report_id = cursor.lastrowid
-            await db.commit()
             async with db.execute(
                 """SELECT r.*, u.nickname as user_nickname, u.email as user_email,
                           tt.title as trial_test_title,
@@ -118,7 +117,7 @@ class TrialTestReportRepository(BaseRepository):
     async def update_trial_test_report_status(
         self, report_id: int, status: str, resolved_by: Optional[int] = None
     ) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="trial_test_reports") as db:
             if status == "resolved" and resolved_by:
                 async with db.execute(
                     """UPDATE trial_test_reports
@@ -126,23 +125,20 @@ class TrialTestReportRepository(BaseRepository):
                        WHERE id = ?""",
                     (status, resolved_by, report_id),
                 ) as cursor:
-                    await db.commit()
                     return cursor.rowcount > 0
             else:
                 async with db.execute(
                     """UPDATE trial_test_reports SET status = ? WHERE id = ?""",
                     (status, report_id),
                 ) as cursor:
-                    await db.commit()
                     return cursor.rowcount > 0
 
     async def delete_trial_test_report(self, report_id: int) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="trial_test_reports") as db:
             async with db.execute(
                 "DELETE FROM trial_test_reports WHERE id = ?",
                 (report_id,),
             ) as cursor:
-                await db.commit()
                 return cursor.rowcount > 0
 
     async def has_user_reported_trial_test_task(self, user_id: int, task_id: int) -> bool:

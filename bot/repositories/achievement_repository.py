@@ -39,8 +39,21 @@ class AchievementRepository(BaseRepository):
         if not eligible:
             return []
 
-        async with self._write_transaction() as db:
-            for achievement in eligible:
+        # Read existing achievements first so already-unlocked badges never take a write lock
+        # or perform no-op INSERTs on every subsequent solved task.
+        async with self._connection() as read_db:
+            async with read_db.execute(
+                "SELECT achievement_id FROM user_achievements WHERE user_id = ?",
+                (user_id,),
+            ) as cursor:
+                existing_ids = {row[0] for row in await cursor.fetchall()}
+
+        missing = [achievement for achievement in eligible if achievement["id"] not in existing_ids]
+        if not missing:
+            return []
+
+        async with self._write_transaction(lock_key=f"user:{user_id}") as db:
+            for achievement in missing:
                 cursor = await db.execute(
                     """
                     INSERT INTO user_achievements (user_id, achievement_id)

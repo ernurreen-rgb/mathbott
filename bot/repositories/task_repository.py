@@ -84,42 +84,28 @@ class TaskRepository(BaseRepository):
         solution_filename: Optional[str],
         created_by: Optional[int],
         difficulty_code: str = "B",
+        answer_mode: str = "choices",
     ) -> int:
-        if isinstance(options, str):
-            options_value = options
-        elif options is None:
-            options_value = None
-        else:
-            options_value = json.dumps(options)
-
-        if isinstance(subquestions, str):
-            subquestions_value = subquestions
-        elif subquestions is None:
-            subquestions_value = None
-        else:
-            subquestions_value = json.dumps(subquestions)
-
-        cursor = await db.execute(
-            """
-            INSERT INTO bank_tasks
-            (text, answer, question_type, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                text or "",
-                answer or "",
-                (question_type or "input").strip() or "input",
-                json.dumps(accepted_answers or [], ensure_ascii=False),
-                text_scale or "md",
-                options_value,
-                subquestions_value,
-                image_filename,
-                solution_filename,
-                difficulty_code,
-                created_by,
-            ),
+        parsed_options = self._parse_json_field(options) if isinstance(options, str) else options
+        parsed_subquestions = self._parse_json_field(subquestions) if isinstance(subquestions, str) else subquestions
+        bank_repo = BankTaskRepository(self.database_url, connection_pool=self.connection_pool)
+        return await bank_repo._insert_bank_task(
+            db,
+            text=text or "",
+            answer=answer or "",
+            question_type=(question_type or "input").strip() or "input",
+            difficulty=difficulty_code,
+            answer_mode=answer_mode,
+            accepted_answers=accepted_answers,
+            text_scale=text_scale or "md",
+            topics=[],
+            options=parsed_options,
+            subquestions=parsed_subquestions,
+            image_filename=image_filename,
+            solution_filename=solution_filename,
+            created_by=created_by,
+            source="task_repository_create",
         )
-        return int(cursor.lastrowid)
 
     async def get_task_by_id(
         self, task_id: int, *, conn: Optional[db_driver.Connection] = None,
@@ -154,8 +140,8 @@ class TaskRepository(BaseRepository):
         sort_order: int = 0,
         bank_task_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Create a task placement. If bank_task_id is missing, create a bank task first."""
-        async with self._connection() as db:
+        """Create a task placement atomically. If bank_task_id is missing, create a versioned bank task first."""
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
@@ -190,7 +176,6 @@ class TaskRepository(BaseRepository):
                 ),
             )
             task_id = int(cursor.lastrowid)
-            await db.commit()
 
         task = await self.get_task_by_id(task_id)
         return task or {}
@@ -209,9 +194,25 @@ class TaskRepository(BaseRepository):
         solution_filename: Optional[str] = None,
         task_type: Optional[str] = None,
         sort_order: Optional[int] = None,
+        bank_task_id: Optional[int] = None,
     ) -> None:
-        """Update placement fields and linked bank task content."""
-        async with self._connection() as db:
+        """Atomically update placement fields and (when supplied) linked bank task content."""
+        has_content_changes = any(
+            val is not None
+            for val in (
+                text,
+                answer,
+                question_type,
+                accepted_answers,
+                text_scale,
+                options,
+                subquestions,
+                image_filename,
+                solution_filename,
+            )
+        )
+        lock_key = "bank_tasks" if has_content_changes else "cms_tasks"
+        async with self._write_transaction(lock_key=lock_key) as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT id, bank_task_id FROM tasks WHERE id = ?",
@@ -229,6 +230,9 @@ class TaskRepository(BaseRepository):
             if sort_order is not None:
                 placement_updates.append("sort_order = ?")
                 placement_params.append(sort_order)
+            if bank_task_id is not None:
+                placement_updates.append("bank_task_id = ?")
+                placement_params.append(int(bank_task_id))
             if placement_updates:
                 placement_updates.append("updated_at = mathbot_datetime('now')")
                 placement_params.append(task_id)
@@ -237,38 +241,37 @@ class TaskRepository(BaseRepository):
                     placement_params,
                 )
 
-            await db.commit()
+            effective_bank_task_id = bank_task_id if bank_task_id is not None else task_row["bank_task_id"]
+            if effective_bank_task_id and has_content_changes:
+                parsed_options = options
+                if isinstance(options, str):
+                    try:
+                        parsed_options = json.loads(options) if options.strip() else []
+                    except Exception:
+                        parsed_options = None
 
-        bank_task_id = task_row["bank_task_id"]
-        if bank_task_id:
-            parsed_options = options
-            if isinstance(options, str):
-                try:
-                    parsed_options = json.loads(options) if options.strip() else []
-                except Exception:
-                    parsed_options = None
+                parsed_subquestions = subquestions
+                if isinstance(subquestions, str):
+                    try:
+                        parsed_subquestions = json.loads(subquestions) if subquestions.strip() else []
+                    except Exception:
+                        parsed_subquestions = None
 
-            parsed_subquestions = subquestions
-            if isinstance(subquestions, str):
-                try:
-                    parsed_subquestions = json.loads(subquestions) if subquestions.strip() else []
-                except Exception:
-                    parsed_subquestions = None
-
-            bank_repo = BankTaskRepository(self.database_url)
-            await bank_repo.update_task(
-                task_id=int(bank_task_id),
-                text=text,
-                answer=answer,
-                question_type=question_type,
-                accepted_answers=accepted_answers,
-                text_scale=text_scale,
-                options=parsed_options if options is not None else None,
-                subquestions=parsed_subquestions if subquestions is not None else None,
-                image_filename=image_filename,
-                solution_filename=solution_filename,
-                source="task_repository_update",
-            )
+                bank_repo = BankTaskRepository(self.database_url, connection_pool=self.connection_pool)
+                await bank_repo._update_task_on_conn(
+                    db,
+                    task_id=int(effective_bank_task_id),
+                    text=text,
+                    answer=answer,
+                    question_type=question_type,
+                    accepted_answers=accepted_answers,
+                    text_scale=text_scale,
+                    options=parsed_options if options is not None else None,
+                    subquestions=parsed_subquestions if subquestions is not None else None,
+                    image_filename=image_filename,
+                    solution_filename=solution_filename,
+                    source="task_repository_update",
+                )
 
     async def reorder_tasks_in_mini_lesson(self, mini_lesson_id: int, task_ids: List[int]) -> int:
         """Atomically update sort_order for tasks belonging to the specified mini-lesson."""
@@ -336,43 +339,34 @@ class TaskRepository(BaseRepository):
                 return [dict(row) for row in rows]
 
     async def soft_delete_task(self, task_id: int) -> None:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="cms_tasks") as db:
             await db.execute(
                 "UPDATE tasks SET deleted_at = mathbot_datetime('now'), updated_at = mathbot_datetime('now') WHERE id = ?",
                 (task_id,),
             )
-            await db.commit()
 
     async def restore_task(self, task_id: int) -> None:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="cms_tasks") as db:
             await db.execute(
                 "UPDATE tasks SET deleted_at = NULL, updated_at = mathbot_datetime('now') WHERE id = ?",
                 (task_id,),
             )
-            await db.commit()
 
     async def cleanup_old_deleted_tasks(self, days: int = 10) -> int:
         """Delete placement tasks that stayed in trash longer than N days."""
-        async with self._connection() as db:
-            async with db.execute(
+        async with self._write_transaction(lock_key="cms_tasks") as db:
+            cursor = await db.execute(
                 """
-                SELECT id FROM tasks
+                DELETE FROM tasks
                 WHERE deleted_at IS NOT NULL
                   AND deleted_at < mathbot_datetime('now', '-' || ? || ' days')
                 """,
                 (days,),
-            ) as cursor:
-                rows = await cursor.fetchall()
-            task_ids = [int(row[0]) for row in rows]
-            if not task_ids:
-                return 0
-            placeholders = ",".join("?" * len(task_ids))
-            await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", task_ids)
-            await db.commit()
-            return len(task_ids)
+            )
+            return int(cursor.rowcount or 0)
 
     async def empty_trash(self, creator_id: Optional[int] = None) -> int:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="cms_tasks") as db:
             if creator_id is not None:
                 cursor = await db.execute(
                     "DELETE FROM tasks WHERE deleted_at IS NOT NULL AND created_by = ?",
@@ -382,7 +376,6 @@ class TaskRepository(BaseRepository):
                 cursor = await db.execute(
                     "DELETE FROM tasks WHERE deleted_at IS NOT NULL"
                 )
-            await db.commit()
             return int(cursor.rowcount or 0)
 
     async def get_tasks_by_section(self, section_id: int) -> List[Dict[str, Any]]:
@@ -457,12 +450,11 @@ class TaskRepository(BaseRepository):
 
     async def reset_task_id_counter(self) -> bool:
         """Restart the tasks id sequence, only when the table is empty."""
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="cms_tasks") as db:
             async with db.execute("SELECT COUNT(*) FROM tasks") as cursor:
                 row = await cursor.fetchone()
                 count = int(row[0]) if row else 0
             if count > 0:
                 return False
             await db.execute("ALTER TABLE tasks ALTER COLUMN id RESTART WITH 1")
-            await db.commit()
             return True

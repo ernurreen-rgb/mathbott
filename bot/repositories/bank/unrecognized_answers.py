@@ -1,4 +1,5 @@
 """Admin queue for repeated written answers that are still not accepted."""
+import asyncio
 from collections import Counter
 import json
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,6 +13,132 @@ from utils.validation import (
     normalize_task_answer_for_compare,
 )
 from .versions import BankTaskVersionConflictError
+
+# Pre-filter written-answer tasks in SQL BEFORE LIMIT so MCQ/TF attempts
+# never crowd out real written answers from the sample window.
+_WRITTEN_BANK_TASK_SQL = """(
+    LOWER(TRIM(COALESCE(bt.question_type, 'input'))) = 'input'
+    OR (
+        LOWER(TRIM(COALESCE(bt.question_type, ''))) IN ('mcq', 'mcq6', 'select')
+        AND LOWER(TRIM(COALESCE(bt.answer_mode, ''))) = 'written'
+    )
+)"""
+
+
+def _parse_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return None
+    return None
+
+
+def _aggregate_unrecognized_answer_rows(
+    raw_rows: List[Dict[str, Any]],
+    *,
+    min_count: int,
+    limit: int,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """CPU-bound math normalization & grouping (designed to run off the asyncio loop)."""
+    tasks_by_id: Dict[int, Dict[str, Any]] = {}
+    eval_cache: Dict[Tuple[int, str], Tuple[bool, str]] = {}
+    grouped: Dict[Tuple[int, str], Dict[str, Any]] = {}
+
+    for row in raw_rows:
+        raw_answer = str(row.get("student_answer") or "").strip()
+        if not raw_answer:
+            continue
+
+        task_id = int(row["bank_task_id"])
+        task = tasks_by_id.get(task_id)
+        if task is None:
+            task = {
+                "id": task_id,
+                "text": row.get("task_text") or "",
+                "answer": row.get("correct_answer") or "",
+                "accepted_answers": row.get("accepted_answers"),
+                "question_type": row.get("question_type") or "input",
+                "answer_mode": row.get("answer_mode"),
+                "options": _parse_json_value(row.get("options")),
+                "subquestions": _parse_json_value(row.get("subquestions")),
+                "current_version": int(row.get("current_version") or 1),
+                "_accepted_parsed": _parse_json_value(row.get("accepted_answers")) or [],
+                "_is_written": normalize_answer_mode(
+                    row.get("answer_mode"), row.get("question_type") or "input"
+                ) == "written",
+            }
+            tasks_by_id[task_id] = task
+
+        if not task["_is_written"]:
+            continue
+
+        cache_key = (task_id, raw_answer)
+        cached = eval_cache.get(cache_key)
+        if cached is None:
+            correct = is_task_answer_correct(task, raw_answer)
+            if correct:
+                canonical_answer = ""
+            else:
+                canonical_answer = normalize_task_answer_for_compare(task, raw_answer)
+                if not canonical_answer or canonical_answer.startswith("__invalid_"):
+                    canonical_answer = " ".join(raw_answer.casefold().split())
+            cached = (correct, canonical_answer)
+            eval_cache[cache_key] = cached
+
+        is_correct, canonical_answer = cached
+        if is_correct:
+            continue
+
+        key = (task_id, canonical_answer)
+        item = grouped.get(key)
+        attempted_at = str(row.get("attempted_at") or "")
+        source = str(row.get("source") or "lesson")
+        user_id = int(row["attempt_user_id"])
+
+        if item is None:
+            item = {
+                "bank_task_id": task_id,
+                "task_text": task["text"],
+                "student_answer": raw_answer,
+                "primary_answer": task["answer"],
+                "accepted_answers": task["_accepted_parsed"],
+                "question_type": task["question_type"],
+                "current_version": task["current_version"],
+                "occurrences": 0,
+                "last_seen_at": attempted_at,
+                "_users": set(),
+                "_sources": set(),
+                "_spellings": Counter(),
+            }
+            grouped[key] = item
+
+        item["occurrences"] += 1
+        item["_users"].add(user_id)
+        item["_sources"].add(source)
+        item["_spellings"][raw_answer] += 1
+        if attempted_at >= item["last_seen_at"]:
+            item["last_seen_at"] = attempted_at
+
+    items: List[Dict[str, Any]] = []
+    for item in grouped.values():
+        if int(item["occurrences"]) < min_count:
+            continue
+        spellings: Counter = item.pop("_spellings")
+        item["student_answer"] = spellings.most_common(1)[0][0]
+        item["students_count"] = len(item.pop("_users"))
+        item["sources"] = sorted(item.pop("_sources"))
+        items.append(item)
+
+    items.sort(
+        key=lambda item: (int(item["occurrences"]), str(item["last_seen_at"])),
+        reverse=True,
+    )
+    return items[:limit], len(items)
 
 
 class BankTaskUnrecognizedAnswersMixin:
@@ -44,7 +171,7 @@ class BankTaskUnrecognizedAnswersMixin:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
-                """
+                f"""
                 SELECT
                     s.user_id AS attempt_user_id,
                     s.answer AS student_answer,
@@ -65,15 +192,16 @@ class BankTaskUnrecognizedAnswersMixin:
                 WHERE s.is_correct = 0
                   AND bt.deleted_at IS NULL
                   AND TRIM(s.answer) <> ''
+                  AND {_WRITTEN_BANK_TASK_SQL}
                 ORDER BY s.id DESC
                 LIMIT ?
                 """,
                 (self._UNRECOGNIZED_EVENT_LIMIT,),
             ) as cursor:
-                lesson_rows = await cursor.fetchall()
+                lesson_rows = [dict(r) for r in await cursor.fetchall()]
 
             async with db.execute(
-                """
+                f"""
                 SELECT
                     r.user_id AS attempt_user_id,
                     (answer_entry.value ->> 'answer') AS student_answer,
@@ -91,12 +219,12 @@ class BankTaskUnrecognizedAnswersMixin:
                 FROM (
                     SELECT id, user_id, completed_at, answers
                     FROM trial_test_results
-                    WHERE answers IS NOT NULL AND left(btrim(answers), 1) = '{'
+                    WHERE answers IS NOT NULL AND left(btrim(answers), 1) = '{{'
                     ORDER BY id DESC
                     LIMIT ?
                 ) r
                 JOIN LATERAL jsonb_each(
-                    CASE WHEN left(btrim(r.answers), 1) = '{' THEN r.answers::jsonb ELSE '{}'::jsonb END
+                    mathbot_try_jsonb_object(r.answers)
                 ) AS answer_entry ON TRUE
                 JOIN trial_test_tasks ttt
                     ON answer_entry.key ~ '^[0-9]+$'
@@ -106,16 +234,17 @@ class BankTaskUnrecognizedAnswersMixin:
                             WHEN answer_entry.value ->> 'correct' IN ('false', '0') THEN 0 END) = 0
                   AND bt.deleted_at IS NULL
                   AND TRIM(COALESCE(answer_entry.value ->> 'answer', '')) <> ''
+                  AND {_WRITTEN_BANK_TASK_SQL}
                 ORDER BY r.id DESC
                 LIMIT ?
                 """,
                 (self._UNRECOGNIZED_EVENT_LIMIT, self._UNRECOGNIZED_EVENT_LIMIT),
             ) as cursor:
-                trial_rows = await cursor.fetchall()
+                trial_rows = [dict(r) for r in await cursor.fetchall()]
 
             # Twins are graded on their own content, so a missing alias shows up here too.
             async with db.execute(
-                """
+                f"""
                 SELECT
                     a.user_id AS attempt_user_id,
                     a.answer AS student_answer,
@@ -135,75 +264,23 @@ class BankTaskUnrecognizedAnswersMixin:
                 WHERE a.is_correct = 0
                   AND bt.deleted_at IS NULL
                   AND TRIM(a.answer) <> ''
+                  AND {_WRITTEN_BANK_TASK_SQL}
                 ORDER BY a.id DESC
                 LIMIT ?
                 """,
                 (self._UNRECOGNIZED_EVENT_LIMIT,),
             ) as cursor:
-                review_rows = await cursor.fetchall()
+                review_rows = [dict(r) for r in await cursor.fetchall()]
 
-        grouped: Dict[tuple[int, str], Dict[str, Any]] = {}
-        for row in [*lesson_rows, *trial_rows, *review_rows]:
-            raw_answer = str(row["student_answer"] or "").strip()
-            if not raw_answer:
-                continue
-
-            task = self._answer_event_task(row)
-            if normalize_answer_mode(task.get("answer_mode"), task.get("question_type")) != "written":
-                continue
-            if is_task_answer_correct(task, raw_answer):
-                continue
-
-            canonical_answer = normalize_task_answer_for_compare(task, raw_answer)
-            if not canonical_answer or canonical_answer.startswith("__invalid_"):
-                canonical_answer = " ".join(raw_answer.casefold().split())
-            key = (int(task["id"]), canonical_answer)
-            item = grouped.get(key)
-            attempted_at = str(row["attempted_at"] or "")
-            source = str(row["source"] or "lesson")
-            user_id = int(row["attempt_user_id"])
-
-            if item is None:
-                item = {
-                    "bank_task_id": int(task["id"]),
-                    "task_text": task["text"],
-                    "student_answer": raw_answer,
-                    "primary_answer": task["answer"],
-                    "accepted_answers": self._parse_json_field(task.get("accepted_answers")) or [],
-                    "question_type": task["question_type"],
-                    "current_version": task["current_version"],
-                    "occurrences": 0,
-                    "last_seen_at": attempted_at,
-                    "_users": set(),
-                    "_sources": set(),
-                    "_spellings": Counter(),
-                }
-                grouped[key] = item
-
-            item["occurrences"] += 1
-            item["_users"].add(user_id)
-            item["_sources"].add(source)
-            item["_spellings"][raw_answer] += 1
-            if attempted_at >= item["last_seen_at"]:
-                item["last_seen_at"] = attempted_at
-
-        items: List[Dict[str, Any]] = []
-        for item in grouped.values():
-            if int(item["occurrences"]) < min_count:
-                continue
-            spellings: Counter = item.pop("_spellings")
-            item["student_answer"] = spellings.most_common(1)[0][0]
-            item["students_count"] = len(item.pop("_users"))
-            item["sources"] = sorted(item.pop("_sources"))
-            items.append(item)
-
-        items.sort(
-            key=lambda item: (int(item["occurrences"]), str(item["last_seen_at"])),
-            reverse=True,
+        all_rows = [*lesson_rows, *trial_rows, *review_rows]
+        page_items, total = await asyncio.to_thread(
+            _aggregate_unrecognized_answer_rows,
+            all_rows,
+            min_count=min_count,
+            limit=limit,
         )
-        total = len(items)
         return {
-            "items": items[:limit],
+            "items": page_items,
             "total": total,
             "limit": limit,
             "min_count": min_count,
@@ -221,8 +298,8 @@ class BankTaskUnrecognizedAnswersMixin:
         reason: str = "Accepted from repeated student answers",
         expected_current_version: Optional[int] = None,
     ) -> Tuple[Optional[Dict[str, Any]], bool]:
-        """Atomically append an accepted answer alias under the write lock."""
-        async with self._write_transaction() as db:
+        """Atomically append an accepted answer alias under the bank_tasks write lock."""
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing or existing.get("deleted_at") is not None:

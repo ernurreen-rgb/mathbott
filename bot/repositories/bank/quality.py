@@ -148,7 +148,7 @@ class BankTaskQualityMixin:
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                where.append("LOWER(bt.text COLLATE \"pg_c_utf8\") LIKE ? ESCAPE '\\'")
                 params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
@@ -270,7 +270,7 @@ class BankTaskQualityMixin:
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
-                where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                where.append("LOWER(bt.text COLLATE \"pg_c_utf8\") LIKE ? ESCAPE '\\'")
                 params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:

@@ -7,11 +7,12 @@ import storage as db_driver
 import logging
 from typing import Optional, Dict
 from contextlib import asynccontextmanager
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 logger = logging.getLogger(__name__)
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _process_write_locks: "WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = WeakKeyDictionary()
+_scoped_write_locks: "WeakKeyDictionary[asyncio.AbstractEventLoop, WeakValueDictionary[str, asyncio.Lock]]" = WeakKeyDictionary()
 
 
 def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
@@ -20,13 +21,24 @@ def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
     return name
 
 
-def _get_process_write_lock() -> asyncio.Lock:
-    """Share one write lock per event loop so waiting writers do not hold pooled connections."""
+def _get_process_write_lock(lock_key: Optional[str] = None) -> asyncio.Lock:
+    """Return a per-event-loop write lock (global when lock_key is None, or scoped by lock_key)."""
     loop = asyncio.get_running_loop()
-    lock = _process_write_locks.get(loop)
+    if lock_key is None:
+        lock = _process_write_locks.get(loop)
+        if lock is None:
+            lock = asyncio.Lock()
+            _process_write_locks[loop] = lock
+        return lock
+
+    scoped = _scoped_write_locks.get(loop)
+    if scoped is None:
+        scoped = WeakValueDictionary()
+        _scoped_write_locks[loop] = scoped
+    lock = scoped.get(lock_key)
     if lock is None:
         lock = asyncio.Lock()
-        _process_write_locks[loop] = lock
+        scoped[lock_key] = lock
     return lock
 
 
@@ -78,13 +90,16 @@ class BaseRepository:
             await self._release_connection(conn)
 
     @asynccontextmanager
-    async def _write_transaction(self):
-        """Reserve the writer before reading state used to authorize a change."""
-        # Acquire the lock before a connection so waiting writers cannot exhaust
-        # the pool. The advisory lock also serializes writers in other processes.
-        async with _get_process_write_lock():
+    async def _write_transaction(self, *, lock_key: Optional[str] = None):
+        """Reserve a write lock (scoped when lock_key is given) before reading state for mutation."""
+        # Acquire the process lock before a connection so waiting writers cannot exhaust
+        # the pool. The PostgreSQL advisory lock serializes matching writers across processes.
+        async with _get_process_write_lock(lock_key):
             async with self._connection() as conn:
-                await conn.begin_write()
+                if lock_key is None:
+                    await conn.begin_write()
+                else:
+                    await conn.begin_write(lock_id=db_driver.advisory_lock_id_for_key(lock_key))
                 try:
                     yield conn
                     await conn.commit()
@@ -224,9 +239,9 @@ class BaseRepository:
         """Build an escaped contains-pattern for LIKE ... ESCAPE '\\'."""
         return f"%{self._escape_like_value(value)}%"
 
-    async def _run_with_write_lock(self, operation):
-        """Run a write operation while holding this process's write lock."""
-        async with _get_process_write_lock():
+    async def _run_with_write_lock(self, operation, *, lock_key: Optional[str] = None):
+        """Run a write operation while holding this process's write lock (optionally scoped)."""
+        async with _get_process_write_lock(lock_key):
             return await operation()
 
     async def _has_page_visit_tracking(self, conn: db_driver.Connection) -> bool:

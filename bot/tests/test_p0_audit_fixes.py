@@ -343,7 +343,7 @@ class C04BankHardDeleteIntegrityTests(unittest.TestCase):
             AUDIT_ACTION_HARD_DELETE = "hard_delete"
 
             @asynccontextmanager
-            async def _write_transaction(self):
+            async def _write_transaction(self, *, lock_key=None):
                 yield FakeConn()
 
             async def _fetch_task_row(self, db, task_id):
@@ -398,7 +398,7 @@ class C05VersionConflictErrorTests(unittest.TestCase):
     def test_add_accepted_answer_raises_version_conflict_not_type_error(self):
         class DummyUnrecRepo(BankTaskUnrecognizedAnswersMixin):
             @asynccontextmanager
-            async def _write_transaction(self):
+            async def _write_transaction(self, *, lock_key=None):
                 yield MagicMock()
 
             async def _fetch_task_row(self, db, task_id):
@@ -535,7 +535,7 @@ class C06C07C08AnswerLeakPreventionTests(unittest.TestCase):
                 return []
 
             @asynccontextmanager
-            async def _write_transaction(self):
+            async def _write_transaction(self, *, lock_key=None):
                 yield FakeConn()
 
         with self.assertRaises(QuizError) as ctx:
@@ -627,7 +627,7 @@ class C06C07C08AnswerLeakPreventionTests(unittest.TestCase):
         class FakeConn:
             row_factory = None
 
-            async def begin_write(self):
+            async def begin_write(self, *, lock_id=None):
                 return None
 
             async def commit(self):
@@ -654,7 +654,7 @@ class C06C07C08AnswerLeakPreventionTests(unittest.TestCase):
             async def _connection(self):
                 yield FakeConn()
 
-            async def _run_with_write_lock(self, op):
+            async def _run_with_write_lock(self, op, *, lock_key=None):
                 return await op()
 
         async def _fake_insert_completion(db, **kwargs):

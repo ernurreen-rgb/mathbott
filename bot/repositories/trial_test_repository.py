@@ -68,28 +68,26 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         solution_filename: Optional[str],
         created_by: Optional[int],
         difficulty: str = "B",
+        answer_mode: str = "choices",
     ) -> int:
-        cursor = await db.execute(
-            """
-            INSERT INTO bank_tasks
-            (text, answer, question_type, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                text or "",
-                answer or "",
-                (question_type or "input").strip() or "input",
-                json.dumps(accepted_answers or [], ensure_ascii=False),
-                text_scale or "md",
-                self._to_json_or_none(options),
-                self._to_json_or_none(subquestions),
-                image_filename,
-                solution_filename,
-                difficulty,
-                created_by,
-            ),
+        bank_repo = BankTaskRepository(self.database_url, connection_pool=self.connection_pool)
+        return await bank_repo._insert_bank_task(
+            db,
+            text=text or "",
+            answer=answer or "",
+            question_type=(question_type or "input").strip() or "input",
+            difficulty=difficulty,
+            answer_mode=answer_mode,
+            accepted_answers=accepted_answers,
+            text_scale=text_scale or "md",
+            topics=[],
+            options=options,
+            subquestions=subquestions,
+            image_filename=image_filename,
+            solution_filename=solution_filename,
+            created_by=created_by,
+            source="trial_test_repository_create",
         )
-        return int(cursor.lastrowid)
 
     @staticmethod
     def _normalize_category(category: Optional[str]) -> str:
@@ -246,10 +244,10 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         bank_task_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Create trial-test placement task.
-        If bank_task_id is omitted, create a bank task inline first.
+        Create trial-test placement task atomically.
+        If bank_task_id is omitted, create a versioned bank task inline first.
         """
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key=f"trial_test:{trial_test_id}") as db:
             db.row_factory = db_driver.Row
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
@@ -297,7 +295,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                     (trial_test_id, resolved_bank_task_id, next_sort, created_by),
                 )
             task_id = int(cursor.lastrowid)
-            await db.commit()
 
         task = await self.get_trial_test_task(task_id)
         return task or {}
@@ -324,8 +321,23 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         sort_order: Optional[int] = None,
         image_filename: Optional[str] = None,
         solution_filename: Optional[str] = None,
+        bank_task_id: Optional[int] = None,
     ) -> None:
-        async with self._connection() as db:
+        has_content_changes = any(
+            val is not None
+            for val in (
+                text,
+                answer,
+                question_type,
+                text_scale,
+                options,
+                subquestions,
+                image_filename,
+                solution_filename,
+            )
+        )
+        lock_key = "bank_tasks" if has_content_changes else f"trial_task:{task_id}"
+        async with self._write_transaction(lock_key=lock_key) as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 "SELECT id, bank_task_id FROM trial_test_tasks WHERE id = ? AND deleted_at IS NULL",
@@ -335,36 +347,41 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
             if not placement:
                 return
 
+            placement_updates: List[str] = []
+            placement_params: List[Any] = []
             if sort_order is not None:
+                placement_updates.append("sort_order = ?")
+                placement_params.append(sort_order)
+            if bank_task_id is not None:
+                placement_updates.append("bank_task_id = ?")
+                placement_params.append(int(bank_task_id))
+            if placement_updates:
+                placement_updates.append("updated_at = mathbot_datetime('now')")
+                placement_params.append(task_id)
                 await db.execute(
-                    """
-                    UPDATE trial_test_tasks
-                    SET sort_order = ?, updated_at = mathbot_datetime('now')
-                    WHERE id = ?
-                    """,
-                    (sort_order, task_id),
+                    f"UPDATE trial_test_tasks SET {', '.join(placement_updates)} WHERE id = ?",
+                    placement_params,
                 )
 
-            await db.commit()
-
-        bank_task_id = placement["bank_task_id"]
-        if bank_task_id:
-            bank_repo = BankTaskRepository(self.database_url)
-            await bank_repo.update_task(
-                task_id=int(bank_task_id),
-                text=text,
-                answer=answer,
-                question_type=question_type,
-                text_scale=text_scale,
-                options=options if options is not None else None,
-                subquestions=subquestions if subquestions is not None else None,
-                image_filename=image_filename,
-                solution_filename=solution_filename,
-                source="trial_test_repository_update",
-            )
+            effective_bank_task_id = bank_task_id if bank_task_id is not None else placement["bank_task_id"]
+            if effective_bank_task_id and has_content_changes:
+                bank_repo = BankTaskRepository(self.database_url, connection_pool=self.connection_pool)
+                await bank_repo._update_task_on_conn(
+                    db,
+                    task_id=int(effective_bank_task_id),
+                    text=text,
+                    answer=answer,
+                    question_type=question_type,
+                    text_scale=text_scale,
+                    options=options if options is not None else None,
+                    subquestions=subquestions if subquestions is not None else None,
+                    image_filename=image_filename,
+                    solution_filename=solution_filename,
+                    source="trial_test_repository_update",
+                )
 
     async def remove_task_from_trial_test(self, trial_test_id: int, task_id: int) -> bool:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key=f"trial_test:{trial_test_id}") as db:
             await db.execute(
                 """
                 UPDATE trial_test_tasks
@@ -373,7 +390,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 """,
                 (trial_test_id, task_id),
             )
-            await db.commit()
             return True
 
     async def get_trial_test_tasks(self, trial_test_id: int) -> List[Dict[str, Any]]:
@@ -397,11 +413,11 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         created_by: Optional[int],
     ) -> Dict[str, Any]:
         """
-        Upsert one slot placement by sort_order.
+        Upsert one slot placement by sort_order atomically under trial-test write lock.
         slot_index is 1-based in API; stored sort_order is 0-based.
         """
         sort_order = max(0, int(slot_index) - 1)
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key=f"trial_test:{trial_test_id}") as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 """
@@ -433,15 +449,13 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 )
                 task_id = int(cursor.lastrowid)
 
-            await db.commit()
-
         task = await self.get_trial_test_task(task_id)
         return task or {}
 
     async def clear_trial_test_slot(self, trial_test_id: int, slot_index: int) -> int:
         """Soft-delete active placement in slot (1-based index)."""
         sort_order = max(0, int(slot_index) - 1)
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key=f"trial_test:{trial_test_id}") as db:
             cursor = await db.execute(
                 """
                 UPDATE trial_test_tasks
@@ -450,7 +464,6 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
                 """,
                 (trial_test_id, sort_order),
             )
-            await db.commit()
             return int(cursor.rowcount or 0)
 
     async def submit_trial_test_attempt(
@@ -467,141 +480,129 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         delete_draft: bool = True,
         attempt_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Persist a trial-test submit in one transaction under the write lock."""
+        """Persist a trial-test submit in one transaction under a per-user advisory write lock."""
         normalized_attempt_id = attempt_id or uuid4().hex
 
-        async def operation() -> Dict[str, Any]:
-            async with self._connection() as db:
-                db.row_factory = db_driver.Row
+        async with self._write_transaction(lock_key=f"user:{user_id}") as db:
+            db.row_factory = db_driver.Row
+            async with db.execute(
+                """SELECT * FROM trial_test_results
+                   WHERE user_id = ? AND trial_test_id = ?
+                     AND submit_mode = 'solo' AND attempt_id = ?""",
+                (user_id, trial_test_id, normalized_attempt_id),
+            ) as saved_cursor:
+                saved = await saved_cursor.fetchone()
+            if saved:
+                return {"result": dict(saved), "recorded_any": False,
+                        "streak_milestone": None, "streak_updated": False, "reused": True}
+
+            # Tasks whose correct_answer was already revealed in an earlier attempt of this
+            # trial test must not award global completions, total_solved, streak or achievements
+            # on subsequent retake attempts.
+            async with db.execute(
+                """SELECT answers FROM trial_test_results
+                   WHERE user_id = ? AND trial_test_id = ?""",
+                (user_id, trial_test_id),
+            ) as prior_cursor:
+                prior_rows = await prior_cursor.fetchall()
+
+            revealed_task_ids: set[int] = set()
+            for prior_row in prior_rows:
+                raw_prior = prior_row["answers"] if hasattr(prior_row, "keys") else prior_row[0]
                 try:
-                    await db.begin_write()
-
-                    async with db.execute(
-                        """SELECT * FROM trial_test_results
-                           WHERE user_id = ? AND trial_test_id = ?
-                             AND submit_mode = 'solo' AND attempt_id = ?""",
-                        (user_id, trial_test_id, normalized_attempt_id),
-                    ) as saved_cursor:
-                        saved = await saved_cursor.fetchone()
-                    if saved:
-                        await db.rollback()
-                        return {"result": dict(saved), "recorded_any": False,
-                                "streak_milestone": None, "streak_updated": False, "reused": True}
-
-                    # Tasks whose correct_answer was already revealed in an earlier attempt of this
-                    # trial test must not award global completions, total_solved, streak or achievements
-                    # on subsequent retake attempts.
-                    async with db.execute(
-                        """SELECT answers FROM trial_test_results
-                           WHERE user_id = ? AND trial_test_id = ?""",
-                        (user_id, trial_test_id),
-                    ) as prior_cursor:
-                        prior_rows = await prior_cursor.fetchall()
-
-                    revealed_task_ids: set[int] = set()
-                    for prior_row in prior_rows:
-                        raw_prior = prior_row["answers"] if hasattr(prior_row, "keys") else prior_row[0]
-                        try:
-                            parsed_prior = json.loads(raw_prior) if isinstance(raw_prior, str) else (raw_prior or {})
-                        except Exception:
-                            parsed_prior = {}
-                        if isinstance(parsed_prior, dict):
-                            for tid_key, item in parsed_prior.items():
-                                if isinstance(item, dict) and item.get("correct_answer") is not None:
-                                    try:
-                                        revealed_task_ids.add(int(tid_key))
-                                    except (TypeError, ValueError):
-                                        pass
-
-                    answers_json = json.dumps(answers)
-                    cursor = await db.execute(
-                        """
-                        INSERT INTO trial_test_results
-                        (user_id, trial_test_id, score, total, percentage, answers, submit_mode, attempt_id)
-                        VALUES (?, ?, ?, ?, ?, ?, 'solo', ?)
-                        """,
-                        (user_id, trial_test_id, score, total, percentage, answers_json,
-                         normalized_attempt_id),
-                    )
-                    result_id = int(cursor.lastrowid)
-
-                    eligible_completions = [
-                        completion
-                        for completion in completions
-                        if int(completion.get("source_ref_id") or 0) not in revealed_task_ids
-                    ]
-                    recorded_any = False
-                    recorded_count = 0
-                    for completion in eligible_completions:
-                        if await insert_task_completion(db, user_id=user_id, **completion):
-                            recorded_any = True
-                            recorded_count += 1
-
-                    if recorded_count > 0:
-                        await db.execute(
-                            """
-                            UPDATE users SET
-                                total_solved = total_solved + ?,
-                                last_active = mathbot_datetime('now')
-                            WHERE id = ?
-                            """,
-                            (recorded_count, user_id),
-                        )
-
-                    effective_should_update_streak = bool(
-                        should_update_streak
-                        and any(
-                            int(task_id) not in revealed_task_ids
-                            for task_id, item in answers.items()
-                            if isinstance(item, dict) and (item.get("score") or 0) > 0
-                        )
-                    )
-                    streak_milestone = None
-                    if effective_should_update_streak:
-                        async with db.execute(
-                            "SELECT streak, last_streak_date FROM users WHERE id = ?",
-                            (user_id,),
-                        ) as cursor_user:
-                            user_row = await cursor_user.fetchone()
-
-                        if user_row:
-                            current_streak = int(user_row["streak"] or 0)
-                            new_streak, streak_date = self._calculate_next_streak(
-                                current_streak,
-                                user_row["last_streak_date"],
-                            )
-                            await db.execute(
-                                "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
-                                (new_streak, streak_date, user_id),
-                            )
-                            if new_streak > current_streak and new_streak in (7, 30, 100):
-                                streak_milestone = new_streak
-
-                    if delete_draft:
-                        await db.execute(
-                            "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
-                            (user_id, trial_test_id),
-                        )
-
-                    async with db.execute(
-                        "SELECT * FROM trial_test_results WHERE id = ?",
-                        (result_id,),
-                    ) as cursor_result:
-                        result_row = await cursor_result.fetchone()
-
-                    await db.commit()
-
-                    return {
-                        "result": dict(result_row) if result_row else {"id": result_id},
-                        "recorded_any": recorded_any,
-                        "streak_milestone": streak_milestone,
-                        "streak_updated": effective_should_update_streak,
-                    }
+                    parsed_prior = json.loads(raw_prior) if isinstance(raw_prior, str) else (raw_prior or {})
                 except Exception:
-                    await db.rollback()
-                    raise
+                    parsed_prior = {}
+                if isinstance(parsed_prior, dict):
+                    for tid_key, item in parsed_prior.items():
+                        if isinstance(item, dict) and item.get("correct_answer") is not None:
+                            try:
+                                revealed_task_ids.add(int(tid_key))
+                            except (TypeError, ValueError):
+                                pass
 
-        return await self._run_with_write_lock(operation)
+            answers_json = json.dumps(answers)
+            cursor = await db.execute(
+                """
+                INSERT INTO trial_test_results
+                (user_id, trial_test_id, score, total, percentage, answers, submit_mode, attempt_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'solo', ?)
+                """,
+                (user_id, trial_test_id, score, total, percentage, answers_json,
+                 normalized_attempt_id),
+            )
+            result_id = int(cursor.lastrowid)
+
+            eligible_completions = [
+                completion
+                for completion in completions
+                if int(completion.get("source_ref_id") or 0) not in revealed_task_ids
+            ]
+            recorded_any = False
+            recorded_count = 0
+            for completion in eligible_completions:
+                if await insert_task_completion(db, user_id=user_id, **completion):
+                    recorded_any = True
+                    recorded_count += 1
+
+            if recorded_count > 0:
+                await db.execute(
+                    """
+                    UPDATE users SET
+                        total_solved = total_solved + ?,
+                        last_active = mathbot_datetime('now')
+                    WHERE id = ?
+                    """,
+                    (recorded_count, user_id),
+                )
+
+            effective_should_update_streak = bool(
+                should_update_streak
+                and any(
+                    int(task_id) not in revealed_task_ids
+                    for task_id, item in answers.items()
+                    if isinstance(item, dict) and (item.get("score") or 0) > 0
+                )
+            )
+            streak_milestone = None
+            if effective_should_update_streak:
+                async with db.execute(
+                    "SELECT streak, last_streak_date FROM users WHERE id = ?",
+                    (user_id,),
+                ) as cursor_user:
+                    user_row = await cursor_user.fetchone()
+
+                if user_row:
+                    current_streak = int(user_row["streak"] or 0)
+                    new_streak, streak_date = self._calculate_next_streak(
+                        current_streak,
+                        user_row["last_streak_date"],
+                    )
+                    await db.execute(
+                        "UPDATE users SET streak = ?, last_streak_date = ? WHERE id = ?",
+                        (new_streak, streak_date, user_id),
+                    )
+                    if new_streak > current_streak and new_streak in (7, 30, 100):
+                        streak_milestone = new_streak
+
+            if delete_draft:
+                await db.execute(
+                    "DELETE FROM trial_test_drafts WHERE user_id = ? AND trial_test_id = ?",
+                    (user_id, trial_test_id),
+                )
+
+            async with db.execute(
+                "SELECT * FROM trial_test_results WHERE id = ?",
+                (result_id,),
+            ) as cursor_result:
+                result_row = await cursor_result.fetchone()
+
+            return {
+                "result": dict(result_row) if result_row else {"id": result_id},
+                "recorded_any": recorded_any,
+                "streak_milestone": streak_milestone,
+                "streak_updated": effective_should_update_streak,
+            }
 
     async def get_user_trial_test_results(self, user_id: int, trial_test_id: Optional[int] = None) -> List[Dict[str, Any]]:
         async with self._connection() as db:
@@ -648,23 +649,19 @@ class TrialTestRepository(TrialFolderMixin, BaseRepository):
         answers: Dict[int, str],
         current_task_index: int,
     ) -> None:
-        async def operation() -> None:
-            async with self._connection() as db:
-                answers_json = json.dumps({str(k): v for k, v in answers.items()})
-                await db.execute(
-                    """
-                    INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index, updated_at)
-                    VALUES (?, ?, ?, ?, mathbot_datetime('now'))
-                    ON CONFLICT(user_id, trial_test_id) DO UPDATE SET
-                      answers = excluded.answers,
-                      current_task_index = excluded.current_task_index,
-                      updated_at = mathbot_datetime('now')
-                    """,
-                    (user_id, trial_test_id, answers_json, current_task_index),
-                )
-                await db.commit()
-
-        await self._run_with_write_lock(operation)
+        async with self._write_transaction(lock_key=f"user:{user_id}") as db:
+            answers_json = json.dumps({str(k): v for k, v in answers.items()})
+            await db.execute(
+                """
+                INSERT INTO trial_test_drafts (user_id, trial_test_id, answers, current_task_index, updated_at)
+                VALUES (?, ?, ?, ?, mathbot_datetime('now'))
+                ON CONFLICT(user_id, trial_test_id) DO UPDATE SET
+                  answers = excluded.answers,
+                  current_task_index = excluded.current_task_index,
+                  updated_at = mathbot_datetime('now')
+                """,
+                (user_id, trial_test_id, answers_json, current_task_index),
+            )
 
     async def get_user_trial_test_draft_ids(self, user_id: int) -> List[int]:
         async with self._connection() as db:

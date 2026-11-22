@@ -116,11 +116,10 @@ async def _update_task_from_report_common(
     text_scale_value = _normalize_text_scale(text_scale)
     image_filename = await save_image_upload(image) if image else None
 
-    await db.tasks.update_task(task_id=task_id, text_scale=text_scale_value)
-
     linked_bank_task_id = task.get("bank_task_id")
+    updated_bank = None
     if isinstance(linked_bank_task_id, int) and linked_bank_task_id > 0:
-        await db.bank_tasks.update_task(
+        updated_bank = await db.bank_tasks.update_task(
             task_id=linked_bank_task_id,
             text=text.strip() if text.strip() else None,
             answer=answer.strip() if answer.strip() else None,
@@ -133,6 +132,25 @@ async def _update_task_from_report_common(
             actor_user_id=admin_user["id"],
             source="admin_report_task_update",
         )
+
+    if updated_bank is None:
+        created_bank = await db.bank_tasks.create_task(
+            text=text.strip(),
+            answer=answer.strip(),
+            question_type=question_type,
+            difficulty="B",
+            text_scale=text_scale_value,
+            options=options_list,
+            subquestions=subquestions_list,
+            image_filename=image_filename,
+            solution_filename=None,
+            created_by=admin_user["id"],
+            source="admin_report_task_relink",
+        )
+        new_bank_id = created_bank.get("id") if isinstance(created_bank, dict) else None
+        if not isinstance(new_bank_id, int) or new_bank_id <= 0:
+            raise HTTPException(status_code=500, detail="Failed to persist task content")
+        await db.tasks.update_task(task_id=task_id, bank_task_id=new_bank_id)
 
     logger.info("Task %s updated from report by admin %s", task_id, email)
     return {"success": True, "message": "Task updated successfully"}

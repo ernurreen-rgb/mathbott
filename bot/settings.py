@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     database_migration_url: str = ""
     database_auto_migrate: Optional[bool] = None
+    database_pool_max_size: Optional[int] = None
     background_tasks_enabled: Optional[bool] = None
     cron_secret: str = ""
     image_storage_backend: str = "local"
@@ -133,7 +134,7 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return defaults[info.field_name]
 
-    @field_validator("image_upload_max_bytes", mode="before")
+    @field_validator("image_upload_max_bytes", "database_pool_max_size", mode="before")
     @classmethod
     def _lenient_optional_int(cls, value: object) -> Optional[int]:
         if value is None or str(value).strip() == "":
@@ -200,6 +201,13 @@ class Settings(BaseSettings):
         if self.database_auto_migrate is not None:
             return self.database_auto_migrate
         return os.environ.get("VERCEL") != "1"
+
+    @property
+    def effective_database_pool_max_size(self) -> int:
+        import os
+        if self.database_pool_max_size is not None:
+            return max(1, min(50, self.database_pool_max_size))
+        return 4 if os.environ.get("VERCEL") == "1" else 8
 
     @property
     def ai_twins_enabled(self) -> bool:

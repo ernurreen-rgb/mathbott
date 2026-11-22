@@ -12,14 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionPool:
-    """Small pool of open PostgreSQL connections"""
+    """Small pool of open PostgreSQL connections with idle staleness detection."""
 
     def __init__(
         self,
         database_url: str,
         min_size: int = 0,
-        max_size: int = 2,
+        max_size: int = 6,
         timeout: int = 30,
+        idle_check_after_seconds: float = 60.0,
+        max_idle_seconds: float = 240.0,
     ):
         """
         Initialize connection pool
@@ -29,13 +31,17 @@ class ConnectionPool:
             min_size: Minimum number of connections to maintain
             max_size: Maximum number of connections in pool
             timeout: Connect timeout and wait for a free connection, in seconds
+            idle_check_after_seconds: Ping pooled connections idle longer than this
+            max_idle_seconds: Proactively retire pooled connections idle longer than this
         """
         self.database_url = database_url
         self.min_size = min_size
         self.max_size = max_size
         self.timeout = timeout
+        self.idle_check_after_seconds = max(0.0, float(idle_check_after_seconds))
+        self.max_idle_seconds = max(0.0, float(max_idle_seconds))
 
-        self._idle: deque[db_driver.Connection] = deque()
+        self._idle: deque[tuple[db_driver.Connection, float]] = deque()
         self._created = 0
         self._cond = asyncio.Condition()
         self._closed = False
@@ -97,22 +103,34 @@ class ConnectionPool:
 
         while True:
             need_create = False
+            candidate: db_driver.Connection | None = None
+            candidate_needs_ping = False
             dead_idle: list[db_driver.Connection] = []
             async with self._cond:
                 while True:
                     if self._closed:
                         raise RuntimeError("Connection pool is closed")
 
+                    now = time.monotonic()
                     while self._idle:
-                        conn = self._idle.popleft()
-                        if self._is_alive(conn):
+                        conn, returned_at = self._idle.popleft()
+                        idle_for = max(0.0, now - returned_at)
+                        stale = self.max_idle_seconds > 0 and idle_for >= self.max_idle_seconds
+                        if self._is_alive(conn) and not stale:
                             self._reset_connection_state(conn)
-                            for dead in dead_idle:
-                                self._spawn_bg(self._close_quietly(dead))
-                            return conn
-                        # Discard broken idle connection and free its slot.
+                            candidate = conn
+                            candidate_needs_ping = bool(
+                                self.idle_check_after_seconds > 0
+                                and idle_for >= self.idle_check_after_seconds
+                                and hasattr(conn, "ping")
+                            )
+                            break
+                        # Discard broken or over-idle connection and free its slot.
                         self._created = max(0, self._created - 1)
                         dead_idle.append(conn)
+
+                    if candidate is not None:
+                        break
 
                     if self._created < self.max_size:
                         # Reserve the slot before opening outside the lock.
@@ -134,6 +152,26 @@ class ConnectionPool:
 
             for dead in dead_idle:
                 self._spawn_bg(self._close_quietly(dead))
+
+            if candidate is not None:
+                if not candidate_needs_ping:
+                    return candidate
+                ping_ok = False
+                try:
+                    ping_ok = bool(await candidate.ping())
+                except asyncio.CancelledError:
+                    self._spawn_bg(self._close_quietly(candidate))
+                    await self._free_slot_safe()
+                    raise
+                except Exception:
+                    ping_ok = False
+                if ping_ok:
+                    self._reset_connection_state(candidate)
+                    return candidate
+                # Server closed idle connection (e.g. Neon idle timeout); drop and acquire fresh.
+                self._spawn_bg(self._close_quietly(candidate))
+                await self._free_slot_safe()
+                continue
 
             if need_create:
                 connect_task = self._spawn_bg(
@@ -176,10 +214,11 @@ class ConnectionPool:
                 await self._free_slot_safe(notify_all=True)
             return
 
-        # Roll back any transaction left open by a handler that errored before
-        # commit, so the connection is not reused with uncommitted state.
+        # Roll back only when a transaction was actually left open (skips network ROLLBACK
+        # on autocommit read connections while preserving cleanup after failed writes).
         healthy = self._is_alive(conn)
-        if healthy:
+        needs_rollback = bool(getattr(conn, "in_transaction", True))
+        if healthy and needs_rollback:
             rollback_task = self._spawn_bg(conn.rollback())
             try:
                 await asyncio.shield(rollback_task)
@@ -197,6 +236,8 @@ class ConnectionPool:
                 raise
             except Exception:
                 healthy = False
+        elif healthy:
+            self._reset_connection_state(conn)
 
         if not healthy:
             close_task = self._spawn_bg(self._close_quietly(conn))
@@ -215,7 +256,7 @@ class ConnectionPool:
                     self._cond.notify_all()
                     should_close = True
                 else:
-                    self._idle.append(conn)
+                    self._idle.append((conn, time.monotonic()))
                     self._cond.notify()
                 returned = True
         except BaseException:
@@ -267,7 +308,7 @@ class ConnectionPool:
                     self._spawn_bg(self._close_quietly(conn))
                 else:
                     self._reset_connection_state(conn)
-                    self._idle.append(conn)
+                    self._idle.append((conn, time.monotonic()))
                     self._cond.notify()
 
         logger.info("Connection pool initialized with %s connections", len(self._idle))
@@ -276,7 +317,7 @@ class ConnectionPool:
         """Close all connections in the pool"""
         async with self._cond:
             self._closed = True
-            idle = list(self._idle)
+            idle = [conn for conn, _ in self._idle]
             self._idle.clear()
             self._created = 0
             self._cond.notify_all()

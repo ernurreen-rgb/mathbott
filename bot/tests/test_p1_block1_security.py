@@ -381,7 +381,7 @@ class H02QuizRbacPrivilegeEscalationTests(unittest.TestCase):
 
     def test_create_session_blocks_reviewer_from_hosting_private_quiz(self):
         class FakeRepo(QuizSessionsMixin):
-            def _write_transaction(self):
+            def _write_transaction(self, *, lock_key=None):
                 class _Ctx:
                     async def __aenter__(self_inner):
                         return object()

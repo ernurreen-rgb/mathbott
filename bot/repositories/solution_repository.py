@@ -20,7 +20,7 @@ class SolutionRepository(BaseRepository):
         completion = build_completion_identity(task, surface="module")
         recorded = False
         streak_changed = False
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"user:{user_id}") as db:
             await db.execute(
                 "INSERT INTO solutions (user_id, task_id, answer, is_correct) VALUES (?, ?, ?, ?)",
                 (user_id, task_id, answer, is_correct),

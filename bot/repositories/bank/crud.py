@@ -39,10 +39,10 @@ class BankTaskCrudMixin:
             if cleaned_search:
                 search_id = cleaned_search.lstrip("#")
                 if search_id.isascii() and search_id.isdigit() and len(search_id) <= 15:
-                    where.append("(bt.id = ? OR LOWER(bt.text) LIKE ? ESCAPE '\\')")
+                    where.append("(bt.id = ? OR LOWER(bt.text COLLATE \"pg_c_utf8\") LIKE ? ESCAPE '\\')")
                     params.extend([int(search_id), self._contains_like_pattern(cleaned_search)])
                 else:
-                    where.append("LOWER(bt.text) LIKE ? ESCAPE '\\'")
+                    where.append("LOWER(bt.text COLLATE \"pg_c_utf8\") LIKE ? ESCAPE '\\'")
                     params.append(self._contains_like_pattern(cleaned_search))
 
             if difficulty:
@@ -228,7 +228,7 @@ class BankTaskCrudMixin:
         source: Optional[str] = "admin_bank_create",
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             task_id = await self._insert_bank_task(
                 db,
@@ -248,7 +248,6 @@ class BankTaskCrudMixin:
                 source=source,
                 reason=reason,
             )
-            await db.commit()
 
         task = await self.get_task_by_id(task_id, include_deleted=True)
         return task or {}
@@ -336,75 +335,44 @@ class BankTaskCrudMixin:
             return []
 
         created_ids: List[int] = []
-        async with self._connection() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
-            try:
-                for payload in tasks:
-                    question_type = payload.get("question_type", "input")
-                    cursor = await db.execute(
-                        """
-                        INSERT INTO bank_tasks
-                        (text, answer, question_type, answer_mode, accepted_answers, text_scale, options, subquestions, image_filename, solution_filename, difficulty, current_version, created_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                        """,
-                        (
-                            payload.get("text", ""),
-                            payload.get("answer", ""),
-                            question_type,
-                            normalize_answer_mode(payload.get("answer_mode"), question_type),
-                            json.dumps(normalize_accepted_answers(payload.get("accepted_answers")), ensure_ascii=False),
-                            payload.get("text_scale") or "md",
-                            json.dumps(payload.get("options"), ensure_ascii=False)
-                            if payload.get("options") is not None
-                            else None,
-                            json.dumps(payload.get("subquestions"), ensure_ascii=False)
-                            if payload.get("subquestions") is not None
-                            else None,
-                            payload.get("image_filename"),
-                            payload.get("solution_filename"),
-                            payload.get("difficulty", "B"),
-                            created_by,
-                        ),
-                    )
-                    task_id = int(cursor.lastrowid)
-                    created_ids.append(task_id)
-
-                    await self._set_task_topics(db, task_id, payload.get("topics") or [])
-
-                    row = await self._fetch_task_row(db, task_id)
-                    if row:
-                        topic_list = await self._fetch_topics_for_task(db, task_id)
-                        snapshot = self._build_snapshot(row, topic_list)
-                        await self._record_version_event(
-                            db,
-                            task_id=task_id,
-                            event_type="create",
-                            snapshot=snapshot,
-                            changed_fields=list(self.SNAPSHOT_FIELDS),
-                            source=source,
-                            actor_user_id=created_by,
-                            reason=reason,
-                            initial=True,
-                        )
-                await self._record_admin_audit_event(
+            for payload in tasks:
+                question_type = payload.get("question_type", "input")
+                task_id = await self._insert_bank_task(
                     db,
-                    action=self.AUDIT_ACTION_IMPORT_CONFIRM,
-                    entity_type="bank_import_batch",
-                    entity_id=None,
-                    actor_user_id=created_by,
-                    actor_email=actor_email,
-                    summary=f"Imported {len(created_ids)} task(s) into bank",
-                    changed_fields=[],
-                    metadata={
-                        "created_count": len(created_ids),
-                        "created_ids": created_ids,
-                        "source": source or "admin_bank_import",
-                    },
+                    text=payload.get("text", ""),
+                    answer=payload.get("answer", ""),
+                    question_type=question_type,
+                    difficulty=payload.get("difficulty", "B"),
+                    answer_mode=payload.get("answer_mode") or "choices",
+                    accepted_answers=payload.get("accepted_answers"),
+                    text_scale=payload.get("text_scale") or "md",
+                    topics=payload.get("topics") or [],
+                    options=payload.get("options"),
+                    subquestions=payload.get("subquestions"),
+                    image_filename=payload.get("image_filename"),
+                    solution_filename=payload.get("solution_filename"),
+                    created_by=created_by,
+                    source=source,
+                    reason=reason,
                 )
-                await db.commit()
-            except Exception:
-                await db.rollback()
-                raise
+                created_ids.append(task_id)
+            await self._record_admin_audit_event(
+                db,
+                action=self.AUDIT_ACTION_IMPORT_CONFIRM,
+                entity_type="bank_import_batch",
+                entity_id=None,
+                actor_user_id=created_by,
+                actor_email=actor_email,
+                summary=f"Imported {len(created_ids)} task(s) into bank",
+                changed_fields=[],
+                metadata={
+                    "created_count": len(created_ids),
+                    "created_ids": created_ids,
+                    "source": source or "admin_bank_import",
+                },
+            )
 
         items: List[Dict[str, Any]] = []
         for task_id in created_ids:
@@ -412,6 +380,154 @@ class BankTaskCrudMixin:
             if item:
                 items.append(item)
         return items
+
+    async def _update_task_on_conn(
+        self,
+        db: db_driver.Connection,
+        *,
+        task_id: int,
+        text: Optional[str] = None,
+        answer: Optional[str] = None,
+        question_type: Optional[str] = None,
+        answer_mode: Optional[str] = None,
+        accepted_answers: Optional[List[str]] = None,
+        text_scale: Optional[str] = None,
+        difficulty: Optional[str] = None,
+        topics: Optional[List[str]] = None,
+        options: Optional[List[Dict[str, Any]]] = None,
+        subquestions: Optional[List[Dict[str, Any]]] = None,
+        image_filename: Optional[str] = None,
+        solution_filename: Optional[str] = None,
+        actor_user_id: Optional[int] = None,
+        source: Optional[str] = "admin_bank_update",
+        reason: Optional[str] = None,
+        expected_current_version: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update a bank task using the caller's open transaction connection."""
+        db.row_factory = db_driver.Row
+        existing = await self._fetch_task_row(db, task_id)
+        if not existing or existing.get("deleted_at") is not None:
+            return None
+
+        current_version = int(existing.get("current_version") or 1)
+        if expected_current_version is not None and int(expected_current_version) != current_version:
+            raise BankTaskVersionConflictError(f"VERSION_CONFLICT:{current_version}")
+
+        existing_topics = await self._fetch_topics_for_task(db, task_id)
+        before_snapshot = self._build_snapshot(existing, existing_topics)
+
+        next_text = existing.get("text") if text is None else text
+        next_answer = existing.get("answer") if answer is None else answer
+        next_question_type = existing.get("question_type") if question_type is None else question_type
+        next_answer_mode = normalize_answer_mode(
+            existing.get("answer_mode") if answer_mode is None else answer_mode,
+            next_question_type,
+        )
+        next_accepted_answers_raw = existing.get("accepted_answers") if accepted_answers is None else json.dumps(
+            normalize_accepted_answers(accepted_answers), ensure_ascii=False
+        )
+        next_text_scale = existing.get("text_scale") if text_scale is None else (text_scale or "md")
+        next_difficulty = existing.get("difficulty") if difficulty is None else difficulty
+        next_options_raw = existing.get("options") if options is None else (
+            json.dumps(options, ensure_ascii=False) if options else None
+        )
+        next_subquestions_raw = existing.get("subquestions") if subquestions is None else (
+            json.dumps(subquestions, ensure_ascii=False) if subquestions else None
+        )
+        next_image_filename = (
+            existing.get("image_filename")
+            if image_filename is None
+            else (image_filename or None)
+        )
+        next_solution_filename = (
+            existing.get("solution_filename") if solution_filename is None else solution_filename
+        )
+        next_topics = existing_topics if topics is None else self._normalize_topics(topics)
+
+        after_snapshot_candidate = {
+            "text": next_text or "",
+            "answer": next_answer or "",
+            "question_type": next_question_type or "input",
+            "answer_mode": next_answer_mode or "choices",
+            "accepted_answers": normalize_accepted_answers(next_accepted_answers_raw),
+            "text_scale": next_text_scale or "md",
+            "options": self._parse_json_field(next_options_raw),
+            "subquestions": self._parse_json_field(next_subquestions_raw),
+            "difficulty": next_difficulty or "B",
+            "topics": next_topics,
+            "image_filename": next_image_filename,
+            "solution_filename": next_solution_filename,
+        }
+
+        changed_fields = self._changed_fields(before_snapshot, after_snapshot_candidate)
+        if not changed_fields:
+            return self._serialize_task_row(existing, existing_topics)
+
+        updates: List[str] = []
+        params: List[Any] = []
+        if next_text != existing.get("text"):
+            updates.append("text = ?")
+            params.append(next_text)
+        if next_answer != existing.get("answer"):
+            updates.append("answer = ?")
+            params.append(next_answer)
+        if next_question_type != existing.get("question_type"):
+            updates.append("question_type = ?")
+            params.append(next_question_type)
+        if next_answer_mode != existing.get("answer_mode"):
+            updates.append("answer_mode = ?")
+            params.append(next_answer_mode)
+        if next_accepted_answers_raw != existing.get("accepted_answers"):
+            updates.append("accepted_answers = ?")
+            params.append(next_accepted_answers_raw)
+        if (next_text_scale or "md") != (existing.get("text_scale") or "md"):
+            updates.append("text_scale = ?")
+            params.append(next_text_scale or "md")
+        if next_difficulty != existing.get("difficulty"):
+            updates.append("difficulty = ?")
+            params.append(next_difficulty)
+        if next_options_raw != existing.get("options"):
+            updates.append("options = ?")
+            params.append(next_options_raw)
+        if next_subquestions_raw != existing.get("subquestions"):
+            updates.append("subquestions = ?")
+            params.append(next_subquestions_raw)
+        if next_image_filename != existing.get("image_filename"):
+            updates.append("image_filename = ?")
+            params.append(next_image_filename)
+        if next_solution_filename != existing.get("solution_filename"):
+            updates.append("solution_filename = ?")
+            params.append(next_solution_filename)
+
+        if updates:
+            updates.append("updated_at = mathbot_datetime('now')")
+            params.append(task_id)
+            await db.execute(
+                f"UPDATE bank_tasks SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+
+        if topics is not None:
+            await self._set_task_topics(db, task_id, next_topics)
+
+        updated_row = await self._fetch_task_row(db, task_id)
+        if not updated_row:
+            return None
+
+        updated_topics = await self._fetch_topics_for_task(db, task_id)
+        after_snapshot = self._build_snapshot(updated_row, updated_topics)
+        await self._record_version_event(
+            db,
+            task_id=task_id,
+            event_type="update",
+            snapshot=after_snapshot,
+            changed_fields=changed_fields,
+            source=source,
+            actor_user_id=actor_user_id,
+            reason=reason,
+            initial=False,
+        )
+        return self._serialize_task_row(updated_row, updated_topics)
 
     async def update_task(
         self,
@@ -433,130 +549,29 @@ class BankTaskCrudMixin:
         reason: Optional[str] = None,
         expected_current_version: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        async with self._write_transaction() as db:
-            db.row_factory = db_driver.Row
-            existing = await self._fetch_task_row(db, task_id)
-            if not existing or existing.get("deleted_at") is not None:
-                return None
-
-            current_version = int(existing.get("current_version") or 1)
-            if expected_current_version is not None and int(expected_current_version) != current_version:
-                raise BankTaskVersionConflictError(f"VERSION_CONFLICT:{current_version}")
-
-            existing_topics = await self._fetch_topics_for_task(db, task_id)
-            before_snapshot = self._build_snapshot(existing, existing_topics)
-
-            next_text = existing.get("text") if text is None else text
-            next_answer = existing.get("answer") if answer is None else answer
-            next_question_type = existing.get("question_type") if question_type is None else question_type
-            next_answer_mode = normalize_answer_mode(
-                existing.get("answer_mode") if answer_mode is None else answer_mode,
-                next_question_type,
-            )
-            next_accepted_answers_raw = existing.get("accepted_answers") if accepted_answers is None else json.dumps(
-                normalize_accepted_answers(accepted_answers), ensure_ascii=False
-            )
-            next_text_scale = existing.get("text_scale") if text_scale is None else (text_scale or "md")
-            next_difficulty = existing.get("difficulty") if difficulty is None else difficulty
-            next_options_raw = existing.get("options") if options is None else (
-                json.dumps(options, ensure_ascii=False) if options else None
-            )
-            next_subquestions_raw = existing.get("subquestions") if subquestions is None else (
-                json.dumps(subquestions, ensure_ascii=False) if subquestions else None
-            )
-            next_image_filename = (
-                existing.get("image_filename")
-                if image_filename is None
-                else (image_filename or None)
-            )
-            next_solution_filename = (
-                existing.get("solution_filename") if solution_filename is None else solution_filename
-            )
-            next_topics = existing_topics if topics is None else self._normalize_topics(topics)
-
-            after_snapshot_candidate = {
-                "text": next_text or "",
-                "answer": next_answer or "",
-                "question_type": next_question_type or "input",
-                "answer_mode": next_answer_mode or "choices",
-                "accepted_answers": normalize_accepted_answers(next_accepted_answers_raw),
-                "text_scale": next_text_scale or "md",
-                "options": self._parse_json_field(next_options_raw),
-                "subquestions": self._parse_json_field(next_subquestions_raw),
-                "difficulty": next_difficulty or "B",
-                "topics": next_topics,
-                "image_filename": next_image_filename,
-                "solution_filename": next_solution_filename,
-            }
-
-            changed_fields = self._changed_fields(before_snapshot, after_snapshot_candidate)
-            if not changed_fields:
-                return self._serialize_task_row(existing, existing_topics)
-
-            updates: List[str] = []
-            params: List[Any] = []
-            if next_text != existing.get("text"):
-                updates.append("text = ?")
-                params.append(next_text)
-            if next_answer != existing.get("answer"):
-                updates.append("answer = ?")
-                params.append(next_answer)
-            if next_question_type != existing.get("question_type"):
-                updates.append("question_type = ?")
-                params.append(next_question_type)
-            if next_answer_mode != existing.get("answer_mode"):
-                updates.append("answer_mode = ?")
-                params.append(next_answer_mode)
-            if next_accepted_answers_raw != existing.get("accepted_answers"):
-                updates.append("accepted_answers = ?")
-                params.append(next_accepted_answers_raw)
-            if (next_text_scale or "md") != (existing.get("text_scale") or "md"):
-                updates.append("text_scale = ?")
-                params.append(next_text_scale or "md")
-            if next_difficulty != existing.get("difficulty"):
-                updates.append("difficulty = ?")
-                params.append(next_difficulty)
-            if next_options_raw != existing.get("options"):
-                updates.append("options = ?")
-                params.append(next_options_raw)
-            if next_subquestions_raw != existing.get("subquestions"):
-                updates.append("subquestions = ?")
-                params.append(next_subquestions_raw)
-            if next_image_filename != existing.get("image_filename"):
-                updates.append("image_filename = ?")
-                params.append(next_image_filename)
-            if next_solution_filename != existing.get("solution_filename"):
-                updates.append("solution_filename = ?")
-                params.append(next_solution_filename)
-
-            if updates:
-                updates.append("updated_at = mathbot_datetime('now')")
-                params.append(task_id)
-                await db.execute(
-                    f"UPDATE bank_tasks SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
-
-            if topics is not None:
-                await self._set_task_topics(db, task_id, next_topics)
-
-            updated_row = await self._fetch_task_row(db, task_id)
-            if not updated_row:
-                return None
-
-            updated_topics = await self._fetch_topics_for_task(db, task_id)
-            after_snapshot = self._build_snapshot(updated_row, updated_topics)
-            await self._record_version_event(
+        async with self._write_transaction(lock_key="bank_tasks") as db:
+            result = await self._update_task_on_conn(
                 db,
                 task_id=task_id,
-                event_type="update",
-                snapshot=after_snapshot,
-                changed_fields=changed_fields,
-                source=source,
+                text=text,
+                answer=answer,
+                question_type=question_type,
+                answer_mode=answer_mode,
+                accepted_answers=accepted_answers,
+                text_scale=text_scale,
+                difficulty=difficulty,
+                topics=topics,
+                options=options,
+                subquestions=subquestions,
+                image_filename=image_filename,
+                solution_filename=solution_filename,
                 actor_user_id=actor_user_id,
+                source=source,
                 reason=reason,
-                initial=False,
+                expected_current_version=expected_current_version,
             )
+            if result is None:
+                return None
 
         return await self.get_task_by_id(task_id, include_deleted=True)
 
@@ -567,7 +582,7 @@ class BankTaskCrudMixin:
         source: Optional[str] = "admin_bank_soft_delete",
         reason: Optional[str] = None,
     ) -> bool:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
@@ -605,7 +620,7 @@ class BankTaskCrudMixin:
         source: Optional[str] = "admin_bank_restore",
         reason: Optional[str] = None,
     ) -> bool:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             existing = await self._fetch_task_row(db, task_id)
             if not existing:
@@ -648,7 +663,7 @@ class BankTaskCrudMixin:
             pass
 
         try:
-            async with self._write_transaction() as db:
+            async with self._write_transaction(lock_key="bank_tasks") as db:
                 db.row_factory = db_driver.Row
                 existing = await self._fetch_task_row(db, task_id)
                 if not existing or not existing.get("deleted_at"):
@@ -732,7 +747,7 @@ class BankTaskCrudMixin:
 
     async def cleanup_old_deleted_tasks(self, days: int = 30) -> int:
         """Delete expired trash atomically while retaining committed media for historical references."""
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             async with db.execute(
                 """
@@ -819,7 +834,7 @@ class BankTaskCrudMixin:
                     SELECT name
                     FROM bank_topics
                     WHERE name_norm LIKE ? ESCAPE '\\'
-                    ORDER BY LOWER(name) ASC
+                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC
                     LIMIT ?
                 """
                 params: List[Any] = [like_value, limit]
@@ -827,7 +842,7 @@ class BankTaskCrudMixin:
                 sql = """
                     SELECT name
                     FROM bank_topics
-                    ORDER BY LOWER(name) ASC
+                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC
                     LIMIT ?
                 """
                 params = [limit]
@@ -983,7 +998,7 @@ class BankTaskCrudMixin:
                 "skipped_missing_ids": [],
             }
 
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             placeholders = ",".join(["?"] * len(ordered_unique_ids))
             async with db.execute(

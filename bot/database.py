@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 
 from migrations.postgres_runner import run_postgres_migrations
 from migrations.seeds import run_seeds
+from settings import get_settings
 from repositories.user_repository import UserRepository
 from repositories.task_repository import TaskRepository
 from repositories.curriculum_repository import CurriculumRepository
@@ -47,7 +48,7 @@ class Database:
             self.connection_pool = ConnectionPool(
                 database_url=self.database_url,
                 min_size=0,
-                max_size=2,
+                max_size=get_settings().effective_database_pool_max_size,
                 timeout=self.connect_timeout_seconds,
             )
 

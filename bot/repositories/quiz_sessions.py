@@ -41,7 +41,7 @@ class QuizSessionsMixin:
             return None
 
     async def create_session(self, quiz_id: int, host_id: int, settings=None):
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="quiz_sessions_create") as db:
             quiz = await self._row(db, "SELECT * FROM quizzes WHERE id = ?", (quiz_id,))
             host = await self._row(db, "SELECT * FROM users WHERE id = ?", (host_id,))
             if not quiz or not host:
@@ -98,7 +98,7 @@ class QuizSessionsMixin:
         return await self.get_session_by_id(row['id']) if row else None
 
     async def update_session_status(self, session_id: int, status: str, shuffle_questions: Optional[bool] = None):
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             row = await self._row(db, "SELECT * FROM quiz_sessions WHERE id = ?", (session_id,))
             if not row:
                 raise QuizError('not_found', 'Session not found')
@@ -138,7 +138,7 @@ class QuizSessionsMixin:
         if not nickname:
             raise QuizError('invalid', 'Nickname is required')
         clean_avatar = (avatar_color or '').strip()[:64] or None
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             session = await self._row(db, 'SELECT * FROM quiz_sessions WHERE id = ?', (session_id,))
             if not session or session['status'] == 'finished':
                 raise QuizError('conflict', 'Session is not accepting participants')
@@ -188,7 +188,7 @@ class QuizSessionsMixin:
         clean_avatar = (avatar_color or '').strip()
         if not clean_avatar or len(clean_avatar) > 64:
             raise QuizError('invalid', 'Avatar is required')
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             participant = await self._token_participant(db, session_id, participant_token)
             session = await self._row(db, 'SELECT status FROM quiz_sessions WHERE id = ?', (session_id,))
             if not session or session['status'] == 'finished':
@@ -217,7 +217,7 @@ class QuizSessionsMixin:
 
     async def claim_participant(self, session_id, participant_token, user_id):
         """Attach a capability-owned guest result once; never transfer another account's result."""
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             participant = await self._token_participant(db, session_id, participant_token)
             if participant['user_id'] is not None and participant['user_id'] != user_id:
                 raise QuizError('forbidden', 'This result belongs to another account')
@@ -339,7 +339,7 @@ class QuizSessionsMixin:
             return await self._progress(db, session_id, participant, time.time())
 
     async def activate_question(self, session_id, participant_token, advance=False, question_id=None):
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             participant = await self._token_participant(db, session_id, participant_token)
             session = await self._row(db, 'SELECT status, settings FROM quiz_sessions WHERE id = ?', (session_id,))
             if session['status'] != 'in_progress':
@@ -407,7 +407,7 @@ class QuizSessionsMixin:
             else None
         )
 
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             participant = await self._token_participant(db, session_id, participant_token, participant_id)
             question_row = await self._row(db, 'SELECT snapshot_json, position FROM quiz_session_questions WHERE session_id = ? AND question_id = ?',
                                           (session_id, question_id))
@@ -467,7 +467,7 @@ class QuizSessionsMixin:
                     'reused': False, 'progress': await self._progress(db, session_id, participant, time.time())}
 
     async def set_participant_finished(self, session_id, participant_id, participant_token):
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             participant = await self._token_participant(db, session_id, participant_token, participant_id)
             question_count = await self._row(db, 'SELECT COUNT(*) AS n FROM quiz_session_questions WHERE session_id = ?', (session_id,))
             answer_count = await self._row(db, 'SELECT COUNT(*) AS n FROM quiz_answers WHERE session_id = ? AND participant_id = ?', (session_id, participant_id))

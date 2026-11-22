@@ -126,7 +126,7 @@ class UserRepository(BaseRepository):
                 else:
                     await db.execute("UPDATE users SET last_active = mathbot_datetime('now') WHERE id = ?", (user_id,))
                 async with db.execute("""SELECT id, nickname FROM users
-                    WHERE mathbot_datetime(last_active) >= mathbot_datetime('now', '-70 seconds')
+                    WHERE last_active >= mathbot_datetime('now', '-70 seconds')
                     ORDER BY id""") as cursor:
                     users = [dict(row) for row in await cursor.fetchall()]
                 await db.commit()
@@ -178,7 +178,7 @@ class UserRepository(BaseRepository):
         normalized_email = _normalize_email(email)
         if not normalized_email:
             raise ValueError("email is required")
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key=f"user_email:{normalized_email}") as db:
             db.row_factory = db_driver.Row
             # Check if user already exists
             async with db.execute(
@@ -396,11 +396,66 @@ class UserRepository(BaseRepository):
                     return bool(row[0]) if row else False
             return False
 
+    @staticmethod
+    async def _ensure_not_removing_last_super_admin(
+        db: db_driver.Connection,
+        *,
+        target_where_sql: str,
+        target_param: Any,
+        new_is_admin: bool,
+        new_role: Optional[str],
+    ) -> None:
+        if new_is_admin and new_role == ADMIN_ROLE_SUPER_ADMIN:
+            return
+        async with db.execute(
+            f"SELECT id, is_admin, admin_role FROM users WHERE {target_where_sql}",
+            (target_param,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        demotes_super = False
+        for row in rows:
+            is_adm = bool(row["is_admin"] if hasattr(row, "keys") else row[1])
+            raw_role = row["admin_role"] if hasattr(row, "keys") else row[2]
+            try:
+                norm_role = _normalize_admin_role(raw_role)
+            except ValueError:
+                norm_role = None
+            if is_adm and norm_role == ADMIN_ROLE_SUPER_ADMIN:
+                demotes_super = True
+                break
+        if not demotes_super:
+            return
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE is_admin = 1 AND admin_role = ?",
+            (ADMIN_ROLE_SUPER_ADMIN,),
+        ) as count_cursor:
+            count_row = await count_cursor.fetchone()
+        super_admin_count = int(count_row[0]) if count_row else 0
+        if super_admin_count <= 1:
+            raise LastSuperAdminError("At least one super_admin must remain")
+
     async def set_admin(self, user_id: Optional[int] = None, email: Optional[str] = None, is_admin: bool = True):
-        """Set admin status for user"""
-        async with self._connection() as db:
+        """Set admin status for user (protected against removing the last super_admin)."""
+        if not user_id and not email:
+            return
+        normalized_email = _normalize_email(email) if email else ""
+        if not user_id and not normalized_email:
+            return
+        async with self._write_transaction(lock_key="admin_roles") as db:
             if user_id:
-                if is_admin:
+                if not is_admin:
+                    await self._ensure_not_removing_last_super_admin(
+                        db,
+                        target_where_sql="id = ?",
+                        target_param=user_id,
+                        new_is_admin=False,
+                        new_role=None,
+                    )
+                    await db.execute(
+                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE id = ?",
+                        (user_id,),
+                    )
+                else:
                     await db.execute(
                         """
                         UPDATE users
@@ -410,16 +465,20 @@ class UserRepository(BaseRepository):
                         """,
                         (ADMIN_ROLE_SUPER_ADMIN, user_id),
                     )
-                else:
-                    await db.execute(
-                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE id = ?",
-                        (user_id,),
+            else:
+                if not is_admin:
+                    await self._ensure_not_removing_last_super_admin(
+                        db,
+                        target_where_sql="LOWER(email) = ?",
+                        target_param=normalized_email,
+                        new_is_admin=False,
+                        new_role=None,
                     )
-            elif email:
-                normalized_email = _normalize_email(email)
-                if not normalized_email:
-                    return
-                if is_admin:
+                    await db.execute(
+                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE LOWER(email) = ?",
+                        (normalized_email,),
+                    )
+                else:
                     await db.execute(
                         """
                         UPDATE users
@@ -429,12 +488,6 @@ class UserRepository(BaseRepository):
                         """,
                         (ADMIN_ROLE_SUPER_ADMIN, normalized_email),
                     )
-                else:
-                    await db.execute(
-                        "UPDATE users SET is_admin = 0, admin_role = NULL WHERE LOWER(email) = ?",
-                        (normalized_email,),
-                    )
-            await db.commit()
 
     async def get_admin_role(self, user_id: Optional[int] = None, email: Optional[str] = None) -> Optional[str]:
         """Get normalized admin role for user."""
@@ -470,24 +523,39 @@ class UserRepository(BaseRepository):
         user_id: Optional[int] = None,
         email: Optional[str] = None,
     ) -> None:
-        """Set admin role (and sync is_admin flag)."""
+        """Set admin role (and sync is_admin flag; protected against removing the last super_admin)."""
         normalized_role = _normalize_admin_role(role)
         is_admin_value = 1 if normalized_role else 0
-        async with self._connection() as db:
+        if not user_id and not email:
+            return
+        normalized_email = _normalize_email(email) if email else ""
+        if not user_id and not normalized_email:
+            return
+        async with self._write_transaction(lock_key="admin_roles") as db:
             if user_id:
+                await self._ensure_not_removing_last_super_admin(
+                    db,
+                    target_where_sql="id = ?",
+                    target_param=user_id,
+                    new_is_admin=bool(is_admin_value),
+                    new_role=normalized_role,
+                )
                 await db.execute(
                     "UPDATE users SET is_admin = ?, admin_role = ? WHERE id = ?",
                     (is_admin_value, normalized_role, user_id),
                 )
-            elif email:
-                normalized_email = _normalize_email(email)
-                if not normalized_email:
-                    return
+            else:
+                await self._ensure_not_removing_last_super_admin(
+                    db,
+                    target_where_sql="LOWER(email) = ?",
+                    target_param=normalized_email,
+                    new_is_admin=bool(is_admin_value),
+                    new_role=normalized_role,
+                )
                 await db.execute(
                     "UPDATE users SET is_admin = ?, admin_role = ? WHERE LOWER(email) = ?",
                     (is_admin_value, normalized_role, normalized_email),
                 )
-            await db.commit()
 
     async def set_admin_with_role(
         self,
@@ -541,10 +609,10 @@ class UserRepository(BaseRepository):
 
         normalized_actor_email = " ".join((actor_email or "").strip().split()).lower() or "unknown"
 
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="admin_roles") as db:
             db.row_factory = db_driver.Row
             async with db.execute(
-                "SELECT id, email, is_admin, admin_role FROM users WHERE email = ?",
+                "SELECT id, email, is_admin, admin_role FROM users WHERE LOWER(email) = ?",
                 (normalized_target_email,),
             ) as cursor:
                 row = await cursor.fetchone()

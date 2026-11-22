@@ -129,7 +129,7 @@ class BankTaskHelpersMixin:
                 FROM bank_task_topic_map m
                 JOIN bank_topics t ON t.id = m.topic_id
                 WHERE m.bank_task_id IN ({placeholders})
-                ORDER BY LOWER(t.name) ASC
+                ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC
             """
             async with db.execute(query, chunk) as cursor:
                 rows = await cursor.fetchall()

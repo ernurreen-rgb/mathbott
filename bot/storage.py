@@ -8,13 +8,40 @@ works with Windows' default event loop.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 from collections.abc import Sequence
 from decimal import Decimal
 from functools import lru_cache
+from threading import Lock
+from typing import Dict, FrozenSet, Optional
 
 WRITE_LOCK_ID = 724831921
+_RESERVED_LOCK_IDS = {WRITE_LOCK_ID, 724831922}
 POSTGRES_URL_PREFIXES = ("postgres://", "postgresql://")
+
+_ID_TABLES_CACHE: Dict[str, FrozenSet[str]] = {}
+_ID_TABLES_LOCK = Lock()
+
+
+def advisory_lock_id_for_key(lock_key: Optional[str]) -> int:
+    """Map an optional logical lock key to a PostgreSQL 64-bit advisory lock ID."""
+    if not lock_key:
+        return WRITE_LOCK_ID
+    digest = hashlib.blake2b(f"qazmath-lock:{lock_key}".encode("utf-8"), digest_size=8).digest()
+    lock_id = int.from_bytes(digest, "big") & 0x7FFFFFFFFFFFFFFF
+    if lock_id in _RESERVED_LOCK_IDS or lock_id == 0:
+        lock_id ^= 0x1000000000000001
+    return lock_id
+
+
+def clear_id_tables_cache(target: Optional[str] = None) -> None:
+    """Clear cached table-id metadata (called after migrations or in tests)."""
+    with _ID_TABLES_LOCK:
+        if target is None:
+            _ID_TABLES_CACHE.clear()
+        else:
+            _ID_TABLES_CACHE.pop(target, None)
 
 
 class DatabaseError(Exception):
@@ -162,27 +189,38 @@ class PostgresConnection:
     async def _open(self):
         if self._conn is None:
             import psycopg
+            # Default to autocommit=True so read-only SELECTs never open idle transactions
+            # or incur a network ROLLBACK when released back to the connection pool.
             conn = await asyncio.to_thread(
                 psycopg.connect, self._target, connect_timeout=int(self._timeout),
                 prepare_threshold=None, options=postgres_options(self._target),
+                autocommit=True,
             )
             self._conn = conn
-            try:
-                def tables():
-                    with conn.cursor() as cursor:
-                        cursor.execute("SELECT table_name FROM information_schema.columns "
-                                       "WHERE table_schema = current_schema() AND column_name = 'id'")
-                        result = {row[0] for row in cursor.fetchall()}
-                    conn.rollback()
-                    return result
-                self._id_tables = await asyncio.to_thread(tables)
-            except BaseException:
-                self._conn = None
+            with _ID_TABLES_LOCK:
+                cached_tables = _ID_TABLES_CACHE.get(self._target)
+            if cached_tables is not None:
+                self._id_tables = set(cached_tables)
+            else:
                 try:
-                    await asyncio.to_thread(conn.close)
-                except Exception:
-                    pass
-                raise
+                    def tables():
+                        with conn.cursor() as cursor:
+                            cursor.execute(
+                                "SELECT table_name FROM information_schema.columns "
+                                "WHERE table_schema = current_schema() AND column_name = 'id'"
+                            )
+                            return frozenset(row[0] for row in cursor.fetchall())
+                    fetched = await asyncio.to_thread(tables)
+                    with _ID_TABLES_LOCK:
+                        _ID_TABLES_CACHE[self._target] = fetched
+                    self._id_tables = set(fetched)
+                except BaseException:
+                    self._conn = None
+                    try:
+                        await asyncio.to_thread(conn.close)
+                    except Exception:
+                        pass
+                    raise
         return self
 
     def __await__(self):
@@ -201,24 +239,22 @@ class PostgresConnection:
         return bool(getattr(self._conn, "closed", False)) or bool(getattr(self._conn, "broken", False))
 
     @property
-    def in_transaction(self):
+    def in_transaction(self) -> bool:
         if self.closed:
             return False
         from psycopg.pq import TransactionStatus
         return self._conn.info.transaction_status != TransactionStatus.IDLE
 
-    def _begin_write_sync(self):
-        # psycopg opens the transaction itself on the first statement.
+    def _begin_write_sync(self, lock_id: int = WRITE_LOCK_ID):
+        # Switch out of autocommit before taking the transaction-scoped advisory lock.
+        if getattr(self._conn, "autocommit", False):
+            self._conn.autocommit = False
         with self._conn.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (WRITE_LOCK_ID,))
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (int(lock_id),))
 
-    async def begin_write(self):
-        """Start a transaction that holds the application-wide write lock until it ends.
-
-        Writers in every process take the same advisory lock, so state read inside the
-        transaction cannot change before the transaction commits.
-        """
-        await asyncio.to_thread(self._begin_write_sync)
+    async def begin_write(self, lock_id: int = WRITE_LOCK_ID):
+        """Start a transaction holding the given transaction-scoped advisory lock until commit/rollback."""
+        await asyncio.to_thread(self._begin_write_sync, int(lock_id))
 
     def _execute_sync(self, sql, parameters):
         import psycopg
@@ -228,10 +264,11 @@ class PostgresConnection:
         if generated_id:
             query += " RETURNING id"
         args = tuple(int(value) if isinstance(value, bool) else value for value in parameters)
-        # A failed statement aborts a PostgreSQL transaction. Savepoints keep it usable
-        # for the repositories that catch duplicate-key errors and carry on.
+        # Only use a savepoint inside an explicit transaction block; autocommit statements
+        # cannot create savepoints and do not abort enclosing transactions on error.
+        use_savepoint = bool(insert and not getattr(self._conn, "autocommit", False))
         with self._conn.cursor() as cursor:
-            if insert:
+            if use_savepoint:
                 cursor.execute("SAVEPOINT mathbot_statement")
             try:
                 cursor.execute(query, args if args else None)
@@ -242,10 +279,10 @@ class PostgresConnection:
                     self._lastrowid = rows[-1][0]
                 if not re.match(r"\s*(SELECT|WITH)\b", query, re.I) and rowcount > 0:
                     self.total_changes += rowcount
-                if insert:
+                if use_savepoint:
                     cursor.execute("RELEASE SAVEPOINT mathbot_statement")
             except psycopg.Error as exc:
-                if insert:
+                if use_savepoint:
                     try:
                         cursor.execute("ROLLBACK TO SAVEPOINT mathbot_statement")
                         cursor.execute("RELEASE SAVEPOINT mathbot_statement")
@@ -263,17 +300,92 @@ class PostgresConnection:
     def execute(self, sql, parameters=()):
         return _Query(self._execute(sql, parameters))
 
+    def _executemany_sync(self, sql, param_rows):
+        import psycopg
+        if not param_rows:
+            return PostgresCursor()
+        query = postgres_sql(sql)
+        insert = re.match(r"INSERT\s+INTO\s+(\w+)", query, re.I)
+        converted_rows = [
+            tuple(int(value) if isinstance(value, bool) else value for value in values)
+            for values in param_rows
+        ]
+        use_savepoint = bool(insert and not getattr(self._conn, "autocommit", False))
+        with self._conn.cursor() as cursor:
+            if use_savepoint:
+                cursor.execute("SAVEPOINT mathbot_statement")
+            try:
+                cursor.executemany(query, converted_rows)
+                rowcount = cursor.rowcount
+                if not re.match(r"\s*(SELECT|WITH)\b", query, re.I) and rowcount > 0:
+                    self.total_changes += rowcount
+                if use_savepoint:
+                    cursor.execute("RELEASE SAVEPOINT mathbot_statement")
+            except psycopg.Error as exc:
+                if use_savepoint:
+                    try:
+                        cursor.execute("ROLLBACK TO SAVEPOINT mathbot_statement")
+                        cursor.execute("RELEASE SAVEPOINT mathbot_statement")
+                    except psycopg.Error:
+                        pass
+                if isinstance(exc, psycopg.IntegrityError):
+                    raise IntegrityError(str(exc)) from exc
+                raise OperationalError(str(exc)) from exc
+        return PostgresCursor(rowcount=rowcount, lastrowid=self._lastrowid)
+
     async def executemany(self, sql, parameters):
-        cursor = PostgresCursor()
-        for values in parameters:
-            cursor = await self._execute(sql, values)
-        return cursor
+        rows = list(parameters)
+        if not rows:
+            return PostgresCursor()
+        return await asyncio.to_thread(self._executemany_sync, sql, rows)
+
+    def _commit_sync(self):
+        if self._conn is None or getattr(self._conn, "autocommit", False):
+            return
+        try:
+            self._conn.commit()
+        finally:
+            if not self.closed:
+                self._conn.autocommit = True
 
     async def commit(self):
-        await asyncio.to_thread(self._conn.commit)
+        await asyncio.to_thread(self._commit_sync)
+
+    def _rollback_sync(self):
+        if self._conn is None:
+            return
+        if getattr(self._conn, "autocommit", False) and not self.in_transaction:
+            return
+        try:
+            self._conn.rollback()
+        finally:
+            if not self.closed:
+                self._conn.autocommit = True
 
     async def rollback(self):
-        await asyncio.to_thread(self._conn.rollback)
+        await asyncio.to_thread(self._rollback_sync)
+
+    def _ping_sync(self) -> bool:
+        if self.closed:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            return True
+        except Exception:
+            conn = self._conn
+            self._conn = None
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
+            return False
+
+    async def ping(self) -> bool:
+        """Probe connection liveness (detects idle disconnects from Neon/proxies)."""
+        return await asyncio.to_thread(self._ping_sync)
 
     async def close(self):
         if self._conn is not None:
