@@ -28,7 +28,11 @@ from middleware.ensure_signed_in_user import EnsureSignedInUserMiddleware
 from config import get_cors_origins
 from instrument import APP_VERSION, ENVIRONMENT, SENTRY_ENABLED
 from settings import get_settings
-from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
+from utils.internal_proxy_auth import (
+    get_verified_proxy_client_key,
+    has_proxy_signature_headers,
+    verify_proxy_signature,
+)
 
 # Загрузить переменные окружения
 environment = ENVIRONMENT
@@ -38,12 +42,16 @@ logger = logging.getLogger(__name__)
 
 
 def get_rate_limit_key(request: Request) -> str:
-    """Rate limit signed proxy requests per authenticated user, fallback to client IP."""
+    """Rate limit signed proxy requests per user or signed client network, fallback to client IP."""
     if has_proxy_signature_headers(request):
         try:
             is_valid_proxy, proxy_email, _ = verify_proxy_signature(request)
-            if is_valid_proxy and proxy_email:
-                return f"user:{proxy_email}"
+            if is_valid_proxy:
+                if proxy_email:
+                    return f"user:{proxy_email}"
+                client_key = get_verified_proxy_client_key(request)
+                if client_key:
+                    return f"proxy-client:{client_key}"
         except Exception:
             logger.debug("Failed to resolve proxy rate-limit key", exc_info=True)
     return get_remote_address(request)

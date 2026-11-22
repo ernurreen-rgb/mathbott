@@ -15,6 +15,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+try:
+    from python_multipart.multipart import MultipartParser, parse_options_header
+except ModuleNotFoundError:  # pragma: no cover
+    from multipart.multipart import MultipartParser, parse_options_header
+
 from settings import get_settings
 from utils.internal_proxy_auth import (
     PROXY_BODY_SHA256_HEADER,
@@ -26,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 MAX_IDENTITY_BODY_BYTES = 1024 * 1024
 MAX_SIGNED_BODY_BYTES = 10 * 1024 * 1024
+_MAX_MULTIPART_EMAIL_BYTES = 4096
+_MAX_MULTIPART_HEADER_BYTES = 16384
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _PUBLIC_TRIAL_TEST_CATALOG_RE = re.compile(r"^/api/trial-tests(?:/(?:folders|categories|\d+))?/?$")
 
@@ -131,7 +138,127 @@ def _is_explicit_json_content_type(media_type: str) -> bool:
     )
 
 
-def _extract_body_emails(media_type: str, body: bytes) -> list[str]:
+def _extract_multipart_emails(content_type: str, body: bytes) -> list[str]:
+    if not body:
+        return []
+    try:
+        _, params = parse_options_header((content_type or "").encode("latin-1"))
+    except Exception as exc:
+        raise _IdentityParseError("Malformed multipart request body.") from exc
+
+    boundary = params.get(b"boundary")
+    if not boundary:
+        raise _IdentityParseError("Malformed multipart request body.")
+
+    emails: list[str] = []
+    saw_end = False
+    header_field = bytearray()
+    header_value = bytearray()
+    disposition: Optional[bytes] = None
+    part_charset = "utf-8"
+    is_email_field = False
+    is_file_field = False
+    email_buf = bytearray()
+
+    def on_part_begin() -> None:
+        nonlocal disposition, part_charset, is_email_field, is_file_field
+        header_field.clear()
+        header_value.clear()
+        disposition = None
+        part_charset = "utf-8"
+        is_email_field = False
+        is_file_field = False
+        email_buf.clear()
+
+    def on_header_field(data: bytes, start: int, end: int) -> None:
+        if len(header_field) + (end - start) > _MAX_MULTIPART_HEADER_BYTES:
+            raise _IdentityParseError("Malformed multipart request body.")
+        header_field.extend(data[start:end])
+
+    def on_header_value(data: bytes, start: int, end: int) -> None:
+        if len(header_value) + (end - start) > _MAX_MULTIPART_HEADER_BYTES:
+            raise _IdentityParseError("Malformed multipart request body.")
+        header_value.extend(data[start:end])
+
+    def on_header_end() -> None:
+        nonlocal disposition, part_charset
+        name_lower = bytes(header_field).strip().lower()
+        val_bytes = bytes(header_value)
+        header_field.clear()
+        header_value.clear()
+        if name_lower == b"content-disposition":
+            disposition = val_bytes
+        elif name_lower == b"content-type":
+            _, ct_params = parse_options_header(val_bytes)
+            raw_cs = ct_params.get(b"charset")
+            if raw_cs:
+                part_charset = raw_cs.decode("latin-1").strip() or "utf-8"
+
+    def on_headers_finished() -> None:
+        nonlocal is_email_field, is_file_field
+        if disposition is None:
+            return
+        _, disp_params = parse_options_header(disposition)
+        raw_name = disp_params.get(b"name")
+        if raw_name is None:
+            return
+        try:
+            field_name = raw_name.decode("utf-8")
+        except UnicodeDecodeError:
+            field_name = raw_name.decode("latin-1")
+        if field_name == "email":
+            is_email_field = True
+            is_file_field = b"filename" in disp_params
+
+    def on_part_data(data: bytes, start: int, end: int) -> None:
+        if is_email_field and not is_file_field:
+            if len(email_buf) + (end - start) > _MAX_MULTIPART_EMAIL_BYTES:
+                raise _IdentityParseError("Malformed multipart email field.")
+            email_buf.extend(data[start:end])
+
+    def on_part_end() -> None:
+        if is_email_field:
+            if is_file_field:
+                emails.append("")
+                return
+            try:
+                decoded = bytes(email_buf).decode(part_charset)
+            except Exception:
+                try:
+                    decoded = bytes(email_buf).decode("latin-1")
+                except Exception as exc:
+                    raise _IdentityParseError("Malformed multipart email field.") from exc
+            emails.append(_normalize_email(decoded) or "")
+
+    def on_end() -> None:
+        nonlocal saw_end
+        saw_end = True
+
+    callbacks = {
+        "on_part_begin": on_part_begin,
+        "on_header_field": on_header_field,
+        "on_header_value": on_header_value,
+        "on_header_end": on_header_end,
+        "on_headers_finished": on_headers_finished,
+        "on_part_data": on_part_data,
+        "on_part_end": on_part_end,
+        "on_end": on_end,
+    }
+    try:
+        parser = MultipartParser(boundary, callbacks)
+        parser.write(body)
+        parser.finalize()
+    except _IdentityParseError:
+        raise
+    except Exception as exc:
+        raise _IdentityParseError("Malformed multipart request body.") from exc
+
+    if not saw_end:
+        raise _IdentityParseError("Malformed multipart request body.")
+    return emails
+
+
+def _extract_body_emails(media_type: str, body: bytes, content_type: str = "") -> list[str]:
     # The caller already bounds buffered bodies. Do not silently skip identity
     # validation for signed JSON imports larger than MAX_IDENTITY_BODY_BYTES.
     if not body:
@@ -157,6 +284,9 @@ def _extract_body_emails(media_type: str, body: bytes) -> list[str]:
         except Exception as exc:
             raise _IdentityParseError("Malformed form request body.") from exc
         return [_normalize_email(value) or "" for value in values.get("email", [])]
+
+    if media_type == "multipart/form-data":
+        return _extract_multipart_emails(content_type, body)
 
     return []
 
@@ -199,6 +329,7 @@ class TrustedProxyIdentityMiddleware:
         should_inspect_body = request.method.upper() in _MUTATING_METHODS and (
             _is_json_content_type(media_type)
             or media_type == "application/x-www-form-urlencoded"
+            or media_type == "multipart/form-data"
         )
         should_verify_signed_body = bool(
             has_signature
@@ -221,7 +352,10 @@ class TrustedProxyIdentityMiddleware:
         body = b""
         replay_receive = receive
         if should_inspect_body or should_verify_signed_body:
-            max_body_bytes = MAX_SIGNED_BODY_BYTES if should_verify_signed_body else MAX_IDENTITY_BODY_BYTES
+            allow_signed_size = should_verify_signed_body or (
+                not get_settings().is_production and media_type == "multipart/form-data"
+            )
+            max_body_bytes = MAX_SIGNED_BODY_BYTES if allow_signed_size else MAX_IDENTITY_BODY_BYTES
             raw_content_length = headers.get("content-length")
             if raw_content_length:
                 try:
@@ -273,7 +407,7 @@ class TrustedProxyIdentityMiddleware:
                 return
 
         try:
-            body_emails = _extract_body_emails(media_type, body)
+            body_emails = _extract_body_emails(media_type, body, content_type=content_type)
         except _IdentityParseError as exc:
             response = JSONResponse({"detail": str(exc)}, status_code=400)
             await response(scope, replay_receive, send)

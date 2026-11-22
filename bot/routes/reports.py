@@ -2,7 +2,7 @@
 Reports роуты
 """
 import logging
-from fastapi import FastAPI, HTTPException, Body, Depends
+from fastapi import FastAPI, HTTPException, Body, Depends, Request
 from slowapi import Limiter
 
 from dependencies import get_db, require_internal_identity
@@ -25,8 +25,10 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
     """Настроить reports роуты"""
 
     @app.post("/api/reports")
+    @limiter.limit("15/minute")
     async def create_report(
-        request: ReportRequest = Body(...),
+        request: Request,
+        payload: ReportRequest = Body(...),
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
@@ -36,19 +38,19 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
 
             # A broken task is often noticed before answering it, so no attempt is required:
             # forcing a guess would also record a first-attempt mistake for the review.
-            task = await db.tasks.get_task_by_id(request.task_id)
+            task = await db.tasks.get_task_by_id(payload.task_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Есеп табылмады")
 
             # Check if user already reported this task
             user_reports = await db.reports.get_user_reports(user["id"])
-            existing_report = next((r for r in user_reports if r["task_id"] == request.task_id), None)
+            existing_report = next((r for r in user_reports if r["task_id"] == payload.task_id), None)
             if existing_report:
                 raise HTTPException(status_code=400, detail="Сіз бұл есепті бұрын жібергенсіз")
 
             # Create report
-            report = await db.reports.create_report(user["id"], request.task_id, request.message)
-            logger.info(f"Report created: user_id={user['id']}, task_id={request.task_id}")
+            report = await db.reports.create_report(user["id"], payload.task_id, payload.message)
+            logger.info(f"Report created: user_id={user['id']}, task_id={payload.task_id}")
 
             return {
                 "id": report["id"],
@@ -78,8 +80,10 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/trial-test-reports")
+    @limiter.limit("15/minute")
     async def create_trial_test_report(
-        request: TrialTestReportRequest = Body(...),
+        request: Request,
+        payload: TrialTestReportRequest = Body(...),
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db)
     ):
@@ -87,24 +91,24 @@ def setup_reports_routes(app: FastAPI, db: Database, limiter: Limiter):
         try:
             user = current_user
 
-            trial_test = await db.trial_tests.get_trial_test_by_id(request.trial_test_id)
+            trial_test = await db.trial_tests.get_trial_test_by_id(payload.trial_test_id)
             if not trial_test:
                 raise HTTPException(status_code=404, detail="Сынақ тесті табылмады")
 
-            task = await db.trial_tests.get_trial_test_task(request.task_id)
-            if not task or task.get("trial_test_id") != request.trial_test_id:
+            task = await db.trial_tests.get_trial_test_task(payload.task_id)
+            if not task or task.get("trial_test_id") != payload.trial_test_id:
                 raise HTTPException(status_code=404, detail="Есеп табылмады")
 
             # Check if user already reported this trial test task
-            if await db.trial_test_reports.has_user_reported_trial_test_task(user["id"], request.task_id):
+            if await db.trial_test_reports.has_user_reported_trial_test_task(user["id"], payload.task_id):
                 raise HTTPException(status_code=400, detail="Сіз бұл есепті бұрын жібергенсіз")
 
             report = await db.trial_test_reports.create_trial_test_report(
-                user["id"], request.trial_test_id, request.task_id, request.message
+                user["id"], payload.trial_test_id, payload.task_id, payload.message
             )
             logger.info(
                 "Trial test report created: user_id=%s, trial_test_id=%s, task_id=%s",
-                user["id"], request.trial_test_id, request.task_id
+                user["id"], payload.trial_test_id, payload.task_id
             )
 
             return {

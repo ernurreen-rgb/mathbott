@@ -3,6 +3,8 @@ import { isIP } from "node:net";
 
 export const QUIZ_ENTRY_KEY_HEADER = "x-quiz-entry-client-key";
 export const QUIZ_ENTRY_SIGNATURE_HEADER = "x-quiz-entry-client-signature";
+export const PROXY_CLIENT_KEY_HEADER = "x-proxy-client-key";
+export const PROXY_CLIENT_KEY_SIGNATURE_HEADER = "x-proxy-client-key-signature";
 
 export function isQuizEntryRequest(method: string, segments: string[]): boolean {
   // Next catchall segments can themselves contain decoded slashes. Match the
@@ -15,8 +17,12 @@ export function isQuizEntryRequest(method: string, segments: string[]): boolean 
 }
 
 export function normalizeQuizEntryNetwork(value: string | null): string | null {
-  if (!value || value.length > 64) return null;
-  const address = value.trim();
+  if (!value || value.length > 512) return null;
+  // Forwarded IP headers (including x-vercel-forwarded-for behind chained proxies)
+  // can contain a comma-separated list; extract the leftmost client hop.
+  const firstHop = value.split(",")[0]?.trim() || "";
+  if (!firstHop || firstHop.length > 64) return null;
+  const address = firstHop;
   if (isIP(address) === 4) return `v4:${address}`;
   if (isIP(address) !== 6) return null;
   try {
@@ -35,16 +41,37 @@ export function normalizeQuizEntryNetwork(value: string | null): string | null {
   }
 }
 
+export function resolveTrustedClientNetwork(
+  headers: Headers,
+  options: { vercel: boolean; trustedIpHeader?: string },
+): string | null {
+  // Only an ingress-owned header may identify a network. Never fall back to
+  // browser-supplied X-Forwarded-For unless explicitly configured via trustedIpHeader.
+  const candidates: string[] = [];
+  if (options.vercel) {
+    candidates.push("x-vercel-forwarded-for", "x-real-ip");
+  } else {
+    const configured = options.trustedIpHeader?.trim().toLowerCase();
+    if (configured) candidates.push(configured);
+  }
+  for (const name of candidates) {
+    let raw: string | null = null;
+    try {
+      raw = headers.get(name);
+    } catch {
+      continue;
+    }
+    const normalized = normalizeQuizEntryNetwork(raw);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 export function quizEntryClientKey(
   headers: Headers, secret: string,
   options: { vercel: boolean; trustedIpHeader?: string },
 ): string {
-  // Only an ingress-owned header may identify a network. Missing configuration
-  // uses one shared, bounded bucket instead of accepting browser-supplied XFF.
-  const name = options.vercel ? "x-vercel-forwarded-for" : options.trustedIpHeader?.trim().toLowerCase();
-  let address: string | null = null;
-  try { address = name ? headers.get(name) : null; } catch { /* Invalid configuration remains bounded. */ }
-  const network = normalizeQuizEntryNetwork(address) || "shared-proxy";
+  const network = resolveTrustedClientNetwork(headers, options) || "shared-proxy";
   return createHmac("sha256", secret).update(`QUIZ-ENTRY-NETWORK\n${network}`).digest("hex");
 }
 
@@ -53,5 +80,23 @@ export function quizEntryClientSignature(input: {
 }): string {
   return createHmac("sha256", input.secret).update([
     "QUIZ-ENTRY-CLIENT", input.timestamp, input.nonce, input.requestSignature, input.clientKey,
+  ].join("\n")).digest("hex");
+}
+
+export function proxyClientNetworkKey(
+  headers: Headers,
+  secret: string,
+  options: { vercel: boolean; trustedIpHeader?: string },
+): string | null {
+  const network = resolveTrustedClientNetwork(headers, options);
+  if (!network) return null;
+  return createHmac("sha256", secret).update(`PROXY-CLIENT-NETWORK\n${network}`).digest("hex");
+}
+
+export function proxyClientKeySignature(input: {
+  clientKey: string; timestamp: string; nonce: string; requestSignature: string; secret: string;
+}): string {
+  return createHmac("sha256", input.secret).update([
+    "PROXY-CLIENT-KEY", input.timestamp, input.nonce, input.requestSignature, input.clientKey,
   ].join("\n")).digest("hex");
 }

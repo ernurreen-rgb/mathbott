@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query, Path, Body, WebSocket, WebSoc
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
-from dependencies import get_db, require_internal_identity, optional_internal_identity
+from dependencies import get_db, is_content_admin, require_internal_identity, optional_internal_identity
 from database import Database
 from utils.quiz import QuizError, public_question
 from utils.quiz_ws_auth import issue_quiz_ws_ticket, verify_quiz_ws_ticket, QUIZ_WS_TTL
@@ -125,7 +125,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         session = await db.quizzes.get_session_by_id(session_id)
         if not session:
             raise HTTPException(404, 'Session not found')
-        if user and (session['host_id'] == user['id'] or user.get('is_admin')):
+        if user and (session['host_id'] == user['id'] or is_content_admin(user)):
             return session, None
         if host_only:
             raise HTTPException(403, 'Only the host may access this operation')
@@ -139,7 +139,8 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
             'leaderboard': await db.quizzes.get_session_leaderboard(session_id)})
 
     @app.post('/api/quiz-sessions')
-    async def create_game_session(payload: CreateSessionRequest,
+    @limiter.limit('20/minute')
+    async def create_game_session(request: Request, payload: CreateSessionRequest,
                                   current_user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
         return await db.quizzes.create_session(payload.quiz_id, current_user['id'], payload.settings)
 
@@ -152,6 +153,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {k: session[k] for k in ('id', 'pin_code', 'quiz_title', 'status')}
 
     @app.post('/api/quiz-sessions/join')
+    @limiter.limit('60/minute')
     async def join_game_session(payload: JoinSessionRequest, request: Request,
                                 user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         client_key = await entry_client(request, payload.pin_code, db)
@@ -169,6 +171,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {'session': session, 'participant': joined, 'participant_token': credential}
 
     @app.post('/api/quiz-sessions/{session_id}/claim')
+    @limiter.limit('30/minute')
     async def claim_guest_result(session_id: int, request: Request,
                                 expected_email: Optional[str] = Query(None),
                                 user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
@@ -182,12 +185,14 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_player_review(session_id, token(request), user['id'] if user else None, participant_id)
 
     @app.post('/api/quiz-sessions/{session_id}/review/answers')
+    @limiter.limit('120/minute')
     async def practice_answer(session_id: int, payload: ReviewAnswerRequest, request: Request,
                               user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         return await db.quizzes.check_review_answer(session_id, payload.question_id, payload.answer,
             token(request), user['id'] if user else None, payload.participant_id)
 
     @app.patch('/api/quiz-sessions/{session_id}/avatar')
+    @limiter.limit('60/minute')
     async def update_participant_avatar(session_id: int, payload: UpdateAvatarRequest, request: Request,
                                         db: Database = Depends(get_db)):
         participant = await db.quizzes.update_participant_avatar(session_id, payload.avatar_color, token(request))
@@ -201,6 +206,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {**session, 'participants': await db.quizzes.list_participants(session_id)}
 
     @app.post('/api/quiz-sessions/{session_id}/start')
+    @limiter.limit('30/minute')
     async def start_game_session(session_id: int, request: Request,
                                  payload: Optional[Dict[str, Any]] = Body(None),
                                  user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
@@ -211,6 +217,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return session
 
     @app.post('/api/quiz-sessions/{session_id}/finish')
+    @limiter.limit('30/minute')
     async def finish_game_session(session_id: int, request: Request,
                                   user: dict = Depends(require_internal_identity), db: Database = Depends(get_db)):
         await access(session_id, request, user, db, host_only=True)
@@ -235,10 +242,12 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_player_progress(session_id, token(request))
 
     @app.post('/api/quiz-sessions/{session_id}/current-question')
+    @limiter.limit('180/minute')
     async def current_question(session_id: int, request: Request, db: Database = Depends(get_db)):
         return await db.quizzes.activate_question(session_id, token(request))
 
     @app.post('/api/quiz-sessions/{session_id}/next')
+    @limiter.limit('180/minute')
     async def next_question(session_id: int, request: Request, question_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
         progress = await db.quizzes.activate_question(session_id, token(request), advance=True, question_id=question_id)
         if progress['participant']['is_finished']:
@@ -246,6 +255,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return progress
 
     @app.post('/api/quiz-sessions/{session_id}/answers')
+    @limiter.limit('180/minute')
     async def submit_answer(session_id: int, payload: SubmitAnswerRequest, request: Request, db: Database = Depends(get_db)):
         result = await db.quizzes.record_answer(session_id, payload.participant_id, payload.question_id,
                                                 payload.answer, token(request))
@@ -254,6 +264,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return result
 
     @app.post('/api/quiz-sessions/{session_id}/complete')
+    @limiter.limit('60/minute')
     async def complete(session_id: int, request: Request, participant_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
         await db.quizzes.set_participant_finished(session_id, participant_id, token(request))
         await broadcast_scores(session_id, db, 'participant_finished')
@@ -299,6 +310,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_user_quiz_history(current_user['id'])
 
     @app.get('/api/quiz-sessions/{session_id}/ws-token')
+    @limiter.limit('60/minute')
     async def ws_ticket(session_id: int, request: Request,
                          user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         _, participant = await access(session_id, request, user, db)
@@ -318,7 +330,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
             return
         if claims['role'] == 'host':
             user = await db.users.get_user_by_id(claims['actor_id'])
-            allowed = user and (session['host_id'] == user['id'] or user.get('is_admin'))
+            allowed = user and (session['host_id'] == user['id'] or is_content_admin(user))
         else:
             participant = await db.quizzes.get_participant(session_id, claims['actor_id'])
             allowed = participant and participant['token_hash'] == claims.get('credential')

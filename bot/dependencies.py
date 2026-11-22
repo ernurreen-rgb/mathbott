@@ -10,33 +10,24 @@ from fastapi import Depends, HTTPException, Request
 
 from database import Database
 from settings import get_settings
+from utils.admin_roles import (
+    ADMIN_ROLE_CONTENT_EDITOR,
+    ADMIN_ROLE_REVIEWER,
+    ADMIN_ROLE_SUPER_ADMIN,
+    ADMIN_ROLES,
+    CAPABILITY_CONTENT_MANAGE,
+    CAPABILITY_REVIEW_MANAGE,
+    CAPABILITY_SUPER_CRITICAL,
+    ROLE_PERMISSIONS,
+    get_role_permissions,
+    has_admin_capability,
+    is_content_admin,
+    normalize_admin_role as _normalize_admin_role,
+)
 from utils.internal_proxy_auth import has_proxy_signature_headers, verify_proxy_signature
 from utils.request_context import get_current_request
 
 logger = logging.getLogger(__name__)
-
-ADMIN_ROLE_CONTENT_EDITOR = "content_editor"
-ADMIN_ROLE_REVIEWER = "reviewer"
-ADMIN_ROLE_SUPER_ADMIN = "super_admin"
-ADMIN_ROLES = {
-    ADMIN_ROLE_CONTENT_EDITOR,
-    ADMIN_ROLE_REVIEWER,
-    ADMIN_ROLE_SUPER_ADMIN,
-}
-
-CAPABILITY_CONTENT_MANAGE = "content_manage"
-CAPABILITY_REVIEW_MANAGE = "review_manage"
-CAPABILITY_SUPER_CRITICAL = "super_critical"
-
-ROLE_PERMISSIONS: Dict[str, List[str]] = {
-    ADMIN_ROLE_CONTENT_EDITOR: [CAPABILITY_CONTENT_MANAGE],
-    ADMIN_ROLE_REVIEWER: [CAPABILITY_REVIEW_MANAGE],
-    ADMIN_ROLE_SUPER_ADMIN: [
-        CAPABILITY_CONTENT_MANAGE,
-        CAPABILITY_REVIEW_MANAGE,
-        CAPABILITY_SUPER_CRITICAL,
-    ],
-}
 
 
 async def get_db(request: Request) -> Database:
@@ -95,28 +86,6 @@ async def resolve_authenticated_email(
 ) -> str:
     """Resolve and verify the caller's authenticated email from signed proxy headers (or legacy dev fallback)."""
     return await _resolve_authenticated_email(request=request, email=email)
-
-
-def _normalize_admin_role(role: Optional[str]) -> Optional[str]:
-    if role is None:
-        return None
-    normalized = str(role).strip().lower()
-    if not normalized:
-        return None
-    if normalized not in ADMIN_ROLES:
-        return None
-    return normalized
-
-
-def get_role_permissions(role: Optional[str]) -> List[str]:
-    normalized = _normalize_admin_role(role)
-    if normalized is None:
-        return []
-    return list(ROLE_PERMISSIONS.get(normalized, []))
-
-
-def has_admin_capability(role: Optional[str], capability: str) -> bool:
-    return capability in get_role_permissions(role)
 
 
 async def require_internal_identity(

@@ -13,8 +13,15 @@ import {
   pathSupportsOptionalProxyIdentity,
 } from "@/lib/proxy-auth-paths";
 import {
-  isQuizEntryRequest, quizEntryClientKey, quizEntryClientSignature,
-  QUIZ_ENTRY_KEY_HEADER, QUIZ_ENTRY_SIGNATURE_HEADER,
+  isQuizEntryRequest,
+  proxyClientKeySignature,
+  proxyClientNetworkKey,
+  PROXY_CLIENT_KEY_HEADER,
+  PROXY_CLIENT_KEY_SIGNATURE_HEADER,
+  quizEntryClientKey,
+  quizEntryClientSignature,
+  QUIZ_ENTRY_KEY_HEADER,
+  QUIZ_ENTRY_SIGNATURE_HEADER,
 } from "@/lib/quiz-entry-identity";
 
 // Matches the API function limit: AI twin drafts can take most of a minute.
@@ -61,6 +68,8 @@ const STRIP_REQUEST_HEADERS = new Set([
   "x-proxy-request-signature-v2",
   QUIZ_ENTRY_KEY_HEADER,
   QUIZ_ENTRY_SIGNATURE_HEADER,
+  PROXY_CLIENT_KEY_HEADER,
+  PROXY_CLIENT_KEY_SIGNATURE_HEADER,
   "x-proxy-user-email",
   "x-proxy-body-sha256",
   "x-proxy-content-type",
@@ -550,11 +559,34 @@ async function proxyRequest(
       headers.set("X-Proxy-Request-Nonce", nonce);
       headers.set("X-Proxy-Request-Signature", legacySignature);
       headers.set("X-Proxy-Request-Signature-V2", signatureV2);
+      const clientIdentityOptions = {
+        vercel: process.env.VERCEL === "1",
+        trustedIpHeader: process.env.TRUSTED_CLIENT_IP_HEADER,
+      };
+      const proxyClientKey = proxyClientNetworkKey(
+        request.headers,
+        INTERNAL_PROXY_SHARED_SECRET,
+        clientIdentityOptions,
+      );
+      if (proxyClientKey) {
+        headers.set(PROXY_CLIENT_KEY_HEADER, proxyClientKey);
+        headers.set(
+          PROXY_CLIENT_KEY_SIGNATURE_HEADER,
+          proxyClientKeySignature({
+            clientKey: proxyClientKey,
+            timestamp,
+            nonce,
+            requestSignature: signatureV2,
+            secret: INTERNAL_PROXY_SHARED_SECRET,
+          }),
+        );
+      }
       if (isQuizEntryRequest(request.method, effectivePathSegments)) {
-        const clientKey = quizEntryClientKey(request.headers, INTERNAL_PROXY_SHARED_SECRET, {
-          vercel: process.env.VERCEL === "1",
-          trustedIpHeader: process.env.TRUSTED_CLIENT_IP_HEADER,
-        });
+        const clientKey = quizEntryClientKey(
+          request.headers,
+          INTERNAL_PROXY_SHARED_SECRET,
+          clientIdentityOptions,
+        );
         headers.set(QUIZ_ENTRY_KEY_HEADER, clientKey);
         headers.set(QUIZ_ENTRY_SIGNATURE_HEADER, quizEntryClientSignature({
           clientKey, timestamp, nonce, requestSignature: signatureV2, secret: INTERNAL_PROXY_SHARED_SECRET,

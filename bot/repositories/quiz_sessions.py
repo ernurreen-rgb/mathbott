@@ -7,6 +7,7 @@ from typing import Optional, List
 import storage as db_driver
 from settings import get_settings
 
+from utils.admin_roles import is_content_admin
 from utils.quiz import (QuizError, token_hash, public_participant, public_question,
                         answer_result, check_question_answer, calculate_speed_points)
 
@@ -45,9 +46,10 @@ class QuizSessionsMixin:
             host = await self._row(db, "SELECT * FROM users WHERE id = ?", (host_id,))
             if not quiz or not host:
                 raise QuizError("not_found", "Quiz or host not found")
-            if not quiz['is_public'] and quiz['created_by'] != host_id and not host['is_admin']:
+            host_is_content_admin = is_content_admin(host)
+            if not quiz['is_public'] and quiz['created_by'] != host_id and not host_is_content_admin:
                 raise QuizError("forbidden", "Private quiz is not available")
-            if quiz['created_by'] != host_id and not host['is_admin']:
+            if quiz['created_by'] != host_id and not host_is_content_admin:
                 active_player = await self._row(
                     db,
                     """SELECT 1 FROM quiz_participants p

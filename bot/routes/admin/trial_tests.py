@@ -471,7 +471,7 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not task or task.get("trial_test_id") != test_id:
             raise HTTPException(status_code=404, detail="Trial test task not found")
 
-        if task.get("created_by") and task.get("created_by") != admin_user["id"]:
+        if not _can_manage_admin_task(task, admin_user):
             raise HTTPException(status_code=403, detail="You can only edit your own tasks")
 
         logger.info(

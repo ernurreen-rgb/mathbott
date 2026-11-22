@@ -7,7 +7,6 @@ export async function updateAdminReportTask(
   formData: FormData
 ): Promise<{ data: { success: boolean; message?: string } | null; error: string | null }> {
   const primaryUrl = `${apiPath(`admin/reports/tasks/${taskId}`)}?email=${encodeURIComponent(email)}`;
-  const legacyUrl = `${apiPath(`admin/tasks/${taskId}`)}?email=${encodeURIComponent(email)}`;
 
   const request = async (
     url: string
@@ -30,10 +29,7 @@ export async function updateAdminReportTask(
   };
 
   try {
-    let result = await request(primaryUrl);
-    if (!result.ok && (result.status === 404 || result.status === 405)) {
-      result = await request(legacyUrl);
-    }
+    const result = await request(primaryUrl);
 
     if (!result.ok) {
       const detail = result.parsed?.detail ?? result.parsed?.error?.detail;

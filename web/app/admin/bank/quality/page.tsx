@@ -62,7 +62,7 @@ const formatDateTime = (value: string): string => {
 export default function AdminBankQualityPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email || null;
-  const { loading: accessLoading, allowed } = useAdminPageAccess("review", status, email);
+  const { loading: accessLoading, allowed } = useAdminPageAccess("content", status, email);
 
   const [tab, setTab] = useState<QualityTab>("duplicates");
   const [search, setSearch] = useState("");

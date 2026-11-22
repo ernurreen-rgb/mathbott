@@ -10,6 +10,7 @@ from .common import (
     Optional,
     Query,
     UploadFile,
+    _can_manage_admin_task,
     _get_allowed_mcq_answer_labels,
     _normalize_accepted_answers_or_raise,
     _normalize_answer_mode_or_raise,
@@ -36,7 +37,6 @@ from .common import (
     FastAPI,
     Limiter,
 )
-from .reports import _update_task_from_report_common
 
 
 def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -221,29 +221,13 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not effective_email:
             raise HTTPException(status_code=400, detail="email is required")
 
-        # Form email takes priority. Query email enables legacy report update flow.
-        cms_mode = bool(email_form)
-        if not cms_mode:
-            return await _update_task_from_report_common(
-                task_id=task_id,
-                text=text,
-                answer=answer,
-                question_type=question_type or "input",
-                text_scale=text_scale or "md",
-                options=options,
-                subquestions=subquestions,
-                image=None,
-                email=effective_email,
-                db=db,
-            )
-
         admin_user = await require_admin(email=effective_email, db=db)
 
         task = await db.tasks.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        if task.get("created_by") != admin_user["id"]:
+        if not _can_manage_admin_task(task, admin_user):
             raise HTTPException(status_code=403, detail="You can only edit your own tasks")
 
         if sort_order is not None and not text and not answer and question_type is None:
@@ -353,7 +337,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             if task.get("deleted_at"):
                 raise HTTPException(status_code=400, detail="Task is already in trash")
 
-            if task.get("created_by") != admin_user["id"]:
+            if not _can_manage_admin_task(task, admin_user):
                 raise HTTPException(status_code=403, detail="You can only delete your own tasks")
 
             try:
@@ -410,7 +394,7 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        if task.get("created_by") != admin_user["id"]:
+        if not _can_manage_admin_task(task, admin_user):
             raise HTTPException(status_code=403, detail="You can only restore your own tasks")
 
         if not task.get("deleted_at"):

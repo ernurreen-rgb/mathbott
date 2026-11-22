@@ -21,6 +21,9 @@ _SENSITIVE_HEADERS = {
     "x-proxy-user-email",
     "x-proxy-request-signature",
     "x-proxy-request-signature-v2",
+    "x-proxy-client-key-signature",
+    "x-quiz-entry-client-signature",
+    "x-quiz-participant-token",
 }
 _SENSITIVE_QUERY_KEYS = {"email", "token", "secret", "ticket", "key", "password", "code"}
 

@@ -3,14 +3,13 @@ Routes for Quizzes management (Quizizz-like service)
 """
 import logging
 from typing import Optional, List, Dict, Any, Literal
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter
 
 from dependencies import (
-    CAPABILITY_CONTENT_MANAGE,
     get_db,
-    has_admin_capability,
+    is_content_admin,
     optional_internal_identity,
     require_internal_identity,
 )
@@ -92,9 +91,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
             return False
         if user['id'] == quiz['created_by']:
             return True
-        return bool(user.get('is_admin')) and has_admin_capability(
-            user.get('admin_role'), CAPABILITY_CONTENT_MANAGE
-        )
+        return is_content_admin(user)
 
     def ensure_visible(quiz, user):
         if not quiz or (not quiz['is_public'] and not can_manage(quiz, user)):
@@ -187,11 +184,13 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         ensure_visible(quiz, current_user)
         if not current_user:
             return []
-        host_filter = None if current_user.get("is_admin") else current_user["id"]
+        host_filter = None if is_content_admin(current_user) else current_user["id"]
         return await db.quizzes.get_quiz_sessions(quiz_id, host_id=host_filter)
 
     @app.post("/api/quizzes/bulk-catalog")
+    @limiter.limit("30/minute")
     async def bulk_catalog_endpoint(
+        request: Request,
         payload: BulkCatalogRequest,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -201,7 +200,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         owners = await db.quizzes.get_quiz_owners(quiz_ids)
         if len(owners) != len(quiz_ids):
             raise HTTPException(status_code=404, detail="Quiz not found")
-        if not current_user.get("is_admin") and any(owner != current_user["id"] for owner in owners.values()):
+        if not is_content_admin(current_user) and any(owner != current_user["id"] for owner in owners.values()):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of every selected quiz")
         updated = await db.quizzes.set_catalog_fields(
             quiz_ids, topic=payload.topic,
@@ -209,7 +208,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {"updated": updated}
 
     @app.post("/api/quizzes")
+    @limiter.limit("30/minute")
     async def create_quiz_endpoint(
+        request: Request,
         payload: CreateQuizRequest,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -228,7 +229,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {**quiz, 'is_public': bool(quiz['is_public']), 'can_manage': True}
 
     @app.put("/api/quizzes/{quiz_id}")
+    @limiter.limit("60/minute")
     async def update_quiz_endpoint(
+        request: Request,
         quiz_id: int,
         payload: UpdateQuizRequest,
         current_user: dict = Depends(require_internal_identity),
@@ -239,8 +242,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        is_admin = bool(current_user.get("is_admin"))
-        if quiz["created_by"] != current_user["id"] and not is_admin:
+        if not can_manage(quiz, current_user):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of this quiz")
 
         updated = await db.quizzes.update_quiz(
@@ -256,7 +258,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {**updated, 'is_public': bool(updated['is_public']), 'can_manage': can_manage(updated, current_user)}
 
     @app.post("/api/quizzes/{quiz_id}/fork")
+    @limiter.limit("20/minute")
     async def fork_quiz_endpoint(
+        request: Request,
         quiz_id: int,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -285,7 +289,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {**cloned, 'is_public': bool(cloned['is_public']), 'can_manage': True}
 
     @app.delete("/api/quizzes/{quiz_id}")
+    @limiter.limit("30/minute")
     async def delete_quiz_endpoint(
+        request: Request,
         quiz_id: int,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -295,8 +301,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        is_admin = bool(current_user.get("is_admin"))
-        if quiz["created_by"] != current_user["id"] and not is_admin:
+        if not can_manage(quiz, current_user):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of this quiz")
 
         await db.quizzes.delete_quiz(quiz_id)
@@ -305,7 +310,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
     # --- Questions management ---
 
     @app.post("/api/quizzes/{quiz_id}/questions")
+    @limiter.limit("60/minute")
     async def add_quiz_question_endpoint(
+        request: Request,
         quiz_id: int,
         payload: QuizQuestionItem,
         current_user: dict = Depends(require_internal_identity),
@@ -316,8 +323,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        is_admin = bool(current_user.get("is_admin"))
-        if quiz["created_by"] != current_user["id"] and not is_admin:
+        if not can_manage(quiz, current_user):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of this quiz")
 
         question = await db.quizzes.add_question(
@@ -336,7 +342,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return question
 
     @app.put("/api/quizzes/{quiz_id}/questions/{question_id}")
+    @limiter.limit("60/minute")
     async def update_quiz_question_endpoint(
+        request: Request,
         quiz_id: int,
         question_id: int,
         payload: UpdateQuestionItem,
@@ -348,8 +356,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        is_admin = bool(current_user.get("is_admin"))
-        if quiz["created_by"] != current_user["id"] and not is_admin:
+        if not can_manage(quiz, current_user):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of this quiz")
 
         question = await db.quizzes.get_question_by_id(question_id)
@@ -377,7 +384,9 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         return updated
 
     @app.delete("/api/quizzes/{quiz_id}/questions/{question_id}")
+    @limiter.limit("60/minute")
     async def delete_quiz_question_endpoint(
+        request: Request,
         quiz_id: int,
         question_id: int,
         current_user: dict = Depends(require_internal_identity),
@@ -388,8 +397,7 @@ def setup_quizzes_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
-        is_admin = bool(current_user.get("is_admin"))
-        if quiz["created_by"] != current_user["id"] and not is_admin:
+        if not can_manage(quiz, current_user):
             raise HTTPException(status_code=403, detail="Forbidden: You are not the author of this quiz")
 
         question = await db.quizzes.get_question_by_id(question_id)

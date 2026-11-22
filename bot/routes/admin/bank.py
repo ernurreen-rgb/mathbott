@@ -77,7 +77,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/admin/bank/tasks/export")
     async def export_bank_tasks_json(
-        admin_user: dict = Depends(require_admin_any_admin),
+        admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db),
     ):
         items = await db.bank_tasks.export_tasks(include_deleted=False)
@@ -92,7 +92,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/admin/bank/quality/summary")
     async def get_bank_quality_summary(
-        admin_user: dict = Depends(require_admin_review_manage),
+        admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db),
     ):
         summary = await db.bank_tasks.get_quality_summary()
@@ -101,7 +101,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/admin/bank/quality/dead")
     async def get_bank_quality_dead_tasks(
-        admin_user: dict = Depends(require_admin_review_manage),
+        admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db),
         search: Optional[str] = Query(None),
         difficulty: Optional[str] = Query(None),
@@ -122,7 +122,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/admin/bank/quality/no-topics")
     async def get_bank_quality_no_topics_tasks(
-        admin_user: dict = Depends(require_admin_review_manage),
+        admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db),
         search: Optional[str] = Query(None),
         difficulty: Optional[str] = Query(None),
@@ -143,7 +143,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
 
     @app.get("/api/admin/bank/quality/duplicates")
     async def get_bank_quality_duplicate_clusters(
-        admin_user: dict = Depends(require_admin_review_manage),
+        admin_user: dict = Depends(require_admin),
         db: Database = Depends(get_db),
         threshold: float = Query(BANK_QUALITY_DUPLICATE_THRESHOLD_DEFAULT),
         search: Optional[str] = Query(None),

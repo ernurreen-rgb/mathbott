@@ -100,7 +100,7 @@ export default function AdminPage() {
         title: "Банк сапасы",
         href: "/admin/bank/quality",
         icon: "compass",
-        section: "review",
+        section: "content",
       },
       {
         title: "Банк аудиті",

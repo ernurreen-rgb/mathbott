@@ -117,4 +117,15 @@ from .content_serialization import (
     _serialize_bank_placement_task,
 )
 
+
+def _can_manage_admin_task(task: Dict[str, Any], admin_user: Dict[str, Any]) -> bool:
+    """Allow super_admin on any task, and allow content admins on their own or unowned (created_by=NULL) tasks."""
+    if admin_user.get("is_super_admin"):
+        return True
+    created_by = task.get("created_by")
+    if created_by is None:
+        return True
+    return created_by == admin_user["id"]
+
+
 __all__ = [name for name in globals().keys() if not name.startswith("__")]

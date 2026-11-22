@@ -53,7 +53,8 @@ export default function BankLibrary(props: Props) {
           <div className={styles.menuPanel}>
             <button type="button" className={styles.quiet} onClick={props.onImport} disabled={props.importing}><Icon name="upload" /> {props.importing ? "Тексерілуде..." : "JSON импорт"}</button>
             <button type="button" className={styles.quiet} onClick={props.onExport} disabled={props.exporting}><Icon name="download" /> {props.exporting ? "Экспортталуда..." : "JSON экспорт"}</button>
-            {props.canReview && <><Link href="/admin/bank/quality" className={styles.quiet}><Icon name="chart" /> Сапа дашборды</Link><Link href="/admin/bank/audit" className={styles.quiet}><Icon name="audit" /> Әрекеттер журналы</Link></>}
+            <Link href="/admin/bank/quality" className={styles.quiet}><Icon name="chart" /> Сапа дашборды</Link>
+            {props.canReview && <Link href="/admin/bank/audit" className={styles.quiet}><Icon name="audit" /> Әрекеттер журналы</Link>}
           </div>
         </details>
         <button type="button" className={styles.primary} onClick={props.onCreate}><Icon name="plus" /> Есеп қосу</button>
