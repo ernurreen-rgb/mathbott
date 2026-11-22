@@ -171,7 +171,42 @@ def _ensure_number_size(value: Fraction) -> Fraction:
     return value
 
 
+def _proportional_polynomial_ratio(numerator: Polynomial, denominator: Polynomial) -> Optional[Fraction]:
+    """Return constant c when numerator == c * denominator for non-empty polynomials, else None."""
+    if not numerator or not denominator or len(numerator) != len(denominator):
+        return None
+    if numerator.keys() != denominator.keys():
+        return None
+    ratio: Optional[Fraction] = None
+    for monomial, den_coeff in denominator.items():
+        if den_coeff == 0:
+            return None
+        current = _ensure_number_size(numerator[monomial] / den_coeff)
+        if ratio is None:
+            ratio = current
+        elif current != ratio:
+            return None
+    return ratio
+
+
 def _add_rationals(left: _RationalPolynomial, right: _RationalPolynomial) -> _RationalPolynomial:
+    if left.denominator == right.denominator:
+        return _RationalPolynomial(
+            _add_polynomials(left.numerator, right.numerator),
+            dict(left.denominator),
+        )
+    ratio = _proportional_polynomial_ratio(left.denominator, right.denominator)
+    if ratio is not None:
+        scaled_right = _clean_polynomial(
+            {
+                monomial: _ensure_number_size(coefficient * ratio)
+                for monomial, coefficient in right.numerator.items()
+            }
+        )
+        return _RationalPolynomial(
+            _add_polynomials(left.numerator, scaled_right),
+            dict(left.denominator),
+        )
     numerator = _add_polynomials(
         _multiply_polynomials(left.numerator, right.denominator),
         _multiply_polynomials(right.numerator, left.denominator),

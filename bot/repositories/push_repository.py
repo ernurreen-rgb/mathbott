@@ -68,21 +68,24 @@ class PushRepository(BaseRepository):
         the streak uses. Claiming before sending means another cron run on the same day
         skips these devices, even if the two runs overlap.
         """
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="push_reminders") as db:
             async with db.execute(
                 """UPDATE push_subscriptions AS ps SET last_reminded_on = ?
                    FROM users AS u
-                   WHERE u.id = ps.user_id AND ps.id IN (
-                       SELECT s.id FROM push_subscriptions AS s
-                       JOIN users AS su ON su.id = s.user_id
-                       WHERE (s.last_reminded_on IS NULL OR s.last_reminded_on <> ?)
-                         AND (su.last_streak_date IS NULL OR LEFT(su.last_streak_date, 10) <> ?)
-                       ORDER BY s.id
-                       LIMIT ?
-                   )
+                   WHERE u.id = ps.user_id
+                     AND (ps.last_reminded_on IS NULL OR ps.last_reminded_on <> ?)
+                     AND ps.id IN (
+                         SELECT s.id FROM push_subscriptions AS s
+                         JOIN users AS su ON su.id = s.user_id
+                         WHERE (s.last_reminded_on IS NULL OR s.last_reminded_on <> ?)
+                           AND (su.last_streak_date IS NULL OR LEFT(su.last_streak_date, 10) <> ?)
+                         ORDER BY s.id
+                         LIMIT ?
+                         FOR UPDATE OF s SKIP LOCKED
+                     )
                    RETURNING ps.id, ps.user_id, ps.endpoint, ps.p256dh, ps.auth, u.streak, u.last_streak_date,
                              u.language""",
-                (today, today, today, limit),
+                (today, today, today, today, limit),
             ) as cursor:
                 rows = await cursor.fetchall()
         return [dict(zip(_CLAIM_COLUMNS, row)) for row in rows]

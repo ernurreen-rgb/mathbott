@@ -13,6 +13,7 @@ from database import Database
 from utils.quiz import QuizError, public_question
 from utils.quiz_ws_auth import issue_quiz_ws_ticket, verify_quiz_ws_ticket, QUIZ_WS_TTL
 from utils.quiz_entry_auth import quiz_entry_client_key
+from utils.rate_limit import QUIZ_GAMEPLAY_NETWORK_LIMIT, quiz_participant_rate_limit_key
 
 logger = logging.getLogger(__name__)
 
@@ -46,26 +47,43 @@ class QuizConnectionManager:
     """In-memory WebSocket connection manager for live quiz sessions."""
 
     MAX_WS_PER_SESSION = 500
+    MAX_WS_PER_ACTOR = 5
     MAX_TOTAL_WS = 2000
     WS_SEND_TIMEOUT_SECONDS = 2.0
+    WS_RECEIVE_TIMEOUT_SECONDS = 75.0
 
     def __init__(self):
         # session_id -> dict of client_id -> WebSocket
         self.sessions: Dict[int, Dict[str, WebSocket]] = {}
+        self._client_actors: Dict[tuple[int, str], str] = {}
+        self._actor_counts: Dict[str, int] = {}
 
     def total_connections(self) -> int:
         return sum(len(clients) for clients in self.sessions.values())
 
-    async def connect(self, session_id: int, client_id: str, websocket: WebSocket) -> bool:
+    async def connect(
+        self,
+        session_id: int,
+        client_id: str,
+        websocket: WebSocket,
+        *,
+        actor_key: Optional[str] = None,
+    ) -> bool:
         session_clients = self.sessions.get(session_id)
-        if (session_clients is not None and len(session_clients) >= self.MAX_WS_PER_SESSION) or (
-            self.total_connections() >= self.MAX_TOTAL_WS
+        actor_limit_hit = bool(actor_key and self._actor_counts.get(actor_key, 0) >= self.MAX_WS_PER_ACTOR)
+        if (
+            actor_limit_hit
+            or (session_clients is not None and len(session_clients) >= self.MAX_WS_PER_SESSION)
+            or (self.total_connections() >= self.MAX_TOTAL_WS)
         ):
             await websocket.close(code=1013)
             return False
         await websocket.accept()
         self.sessions.setdefault(session_id, {})
         self.sessions[session_id][client_id] = websocket
+        if actor_key:
+            self._client_actors[(session_id, client_id)] = actor_key
+            self._actor_counts[actor_key] = self._actor_counts.get(actor_key, 0) + 1
         return True
 
     def disconnect(self, session_id: int, client_id: str):
@@ -73,6 +91,36 @@ class QuizConnectionManager:
             self.sessions[session_id].pop(client_id, None)
             if not self.sessions[session_id]:
                 self.sessions.pop(session_id, None)
+        actor_key = self._client_actors.pop((session_id, client_id), None)
+        if actor_key is not None:
+            remaining = self._actor_counts.get(actor_key, 0) - 1
+            if remaining <= 0:
+                self._actor_counts.pop(actor_key, None)
+            else:
+                self._actor_counts[actor_key] = remaining
+
+    async def close_session(self, session_id: int, code: int = 1000, reason: str = "Session finished") -> int:
+        clients = self.sessions.pop(session_id, None)
+        if not clients:
+            return 0
+        targets = list(clients.items())
+        for client_id, _ in targets:
+            actor_key = self._client_actors.pop((session_id, client_id), None)
+            if actor_key is not None:
+                remaining = self._actor_counts.get(actor_key, 0) - 1
+                if remaining <= 0:
+                    self._actor_counts.pop(actor_key, None)
+                else:
+                    self._actor_counts[actor_key] = remaining
+
+        async def _close_one(ws: WebSocket) -> None:
+            try:
+                await asyncio.wait_for(ws.close(code=code, reason=reason), timeout=self.WS_SEND_TIMEOUT_SECONDS)
+            except Exception:
+                pass
+
+        await asyncio.gather(*(_close_one(ws) for _, ws in targets), return_exceptions=True)
+        return len(targets)
 
     async def broadcast(self, session_id: int, message: Dict[str, Any], exclude_client: Optional[str] = None):
         clients = self.sessions.get(session_id)
@@ -125,11 +173,18 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         session = await db.quizzes.get_session_by_id(session_id)
         if not session:
             raise HTTPException(404, 'Session not found')
+        if host_only:
+            if user and (session['host_id'] == user['id'] or is_content_admin(user)):
+                return session, None
+            raise HTTPException(403, 'Only the host may access this operation')
+        participant_token = token(request)
+        if participant_token:
+            # Respect explicit player token even when the signed-in user is also the host or an admin (H-24).
+            participant = await db.quizzes.authenticate_participant(session_id, participant_token)
+            return session, participant
         if user and (session['host_id'] == user['id'] or is_content_admin(user)):
             return session, None
-        if host_only:
-            raise HTTPException(403, 'Only the host may access this operation')
-        participant = await db.quizzes.authenticate_participant(session_id, token(request))
+        participant = await db.quizzes.authenticate_participant(session_id, participant_token)
         return session, participant
 
     async def broadcast_scores(session_id, db, event='answer_submitted'):
@@ -185,14 +240,16 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_player_review(session_id, token(request), user['id'] if user else None, participant_id)
 
     @app.post('/api/quiz-sessions/{session_id}/review/answers')
-    @limiter.limit('120/minute')
+    @limiter.limit('120/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def practice_answer(session_id: int, payload: ReviewAnswerRequest, request: Request,
                               user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         return await db.quizzes.check_review_answer(session_id, payload.question_id, payload.answer,
             token(request), user['id'] if user else None, payload.participant_id)
 
     @app.patch('/api/quiz-sessions/{session_id}/avatar')
-    @limiter.limit('60/minute')
+    @limiter.limit('60/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def update_participant_avatar(session_id: int, payload: UpdateAvatarRequest, request: Request,
                                         db: Database = Depends(get_db)):
         participant = await db.quizzes.update_participant_avatar(session_id, payload.avatar_color, token(request))
@@ -224,6 +281,7 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         await db.quizzes.update_session_status(session_id, 'finished')
         stats = await db.quizzes.get_session_stats(session_id)
         await quiz_manager.broadcast(session_id, {'type': 'game_finished', 'session_id': session_id, 'stats': stats})
+        await quiz_manager.close_session(session_id)
         return stats
 
     @app.get('/api/quiz-sessions/{session_id}/questions')
@@ -242,12 +300,14 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_player_progress(session_id, token(request))
 
     @app.post('/api/quiz-sessions/{session_id}/current-question')
-    @limiter.limit('180/minute')
+    @limiter.limit('180/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def current_question(session_id: int, request: Request, db: Database = Depends(get_db)):
         return await db.quizzes.activate_question(session_id, token(request))
 
     @app.post('/api/quiz-sessions/{session_id}/next')
-    @limiter.limit('180/minute')
+    @limiter.limit('180/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def next_question(session_id: int, request: Request, question_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
         progress = await db.quizzes.activate_question(session_id, token(request), advance=True, question_id=question_id)
         if progress['participant']['is_finished']:
@@ -255,16 +315,20 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return progress
 
     @app.post('/api/quiz-sessions/{session_id}/answers')
-    @limiter.limit('180/minute')
+    @limiter.limit('180/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def submit_answer(session_id: int, payload: SubmitAnswerRequest, request: Request, db: Database = Depends(get_db)):
         result = await db.quizzes.record_answer(session_id, payload.participant_id, payload.question_id,
                                                 payload.answer, token(request))
         if not result.pop('reused'):
-            await broadcast_scores(session_id, db)
+            progress_participant = (result.get('progress') or {}).get('participant') or {}
+            event = 'participant_finished' if progress_participant.get('is_finished') else 'answer_submitted'
+            await broadcast_scores(session_id, db, event)
         return result
 
     @app.post('/api/quiz-sessions/{session_id}/complete')
-    @limiter.limit('60/minute')
+    @limiter.limit('60/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def complete(session_id: int, request: Request, participant_id: int = Body(..., embed=True), db: Database = Depends(get_db)):
         await db.quizzes.set_participant_finished(session_id, participant_id, token(request))
         await broadcast_scores(session_id, db, 'participant_finished')
@@ -295,12 +359,15 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not results:
             raise HTTPException(404, 'Session results not found')
         if participant:
+            def _sanitize_participant(row: Dict[str, Any]) -> Dict[str, Any]:
+                cleaned = {k: v for k, v in row.items() if k != 'user_id'}
+                if row['id'] != participant['id']:
+                    cleaned['answers'] = []
+                return cleaned
+
             results = {
                 **results,
-                'participants': [
-                    p if p['id'] == participant['id'] else {**p, 'answers': []}
-                    for p in results['participants']
-                ],
+                'participants': [_sanitize_participant(p) for p in results['participants']],
             }
         return results
 
@@ -310,7 +377,8 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await db.quizzes.get_user_quiz_history(current_user['id'])
 
     @app.get('/api/quiz-sessions/{session_id}/ws-token')
-    @limiter.limit('60/minute')
+    @limiter.limit('60/minute', key_func=quiz_participant_rate_limit_key)
+    @limiter.limit(QUIZ_GAMEPLAY_NETWORK_LIMIT)
     async def ws_ticket(session_id: int, request: Request,
                          user: Optional[dict] = Depends(optional_internal_identity), db: Database = Depends(get_db)):
         _, participant = await access(session_id, request, user, db)
@@ -338,12 +406,19 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
             await websocket.close(code=1008)
             return
         client_id = str(uuid4())
-        if not await quiz_manager.connect(session_id, client_id, websocket):
+        actor_key = f"{claims['role']}:{claims['actor_id']}"
+        if not await quiz_manager.connect(session_id, client_id, websocket, actor_key=actor_key):
             return
         try:
             await websocket.send_json({'type': 'session_state', 'status': session['status']})
+            if session['status'] == 'finished':
+                await websocket.close(code=1000)
+                return
             while True:
-                data = await websocket.receive_text()
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=quiz_manager.WS_RECEIVE_TIMEOUT_SECONDS,
+                )
                 if len(data) > 1024:
                     await websocket.close(code=1009)
                     break
@@ -353,6 +428,11 @@ def setup_quiz_game_routes(app: FastAPI, db: Database, limiter: Limiter):
                         await websocket.send_json({'type': 'pong'})
                 except ValueError:
                     continue
+        except asyncio.TimeoutError:
+            try:
+                await websocket.close(code=1001)
+            except Exception:
+                pass
         except WebSocketDisconnect:
             pass
         finally:

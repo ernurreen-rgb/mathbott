@@ -1,5 +1,6 @@
 """Quiz domain rules shared by transactions and HTTP serializers."""
 import hashlib
+import json
 from typing import Any
 
 from utils.validation import is_task_answer_correct
@@ -27,23 +28,50 @@ def calculate_speed_points(base_points: int, time_limit: int, time_taken: float,
     return max(100, int(base_points * (0.5 + 0.5 * fraction)) + bonus)
 
 
+def _normalize_quiz_options(raw_options: Any) -> list[dict]:
+    if isinstance(raw_options, str):
+        try:
+            raw_options = json.loads(raw_options)
+        except Exception:
+            return []
+    if not isinstance(raw_options, list):
+        return []
+    normalized: list[dict] = []
+    for opt in raw_options:
+        if not isinstance(opt, dict):
+            continue
+        opt_id = opt.get("id") if opt.get("id") is not None else opt.get("label")
+        label = opt.get("label") if opt.get("label") is not None else opt.get("id")
+        normalized.append({
+            **opt,
+            "id": opt_id,
+            "label": label,
+            "text": opt.get("text", ""),
+        })
+    return normalized
+
+
 def check_question_answer(question: dict, answer: str) -> bool:
     question_type = question.get("question_type", "input")
-    return is_task_answer_correct({
+    task_payload: dict[str, Any] = {
         "question_type": "mcq" if question_type == "multi_select" else question_type,
         "answer": question.get("correct_answer"),
-        "options": question.get("options"),
+        "options": _normalize_quiz_options(question.get("options")),
         "accepted_answers": question.get("accepted_answers"),
-    }, answer)
+    }
+    if question.get("answer_mode") is not None:
+        task_payload["answer_mode"] = question.get("answer_mode")
+    return is_task_answer_correct(task_payload, answer)
 
 
 def public_question(question: dict) -> dict:
     # Whitelist nested fields too: imported option dictionaries may contain keys.
+    options = _normalize_quiz_options(question.get("options"))
     return {**{key: question.get(key) for key in (
         "id", "quiz_id", "question_text", "question_type", "time_limit_seconds",
         "points", "sort_order", "image_filename",
     )}, "options": [{"id": opt.get("id"), "text": opt.get("text", "")}
-                    for opt in question.get("options", [])]}
+                    for opt in options]}
 
 
 def public_participant(participant: dict) -> dict:

@@ -92,12 +92,16 @@ function JoinForm() {
         return;
       }
       const saved = readQuizPlayer(lobby.data.id);
+      const normalizedEmail = email?.trim().toLowerCase() || undefined;
+      const canReuseSavedToken =
+        !!saved?.token &&
+        (!saved.accountEmail || saved.accountEmail === normalizedEmail);
       const { data, error } = await joinQuizSession(
         cleanPin,
         cleanNick,
         email,
         selectedAvatar,
-        saved?.nickname === cleanNick ? saved.token : undefined
+        canReuseSavedToken ? saved.token : undefined
       );
 
       if (error || !data) {
@@ -108,7 +112,6 @@ function JoinForm() {
 
       // Preserve guest access after closing the tab and signing up later.
       if (typeof window !== "undefined") {
-        const normalizedEmail = email?.trim().toLowerCase() || undefined;
         const persisted = saveQuizPlayer({
           sessionId: data.session.id,
           participantId: data.participant.id,

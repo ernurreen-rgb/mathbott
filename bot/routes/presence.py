@@ -25,6 +25,7 @@ PRESENCE_CLIENT_TIMEOUT_SECONDS = 70
 
 
 class PresenceConnectionManager:
+    MAX_WS_PER_USER = 5
     MAX_TOTAL_WS = 2000
     WS_SEND_TIMEOUT_SECONDS = 2.0
 
@@ -49,11 +50,14 @@ class PresenceConnectionManager:
         ]
 
     async def connect(self, user: Dict[str, Any], websocket: WebSocket) -> Optional[tuple[str, bool, Dict[str, Any]]]:
-        if self.total_connections() >= self.MAX_TOTAL_WS:
+        user_id = int(user["id"])
+        user_conns = self.active_connections.get(user_id)
+        if (user_conns is not None and len(user_conns) >= self.MAX_WS_PER_USER) or (
+            self.total_connections() >= self.MAX_TOTAL_WS
+        ):
             await websocket.close(code=1013)
             return None
         await websocket.accept()
-        user_id = int(user["id"])
         was_offline = user_id not in self.active_connections
         connection_id = str(uuid4())
         self.active_connections.setdefault(user_id, {})[connection_id] = websocket
@@ -87,7 +91,11 @@ class PresenceConnectionManager:
             timeout=self.WS_SEND_TIMEOUT_SECONDS,
         )
 
-    async def broadcast(self, message: Dict[str, Any], exclude_connection_id: Optional[str] = None) -> None:
+    async def _send_to_all(
+        self,
+        message: Dict[str, Any],
+        exclude_connection_id: Optional[str] = None,
+    ) -> list[Dict[str, Any]]:
         data = json.dumps(message, ensure_ascii=False)
         targets: list[tuple[int, str, WebSocket]] = [
             (user_id, connection_id, ws)
@@ -96,7 +104,7 @@ class PresenceConnectionManager:
             if not (exclude_connection_id and connection_id == exclude_connection_id)
         ]
         if not targets:
-            return
+            return []
 
         async def _send_one(user_id: int, connection_id: str, ws: WebSocket) -> Optional[tuple[int, str]]:
             try:
@@ -106,9 +114,29 @@ class PresenceConnectionManager:
                 return (user_id, connection_id)
 
         results = await asyncio.gather(*(_send_one(uid, cid, ws) for uid, cid, ws in targets), return_exceptions=True)
+        offline_users: list[Dict[str, Any]] = []
         for item in results:
             if isinstance(item, tuple):
-                self.disconnect(item[0], item[1])
+                offline_user = self.disconnect(item[0], item[1])
+                if offline_user is not None:
+                    offline_users.append(offline_user)
+        return offline_users
+
+    async def broadcast(self, message: Dict[str, Any], exclude_connection_id: Optional[str] = None) -> None:
+        pending_offline = await self._send_to_all(message, exclude_connection_id=exclude_connection_id)
+        # Notify surviving sockets whenever dead connections pruned during send take a user offline (H-25).
+        while pending_offline:
+            batch = pending_offline
+            pending_offline = []
+            for offline_user in batch:
+                newly_offline = await self._send_to_all(
+                    {
+                        "type": "presence_update",
+                        "status": "offline",
+                        "user": offline_user,
+                    }
+                )
+                pending_offline.extend(newly_offline)
 
 
 def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
@@ -187,11 +215,16 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
                     websocket.receive_text(),
                     timeout=PRESENCE_CLIENT_TIMEOUT_SECONDS,
                 )
+                if len(data) > 1024:
+                    await websocket.close(code=1009)
+                    break
                 try:
                     payload = json.loads(data)
                 except Exception:
                     continue
 
+                if not isinstance(payload, dict):
+                    continue
                 if payload.get("type") == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
                 elif payload.get("type") == "snapshot":
@@ -201,33 +234,21 @@ def setup_presence_routes(app: FastAPI, db: Database, limiter: Limiter):
                 await websocket.close(code=1001)
             except Exception:
                 pass
-            offline_user = manager.disconnect(user_id, connection_id)
-            if offline_user:
-                await manager.broadcast(
-                    {
-                        "type": "presence_update",
-                        "status": "offline",
-                        "user": offline_user,
-                    }
-                )
         except WebSocketDisconnect:
-            offline_user = manager.disconnect(user_id, connection_id)
-            if offline_user:
-                await manager.broadcast(
-                    {
-                        "type": "presence_update",
-                        "status": "offline",
-                        "user": offline_user,
-                    }
-                )
+            pass
         except Exception as e:
+            logger.error("Presence websocket error: %s", e, exc_info=True)
+        finally:
+            # Always detach even on asyncio.CancelledError so connections never leak (H-25).
             offline_user = manager.disconnect(user_id, connection_id)
             if offline_user:
-                await manager.broadcast(
-                    {
-                        "type": "presence_update",
-                        "status": "offline",
-                        "user": offline_user,
-                    }
-                )
-            logger.error("Presence websocket error: %s", e, exc_info=True)
+                try:
+                    await manager.broadcast(
+                        {
+                            "type": "presence_update",
+                            "status": "offline",
+                            "user": offline_user,
+                        }
+                    )
+                except BaseException:
+                    pass

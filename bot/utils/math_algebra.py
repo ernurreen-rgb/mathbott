@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from math import gcd, isqrt
 from typing import Dict, Optional
-from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_TOTAL_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_polynomials, _multiply_rationals, _negate_polynomial, _power_rational, _variable_polynomial
+from .math_polynomial import Monomial, Polynomial, _ALLOWED_LONG_NAMES, _LATEX_VARIABLE_RE, _MAX_AST_NODES, _MAX_EXPRESSION_LENGTH, _MAX_ROOT_DEGREE, _MAX_TOTAL_DEGREE, _MAX_VARIABLES, _NAME_RE, _NUMBER_RE, _RationalPolynomial, _SUPERSCRIPT_DIGITS, _add_rationals, _clean_polynomial, _constant_polynomial, _constant_value, _divide_rationals, _ensure_number_size, _multiply_polynomials, _multiply_rationals, _negate_polynomial, _power_rational, _proportional_polynomial_ratio, _variable_polynomial
 
 _RADICAL_VAR_RE = re.compile(r"^__root_(\d+)_(\d+)__$")
 _MAX_IRRATIONAL_RADICAND_BITS = 64
@@ -20,13 +20,16 @@ def looks_like_comma_collection(value: str) -> bool:
         return False
     if re.search(r",\s+", stripped):
         return True
-    if stripped.count(",") > 1:
-        return True
     if (
         (stripped.startswith("(") and stripped.endswith(")"))
         or (stripped.startswith("{") and stripped.endswith("}"))
         or (stripped.startswith("[") and stripped.endswith("]"))
     ):
+        return True
+    # Allow multiple decimal numbers written with Russian/Kazakh comma decimals (e.g. "0,5x + 0,5"),
+    # while still catching unspaced lists like "1,2,3", "1,5,-2,5", or "x,y".
+    without_decimals = re.sub(r"(?<![\d,])\d+,\d+(?![\d,])", "0", stripped)
+    if "," in without_decimals:
         return True
     return False
 
@@ -150,6 +153,9 @@ def _tokenize_with_implicit_multiplication(value: str) -> Optional[str]:
             cursor += 2
             continue
         char = value[cursor]
+        if char.isspace():
+            cursor += 1
+            continue
         if char in "+-*/":
             tokens.append(("operator", char))
         elif char == "(":
@@ -565,11 +571,6 @@ def _normalize_rational(value: _RationalPolynomial) -> _RationalPolynomial:
         raise ValueError("division by zero")
 
     numerator, denominator = _cancel_univariate_gcd(reduced.numerator, reduced.denominator)
-    if numerator == denominator:
-        return _RationalPolynomial(
-            _constant_polynomial(Fraction(1)),
-            _constant_polynomial(Fraction(1)),
-        )
 
     numerator_common = _common_monomial(numerator)
     denominator_common = _common_monomial(denominator)
@@ -580,6 +581,13 @@ def _normalize_rational(value: _RationalPolynomial) -> _RationalPolynomial:
     common = {variable: exponent for variable, exponent in common.items() if exponent}
     numerator = _divide_monomial(numerator, common)
     denominator = _divide_monomial(denominator, common)
+
+    ratio = _proportional_polynomial_ratio(numerator, denominator)
+    if ratio is not None:
+        return _RationalPolynomial(
+            _constant_polynomial(ratio),
+            _constant_polynomial(Fraction(1)),
+        )
 
     leading_monomial = max(denominator)
     leading_coefficient = denominator[leading_monomial]

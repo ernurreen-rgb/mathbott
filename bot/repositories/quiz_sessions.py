@@ -132,27 +132,73 @@ class QuizSessionsMixin:
         '#f3f4f6:rabbit', '#f3f4f6:koala', '#f3f4f6:pug', '#f3f4f6:dragon',
     )
 
+    @staticmethod
+    def _safe_token_hash(participant_token: Optional[str]) -> Optional[str]:
+        if not participant_token:
+            return None
+        try:
+            return token_hash(participant_token)
+        except QuizError:
+            return None
+
     async def join_session(self, session_id: int, nickname: str, user_id=None, avatar_color=None, participant_token=None,
                            *, entry_client_key: Optional[str] = None):
         nickname = nickname.strip()
         if not nickname:
             raise QuizError('invalid', 'Nickname is required')
         clean_avatar = (avatar_color or '').strip()[:64] or None
+        provided_token_hash = self._safe_token_hash(participant_token)
         async with self._write_transaction(lock_key=f"quiz_session:{session_id}") as db:
             session = await self._row(db, 'SELECT * FROM quiz_sessions WHERE id = ?', (session_id,))
             if not session or session['status'] == 'finished':
                 raise QuizError('conflict', 'Session is not accepting participants')
-            existing = await self._row(db, 'SELECT * FROM quiz_participants WHERE session_id = ? AND nickname = ?', (session_id, nickname))
-            if existing:
-                owns_token = bool(participant_token and existing['token_hash'] == token_hash(participant_token))
-                owns_account = bool(user_id and existing['user_id'] == user_id)
+            existing_by_nick = await self._row(
+                db, 'SELECT * FROM quiz_participants WHERE session_id = ? AND nickname = ?', (session_id, nickname)
+            )
+            existing_by_user = (
+                await self._row(
+                    db,
+                    'SELECT * FROM quiz_participants WHERE session_id = ? AND user_id = ? ORDER BY id LIMIT 1',
+                    (session_id, user_id),
+                )
+                if user_id is not None
+                else None
+            )
+            existing_by_token = (
+                await self._row(
+                    db,
+                    'SELECT * FROM quiz_participants WHERE session_id = ? AND token_hash = ?',
+                    (session_id, provided_token_hash),
+                )
+                if provided_token_hash
+                else None
+            )
+
+            target = None
+            if existing_by_nick:
+                owns_token = bool(provided_token_hash and existing_by_nick['token_hash'] == provided_token_hash)
+                owns_account = bool(user_id is not None and existing_by_nick['user_id'] == user_id)
                 if not owns_token and not owns_account:
                     raise QuizError('conflict', 'Nickname already taken; choose another nickname')
-                participant_id = existing['id']
+                if user_id is not None and existing_by_user is not None and existing_by_user['id'] != existing_by_nick['id']:
+                    raise QuizError('conflict', 'This account already joined this session under another nickname')
+                target = existing_by_nick
+            elif existing_by_user is not None:
+                # Prevent Sybil joins by the same authenticated account under a second nickname.
+                target = existing_by_user
+            elif existing_by_token is not None and (
+                existing_by_token['user_id'] is None or existing_by_token['user_id'] == user_id
+            ):
+                # Prevent Sybil joins by the same participant token under a second nickname.
+                target = existing_by_token
+
+            if target is not None:
+                participant_id = target['id']
+                owns_token = bool(provided_token_hash and target['token_hash'] == provided_token_hash)
                 if owns_token:
                     issued_token = participant_token
                 else:
-                    # Authenticated account recovery also handles legacy records.
+                    # Authenticated account recovery also handles legacy or stale-token records.
                     issued_token = secrets.token_urlsafe(32)
                     await db.execute('UPDATE quiz_participants SET token_hash = ? WHERE id = ?', (token_hash(issued_token), participant_id))
                 if clean_avatar:
@@ -221,6 +267,13 @@ class QuizSessionsMixin:
             participant = await self._token_participant(db, session_id, participant_token)
             if participant['user_id'] is not None and participant['user_id'] != user_id:
                 raise QuizError('forbidden', 'This result belongs to another account')
+            other = await self._row(
+                db,
+                'SELECT id FROM quiz_participants WHERE session_id = ? AND user_id = ? AND id != ? LIMIT 1',
+                (session_id, user_id, participant['id']),
+            )
+            if other:
+                raise QuizError('conflict', 'This account already has a participant in this session')
             await db.execute('UPDATE quiz_participants SET user_id = ? WHERE id = ? AND user_id IS NULL',
                              (user_id, participant['id']))
             owner = await self._row(db, 'SELECT user_id FROM quiz_participants WHERE id = ?', (participant['id'],))
@@ -390,8 +443,19 @@ class QuizSessionsMixin:
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant['id'],))
             return await self._progress(db, session_id, participant, now)
 
-    async def record_answer(self, session_id, participant_id, question_id, user_answer, participant_token):
+    async def record_answer(
+        self,
+        session_id,
+        participant_id,
+        question_id,
+        user_answer,
+        participant_token,
+        *,
+        submitted_at: Optional[float] = None,
+    ):
         """Authorize, check clock/state, grade outside write lock, and persist once atomically."""
+        # Capture submission timestamp before pre-queries, math grading, or lock wait (H-21).
+        received_at = time.time() if submitted_at is None else float(submitted_at)
         preloaded_question = None
         async with self._connection() as read_db:
             preloaded_row = await self._row(
@@ -442,11 +506,16 @@ class QuizSessionsMixin:
                 expected_qid = order[curr_idx] if 0 <= curr_idx < len(order) else None
                 if question_id != expected_qid or participant['question_started_at'] is None:
                     raise QuizError('conflict', 'Question has not been activated')
+                total_count = len(order)
             else:
                 if participant['current_question_index'] != question_row['position'] or participant['question_started_at'] is None:
                     raise QuizError('conflict', 'Question has not been activated')
+                count_row = await self._row(
+                    db, 'SELECT COUNT(*) AS n FROM quiz_session_questions WHERE session_id = ?', (session_id,)
+                )
+                total_count = int(count_row['n']) if count_row else 0
 
-            elapsed = max(0.0, time.time() - participant['question_started_at'])
+            elapsed = max(0.0, received_at - participant['question_started_at'])
             answer_matches = (
                 prechecked_correct
                 if prechecked_correct is not None and question == preloaded_question
@@ -454,14 +523,16 @@ class QuizSessionsMixin:
             )
             is_correct = elapsed < question['time_limit_seconds'] and answer_matches
             points = calculate_speed_points(question['points'], question['time_limit_seconds'], elapsed, participant['streak'] + 1) if is_correct else 0
+            should_finish = total_count > 0 and (participant['current_question_index'] + 1 >= total_count)
             await db.execute('''INSERT INTO quiz_answers
                 (session_id, participant_id, question_id, user_answer, is_correct, time_taken_seconds, points_awarded)
                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
                 (session_id, participant_id, question_id, user_answer, int(is_correct), elapsed, points))
             await db.execute('''UPDATE quiz_participants SET score = score + ?, streak = ?,
                 correct_count = correct_count + ?, total_answered = total_answered + 1,
+                is_finished = CASE WHEN ? = 1 THEN 1 ELSE is_finished END,
                 last_active_at = mathbot_datetime('now') WHERE session_id = ? AND id = ?''',
-                (points, participant['streak'] + 1 if is_correct else 0, int(is_correct), session_id, participant_id))
+                (points, participant['streak'] + 1 if is_correct else 0, int(is_correct), int(should_finish), session_id, participant_id))
             participant = await self._row(db, 'SELECT * FROM quiz_participants WHERE id = ?', (participant_id,))
             return {**answer_result({'is_correct': is_correct, 'points_awarded': points}, participant, question),
                     'reused': False, 'progress': await self._progress(db, session_id, participant, time.time())}

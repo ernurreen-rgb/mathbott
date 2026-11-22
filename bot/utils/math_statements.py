@@ -8,6 +8,11 @@ from .math_algebra import _RELATION_ALIASES, _parse_algebraic_expression, _seria
 
 _RELATION_OPERATORS = frozenset({"=", "≠", "<", ">", "≤", "≥", "∈", "∉"})
 
+_SINGLE_VARIABLE_RE = re.compile(
+    r"(?:[A-Za-z]|\\(?:alpha|beta|delta|gamma|lambda|mu|omega|phi|pi|rho|sigma|theta|varphi))"
+    r"(?:_\{?[A-Za-z0-9]+\}?)?"
+)
+
 
 _NUMBER_SET_SYMBOLS = {
     "n": "N",
@@ -108,6 +113,9 @@ def _canonicalize_relation_operand(value: str, *, number_set: bool = False) -> O
         canonical_set = _canonicalize_number_set(value)
         if canonical_set:
             return canonical_set
+        interval_set = canonicalize_interval_set(value, allow_ambiguous=True)
+        if interval_set is not None:
+            return interval_set
     return canonicalize_algebraic_expression(value) or f"raw:{value}"
 
 
@@ -262,7 +270,7 @@ def _canonicalize_polynomial_comparison(left: str, right: str, operator: str) ->
     return f"polynomial:{operator}:{_serialize_polynomial(difference)}"
 
 
-def _canonicalize_relation_atom(value: str) -> Optional[str]:
+def _canonicalize_relation_atom(value: str, *, allow_bare_interval: bool = False) -> Optional[str]:
     relation = _find_top_level_relation(value)
     if relation is None:
         return None
@@ -276,7 +284,7 @@ def _canonicalize_relation_atom(value: str) -> Optional[str]:
     elif operator == "≥":
         left, right, operator = right, left, "≤"
 
-    if operator == "∈" and re.fullmatch(r"[A-Za-z](?:_\{?[A-Za-z0-9]+\}?)?", left):
+    if allow_bare_interval and operator == "∈" and _SINGLE_VARIABLE_RE.fullmatch(left):
         interval_set = canonicalize_interval_set(right, allow_ambiguous=True)
         if interval_set is not None:
             return interval_set
@@ -311,7 +319,8 @@ def canonicalize_math_statement(value: str) -> Optional[str]:
     parts = _split_top_level_relations(normalized)
     if not parts:
         return None
-    atoms = [_canonicalize_relation_atom(part) for part in parts]
+    allow_bare_interval = len(parts) == 1
+    atoms = [_canonicalize_relation_atom(part, allow_bare_interval=allow_bare_interval) for part in parts]
     if any(atom is None for atom in atoms):
         return None
     if len(atoms) == 1 and atoms[0].startswith("__interval_set__:"):

@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import aiohttp
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from settings import get_settings
 
@@ -60,14 +61,69 @@ class AiTwinError(Exception):
         self.kind = kind
 
 
+def _coerce_scalar_to_str(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return value
+        return str(int(value)) if value.is_integer() else str(value)
+    return value
+
+
+def _coerce_answer_to_str(value: Any) -> Any:
+    if isinstance(value, list):
+        if not value:
+            return value
+        coerced_items: List[str] = []
+        for item in value:
+            coerced = _coerce_scalar_to_str(item)
+            if not isinstance(coerced, str) or not coerced:
+                return value
+            coerced_items.append(coerced)
+        return json.dumps(coerced_items, ensure_ascii=False)
+    return _coerce_scalar_to_str(value)
+
+
+def _coerce_accepted_answers(value: Any) -> Any:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        coerced_items: List[str] = []
+        for item in value:
+            if item is None:
+                continue
+            coerced = _coerce_scalar_to_str(item)
+            if not isinstance(coerced, str):
+                return value
+            if coerced:
+                coerced_items.append(coerced)
+        return coerced_items
+    return value
+
+
 class TwinOption(BaseModel):
     label: str = Field(min_length=1, max_length=4)
     text: str = Field(max_length=2000)
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def _coerce_text(cls, value: Any) -> Any:
+        return _coerce_scalar_to_str(value)
 
 
 class TwinSubquestion(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     correct: str = Field(min_length=1, max_length=4)
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def _coerce_text(cls, value: Any) -> Any:
+        return _coerce_scalar_to_str(value)
 
 
 class TwinDraft(BaseModel):
@@ -77,6 +133,16 @@ class TwinDraft(BaseModel):
     options: Optional[List[TwinOption]] = None
     subquestions: Optional[List[TwinSubquestion]] = None
 
+    @field_validator("answer", mode="before")
+    @classmethod
+    def _coerce_answer(cls, value: Any) -> Any:
+        return _coerce_answer_to_str(value)
+
+    @field_validator("accepted_answers", mode="before")
+    @classmethod
+    def _coerce_accepted(cls, value: Any) -> Any:
+        return _coerce_accepted_answers(value)
+
 
 class _DraftBatch(BaseModel):
     twins: List[TwinDraft]
@@ -84,6 +150,11 @@ class _DraftBatch(BaseModel):
 
 class _Solved(BaseModel):
     answer: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("answer", mode="before")
+    @classmethod
+    def _coerce_answer(cls, value: Any) -> Any:
+        return _coerce_answer_to_str(value)
 
 
 def _validate_provider_base_url(base_url: str, *, is_production: bool) -> str:
