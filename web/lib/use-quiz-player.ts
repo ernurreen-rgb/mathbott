@@ -16,6 +16,9 @@ export function useQuizPlayer(sessionId: number) {
   const [hasPendingAnswer, setHasPendingAnswer] = useState(false);
   const [rank, setRank] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
+  // The server finishes a player on their last answer; keep that answer's feedback on screen
+  // until the player moves on, instead of jumping straight to the summary.
+  const [reviewingFinalAnswer, setReviewingFinalAnswer] = useState(false);
   const busy = useRef(false);
   const reading = useRef(false);
   const offset = useRef(0);
@@ -35,6 +38,7 @@ export function useQuizPlayer(sessionId: number) {
     pendingAnswer.current = null;
     timeoutAttempt.current = null;
     setHasPendingAnswer(false);
+    setReviewingFinalAnswer(false);
     setProgress(null);
     setSessionData(null);
     setRank(null);
@@ -118,6 +122,7 @@ export function useQuizPlayer(sessionId: number) {
         setHasPendingAnswer(false);
         const saved = result.data.progress ?? (await getQuizProgress(sessionId, { participantToken: credentials.token })).data;
         if (!live.current || version !== mutationVersion.current) return;
+        if (saved?.participant.is_finished && saved.result) setReviewingFinalAnswer(true);
         if (saved) applyProgress(saved);
         else setProgress((p) => p ? { ...p, result: result.data,
           participant: { ...p.participant, score: result.data!.total_score, streak: result.data!.streak } } : p);
@@ -137,6 +142,11 @@ export function useQuizPlayer(sessionId: number) {
   }, [credentials, progress, sessionId, refresh, applyProgress]);
 
   const advance = useCallback(async () => {
+    if (reviewingFinalAnswer) {
+      // The last answer already finished the player on the server: just show the summary.
+      setReviewingFinalAnswer(false);
+      return true;
+    }
     if (!credentials || !progress?.result || busy.current) return false;
     busy.current = true;
     const version = ++mutationVersion.current;
@@ -159,7 +169,7 @@ export function useQuizPlayer(sessionId: number) {
         if (live.current) setSubmitting(false);
       }
     }
-  }, [credentials, progress, sessionId, applyProgress, refresh]);
+  }, [credentials, progress, sessionId, applyProgress, refresh, reviewingFinalAnswer]);
 
   const submitRef = useRef(submitAnswer);
   submitRef.current = submitAnswer;
@@ -222,5 +232,5 @@ export function useQuizPlayer(sessionId: number) {
   }, [submitAnswer, refresh]);
 
   return { credentials, progress, sessionData, loading, submitting, error, hasPendingAnswer, rank, timeLeft,
-    submitAnswer, advance, refresh, updateAvatar, retryAnswer };
+    reviewingFinalAnswer, submitAnswer, advance, refresh, updateAvatar, retryAnswer };
 }

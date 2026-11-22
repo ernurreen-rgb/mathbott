@@ -121,7 +121,12 @@ export default function PlayQuizPage({ params }: PageProps) {
   const totalScore = progress?.participant.score || 0;
   const streak = progress?.participant.streak || 0;
   const correctCount = progress?.participant.correct_count || 0;
-  const isFinished = progress?.status === "finished" || !!progress?.participant.is_finished;
+  // The last answer finishes the player on the server; show its feedback before the summary.
+  const showFinalAnswerFeedback =
+    game.reviewingFinalAnswer && progress?.status === "in_progress" && isAnswered;
+  const isFinished =
+    !showFinalAnswerFeedback &&
+    (progress?.status === "finished" || !!progress?.participant.is_finished);
   const isAllAnswered = questionCount > 0 && currentQIndex >= questionCount;
 
   useEffect(() => {
@@ -323,7 +328,7 @@ export default function PlayQuizPage({ params }: PageProps) {
   }
 
   // STATE C: FINISHED (PLAYER SUMMARY)
-  if (progress && (isFinished || (questionCount > 0 && currentQIndex >= questionCount))) {
+  if (progress && (isFinished || (!showFinalAnswerFeedback && isAllAnswered))) {
     const accuracy = questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0;
 
     return (

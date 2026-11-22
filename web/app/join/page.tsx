@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { joinQuizSession, getQuizSessionByPin } from "@/lib/api/quizzes";
-import { readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
+import { canReuseSavedQuizToken, readQuizPlayer, saveQuizPlayer } from "@/lib/quiz-player-storage";
 import {
   QuizAvatar,
   QuizAvatarPicker,
@@ -93,15 +93,12 @@ function JoinForm() {
       }
       const saved = readQuizPlayer(lobby.data.id);
       const normalizedEmail = email?.trim().toLowerCase() || undefined;
-      const canReuseSavedToken =
-        !!saved?.token &&
-        (!saved.accountEmail || saved.accountEmail === normalizedEmail);
       const { data, error } = await joinQuizSession(
         cleanPin,
         cleanNick,
         email,
         selectedAvatar,
-        canReuseSavedToken ? saved.token : undefined
+        saved && canReuseSavedQuizToken(saved, cleanNick, normalizedEmail) ? saved.token : undefined
       );
 
       if (error || !data) {

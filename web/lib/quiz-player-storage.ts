@@ -29,6 +29,21 @@ export function readQuizPlayer(sessionId: number, participantId?: number): QuizP
   } catch { return null; }
 }
 
+/**
+ * Whether a join may send the token saved on this device. A guest token is reused only for the
+ * same nickname: on a shared computer it can belong to the previous student. A token linked to
+ * an account follows that account.
+ */
+export function canReuseSavedQuizToken(
+  saved: QuizPlayerCredentials | null,
+  nickname: string,
+  accountEmail: string | undefined,
+): boolean {
+  if (!saved?.token) return false;
+  if (saved.accountEmail) return saved.accountEmail === accountEmail;
+  return saved.nickname === nickname;
+}
+
 export function saveQuizPlayer(player: QuizPlayerCredentials, notify = true): boolean {
   if (typeof window === "undefined") return false;
   const activeKey = `${PREFIX}${player.sessionId}`;

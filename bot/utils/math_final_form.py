@@ -103,9 +103,10 @@ def _finalize_product_factors(factors: list) -> list:
         if (
             isinstance(coeff, Fraction)
             and coeff.denominator == 1
-            and coeff.numerator > 1
+            and coeff.numerator > 0
             and gcd(coeff.numerator, divisor_int) == 1
         ):
+            # A coefficient of 1 combines too, so 1x/3 matches x/3 as it did before.
             result[num_idx] = ("n", Fraction(coeff.numerator, divisor_int))
             result.pop(div_idx)
             return result

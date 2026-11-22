@@ -164,16 +164,9 @@ class QuizSessionsMixin:
                 if user_id is not None
                 else None
             )
-            existing_by_token = (
-                await self._row(
-                    db,
-                    'SELECT * FROM quiz_participants WHERE session_id = ? AND token_hash = ?',
-                    (session_id, provided_token_hash),
-                )
-                if provided_token_hash
-                else None
-            )
-
+            # A participant token alone never selects a seat under a different nickname: on a
+            # shared computer the browser can still hold the previous guest's token, and handing
+            # that seat to the next student would let them play over someone else's result.
             target = None
             if existing_by_nick:
                 owns_token = bool(provided_token_hash and existing_by_nick['token_hash'] == provided_token_hash)
@@ -186,11 +179,6 @@ class QuizSessionsMixin:
             elif existing_by_user is not None:
                 # Prevent Sybil joins by the same authenticated account under a second nickname.
                 target = existing_by_user
-            elif existing_by_token is not None and (
-                existing_by_token['user_id'] is None or existing_by_token['user_id'] == user_id
-            ):
-                # Prevent Sybil joins by the same participant token under a second nickname.
-                target = existing_by_token
 
             if target is not None:
                 participant_id = target['id']

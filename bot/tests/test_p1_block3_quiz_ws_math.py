@@ -295,13 +295,19 @@ class H21H22H23QuizSessionsTests(unittest.TestCase):
         self.assertEqual(rejoined_user["nickname"], "Almas")
         self.assertEqual(len(participants), 1)
 
-        # 4. Guest joins, then tries Sybil join with their token under a second nickname -> reconnects, no clone.
+        # 4. A guest token alone never selects a seat under another nickname: a shared computer can
+        #    still hold the previous student's token. The joiner gets a new seat; GuestOne keeps hers.
         guest1 = asyncio.run(repo.join_session(50, "GuestOne"))
         self.assertEqual(len(participants), 2)
-        guest_sybil = asyncio.run(repo.join_session(50, "GuestSpy", participant_token=guest1["participant_token"]))
-        self.assertEqual(guest_sybil["id"], guest1["id"])
-        self.assertEqual(guest_sybil["nickname"], "GuestOne")
-        self.assertEqual(len(participants), 2)
+        next_student = asyncio.run(repo.join_session(50, "GuestSpy", participant_token=guest1["participant_token"]))
+        self.assertNotEqual(next_student["id"], guest1["id"])
+        self.assertEqual(next_student["nickname"], "GuestSpy")
+        self.assertNotEqual(next_student["participant_token"], guest1["participant_token"])
+        self.assertEqual(len(participants), 3)
+        # GuestOne's own token under her own nickname still reconnects to her seat.
+        guest_again = asyncio.run(repo.join_session(50, "GuestOne", participant_token=guest1["participant_token"]))
+        self.assertEqual(guest_again["id"], guest1["id"])
+        self.assertEqual(len(participants), 3)
 
         # 5. Claiming GuestOne onto user_id=11 (who already owns Almas in session 50) must be rejected with conflict.
         with self.assertRaises(QuizError) as claim_ctx:
@@ -647,6 +653,8 @@ class H26MathEngineTests(unittest.TestCase):
             (r"\frac{2x}{3}", r"2 \cdot \frac{x}{3}"),
             (r"2 \cdot \frac{x}{3}", r"\frac{2x}{3}"),
             (r"\frac{2}{3}x", r"2 \cdot \frac{x}{3}"),
+            # A written coefficient of 1 is still the final form.
+            ("x/3", "1x/3"),
             # Evaluated powers inside equations and intervals
             (r"x = 2^{10}", "x = 1024"),
             (r"(0; 2^{10})", "(0; 1024)"),
