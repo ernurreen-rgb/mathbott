@@ -90,17 +90,29 @@ export async function enableStreakReminder(email: string): Promise<ReminderResul
       await subscription.unsubscribe();
       subscription = null;
     }
-    const createdFresh = !subscription;
-    subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
+    // The server sends a test notification; a push service that calls the subscription dead
+    // (404/410) gets one more try with a brand-new subscription, as the browser may have handed
+    // back one the service has already dropped.
+    const subscribeAndSave = async (reuse: PushSubscription | null) => {
+      const current =
+        reuse ?? (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey }));
+      const keys = toKeys(current);
+      const saved = keys ? await savePushSubscription(keys, email, true) : { data: null, error: UNAVAILABLE, status: undefined };
+      return { subscription: current, fresh: !reuse, saved };
+    };
+    const isGone = (status?: number) => status === 404 || status === 410;
 
-    const keys = toKeys(subscription);
-    const saved = keys ? await savePushSubscription(keys, email, true) : { data: null, error: UNAVAILABLE, status: undefined };
-    if (!saved.data) {
-      // Only tear down browser subscription if we freshly created it or the server confirmed it is gone (404/410).
-      if (createdFresh || saved.status === 404 || saved.status === 410) {
-        await subscription.unsubscribe().catch(() => undefined);
+    let attempt = await subscribeAndSave(subscription);
+    if (!attempt.saved.data && isGone(attempt.saved.status)) {
+      await attempt.subscription.unsubscribe().catch(() => undefined);
+      attempt = await subscribeAndSave(null);
+    }
+    if (!attempt.saved.data) {
+      // Only tear down a browser subscription made here, or one the server says is gone.
+      if (attempt.fresh || isGone(attempt.saved.status)) {
+        await attempt.subscription.unsubscribe().catch(() => undefined);
       }
-      return { ok: false, error: saved.error || UNAVAILABLE };
+      return { ok: false, error: attempt.saved.error || UNAVAILABLE };
     }
     return { ok: true };
   } catch {
