@@ -88,6 +88,30 @@ class ReminderTextTests(unittest.TestCase):
             self.assertFalse(is_allowed_push_endpoint(endpoint), endpoint)
 
 
+class PushRefusalLogTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_refused_push_logs_the_service_and_its_answer_but_not_the_device(self):
+        from types import SimpleNamespace
+
+        from pywebpush import WebPushException
+
+        from services.streak_reminders import send_push
+
+        endpoint = "https://web.push.apple.com/QGuQyavXutnMei3dJdoBxRkZaUanUqkI9DDC7Ss1eOy06BSxD"
+        refusal = WebPushException(
+            'Push failed: 410 Gone\nResponse body:{"reason": "Unregistered"}',
+            response=SimpleNamespace(status_code=410),
+        )
+        device = _flat(_subscription("a")) | {"endpoint": endpoint}
+        with patch("pywebpush.webpush_async", AsyncMock(side_effect=refusal)), \
+                self.assertLogs("services.streak_reminders", level="WARNING") as logs:
+            outcome = await send_push(device, {"title": "x"}, session=None, vapid=None, ttl=60)
+        self.assertEqual(outcome, "gone")
+        line = "\n".join(logs.output)
+        self.assertIn("web.push.apple.com answered 410", line)
+        self.assertIn('{"reason": "Unregistered"}', line)
+        self.assertNotIn("QGuQyavXut", line)
+
+
 class PushReminderTests(PostgresTestCase):
     environment = _vapid_environment()
 

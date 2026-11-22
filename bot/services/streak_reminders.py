@@ -80,6 +80,21 @@ class _NoRedirectSession:
         return getattr(self._session, name)
 
 
+def push_service_host(endpoint: str) -> str:
+    """The push service's host name (fcm.googleapis.com, web.push.apple.com, ...) for logs."""
+    try:
+        return (urlsplit(endpoint).hostname or "unknown").lower()
+    except ValueError:
+        return "unknown"
+
+
+def push_refusal_reason(exc: Any) -> str:
+    """The push service's own words from a pywebpush failure, short and on one line."""
+    message = str(getattr(exc, "message", "") or "")
+    body = message.split("Response body:", 1)[1] if "Response body:" in message else message
+    return " ".join(body.split())[:200]
+
+
 def is_allowed_push_endpoint(endpoint: str) -> bool:
     if not isinstance(endpoint, str) or not endpoint or endpoint != endpoint.strip():
         return False
@@ -204,10 +219,13 @@ async def send_push(
         )
         return "sent"
     except WebPushException as exc:
-        if exc.status_code in GONE_STATUSES:
-            return "gone"
-        logger.warning("Push failed with status %s", exc.status_code)
-        return "failed"
+        outcome = "gone" if exc.status_code in GONE_STATUSES else "failed"
+        # Which push service refused and why (e.g. Apple's {"reason":"BadJwtToken"}); never the
+        # endpoint itself, which identifies the student's device.
+        logger.warning(
+            "Push %s: %s answered %s %s", outcome, push_service_host(endpoint), exc.status_code, push_refusal_reason(exc)
+        )
+        return outcome
     except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
         logger.warning("Push failed: %s", type(exc).__name__)
         return "failed"
