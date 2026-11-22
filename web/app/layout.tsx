@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import "mathlive/static.css";
 import { Providers } from "./providers";
@@ -32,10 +33,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { locale } = await getServerT();
+  // Set by middleware.ts; the CSP only runs inline scripts that carry it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang={locale}>
       <body suppressHydrationWarning>
         <script
+          nonce={nonce}
+          // Browsers hide the nonce attribute after parsing, so hydration sees "".
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html:
               "try{if(localStorage.getItem('mathbot_desktop_nav_collapsed')==='true'){document.body.classList.add('desktop-nav-collapsed');}}catch(e){}",
