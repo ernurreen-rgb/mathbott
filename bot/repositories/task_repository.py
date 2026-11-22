@@ -450,7 +450,8 @@ class TaskRepository(BaseRepository):
 
     async def reset_task_id_counter(self) -> bool:
         """Restart the tasks id sequence, only when the table is empty."""
-        async with self._write_transaction(lock_key="cms_tasks") as db:
+        # Same lock as create_task, so no placement can be inserted between the count and the restart.
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             async with db.execute("SELECT COUNT(*) FROM tasks") as cursor:
                 row = await cursor.fetchone()
                 count = int(row[0]) if row else 0

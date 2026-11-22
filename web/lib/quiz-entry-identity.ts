@@ -18,11 +18,13 @@ export function isQuizEntryRequest(method: string, segments: string[]): boolean 
 
 export function normalizeQuizEntryNetwork(value: string | null): string | null {
   if (!value || value.length > 512) return null;
-  // Forwarded IP headers (including x-vercel-forwarded-for behind chained proxies)
-  // can contain a comma-separated list; extract the leftmost client hop.
-  const firstHop = value.split(",")[0]?.trim() || "";
-  if (!firstHop || firstHop.length > 64) return null;
-  const address = firstHop;
+  // A forwarded list grows to the right: each proxy appends the address it saw. Only the
+  // rightmost hop comes from the trusted ingress; anything to its left can be sent by the
+  // client, so it must never choose the network budget.
+  const hops = value.split(",");
+  const lastHop = hops[hops.length - 1]?.trim() || "";
+  if (!lastHop || lastHop.length > 64) return null;
+  const address = lastHop;
   if (isIP(address) === 4) return `v4:${address}`;
   if (isIP(address) !== 6) return null;
   try {

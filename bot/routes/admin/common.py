@@ -128,4 +128,49 @@ def _can_manage_admin_task(task: Dict[str, Any], admin_user: Dict[str, Any]) -> 
     return created_by == admin_user["id"]
 
 
-__all__ = [name for name in globals().keys() if not name.startswith("__")]
+async def _replacement_bank_task_fields(
+    db: Database,
+    previous_bank_task_id: Optional[int],
+    *,
+    text: Optional[str],
+    answer: Optional[str],
+    question_type: Optional[str],
+    answer_mode: Optional[str],
+    accepted_answers: Optional[List[str]],
+    text_scale: Optional[str],
+    difficulty: Optional[str],
+    topics: Optional[List[str]],
+    options: Optional[List[Dict[str, Any]]],
+    subquestions: Optional[List[Dict[str, Any]]],
+    image_filename: Optional[str],
+) -> Dict[str, Any]:
+    """create_task() arguments for a bank task that replaces a missing or trashed one.
+
+    None means "not submitted": the field keeps the old bank task's content (a trashed task
+    still has it), so a partial edit never blanks text, choices, image or solution. An empty
+    image_filename removes the image.
+    """
+    previous: Dict[str, Any] = {}
+    if isinstance(previous_bank_task_id, int) and previous_bank_task_id > 0:
+        previous = await db.bank_tasks.get_task_by_id(previous_bank_task_id, include_deleted=True) or {}
+
+    def pick(submitted: Any, key: str) -> Any:
+        return previous.get(key) if submitted is None else submitted
+
+    return {
+        "text": pick(text, "text") or "",
+        "answer": pick(answer, "answer") or "",
+        "question_type": pick(question_type, "question_type") or "input",
+        "answer_mode": pick(answer_mode, "answer_mode") or "choices",
+        "accepted_answers": pick(accepted_answers, "accepted_answers"),
+        "text_scale": pick(text_scale, "text_scale") or "md",
+        "difficulty": pick(difficulty, "difficulty") or "B",
+        "topics": pick(topics, "topics") or [],
+        "options": pick(options, "options"),
+        "subquestions": pick(subquestions, "subquestions"),
+        "image_filename": pick(image_filename, "image_filename") or None,
+        "solution_filename": previous.get("solution_filename"),
+    }
+
+
+__all__ =[name for name in globals().keys() if not name.startswith("__")]

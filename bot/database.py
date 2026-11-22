@@ -132,7 +132,7 @@ class Database:
         bank_difficulty: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a placement task in mini-lesson, creating bank content atomically when needed."""
-        async with self.curriculum._write_transaction() as conn:
+        async with self.curriculum._write_transaction(lock_key="bank_tasks") as conn:
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
                 resolved_bank_task_id = await self.bank_tasks._insert_bank_task(
@@ -188,7 +188,7 @@ class Database:
             # Legacy: questions list was passed via "questions"
             resolved_options = questions
 
-        async with self.curriculum._write_transaction() as conn:
+        async with self.curriculum._write_transaction(lock_key="bank_tasks") as conn:
             resolved_bank_task_id = bank_task_id
             if not resolved_bank_task_id:
                 resolved_bank_task_id = await self.bank_tasks._insert_bank_task(

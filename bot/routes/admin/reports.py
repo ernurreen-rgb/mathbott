@@ -18,6 +18,7 @@ from .common import (
     UploadFile,
     _normalize_text_scale,
     _normalize_trial_like_answer_or_raise,
+    _replacement_bank_task_fields,
     _validate_trial_like_payload,
     get_db,
     has_admin_capability,
@@ -134,16 +135,23 @@ async def _update_task_from_report_common(
         )
 
     if updated_bank is None:
-        created_bank = await db.bank_tasks.create_task(
-            text=text.strip(),
-            answer=answer.strip(),
+        replacement = await _replacement_bank_task_fields(
+            db,
+            linked_bank_task_id,
+            text=text.strip() or None,
+            answer=answer.strip() or None,
             question_type=question_type,
-            difficulty="B",
+            answer_mode=None,
+            accepted_answers=None,
             text_scale=text_scale_value,
+            difficulty=None,
+            topics=None,
             options=options_list,
             subquestions=subquestions_list,
             image_filename=image_filename,
-            solution_filename=None,
+        )
+        created_bank = await db.bank_tasks.create_task(
+            **replacement,
             created_by=admin_user["id"],
             source="admin_report_task_relink",
         )

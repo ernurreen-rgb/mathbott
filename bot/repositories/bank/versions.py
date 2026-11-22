@@ -157,7 +157,7 @@ class BankTaskVersionsMixin:
         actor_user_id: Optional[int] = None,
         actor_email: Optional[str] = None,
     ) -> bool:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             task_row = await self._fetch_task_row(db, task_id)
             if not task_row:
@@ -245,7 +245,7 @@ class BankTaskVersionsMixin:
         reason: Optional[str] = None,
         expected_current_version: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             current_row = await self._fetch_task_row(db, task_id)
             if not current_row or current_row.get("deleted_at") is not None:

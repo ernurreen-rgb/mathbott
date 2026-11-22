@@ -568,19 +568,23 @@ def register_trial_tests_routes(app: FastAPI, db: Database, limiter: Limiter):
                 )
 
         if updated_bank is None:
-            created_bank = await db.bank_tasks.create_task(
-                text=text or "",
-                answer=answer or "",
+            replacement = await _replacement_bank_task_fields(
+                db,
+                bank_task_id,
+                text=text or None,
+                answer=answer or None,
                 question_type=question_type,
-                answer_mode=answer_mode_value or "choices",
+                answer_mode=answer_mode_value,
                 accepted_answers=accepted_answers_value,
                 text_scale=text_scale_value,
-                difficulty=difficulty_value or "B",
-                topics=topics_value or [],
+                difficulty=difficulty_value,
+                topics=topics_value,
                 options=options_list,
                 subquestions=subquestions_list,
-                image_filename=image_filename or None,
-                solution_filename=None,
+                image_filename=image_filename,
+            )
+            created_bank = await db.bank_tasks.create_task(
+                **replacement,
                 created_by=admin_user["id"],
                 source="admin_trial_task_relink",
             )

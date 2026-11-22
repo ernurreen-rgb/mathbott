@@ -127,7 +127,7 @@ class BankTaskTwinsMixin:
 
     async def approve_twin(self, twin_task_id: int, *, actor_user_id: Optional[int], actor_email: Optional[str]) -> bool:
         """Release a draft to mistake review; returns False when it was not a draft."""
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             cursor = await db.execute(
                 """
                 UPDATE bank_task_twins
@@ -157,7 +157,7 @@ class BankTaskTwinsMixin:
         return True
 
     async def record_twin_check(self, twin_task_id: int, *, status: str, answer: Optional[str], version: int) -> None:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             await db.execute(
                 """
                 UPDATE bank_task_twins
@@ -189,7 +189,7 @@ class BankTaskTwinsMixin:
         origin: str = "manual",
         ai_model: Optional[str] = None,
     ) -> Dict[str, Any]:
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             db.row_factory = db_driver.Row
             source = await self._fetch_task_row(db, source_task_id)
             if not source or source.get("deleted_at"):

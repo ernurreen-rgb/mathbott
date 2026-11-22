@@ -91,7 +91,12 @@ class BaseRepository:
 
     @asynccontextmanager
     async def _write_transaction(self, *, lock_key: Optional[str] = None):
-        """Reserve a write lock (scoped when lock_key is given) before reading state for mutation."""
+        """Reserve a write lock (scoped when lock_key is given) before reading state for mutation.
+
+        Writers only exclude writers with the same key. Every write that reads state to decide
+        a change to the same rows must use the same key: all bank_* writes and every insert into
+        tasks use "bank_tasks".
+        """
         # Acquire the process lock before a connection so waiting writers cannot exhaust
         # the pool. The PostgreSQL advisory lock serializes matching writers across processes.
         async with _get_process_write_lock(lock_key):

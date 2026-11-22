@@ -242,15 +242,16 @@ class CurriculumRepository(BaseRepository):
                 await db.commit()
 
     async def delete_lesson(self, lesson_id: int) -> None:
-        """Delete a lesson and all its mini-lessons and tasks."""
-        async with self._connection() as db:
+        """Delete a lesson and all its mini-lessons and tasks in one transaction."""
+        # Pooled connections autocommit, so the two deletes need an explicit transaction:
+        # a failed lesson delete must not leave its tasks already gone.
+        async with self._write_transaction() as db:
             async with db.execute("SELECT id FROM mini_lessons WHERE lesson_id = ?", (lesson_id,)) as cursor:
                 mini_ids = [row[0] for row in await cursor.fetchall()]
             if mini_ids:
                 placeholders = ",".join("?" * len(mini_ids))
                 await db.execute(f"DELETE FROM tasks WHERE mini_lesson_id IN ({placeholders})", mini_ids)
             await db.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
-            await db.commit()
 
     # Mini-lessons
     async def get_module_outline(self, module_id: int) -> Dict[str, Any]:
@@ -370,7 +371,7 @@ class CurriculumRepository(BaseRepository):
 
         if conn is not None:
             return await _insert(conn)
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             return await _insert(db)
 
     async def create_task_in_section(
@@ -406,6 +407,6 @@ class CurriculumRepository(BaseRepository):
 
         if conn is not None:
             return await _insert(conn)
-        async with self._write_transaction() as db:
+        async with self._write_transaction(lock_key="bank_tasks") as db:
             return await _insert(db)
 

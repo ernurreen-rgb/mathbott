@@ -20,6 +20,7 @@ from .common import (
     _parse_bool_flag,
     _parse_options_json,
     _parse_subquestions_json,
+    _replacement_bank_task_fields,
     _validate_bank_difficulty,
     _validate_trial_like_payload,
     db_driver,
@@ -320,19 +321,23 @@ def register_task_content_routes(app: FastAPI, db: Database, limiter: Limiter):
             )
 
         if updated_bank is None:
-            created_bank = await db.bank_tasks.create_task(
-                text=text or "",
-                answer=answer or "",
+            replacement = await _replacement_bank_task_fields(
+                db,
+                linked_bank_task_id,
+                text=text or None,
+                answer=answer or None,
                 question_type=effective_question_type,
                 answer_mode=effective_answer_mode,
                 accepted_answers=accepted_answers_value,
-                text_scale=text_scale_value or "md",
-                difficulty=difficulty_value or "B",
-                topics=topics_value or [],
+                text_scale=text_scale_value,
+                difficulty=difficulty_value,
+                topics=topics_value,
                 options=options_list,
                 subquestions=subquestions_list,
-                image_filename=image_filename_value or None,
-                solution_filename=None,
+                image_filename=image_filename_value,
+            )
+            created_bank = await db.bank_tasks.create_task(
+                **replacement,
                 created_by=admin_user["id"],
                 source="admin_module_task_relink",
             )

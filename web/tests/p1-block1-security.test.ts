@@ -10,40 +10,39 @@ import {
 } from "@/lib/quiz-entry-identity";
 
 describe("P1 Block 1 security & RBAC regressions (H-03, H-05)", () => {
-  it("H-05: normalizeQuizEntryNetwork parses multi-hop comma-separated IPv4 and IPv6 headers", () => {
-    expect(normalizeQuizEntryNetwork("203.0.113.195, 70.41.3.18")).toBe("v4:203.0.113.195");
-    expect(normalizeQuizEntryNetwork("  198.51.100.4 , 10.0.0.1, 10.0.0.2 ")).toBe("v4:198.51.100.4");
-    expect(normalizeQuizEntryNetwork("2001:db8:1:2::99, 2001:db8::1")).toBe("v6:2001:db8:1:2::/64");
-    expect(normalizeQuizEntryNetwork("::ffff:203.0.113.42, 10.0.0.1")).toBe("v4:203.0.113.42");
-    expect(normalizeQuizEntryNetwork("not-an-ip, 203.0.113.1")).toBeNull();
+  it("H-05: normalizeQuizEntryNetwork takes the rightmost (ingress-appended) hop of a forwarded list", () => {
+    expect(normalizeQuizEntryNetwork("203.0.113.195, 70.41.3.18")).toBe("v4:70.41.3.18");
+    expect(normalizeQuizEntryNetwork("  198.51.100.4 , 10.0.0.1, 10.0.0.2 ")).toBe("v4:10.0.0.2");
+    expect(normalizeQuizEntryNetwork("2001:db8::99, 2001:db8:1:2::1")).toBe("v6:2001:db8:1:2::/64");
+    expect(normalizeQuizEntryNetwork("10.0.0.1, ::ffff:203.0.113.42")).toBe("v4:203.0.113.42");
+    // Client-supplied entries on the left are ignored, garbage included.
+    expect(normalizeQuizEntryNetwork("not-an-ip, 203.0.113.1")).toBe("v4:203.0.113.1");
+    expect(normalizeQuizEntryNetwork("203.0.113.1, not-an-ip")).toBeNull();
     expect(normalizeQuizEntryNetwork("")).toBeNull();
   });
 
-  it("H-05: quizEntryClientKey does not collapse multi-hop clients into shared-proxy", () => {
+  it("H-05: quizEntryClientKey ignores spoofed left hops but separates real client networks", () => {
     const secret = "s".repeat(48);
     const sharedKey = createHmac("sha256", secret)
       .update("QUIZ-ENTRY-NETWORK\nshared-proxy")
       .digest("hex");
+    const key = (value: string) =>
+      quizEntryClientKey(new Headers({ "x-vercel-forwarded-for": value }), secret, { vercel: true });
 
-    const clientA = quizEntryClientKey(
-      new Headers({ "x-vercel-forwarded-for": "203.0.113.10, 70.41.3.18" }),
-      secret,
-      { vercel: true },
-    );
-    const clientB = quizEntryClientKey(
-      new Headers({ "x-vercel-forwarded-for": "198.51.100.20, 70.41.3.18" }),
-      secret,
-      { vercel: true },
-    );
+    const spoofedA = key("203.0.113.10, 70.41.3.18");
+    const spoofedB = key("198.51.100.20, 70.41.3.18");
+    const otherNetwork = key("70.41.3.19");
     const fallbackRealIp = quizEntryClientKey(
       new Headers({ "x-real-ip": "203.0.113.77" }),
       secret,
       { vercel: true },
     );
 
-    expect(clientA).not.toBe(sharedKey);
-    expect(clientB).not.toBe(sharedKey);
-    expect(clientA).not.toBe(clientB);
+    // Rotating a fake left hop must not buy a fresh budget.
+    expect(spoofedA).toBe(spoofedB);
+    expect(spoofedA).toBe(key("70.41.3.18"));
+    expect(spoofedA).not.toBe(sharedKey);
+    expect(otherNetwork).not.toBe(spoofedA);
     expect(fallbackRealIp).not.toBe(sharedKey);
   });
 
