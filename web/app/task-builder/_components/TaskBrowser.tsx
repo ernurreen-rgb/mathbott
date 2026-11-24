@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
 import type { ConstructorQuestionType, ConstructorTask } from "@/types/constructor";
 import TaskPreview from "./TaskPreview";
+import TopicCombobox from "./TopicCombobox";
 
 const PAGE_SIZE = 20;
 const LEVELS = ["A", "B", "C"] as const;
@@ -112,13 +113,7 @@ export default function TaskBrowser({
           />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="block">
-            <span className="sr-only">{t("constructor.topic")}</span>
-            <select value={topic} onChange={(event) => setTopic(event.target.value)} className={selectClass}>
-              <option value="">{t("constructor.allTopics")}</option>
-              {topics.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
+          <TopicCombobox topics={topics} value={topic} onChange={setTopic} />
           <label className="block">
             <span className="sr-only">{t("constructor.type")}</span>
             <select
