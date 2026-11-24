@@ -367,8 +367,11 @@ class LatexParser {
         const negated: Record<string, string> = { "=": "≠", "∈": "∉", "<": "≮", ">": "≯", "≤": "≰", "≥": "≱", "∥": "∦", "∣": "∤", "⊂": "⊄", "⊆": "⊈", "≡": "≢", "∼": "≁", "∃": "∄" };
         return run(negated[text] ?? `${text}̸`);
       }
-      case "text": case "textrm": case "textup": case "textnormal": case "mbox": case "hbox": case "textit": case "textsf": case "texttt":
-        return run(unescapeText(this.readRawGroup()), "text");
+      case "text": case "textrm": case "textup": case "textnormal": case "mbox": case "hbox": case "textit": case "textsf": case "texttt": {
+        const text = unescapeText(this.readRawGroup());
+        // The bank writes a leading minus as \text{-}: it is the minus sign, not a hyphen.
+        return text.trim() === "-" ? run("−") : run(text, "text");
+      }
       case "textbf":
         return run(unescapeText(this.readRawGroup()), "bold");
       case "mathrm": case "mathup": case "rm": case "mathsf": case "mathtt":
@@ -724,13 +727,12 @@ const ITALIC_LETTERS = /[A-Za-zα-ω]+/g;
 
 function singleRun(text: string, style: MathStyle, options: OmmlOptions, italic: boolean): string {
   const space = /^\s|\s$/.test(text) ? ' xml:space="preserve"' : "";
+  // \text is upright math too: PowerPoint can draw a stray dash beside "normal text" (m:nor).
   const styleProps = style === "math"
     ? ""
     : style === "bold"
       ? '<m:sty m:val="b"/>'
-      : style === "text"
-        ? "<m:nor/>"
-        : '<m:sty m:val="p"/>';
+      : '<m:sty m:val="p"/>';
   const mathProps = styleProps ? `<m:rPr>${styleProps}</m:rPr>` : "";
   return `<m:r>${mathProps}${runProperties(options, italic, style === "bold")}<m:t${space}>${escapeXml(text)}</m:t></m:r>`;
 }

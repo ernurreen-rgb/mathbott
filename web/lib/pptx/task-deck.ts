@@ -1,6 +1,7 @@
 /**
  * A PPTX deck of constructor tasks, laid out like the teacher's live-lesson slides: a title slide,
- * one task per slide on a white card with "Есеп №N:" above it, and the answer key at the end.
+ * one task per slide under "Есеп №N:" directly on the user's background, and the answer key at
+ * the end.
  *
  * Formulas are PowerPoint equations (OMML) the teacher can edit in place. Each text box with a
  * formula is written twice inside mc:AlternateContent: the equation version for PowerPoint and a
@@ -57,11 +58,14 @@ const MUTED_COLOR = "64748B";
 const DEFAULT_ACCENT = "2436AE";
 const inch = (value: number) => Math.round(value * EMU_PER_INCH);
 
-// The card of the example deck: 0.7 in from the left, 1.5 in from the top, 10.96 × 5.1 in.
-const CARD = { x: 638088, y: 1378221, w: 10019752, h: 4669653 };
-const CARD_EDGE = inch(0.035);
-const HEADER = { x: CARD.x + inch(0.16), y: CARD.y + inch(0.14), w: CARD.w - inch(0.32), h: inch(0.45) };
-const BODY = { x: CARD.x + inch(0.2), y: CARD.y + inch(0.68), w: CARD.w - inch(0.4), h: CARD.h - inch(0.84) };
+// Where the example deck puts its task: 0.7 in from the left, 1.5 in from the top, 10.96 in wide,
+// clear of the branding a background carries above it. The text sits on the background itself.
+const AREA = { x: 638088, y: 1378221, w: 10019752 };
+const HEADER = { x: AREA.x + inch(0.16), y: AREA.y + inch(0.14), w: AREA.w - inch(0.32), h: inch(0.45) };
+const BODY_TOP = AREA.y + inch(0.68);
+const BODY = { x: AREA.x + inch(0.2), y: BODY_TOP, w: AREA.w - inch(0.4), h: SLIDE_HEIGHT - inch(0.5) - BODY_TOP };
+/** The estimate of a text's height runs low on stacked fractions; keep this much room spare. */
+const FIT_MARGIN = 1.12;
 const BODY_SIZES = [2400, 2200, 2000, 1800, 1600];
 const ANSWERS_PER_COLUMN = 10;
 const ANSWER_COLUMNS = 3;
@@ -157,8 +161,11 @@ function paragraphXml(paragraph: Paragraph, style: TextStyle, equations: boolean
   const body = display ? (() => {
     const formula = latexToOmml(display.latex, formulaOptions);
     formula.unsupported.forEach((name) => unsupported.add(name));
+    // The label is a bold upright math run. As "normal text" (m:nor) PowerPoint draws a stray
+    // dash beside the first label of a text box.
     const label = display.label
-      ? `<m:r><m:rPr><m:nor/></m:rPr>${textRunProperties(style, { bold: true })}<m:t xml:space="preserve">${escapeXml(display.label)}</m:t></m:r>`
+      ? `<m:r><m:rPr><m:sty m:val="b"/></m:rPr>${textRunProperties(style, { bold: true, font: "Cambria Math" })}`
+        + `<m:t xml:space="preserve">${escapeXml(display.label)}</m:t></m:r>`
       : "";
     return `<a14:m><m:oMathPara xmlns:m="${NS.m}"><m:oMathParaPr><m:jc m:val="left"/></m:oMathParaPr>`
       + `<m:oMath>${label}${formula.inner}</m:oMath></m:oMathPara></a14:m>`;
@@ -216,21 +223,6 @@ class SlideWriter {
       + `<a:srcRect${crop}/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
   }
 
-  card(accent: string) {
-    const geometry = '<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 2600"/></a:avLst></a:prstGeom>';
-    this.shapes.push(
-      `<p:sp><p:nvSpPr><p:cNvPr id="${this.id()}" name="Card edge"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>`
-      + `<p:spPr>${xfrm(CARD)}${geometry}<a:solidFill><a:srgbClr val="${accent}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>`
-      + '<p:txBody><a:bodyPr rtlCol="0" anchor="ctr"/><a:lstStyle/><a:p><a:endParaRPr lang="kk-KZ" dirty="0"/></a:p></p:txBody></p:sp>',
-      `<p:sp><p:nvSpPr><p:cNvPr id="${this.id()}" name="Card"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>`
-      + `<p:spPr>${xfrm({ ...CARD, x: CARD.x + CARD_EDGE, w: CARD.w - CARD_EDGE })}${geometry}`
-      + '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln><a:noFill/></a:ln>'
-      + '<a:effectLst><a:outerShdw blurRad="152400" dist="25400" dir="5400000" algn="t" rotWithShape="0">'
-      + '<a:srgbClr val="0F172A"><a:alpha val="14000"/></a:srgbClr></a:outerShdw></a:effectLst></p:spPr>'
-      + '<p:txBody><a:bodyPr rtlCol="0" anchor="ctr"/><a:lstStyle/><a:p><a:endParaRPr lang="kk-KZ" dirty="0"/></a:p></p:txBody></p:sp>',
-    );
-  }
-
   textBox(name: string, box: Box, paragraphs: Paragraph[], style: TextStyle, options: { anchor?: "t" | "ctr"; align?: string } = {}) {
     const hasMath = paragraphs.some((paragraph) => paragraph.inlines.some((inline) => inline.kind === "math"));
     const id = this.id();
@@ -274,7 +266,7 @@ class SlideWriter {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Fitting text into the card
+// Fitting text into its box
 
 function heightFactor(node: MathNode): number {
   switch (node.t) {
@@ -366,7 +358,7 @@ export function estimateTextHeight(paragraphs: Paragraph[], size: number, width:
 
 function fitSize(paragraphs: Paragraph[], box: Box): number {
   for (const size of BODY_SIZES) {
-    if (estimateTextHeight(paragraphs, size, box.w) <= box.h) return size;
+    if (estimateTextHeight(paragraphs, size, box.w) * FIT_MARGIN <= box.h) return size;
   }
   return BODY_SIZES[BODY_SIZES.length - 1];
 }
@@ -377,10 +369,21 @@ function fitSize(paragraphs: Paragraph[], box: Box): number {
 const NUMERIC_TEXT = /^[\s\d.,;:+\-−±()[\]]+$/;
 
 /** An option's content. A plain number ("2", "-3") is written as a formula too, so all options look alike. */
+const HAS_WORD = /[A-Za-zЀ-ӿ]{2,}/;
+
+/**
+ * An option's content. An option without words is one formula, so it shows as a full-size
+ * display equation like the others: a plain number ("2", "-3") and a sign the site shows as
+ * text ("\text{-}\frac{16}{25}") alike.
+ */
 function optionInlines(text: string): Inline[] {
   const inlines = contentInlines(text).flatMap((paragraph, index) => (index ? [{ kind: "br" as const }, ...paragraph] : paragraph));
   if (inlines.length === 1 && inlines[0].kind === "text" && NUMERIC_TEXT.test(inlines[0].text) && /\d/.test(inlines[0].text)) {
     return [{ kind: "math", latex: inlines[0].text.trim() }];
+  }
+  const words = inlines.some((inline) => inline.kind === "text" && HAS_WORD.test(inline.text));
+  if (inlines.length > 1 && !words && inlines.every((inline) => inline.kind !== "br") && inlines.some((inline) => inline.kind === "math")) {
+    return [{ kind: "math", latex: text.trim() }];
   }
   return inlines;
 }
@@ -457,7 +460,6 @@ class DeckBuilder {
       this.backgroundName ??= this.addMedia(this.input.background);
       slide.setBackground(this.input.background, this.backgroundName);
     }
-    slide.card(this.accent);
     return slide;
   }
 

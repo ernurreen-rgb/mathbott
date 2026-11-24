@@ -36,7 +36,11 @@ export default function BackgroundPicker({
     try {
       const prepared = await prepareBackground(file);
       const result = await uploadTaskCollectionImage(collectionId, kind, prepared, email);
-      if (!result.data) throw new Error("upload");
+      if (!result.data) {
+        if (result.status === 413) throw new Error("image-too-large");
+        console.error("Background image upload failed:", result.status, result.error);
+        throw new Error("upload");
+      }
       onChange(result.data);
     } catch (problem) {
       setError(t(problem instanceof Error && problem.message === "image-too-large" ? "constructor.imageTooLarge" : "constructor.imageFailed"));
@@ -68,7 +72,14 @@ export default function BackgroundPicker({
           <div className="flex h-full items-center justify-center text-xs text-slate-400">{t("constructor.noImage")}</div>
         )}
         {kind === "background" && (
-          <div aria-hidden="true" className="absolute left-[5%] top-[20%] h-[68%] w-[82%] rounded-md border-l-2 border-[#2436AE] bg-white/95 shadow" />
+          // Where a slide puts "Есеп №N:" and the task text, on the background itself.
+          <div aria-hidden="true" className="absolute left-[6%] top-[22%] w-[60%] space-y-[6%]">
+            <div className="h-1.5 w-1/4 rounded-full bg-[#2436AE]" />
+            <div className="h-1 w-full rounded-full bg-slate-500/70" />
+            <div className="h-1 w-4/5 rounded-full bg-slate-500/70" />
+            <div className="h-1 w-1/3 rounded-full bg-slate-500/50" />
+            <div className="h-1 w-1/3 rounded-full bg-slate-500/50" />
+          </div>
         )}
         {busy && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-semibold text-slate-700">

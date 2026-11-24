@@ -105,7 +105,9 @@ describe("LaTeX to PowerPoint equations", () => {
     expect(texts(latexToOmml("3a-4b", OPTIONS).omml)).toEqual(["3", "𝑎", "−4", "𝑏"]);
     expect(latexToOmml("AB", OPTIONS).omml).toContain(">𝐴𝐵</m:t>");
     expect(latexToOmml("h", OPTIONS).omml).toContain(">ℎ</m:t>");
-    expect(latexToOmml(String.raw`\text{Жауабы: }x`, OPTIONS).omml).toContain('<m:rPr><m:nor/></m:rPr>');
+    const text = latexToOmml(String.raw`\text{Жауабы: }x`, OPTIONS).omml;
+    expect(text).toContain('<m:rPr><m:sty m:val="p"/></m:rPr><a:rPr');
+    expect(text).not.toContain("<m:nor/>"); // PowerPoint can draw a stray dash beside m:nor text
     expect(latexToOmml(String.raw`\mathbb{R}`, OPTIONS).omml).toContain(">ℝ</m:t>");
   });
 
@@ -124,6 +126,12 @@ describe("LaTeX to PowerPoint equations", () => {
     expect(latexToOmml(String.raw`\sqrt{x+3}=2`, OPTIONS).text).toBe("√(x+3)=2");
     expect(latexToOmml(String.raw`\frac{a+1}{a}`, OPTIONS).text).toBe("(a+1)/a");
     expect(latexToOmml(String.raw`x^{2}+5^{\log_3 7}`, OPTIONS).text).toBe("x²+5^(log₃ 7)");
+  });
+
+  it("reads the bank's \text{-} as a minus sign", () => {
+    const { omml, text } = latexToOmml(String.raw`\text{-}\frac{16}{25}`, OPTIONS);
+    expect(text).toBe("−16/25");
+    expect(omml.startsWith("<m:oMath><m:box>")).toBe(true); // a unary sign stays tight after a label
   });
 
   it("reports commands it does not know instead of dropping them", () => {
@@ -243,7 +251,17 @@ describe("PPTX deck", () => {
     expect(strFromU8(files["ppt/slides/slide4.xml"])).toContain(">Верно</a:t>");
   });
 
-  it("shrinks long tasks to fit the card", () => {
+  it("writes an option without words as one display equation", () => {
+    const deck = (options: string[]) => buildTaskDeckFiles({ title: "T", author: "A", language: "kk",
+      tasks: [task(1, { options: options.map((text, index) => ({ label: "ABCD"[index], text })) })] }).files.get("ppt/slides/slide2.xml") as string;
+    const slide = deck([String.raw`\text{-}\frac{16}{25}`, "-3", String.raw`\frac{25}{16}`, "Шешімі жоқ"]);
+    const choice = slide.slice(slide.indexOf("<mc:Choice"), slide.indexOf("</mc:Choice>"));
+    expect(choice.match(/<m:oMathPara /g)?.length).toBe(3); // the option with words stays text
+    expect(choice).toContain(">Шешімі жоқ</a:t>");
+    expect(choice).not.toContain("<m:nor/>");
+  });
+
+  it("shrinks long tasks to fit their box", () => {
     const long = task(1, { text: "Өрнекті ықшамдаңыз: " + String.raw`\frac{k^2-25}{k+3}\cdot\frac{1}{k^2+5k}`.repeat(6) });
     const { files } = buildTaskDeckFiles({ title: "T", author: "A", language: "kk", tasks: [task(2), long] });
     const size = (xml: string) => Number(xml.match(/<a:p><a:pPr[^>]*>.*?sz="(\d+)"/)?.[1]);
