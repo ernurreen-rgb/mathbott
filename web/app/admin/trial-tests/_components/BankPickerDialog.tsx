@@ -4,6 +4,8 @@ import CmsSkeleton from "../../cms/_components/CmsSkeleton";
 import styles from "../../cms/CmsWorkspace.module.css";
 import local from "../TrialTests.module.css";
 import MathRender from "@/components/ui/MathRender";
+import ComparisonTableView from "@/components/student/ComparisonTableView";
+import { parseComparisonTask } from "@/lib/comparison-task";
 import { getTaskTextScaleClass, getTaskTextScaleStyle, normalizeTaskTextScale } from "@/lib/task-text-scale";
 import { BankDifficulty, BankTask } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
@@ -118,7 +120,14 @@ export default function BankPickerDialog({
               className={`text-slate-800 ${getTaskTextScaleClass(normalizeTaskTextScale(task.text_scale))}`}
               style={getTaskTextScaleStyle(task.text_scale)}
             >
-              <MathRender latex={task.text || ""} />
+              {(() => {
+                const comparisonParts = parseComparisonTask(task.text);
+                return comparisonParts ? (
+                  <ComparisonTableView parts={comparisonParts} compact />
+                ) : (
+                  <MathRender latex={task.text || ""} />
+                );
+              })()}
             </div>
           </div>
           <button

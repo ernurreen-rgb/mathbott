@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
+import ComparisonTableView from "@/components/student/ComparisonTableView";
+import { parseComparisonTask } from "@/lib/comparison-task";
 import { apiPath } from "@/lib/api/client";
 import {
   TaskFontViewport,
@@ -26,13 +28,20 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
     setImageFailed(false);
   }, [src]);
   const normalizedScale = normalizeTaskTextScale(task.text_scale);
+  const comparisonParts = parseComparisonTask(task.text);
   return (
     <div className="w-full space-y-4 min-w-0">
       <div
         className={`min-w-0 break-words font-semibold leading-[1.65] text-gray-900 ${viewport ? "" : getTaskTextScaleClass(normalizedScale)}`}
         style={getTaskTextScaleStyle(normalizedScale, viewport)}
       >
-        {task.text ? <MathRender latex={task.text} /> : <span className="text-gray-400">{t("task.textPlaceholder")}</span>}
+        {comparisonParts ? (
+          <ComparisonTableView parts={comparisonParts} />
+        ) : task.text ? (
+          <MathRender latex={task.text} />
+        ) : (
+          <span className="text-gray-400">{t("task.textPlaceholder")}</span>
+        )}
       </div>
       {src && !imageFailed && (
         <Image

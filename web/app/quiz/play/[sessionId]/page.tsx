@@ -13,7 +13,9 @@ import {
   parseQuizAvatar,
 } from "@/components/quiz/QuizAvatar";
 import MathRender from "@/components/ui/MathRender";
+import ComparisonTableView from "@/components/student/ComparisonTableView";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
+import { hasEmptyMcqOptionTexts, parseComparisonTask } from "@/lib/comparison-task";
 import toast from "react-hot-toast";
 import { completeQuizParticipant } from "@/lib/api/quizzes";
 import { useI18n } from "@/lib/i18n/provider";
@@ -85,7 +87,7 @@ function formatQuizCorrectAnswer(
       .filter(Boolean);
     const mapped = parts.map((part) => {
       const option = question.options?.find((opt) => opt.id.toUpperCase() === part.toUpperCase());
-      return option ? option.text : part;
+      return option?.text?.trim() || part;
     });
     if (mapped.length > 0) return mapped.join(",\\; ");
   }
@@ -489,7 +491,14 @@ export default function PlayQuizPage({ params }: PageProps) {
         <div className="my-auto py-4">
           <div className="min-w-0 bg-white border border-purple-100 rounded-3xl p-6 sm:p-8 shadow-lg text-center space-y-4">
             <div className="min-w-0 text-lg sm:text-2xl font-bold text-gray-900 leading-relaxed">
-              <MathRender latex={currentQ.question_text} />
+              {(() => {
+                const comparisonParts = parseComparisonTask(currentQ.question_text);
+                return comparisonParts ? (
+                  <ComparisonTableView parts={comparisonParts} className="text-left" />
+                ) : (
+                  <MathRender latex={currentQ.question_text} />
+                );
+              })()}
             </div>
             {currentQ.image_filename && (
               <div className="flex justify-center">
@@ -553,28 +562,37 @@ export default function PlayQuizPage({ params }: PageProps) {
         {!isAnswered && (
           <div className="w-full pb-4">
             {/* 1. MCQ (4 colorful Quizizz buttons) */}
-            {currentQ.question_type === "mcq" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {currentQ.options?.map((opt, idx) => {
-                  const theme = MCQ_THEMES[idx % MCQ_THEMES.length];
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => submitAnswer(opt.id)}
-                      disabled={submitting}
-                      className={`h-24 sm:h-28 rounded-2xl p-4 text-white font-extrabold text-base shadow-lg transition-all active:scale-95 flex items-center gap-4 text-left border-b-4 ${theme.bg} ${theme.border}`}
-                    >
-                      <span className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-black text-sm shrink-0">
-                        <Icon name={theme.icon} size={20} />
-                      </span>
-                      <div className="flex-1 overflow-y-auto max-h-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                        <MathRender latex={opt.text} inline />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {currentQ.question_type === "mcq" && (() => {
+              const labelOnly = hasEmptyMcqOptionTexts(currentQ.options);
+              return (
+                <div className={labelOnly ? "grid grid-cols-2 sm:grid-cols-4 gap-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+                  {currentQ.options?.map((opt, idx) => {
+                    const theme = MCQ_THEMES[idx % MCQ_THEMES.length];
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => submitAnswer(opt.id)}
+                        disabled={submitting}
+                        className={`h-24 sm:h-28 rounded-2xl p-4 text-white font-extrabold shadow-lg transition-all active:scale-95 flex items-center border-b-4 ${
+                          labelOnly ? "justify-center gap-3 text-2xl" : "gap-4 text-base text-left"
+                        } ${theme.bg} ${theme.border}`}
+                      >
+                        <span className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-black text-sm shrink-0">
+                          <Icon name={theme.icon} size={20} />
+                        </span>
+                        {labelOnly ? (
+                          <span className="font-black">{opt.id}</span>
+                        ) : (
+                          <div className="flex-1 overflow-y-auto max-h-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                            <MathRender latex={opt.text} inline />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* 2. TRUE / FALSE (2 big buttons) */}
             {currentQ.question_type === "tf" && (

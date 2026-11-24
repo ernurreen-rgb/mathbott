@@ -1,6 +1,7 @@
 "use client";
 
 import MathRender from "@/components/ui/MathRender";
+import { hasEmptyMcqOptionTexts } from "@/lib/comparison-task";
 import { getTaskMcqCorrectCount, parseMcqAnswerLabels } from "@/lib/question-options";
 import { parseWrittenAnswerSlots } from "@/lib/written-answer";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
@@ -114,24 +115,32 @@ export function ReviewAnswerBlock({
               </div>
             </div>
           )}
-          <div className="grid grid-cols-1 gap-2">
+          <div className={`grid gap-2 ${hasEmptyMcqOptionTexts(options) ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1"}`}>
             {options.map((option) => {
             const labelUpper = (option.label || "").trim().toUpperCase();
             const isUserChoice = !isWrittenAnswer && userMcqLabels.includes(labelUpper as any);
             const isCorrectOption = correctMcqLabels.includes(labelUpper as any);
+            const labelOnly = hasEmptyMcqOptionTexts(options);
             let style = "bg-gray-50 border-gray-200";
             if (isUserChoice && (isCorrect || isCorrectOption)) style = "bg-green-100 border-green-500";
             else if (isUserChoice && !isCorrectOption) style = "bg-red-100 border-red-500";
             else if (!isUserChoice && isCorrectOption) style = "bg-green-50 border-green-400";
 
               return (
-                <div key={option.label} className={`border-2 rounded-lg p-3 text-left ${style}`}>
-                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
-                    <span className="font-bold text-gray-900 shrink-0">{option.label}</span>
-                    <div className="min-w-0 break-words whitespace-normal">
-                      <MathRender inline latex={option.text} className="text-gray-700" />
+                <div
+                  key={option.label}
+                  className={`border-2 rounded-lg p-3 ${labelOnly ? "text-center flex items-center justify-center" : "text-left"} ${style}`}
+                >
+                  {labelOnly ? (
+                    <span className="font-bold text-gray-900">{option.label}</span>
+                  ) : (
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                      <span className="font-bold text-gray-900 shrink-0">{option.label}</span>
+                      <div className="min-w-0 break-words whitespace-normal">
+                        <MathRender inline latex={option.text} className="text-gray-700" />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

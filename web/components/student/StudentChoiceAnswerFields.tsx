@@ -2,6 +2,7 @@
 
 import MathRender from "@/components/ui/MathRender";
 import Icon from "@/components/ui/Icon";
+import { hasEmptyMcqOptionTexts } from "@/lib/comparison-task";
 import {
   getMcqSelectableCount,
   parseMcqAnswerLabels,
@@ -45,9 +46,12 @@ export default function StudentChoiceAnswerFields({
 }: StudentChoiceAnswerFieldsProps) {
   const { t } = useI18n();
   const options = task.options || [];
-  const optionLayoutClass = layout === "stack"
-    ? "grid grid-cols-1 gap-2.5"
-    : "grid grid-cols-1 gap-2.5 sm:grid-cols-2";
+  const labelOnlyOptions = hasEmptyMcqOptionTexts(options);
+  const optionLayoutClass = labelOnlyOptions
+    ? "grid grid-cols-2 gap-2.5 sm:grid-cols-4"
+    : layout === "stack"
+      ? "grid grid-cols-1 gap-2.5"
+      : "grid grid-cols-1 gap-2.5 sm:grid-cols-2";
 
   if (task.question_type === "select") {
     const effectiveSelectValue = value || selectedAnswer || "";
@@ -183,38 +187,57 @@ export default function StudentChoiceAnswerFields({
                 if (isAnswered) return;
                 onChange(toggleMcqAnswerLabel(value, label, maxSelectableCount));
               }}
-              className={`min-h-[52px] rounded-xl border px-4 py-3 text-base text-left transition-colors flex items-center justify-between ${
+              className={`min-h-[52px] rounded-xl border px-4 py-3 text-base transition-colors flex items-center ${
+                labelOnlyOptions ? "justify-center gap-1.5 text-center" : "justify-between text-left"
+              } ${
                 disabled || isAnswered ? "cursor-default" : ""
               } ${buttonStyle}`}
             >
-              <div className="flex items-center">
-                <span className="mr-2 font-bold">{option.label}</span>
-                <MathRender
-                  inline
-                  latex={option.text}
-                  className={
-                    isAnswered
-                      ? isSelected
-                        ? "text-white"
-                        : isCorrectOption
-                        ? "text-green-800"
-                        : "text-gray-400"
-                      : isSelected
-                      ? "text-white"
-                      : "text-gray-700"
-                  }
-                />
-              </div>
-              {isAnswered && isSelected && (isCorrect || isCorrectOption) && (
-                <Icon name="check" className="w-4 h-4 text-white shrink-0 ml-2" />
-              )}
-              {isAnswered && isSelected && !isCorrectOption && !isCorrect && (
-                <Icon name="close" className="w-4 h-4 text-white shrink-0 ml-2" />
-              )}
-              {isAnswered && !isSelected && isCorrectOption && (
-                <span className="text-xs text-green-700 font-bold shrink-0 ml-2 flex items-center gap-1">
-                  <Icon name="check" className="w-3.5 h-3.5" /> {t("answer.correctBadge")}
-                </span>
+              {labelOnlyOptions ? (
+                <>
+                  <span className="font-bold text-lg">{option.label}</span>
+                  {isAnswered && isSelected && (isCorrect || isCorrectOption) && (
+                    <Icon name="check" className="w-4 h-4 text-white shrink-0" />
+                  )}
+                  {isAnswered && isSelected && !isCorrectOption && !isCorrect && (
+                    <Icon name="close" className="w-4 h-4 text-white shrink-0" />
+                  )}
+                  {isAnswered && !isSelected && isCorrectOption && (
+                    <Icon name="check" className="w-4 h-4 text-green-700 shrink-0" />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center">
+                    <span className="mr-2 font-bold">{option.label}</span>
+                    <MathRender
+                      inline
+                      latex={option.text}
+                      className={
+                        isAnswered
+                          ? isSelected
+                            ? "text-white"
+                            : isCorrectOption
+                            ? "text-green-800"
+                            : "text-gray-400"
+                          : isSelected
+                          ? "text-white"
+                          : "text-gray-700"
+                      }
+                    />
+                  </div>
+                  {isAnswered && isSelected && (isCorrect || isCorrectOption) && (
+                    <Icon name="check" className="w-4 h-4 text-white shrink-0 ml-2" />
+                  )}
+                  {isAnswered && isSelected && !isCorrectOption && !isCorrect && (
+                    <Icon name="close" className="w-4 h-4 text-white shrink-0 ml-2" />
+                  )}
+                  {isAnswered && !isSelected && isCorrectOption && (
+                    <span className="text-xs text-green-700 font-bold shrink-0 ml-2 flex items-center gap-1">
+                      <Icon name="check" className="w-3.5 h-3.5" /> {t("answer.correctBadge")}
+                    </span>
+                  )}
+                </>
               )}
             </button>
           );

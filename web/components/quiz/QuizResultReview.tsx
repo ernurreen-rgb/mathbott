@@ -6,6 +6,7 @@ import Link from "next/link";
 import MathRender from "@/components/ui/MathRender";
 import StudentMathAnswerInput from "@/components/student/StudentMathAnswerInput";
 import TaskStatement from "@/components/student/TaskStatement";
+import { hasEmptyMcqOptionTexts } from "@/lib/comparison-task";
 import { checkQuizPracticeAnswer, getQuizReview } from "@/lib/api/quizzes";
 import { readQuizPlayer } from "@/lib/quiz-player-storage";
 import type { QuizAuth, QuizPracticeResult, QuizQuestion, QuizReview } from "@/types/quiz";
@@ -16,7 +17,10 @@ function answerText(question: QuizQuestion, answer: string, t: Translate) {
   if (!answer || answer === "__timeout__") return t("review.noAnswer");
   if (question.question_type === "input") return answer;
   const options = Array.isArray(question.options) ? question.options : [];
-  return answer.split(",").map((id) => options.find((option) => option.id === id)?.text || id).join("; ");
+  return answer
+    .split(",")
+    .map((id) => options.find((option) => option.id === id)?.text?.trim() || id)
+    .join("; ");
 }
 
 export default function QuizResultReview({ sessionId, participantId }: { sessionId: number; participantId: number }) {
@@ -92,16 +96,19 @@ export default function QuizResultReview({ sessionId, participantId }: { session
             <p className="text-sm text-gray-500">{t("quizPlay.questionOf", { n: index + 1, total: mistakes.length })} · {t("review.fixedInPractice", { count: solved.size })}</p>
             <TaskStatement task={{ text: current.question.question_text, image_filename: current.question.image_filename, text_scale: "md" }} />
             {current.question.question_type === "input" ? <StudentMathAnswerInput key={current.question.id} ariaLabel={t("review.practiceAnswerAria")} value={answer}
-              onChange={setAnswer} disabled={checking || !!result?.is_correct} /> :
-              <div className="grid gap-2">{(Array.isArray(current.question.options) ? current.question.options : []).map((option) => {
+              onChange={setAnswer} disabled={checking || !!result?.is_correct} /> : (() => {
+              const quizOptions = Array.isArray(current.question.options) ? current.question.options : [];
+              const labelOnly = hasEmptyMcqOptionTexts(quizOptions);
+              return <div className={labelOnly ? "grid grid-cols-2 sm:grid-cols-4 gap-2" : "grid gap-2"}>{quizOptions.map((option) => {
                 const selected = answer.split(",").includes(option.id);
                 return <button key={option.id} aria-pressed={selected} disabled={checking || !!result?.is_correct}
-                  className={`rounded-lg border p-4 text-left ${selected ? "border-purple-600 bg-purple-50" : "border-gray-200"}`}
+                  className={`rounded-lg border p-4 ${labelOnly ? "text-center font-bold text-lg" : "text-left"} ${selected ? "border-purple-600 bg-purple-50" : "border-gray-200"}`}
                   onClick={() => { setResult(null); setAnswer(current.question.question_type === "multi_select" ?
                     (selected ? answer.split(",").filter((id) => id !== option.id) : [...answer.split(",").filter(Boolean), option.id]).sort().join(",") : option.id); }}>
-                  <span className="mr-2 font-bold">{option.id}</span><MathRender inline latex={option.text} />
+                  {labelOnly ? <span>{option.id}</span> : <><span className="mr-2 font-bold">{option.id}</span><MathRender inline latex={option.text} /></>}
                 </button>;
-              })}</div>}
+              })}</div>;
+            })()}
             {error && <p role="alert" className="text-red-700">{error}</p>}
             {result && <div role="status" className={`rounded-lg p-4 ${result.is_correct ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-900"}`}>
               <p className="font-semibold">{result.is_correct ? t("review.correct") : t("review.tryAgain")}</p>

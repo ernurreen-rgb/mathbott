@@ -1,5 +1,6 @@
 "use client";
 import MathRender from "@/components/ui/MathRender";
+import { hasEmptyMcqOptionTexts } from "@/lib/comparison-task";
 import { getTaskAnswerMode } from "@/lib/answer-mode";
 import {
   getMcqCorrectOptionLimit,
@@ -107,15 +108,16 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
 
   if ((questionType === "mcq" || questionType === "mcq6") && answerMode !== "written") {
     const selectedLabels = parseMcqAnswerLabels(value);
+    const labelOnly = hasEmptyMcqOptionTexts(options);
     return (
-      <div className="grid grid-cols-1 gap-2">
+      <div className={labelOnly ? "grid grid-cols-2 sm:grid-cols-4 gap-2" : "grid grid-cols-1 gap-2"}>
         {options.map((option, optionIndex) => {
           const label = String(option?.label || "");
           const isSelected = selectedLabels.includes(label as McqOptionLabel);
           return (
             <button
               key={`slot-${currentSlotIndex}-option-${optionIndex}`}
-                      aria-pressed={isSelected}
+              aria-pressed={isSelected}
               type="button"
               onClick={() =>
                 setPreviewAnswer(
@@ -123,15 +125,19 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
                   toggleMcqAnswerLabel(value, label as McqOptionLabel, getMcqCorrectOptionLimit(questionType, options.length))
                 )
               }
-              className={`text-left border rounded-lg p-3 transition-colors ${isSelected
+              className={`border rounded-lg p-3 transition-colors ${
+                labelOnly ? "text-center flex items-center justify-center" : "text-left"
+              } ${isSelected
                 ? "bg-slate-800 border-slate-900 text-white"
                 : "border-gray-200 bg-white text-gray-900 hover:border-slate-400 hover:bg-slate-50"
                 }`}
             >
               <div className={`font-bold ${isSelected ? "text-white" : "text-gray-900"}`}>{label}</div>
-              <div className={isSelected ? "text-white" : "text-gray-700"}>
-                <MathRender inline latex={String(option?.text || "")} />
-              </div>
+              {!labelOnly && (
+                <div className={isSelected ? "text-white" : "text-gray-700"}>
+                  <MathRender inline latex={String(option?.text || "")} />
+                </div>
+              )}
             </button>
           );
         })}

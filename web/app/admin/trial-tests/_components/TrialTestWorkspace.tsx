@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
 import MathRender from "@/components/ui/MathRender";
+import ComparisonTableView from "@/components/student/ComparisonTableView";
+import { parseComparisonTask } from "@/lib/comparison-task";
 import { apiPath } from "@/lib/api";
 import { getTaskTextScaleClass, getTaskTextScaleStyle } from "@/lib/task-text-scale";
 import type { TrialTest } from "@/types";
@@ -64,7 +66,17 @@ function TaskEditor({ test }: { test: TrialTest }) {
           {currentPlacement && <button type="button" disabled={editor.busy} className={styles.dangerButton} onClick={() => void editor.onClearSlot(currentSlotIndex)}>Тазалау</button>}
         </div></div>
         {currentPlacement ? <>
-          <div className={`${local.statement} ${getTaskTextScaleClass(getPlacementTextScale(currentPlacement))}`} style={getTaskTextScaleStyle(getPlacementTextScale(currentPlacement))}><MathRender latex={getPlacementText(currentPlacement) || "Тапсырма мәтіні бос"} /></div>
+          <div className={`${local.statement} ${getTaskTextScaleClass(getPlacementTextScale(currentPlacement))}`} style={getTaskTextScaleStyle(getPlacementTextScale(currentPlacement))}>
+            {(() => {
+              const placementText = getPlacementText(currentPlacement);
+              const comparisonParts = parseComparisonTask(placementText);
+              return comparisonParts ? (
+                <ComparisonTableView parts={comparisonParts} />
+              ) : (
+                <MathRender latex={placementText || "Тапсырма мәтіні бос"} />
+              );
+            })()}
+          </div>
           {getPlacementImageFilename(currentPlacement) && <Image src={apiPath(`images/${getPlacementImageFilename(currentPlacement)}`)} alt="Тапсырма суреті" width={1280} height={720} unoptimized className="mt-4 max-h-64 w-auto max-w-full rounded border border-slate-200" />}
           <div className={local.answerControls}><CurrentSlotControls currentPlacement={currentPlacement} previewAnswers={editor.previewAnswers} currentSlotIndex={currentSlotIndex} setPreviewAnswer={editor.setPreviewAnswer} /></div>
         </> : <div className={styles.empty}><h3>Бос ұяшық</h3><p>Банктен таңдаңыз немесе осы орынға жаңа тапсырма қосыңыз.</p><button type="button" className={`${styles.secondaryButton} mt-4`} onClick={() => editor.openInlineCreateForCurrentSlot()}>Жаңа тапсырма құру</button></div>}
