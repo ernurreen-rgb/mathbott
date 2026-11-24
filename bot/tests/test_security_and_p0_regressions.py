@@ -913,6 +913,50 @@ class Sprint3RegressionTests(unittest.TestCase):
                 {"filename": "title.jpg", "content_type": "image/jpeg", "size": len(jpeg_bytes)},
             )
 
+    def test_list_topics_without_limit_omits_sql_limit_clause(self):
+        from repositories.bank.crud import BankTaskCrudMixin
+
+        executed = []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchall(self):
+                return [("Алгебра",), ("ҰБТ есептері",)]
+
+        class _FakeDb:
+            def execute(self, sql, params):
+                executed.append((sql, list(params)))
+                return _FakeCursor()
+
+        class _FakeConnCtx:
+            async def __aenter__(self):
+                return _FakeDb()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeRepo(BankTaskCrudMixin):
+            def _connection(self):
+                return _FakeConnCtx()
+
+            def _normalize_topic(self, text: str) -> str:
+                return text.strip().lower()
+
+            def _contains_like_pattern(self, value: str) -> str:
+                return f"%{value}%"
+
+        repo = _FakeRepo()
+        items = asyncio.run(repo.list_topics(query=None, limit=None))
+        self.assertEqual(items, ["Алгебра", "ҰБТ есептері"])
+        self.assertEqual(len(executed), 1)
+        self.assertNotIn("LIMIT", executed[0][0].upper())
+        self.assertEqual(executed[0][1], [])
+
 
 if __name__ == "__main__":
     unittest.main()

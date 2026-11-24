@@ -159,6 +159,42 @@ describe("task text into slide paragraphs", () => {
     expect(mixed[0]).toMatchObject({ kind: "text" });
     expect(mixed.find((inline) => inline.kind === "math")).toMatchObject({ latex: expect.stringContaining("\\log_2") });
   });
+
+  it("keeps multi-line LaTeX environments and delimiter blocks together across newlines", () => {
+    const multilineCases = [
+      "Теңдеулер жүйесін шешіңіз:",
+      "",
+      String.raw`\begin{cases}`,
+      String.raw`x + y = 3 \\`,
+      "",
+      String.raw`x - y = 1`,
+      String.raw`\end{cases}`,
+    ].join("\n");
+    const paragraphs = contentInlines(multilineCases);
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[1]).toEqual([
+      { kind: "math", latex: expect.stringMatching(/^\\begin\{cases\}.*x \+ y = 3.*x - y = 1.*\\end\{cases\}$/) },
+    ]);
+
+    const { files, unsupported } = buildTaskDeckFiles({
+      title: "T",
+      author: "A",
+      language: "kk",
+      tasks: [
+        task(1, { text: multilineCases }),
+        task(2, { text: "Матрица:\n" + String.raw`\begin{pmatrix}` + "\n1 & 2 \\\\\n3 & 4\n" + String.raw`\end{pmatrix}` }),
+        task(3, { text: String.raw`\left(` + "\n" + String.raw`\frac{1}{2} + \frac{1}{3}` + "\n" + String.raw`\right)` }),
+      ],
+    });
+    expect(unsupported).toEqual([]);
+    const casesSlide = files.get("ppt/slides/slide2.xml") as string;
+    expectWellFormed(casesSlide);
+    expect(casesSlide).toContain("<m:eqArr>");
+    expect(casesSlide).not.toContain("<m:oMath></m:oMath>");
+    const matrixSlide = files.get("ppt/slides/slide3.xml") as string;
+    expectWellFormed(matrixSlide);
+    expect(matrixSlide).toContain("<m:m>");
+  });
 });
 
 const task = (id: number, changes: Partial<ConstructorTask> = {}): ConstructorTask => ({
@@ -282,5 +318,28 @@ describe("PPTX deck", () => {
     const short = files.get("ppt/slides/slide2.xml") as string;
     const crowded = files.get("ppt/slides/slide3.xml") as string;
     expect(size(crowded.slice(crowded.indexOf('name="Task 2"')))).toBeLessThan(size(short.slice(short.indexOf('name="Task 1"'))));
+  });
+
+  it("formats [[A]] / [[B]] comparison tasks and label-only MCQ choices cleanly", () => {
+    const comparisonTask = task(1, {
+      text: "Шамаларды салыстырыңыз:\n[[A]] \\frac{17}{19}\n[[B]] \\frac{19}{21}",
+      options: ["A", "B", "C", "D"].map((label) => ({ label, text: "" })),
+      answer: "B",
+    });
+    const { files, unsupported } = buildTaskDeckFiles({
+      title: "Салыстыру",
+      author: "A",
+      language: "kk",
+      tasks: [comparisonTask],
+    });
+    expect(unsupported).toEqual([]);
+    const slide = files.get("ppt/slides/slide2.xml") as string;
+    expectWellFormed(slide);
+    expect(slide).not.toContain("[[");
+    expect(slide).not.toContain("]]");
+    expect(slide).toContain("Шамаларды салыстырыңыз:");
+    expect(slide).toContain(">A:   </m:t>");
+    expect(slide).toContain(">B:   </m:t>");
+    expect(slide).toContain("□ A        □ B        □ C        □ D");
   });
 });

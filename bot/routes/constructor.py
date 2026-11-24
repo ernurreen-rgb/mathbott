@@ -190,7 +190,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None, max_length=80),
     ):
-        return {"items": await db.bank_tasks.list_topics(query=q, limit=300)}
+        return {"items": await db.bank_tasks.list_topics(query=q, limit=None)}
 
     @app.get("/api/constructor/collections")
     async def list_task_collections(

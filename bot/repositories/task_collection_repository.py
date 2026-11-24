@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import storage as db_driver
 
+from .bank.twins import NOT_TWIN_SQL
 from .base import BaseRepository
 
 MAX_COLLECTIONS_PER_USER = 50
@@ -50,9 +51,12 @@ class TaskCollectionRepository(BaseRepository):
                 (user_id,),
             ) as cursor:
                 rows = await cursor.fetchall()
-        items = [_serialize(row) for row in rows]
+            items = [_serialize(row) for row in rows]
+            all_ids = list(dict.fromkeys(tid for item in items for tid in item["task_ids"]))
+            active_ids = set(await self._existing_bank_task_ids(db, all_ids)) if all_ids else set()
         for item in items:
-            item["task_count"] = len(item.pop("task_ids"))
+            raw_ids = item.pop("task_ids")
+            item["task_count"] = sum(1 for tid in dict.fromkeys(raw_ids) if tid in active_ids)
         return items
 
     async def get(self, collection_id: int, user_id: int) -> Optional[Dict[str, Any]]:
@@ -149,9 +153,14 @@ class TaskCollectionRepository(BaseRepository):
         unique_ids = list(dict.fromkeys(task_ids))
         if not unique_ids:
             return []
-        placeholders = ",".join(["?"] * len(unique_ids))
-        async with db.execute(
-            f"SELECT id FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NULL", tuple(unique_ids)
-        ) as cursor:
-            existing = {int(row[0]) for row in await cursor.fetchall()}
+        existing: set[int] = set()
+        chunk_size = 500
+        for start in range(0, len(unique_ids), chunk_size):
+            chunk = unique_ids[start:start + chunk_size]
+            placeholders = ",".join(["?"] * len(chunk))
+            async with db.execute(
+                f"SELECT bt.id FROM bank_tasks bt WHERE bt.id IN ({placeholders}) AND bt.deleted_at IS NULL AND {NOT_TWIN_SQL}",
+                tuple(chunk),
+            ) as cursor:
+                existing.update(int(row[0]) for row in await cursor.fetchall())
         return [task_id for task_id in unique_ids if task_id in existing]

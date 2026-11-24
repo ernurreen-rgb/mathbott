@@ -190,13 +190,14 @@ class BankTaskCrudMixin:
                         }
             return result
 
-    async def get_active_tasks_by_ids(self, task_ids: List[int]) -> List[Dict[str, Any]]:
-        """Tasks that are not deleted, in the order of `task_ids` (the task constructor's export)."""
+    async def get_active_tasks_by_ids(self, task_ids: List[int], *, exclude_twins: bool = True) -> List[Dict[str, Any]]:
+        """Tasks that are not deleted (and not twins by default), in the order of `task_ids`."""
         ordered_ids = list(dict.fromkeys(
             int(tid) for tid in task_ids if isinstance(tid, int) and not isinstance(tid, bool) and tid > 0
         ))
         if not ordered_ids:
             return []
+        twin_clause = f" AND {NOT_TWIN_SQL}" if exclude_twins else ""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             rows_by_id: Dict[int, Any] = {}
@@ -205,7 +206,7 @@ class BankTaskCrudMixin:
                 chunk = ordered_ids[start:start + chunk_size]
                 placeholders = ",".join(["?"] * len(chunk))
                 async with db.execute(
-                    f"SELECT * FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NULL",
+                    f"SELECT bt.* FROM bank_tasks bt WHERE bt.id IN ({placeholders}) AND bt.deleted_at IS NULL{twin_clause}",
                     chunk,
                 ) as cursor:
                     for row in await cursor.fetchall():
@@ -849,27 +850,28 @@ class BankTaskCrudMixin:
 
         return deleted_count
 
-    async def list_topics(self, query: Optional[str] = None, limit: int = 20) -> List[str]:
+    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = 20) -> List[str]:
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
+            limit_clause = "\n                    LIMIT ?" if limit is not None else ""
             if normalized_query:
                 like_value = self._contains_like_pattern(normalized_query)
-                sql = """
+                sql = f"""
                     SELECT name
                     FROM bank_topics
                     WHERE name_norm LIKE ? ESCAPE '\\'
-                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC
-                    LIMIT ?
+                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC{limit_clause}
                 """
-                params: List[Any] = [like_value, limit]
+                params: List[Any] = [like_value]
             else:
-                sql = """
+                sql = f"""
                     SELECT name
                     FROM bank_topics
-                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC
-                    LIMIT ?
+                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC{limit_clause}
                 """
-                params = [limit]
+                params = []
+            if limit is not None:
+                params.append(limit)
             async with db.execute(sql, params) as cursor:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]

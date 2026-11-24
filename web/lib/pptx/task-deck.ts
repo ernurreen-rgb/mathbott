@@ -7,7 +7,9 @@
  * formula is written twice inside mc:AlternateContent: the equation version for PowerPoint and a
  * plain-text version for apps without equations, so nothing is ever lost.
  */
+import { hasEmptyMcqOptionTexts, parseComparisonTask } from "@/lib/comparison-task";
 import { splitMathRenderContent } from "@/lib/math-content";
+import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
 import { taskAnswerPieces, type AnswerPiece, type ConstructorLanguage } from "@/lib/constructor-answers";
 import type { ConstructorTask } from "@/types/constructor";
 import { DEFAULT_PPTX_FONT } from "./fonts";
@@ -90,11 +92,11 @@ interface Paragraph {
  * equation (m:oMathPara), as in the teacher's deck: fractions keep their full size there, while
  * PowerPoint shrinks them inside a line of text.
  */
-function displayFormula(paragraph: Paragraph): { label: string | null; latex: string } | null {
+function displayFormula(paragraph: Paragraph): { label: string | null; labelColor?: string; latex: string } | null {
   const inlines = paragraph.inlines.filter((inline) => !(inline.kind === "text" && !inline.text.trim() && !inline.bold));
   if (inlines.length === 1 && inlines[0].kind === "math") return { label: null, latex: inlines[0].latex };
   if (inlines.length === 2 && inlines[0].kind === "text" && inlines[0].bold && inlines[1].kind === "math") {
-    return { label: inlines[0].text, latex: inlines[1].latex };
+    return { label: inlines[0].text, labelColor: inlines[0].color, latex: inlines[1].latex };
   }
   return null;
 }
@@ -107,10 +109,129 @@ interface TextStyle {
   color: string;
 }
 
+function isStandaloneCommand(text: string, start: number, name: "left" | "right"): boolean {
+  if (!text.startsWith(`\\${name}`, start)) return false;
+  const next = text[start + name.length + 1];
+  return !next || !/[A-Za-z]/.test(next);
+}
+
+function skipDelimiterToken(text: string, start: number): number {
+  let cursor = start;
+  while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+  if (cursor >= text.length) return cursor;
+  if (text[cursor] === "\\") {
+    cursor += 1;
+    const cmd = text.slice(cursor).match(/^[A-Za-z]+/)?.[0];
+    return cmd ? cursor + cmd.length : Math.min(cursor + 1, text.length);
+  }
+  return cursor + 1;
+}
+
+function findBalancedEnvironmentEnd(text: string, start: number): number {
+  const firstClose = text.indexOf("}", start + "\\begin{".length);
+  if (firstClose === -1) return -1;
+  const rootEnv = text.slice(start + "\\begin{".length, firstClose);
+  if (!/^[A-Za-z*]+$/.test(rootEnv)) return -1;
+  const stack = [rootEnv];
+  let i = firstClose + 1;
+  while (i < text.length) {
+    if (text[i] === "\\" && (i === 0 || text[i - 1] !== "\\")) {
+      if (text.startsWith("\\begin{", i)) {
+        const close = text.indexOf("}", i + "\\begin{".length);
+        if (close !== -1) {
+          const name = text.slice(i + "\\begin{".length, close);
+          if (/^[A-Za-z*]+$/.test(name)) {
+            stack.push(name);
+            i = close + 1;
+            continue;
+          }
+        }
+      } else if (text.startsWith("\\end{", i)) {
+        const close = text.indexOf("}", i + "\\end{".length);
+        if (close !== -1) {
+          const name = text.slice(i + "\\end{".length, close);
+          const matchIdx = stack.lastIndexOf(name);
+          if (matchIdx !== -1) {
+            stack.length = matchIdx;
+            if (stack.length === 0) return close + 1;
+            i = close + 1;
+            continue;
+          }
+        }
+      }
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+function findBalancedLeftRightEnd(text: string, start: number): number {
+  let depth = 1;
+  let i = skipDelimiterToken(text, start + "\\left".length);
+  while (i < text.length) {
+    if (text[i] === "\\" && (i === 0 || text[i - 1] !== "\\")) {
+      if (isStandaloneCommand(text, i, "left")) {
+        depth += 1;
+        i = skipDelimiterToken(text, i + "\\left".length);
+        continue;
+      }
+      if (isStandaloneCommand(text, i, "right")) {
+        depth -= 1;
+        i = skipDelimiterToken(text, i + "\\right".length);
+        if (depth === 0) return i;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+function findBalancedBracesEnd(text: string, start: number): number {
+  let depth = 1;
+  for (let i = start + 1; i < text.length; i += 1) {
+    if (text[i - 1] === "\\") continue;
+    if (text[i] === "{") depth += 1;
+    else if (text[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/** Collapse newlines inside multi-line LaTeX environments, \left...\right blocks and {groups}. */
+function collapseMathNewlines(value: string): string {
+  const text = normalizeLatexForMathDisplay((value || "").replace(/\r\n?/g, "\n"));
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const prev = i > 0 ? text[i - 1] : "";
+    if (prev !== "\\") {
+      let spanEnd = -1;
+      if (text.startsWith("\\begin{", i)) {
+        spanEnd = findBalancedEnvironmentEnd(text, i);
+      } else if (isStandaloneCommand(text, i, "left")) {
+        spanEnd = findBalancedLeftRightEnd(text, i);
+      } else if (text[i] === "{") {
+        spanEnd = findBalancedBracesEnd(text, i);
+      }
+      if (spanEnd > i) {
+        out += text.slice(i, spanEnd).replace(/\n+/g, " ");
+        i = spanEnd;
+        continue;
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
 /** A task string → paragraphs of text and formulas, split exactly as the site shows it. */
 export function contentInlines(value: string): Inline[][] {
   const paragraphs: Inline[][] = [];
-  for (const block of (value || "").replace(/\r\n?/g, "\n").split(/\n\s*\n/)) {
+  for (const block of collapseMathNewlines(value).split(/\n\s*\n/)) {
     const inlines: Inline[] = [];
     block.split("\n").forEach((line, lineIndex) => {
       if (!line.trim()) return;
@@ -169,7 +290,7 @@ function paragraphXml(paragraph: Paragraph, style: TextStyle, equations: boolean
     // The label is a bold upright math run. As "normal text" (m:nor) PowerPoint draws a stray
     // dash beside the first label of a text box.
     const label = display.label
-      ? `<m:r><m:rPr><m:sty m:val="b"/></m:rPr>${textRunProperties(style, { bold: true, font: "Cambria Math" })}`
+      ? `<m:r><m:rPr><m:sty m:val="b"/></m:rPr>${textRunProperties(style, { bold: true, color: display.labelColor, font: "Cambria Math" })}`
         + `<m:t xml:space="preserve">${escapeXml(display.label)}</m:t></m:r>`
       : "";
     return `<a14:m><m:oMathPara xmlns:m="${NS.m}"><m:oMathParaPr><m:jc m:val="left"/></m:oMathParaPr>`
@@ -394,8 +515,15 @@ function optionInlines(text: string): Inline[] {
 }
 
 function optionParagraphs(task: ConstructorTask): Paragraph[] {
+  if (hasEmptyMcqOptionTexts(task.options)) {
+    return [{
+      inlines: [{ kind: "text", text: task.options.map((option) => `□ ${option.label}`).join("        "), bold: true }],
+      lineSpacing: 120000,
+      spaceAfter: 0,
+    }];
+  }
   return task.options
-    .filter((option) => option.text.trim() || task.options.every((item) => !item.text.trim()))
+    .filter((option) => option.text.trim())
     .map((option) => ({
       inlines: [
         { kind: "text" as const, text: `${option.label}) `, bold: true },
@@ -406,8 +534,31 @@ function optionParagraphs(task: ConstructorTask): Paragraph[] {
     }));
 }
 
-function taskParagraphs(task: ConstructorTask, language: ConstructorLanguage): Paragraph[] {
-  const statement = contentInlines(task.text).map((inlines) => ({ inlines, lineSpacing: 120000, spaceAfter: 900 }));
+function statementParagraphs(text: string, accent: string): Paragraph[] {
+  const comparison = parseComparisonTask(text);
+  if (!comparison) {
+    return contentInlines(text).map((inlines) => ({ inlines, lineSpacing: 120000, spaceAfter: 900 }));
+  }
+  const condition = comparison.condition
+    ? contentInlines(comparison.condition).map((inlines) => ({ inlines, lineSpacing: 120000, spaceAfter: 600 }))
+    : [];
+  return [
+    ...condition,
+    {
+      inlines: [{ kind: "text", text: "A:   ", bold: true, color: accent }, ...optionInlines(comparison.columnA)],
+      lineSpacing: 120000,
+      spaceAfter: 500,
+    },
+    {
+      inlines: [{ kind: "text", text: "B:   ", bold: true, color: accent }, ...optionInlines(comparison.columnB)],
+      lineSpacing: 120000,
+      spaceAfter: 900,
+    },
+  ];
+}
+
+function taskParagraphs(task: ConstructorTask, language: ConstructorLanguage, accent = DEFAULT_ACCENT): Paragraph[] {
+  const statement = statementParagraphs(task.text, accent);
   const choices = task.answer_mode !== "written" || task.question_type === "tf";
   if (task.question_type === "select") {
     const subquestions = task.subquestions.map((subquestion, index) => ({
@@ -419,11 +570,13 @@ function taskParagraphs(task: ConstructorTask, language: ConstructorLanguage): P
       spaceAfter: 400,
     }));
     if (!choices || !task.options.length) return [...statement, ...subquestions];
-    const options: Inline[] = task.options.flatMap((option, index) => [
-      ...(index ? [{ kind: "text" as const, text: "     " }] : []),
-      { kind: "text" as const, text: `${option.label}) `, bold: true },
-      ...contentInlines(option.text).flat(),
-    ]);
+    const options: Inline[] = hasEmptyMcqOptionTexts(task.options)
+      ? [{ kind: "text", text: task.options.map((option) => `□ ${option.label}`).join("     "), bold: true }]
+      : task.options.flatMap((option, index) => [
+          ...(index ? [{ kind: "text" as const, text: "     " }] : []),
+          { kind: "text" as const, text: `${option.label}) `, bold: true },
+          ...contentInlines(option.text).flat(),
+        ]);
     return [...statement, ...subquestions, { inlines: options, lineSpacing: 120000, spaceAfter: 0 }];
   }
   if (task.question_type === "tf") {
@@ -496,7 +649,7 @@ class DeckBuilder {
     this.header(slide, `${this.labels.task} №${number}:`);
     const image = this.input.taskImages?.get(task.id);
     const textBox: Box = image ? { ...BODY, w: Math.round(BODY.w * 0.58) } : BODY;
-    const paragraphs = taskParagraphs(task, this.input.language);
+    const paragraphs = taskParagraphs(task, this.input.language, this.accent);
     const size = fitSize(paragraphs, textBox);
     slide.textBox(`Task ${number}`, textBox, paragraphs, { size, language: this.language, color: TEXT_COLOR, font: this.font });
     if (image) {

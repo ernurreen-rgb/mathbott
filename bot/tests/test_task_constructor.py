@@ -91,10 +91,10 @@ class TaskConstructorTests(PostgresTestCase):
             self.assertEqual((created["title"], created["header_text"], created["tasks"]),
                              ("Логарифм қасиеттері", "", []))
             url = f"/api/constructor/collections/{created['id']}"
-            order = [self.ids[7], self.ids[0], self.ids[5], 999999, self.ids[2]]
+            order = [self.ids[7], self.ids[4], self.ids[0], self.ids[5], 999999, self.ids[2]]
             saved = (await client.put(url, params=teacher, json={
                 "task_ids": order, "header_text": " Ернұр  ағайдан ", "title": "Логарифм"})).json()
-            # The deleted task and the unknown id are left out; the rest keep the given order.
+            # Twin tasks, deleted tasks, and unknown ids are left out; the rest keep the given order.
             self.assertEqual([task["id"] for task in saved["tasks"]], [self.ids[7], self.ids[0], self.ids[2]])
             self.assertEqual((saved["title"], saved["header_text"]), ("Логарифм", "Ернұр ағайдан"))
             self.assertTrue(all("answer" not in task for task in saved["tasks"]))
@@ -117,6 +117,31 @@ class TaskConstructorTests(PostgresTestCase):
 
             self.assertEqual((await client.delete(url, params=teacher)).json(), {"deleted": True})
             self.assertEqual((await client.get(url, params=teacher)).status_code, 404)
+
+    async def test_twins_and_later_deleted_tasks_never_leak_or_inflate_counts(self):
+        student = {"email": "student@example.test"}
+        async with self.client() as client:
+            created = (await client.post("/api/constructor/collections", params=student,
+                                         json={"title": "Дайындық"})).json()
+            url = f"/api/constructor/collections/{created['id']}"
+            saved = (await client.put(url, params=student,
+                                      json={"task_ids": [self.ids[0], self.ids[1], self.ids[2]]})).json()
+            self.assertEqual([t["id"] for t in saved["tasks"]], [self.ids[0], self.ids[1], self.ids[2]])
+
+            # Later: one task is trashed and another becomes an unapproved AI twin draft.
+            await self.db.bank_tasks.soft_delete_task(self.ids[1], actor_user_id=self.owner["id"])
+            async with self.seed() as connection:
+                await connection.execute(
+                    "INSERT INTO bank_task_twins (source_bank_task_id, twin_bank_task_id, status, origin) VALUES (?, ?, 'draft', 'ai')",
+                    (self.ids[0], self.ids[2]),
+                )
+
+            listed = (await client.get("/api/constructor/collections", params=student)).json()
+            self.assertEqual([(item["id"], item["task_count"]) for item in listed["items"]], [(created["id"], 1)])
+            fetched = (await client.get(url, params=student)).json()
+            self.assertEqual([t["id"] for t in fetched["tasks"]], [self.ids[0]])
+            exported = (await client.get(f"{url}/export", params=student)).json()
+            self.assertEqual([t["id"] for t in exported["tasks"]], [self.ids[0]])
 
     async def test_the_deck_font_defaults_to_juz40_and_takes_only_offered_fonts(self):
         teacher = {"email": "teacher@example.test"}
