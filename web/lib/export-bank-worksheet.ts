@@ -190,8 +190,9 @@ export async function exportBankWorksheet(
     };
 
     const header = root.querySelector<HTMLElement>('[data-pdf-header]');
-    if (!header) throw new Error('PDF жинағы дайын емес. Қайта көріңіз.');
-    await place(await capture(header));
+    if (header) {
+      await place(await capture(header));
+    }
     const tasks = Array.from(root.querySelectorAll<HTMLElement>('[data-pdf-task]'));
     for (const [index, task] of tasks.entries()) {
       const height = task.getBoundingClientRect().height * WIDTH / 720;

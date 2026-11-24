@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import BankWorksheetDocument, { type WorksheetAnswer } from "@/components/admin/BankWorksheetDocument";
 import Icon from "@/components/ui/Icon";
 import { exportTaskCollection, getTaskCollection, updateTaskCollection } from "@/lib/api/constructor";
-import { answerKey, downloadCollectionPptx, worksheetTasks } from "@/lib/constructor-export";
+import { answerKey, customCollectionTitle, downloadCollectionPptx, worksheetTasks } from "@/lib/constructor-export";
 import type { WorksheetTask } from "@/lib/bank-worksheet";
 import { useI18n } from "@/lib/i18n/provider";
 import { DEFAULT_PPTX_FONT, isPptxFont, PPTX_FONTS, type PptxFont } from "@/lib/pptx/fonts";
@@ -62,14 +62,15 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
         return;
       }
       const loaded = result.data;
+      const initialTitle = customCollectionTitle(loaded.title);
       setCollection(loaded);
-      setTitle(loaded.title);
+      setTitle(initialTitle);
       const loadedFont = isPptxFont(loaded.pptx_font) ? loaded.pptx_font : DEFAULT_PPTX_FONT;
       setHeader(loaded.header_text);
       setFont(loadedFont);
       setTasks(loaded.tasks);
       saved.current = snapshot({
-        title: loaded.title, header: loaded.header_text, font: loadedFont, ids: loaded.tasks.map((task) => task.id),
+        title: initialTitle, header: loaded.header_text, font: loadedFont, ids: loaded.tasks.map((task) => task.id),
       });
     });
     return () => {
@@ -86,7 +87,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       if (key === saved.current) return true;
       setSaveState("saving");
       const result = await updateTaskCollection(collectionId, {
-        ...(current.title.trim() ? { title: current.title.trim() } : {}),
+        title: current.title.trim() || t("constructor.defaultTitle"),
         header_text: current.header.trim(),
         pptx_font: current.font,
         task_ids: current.ids,
@@ -100,7 +101,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       return true;
     });
     return saving.current;
-  }, [collectionId, email]);
+  }, [collectionId, email, t]);
 
   useEffect(() => {
     if (!collection) return;
@@ -164,8 +165,9 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       if (kind === "pptx") {
         await downloadCollectionPptx(full, { language: locale, author: header.trim() || author, signal: controller.signal, onProgress });
       } else {
+        const pdfTitle = customCollectionTitle(full.title);
         flushSync(() => setPdfDocument({
-          title: full.title,
+          title: pdfTitle,
           brand: full.header_text,
           tasks: worksheetTasks(full.tasks),
           answers: answerKey(full.tasks, locale),
@@ -173,7 +175,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
         const documentRoot = pdfRoot.current?.firstElementChild;
         if (!(documentRoot instanceof HTMLElement)) throw new Error("render");
         const { exportBankWorksheet } = await import("@/lib/export-bank-worksheet");
-        await exportBankWorksheet(documentRoot, full.title, onProgress, controller.signal, { author: full.header_text || author });
+        await exportBankWorksheet(documentRoot, pdfTitle, onProgress, controller.signal, { author: full.header_text || author });
       }
     } catch (problem) {
       if (!controller.signal.aborted) {
@@ -228,7 +230,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             maxLength={120}
             onChange={(event) => setTitle(event.target.value)}
             placeholder={t("constructor.collectionTitle")}
-            className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-2xl font-bold text-slate-900 hover:border-slate-200 focus:border-purple-400 focus:bg-white focus:outline-none sm:text-3xl"
+            className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-2xl font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 hover:border-slate-200 focus:border-purple-400 focus:bg-white focus:outline-none sm:text-3xl"
           />
         </label>
         <p role="status" className={`flex items-center gap-1.5 text-sm ${saveState === "error" ? "text-red-700" : "text-slate-500"}`}>
@@ -366,6 +368,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             brand={pdfDocument.brand}
             language={locale}
             answerKey={pdfDocument.answers}
+            allowEmptyHeader
           />
         )}
       </div>

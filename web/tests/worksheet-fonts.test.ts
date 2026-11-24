@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { customCollectionTitle } from "@/lib/constructor-export";
 import { validateWorksheetFontCSS } from "@/lib/worksheet-fonts";
 
 const EMBEDDED_KATEX =
@@ -34,5 +35,21 @@ describe("validateWorksheetFontCSS", () => {
 
   it("allows empty font CSS when no KaTeX fonts are used (plain text or empty math wrappers)", () => {
     expect(validateWorksheetFontCSS("", false)).toBe("");
+  });
+});
+
+describe("customCollectionTitle", () => {
+  it("treats auto-generated default titles and blanks as empty", () => {
+    expect(customCollectionTitle("")).toBe("");
+    expect(customCollectionTitle("   ")).toBe("");
+    expect(customCollectionTitle("Жаңа жинақ")).toBe("");
+    expect(customCollectionTitle("  жаңа жинақ  ")).toBe("");
+    expect(customCollectionTitle("Новый сборник")).toBe("");
+    expect(customCollectionTitle(null)).toBe("");
+  });
+
+  it("preserves teacher-provided titles", () => {
+    expect(customCollectionTitle("Туынды. 10-сынып")).toBe("Туынды. 10-сынып");
+    expect(customCollectionTitle("  Тригонометрия  ")).toBe("Тригонометрия");
   });
 });

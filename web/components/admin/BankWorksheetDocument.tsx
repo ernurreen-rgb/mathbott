@@ -21,15 +21,18 @@ const WORDS: Record<ConstructorLanguage, { true: string; false: string; answers:
  * The printable worksheet. `brand` is the line above the title and in the footer (the site's own
  * when omitted, none when empty); `answerKey` adds an answer page after the tasks.
  */
-export default function BankWorksheetDocument({ title, tasks, brand, language = 'kk', answerKey }: {
+export default function BankWorksheetDocument({ title, tasks, brand, language = 'kk', answerKey, allowEmptyHeader = false }: {
   title: string;
   tasks: WorksheetTask[];
   brand?: string;
   language?: ConstructorLanguage;
   answerKey?: WorksheetAnswer[];
+  allowEmptyHeader?: boolean;
 }) {
   const brandLine = brand === undefined ? WORKSHEET_BRAND : brand.trim();
   const words = WORDS[language];
+  const heading = allowEmptyHeader ? title.trim() : (title.trim() || words.untitled);
+  const showHeader = Boolean(brandLine || heading);
   const options = (task: WorksheetTask) => {
     const labelOnly = hasEmptyMcqOptionTexts(task.options);
     if (labelOnly) {
@@ -46,10 +49,12 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
     </div>;
   };
   return <div style={{ width: 720, background: '#fff', color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: 17, lineHeight: 1.55 }}>
-    <header data-pdf-header style={{ paddingBottom: 18, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
-      {brandLine && <div style={{ fontSize: 11, color: '#64748b' }}>{brandLine}</div>}
-      <h1 style={{ margin: '8px 0 16px', fontSize: 25, fontWeight: 700, overflowWrap: 'anywhere' }}>{title.trim() || words.untitled}</h1>
-    </header>
+    {showHeader && (
+      <header data-pdf-header style={{ paddingBottom: heading ? 18 : 10, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
+        {brandLine && <div style={{ fontSize: 11, color: '#64748b' }}>{brandLine}</div>}
+        {heading && <h1 style={{ margin: '8px 0 16px', fontSize: 25, fontWeight: 700, overflowWrap: 'anywhere' }}>{heading}</h1>}
+      </header>
+    )}
     {tasks.map((task, index) => {
       const comparison = parseComparisonTask(task.text);
       return <article key={task.id} data-pdf-task data-task-id={task.id} style={{ padding: '12px 0 18px' }}>

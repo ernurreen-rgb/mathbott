@@ -15,6 +15,13 @@ const BACKGROUND_WIDTH = 1920;
 const BACKGROUND_HEIGHT = 1080;
 /** Uploads above this are rejected before they reach the server (its own limit is 5 MB). */
 export const MAX_BACKGROUND_SOURCE_BYTES = 20 * 1024 * 1024;
+const DEFAULT_COLLECTION_TITLES = new Set(["жаңа жинақ", "новый сборник"]);
+
+/** Returns the teacher's custom title, or "" when the collection still has the auto-generated default title. */
+export function customCollectionTitle(title: string | null | undefined): string {
+  const trimmed = (title ?? "").trim();
+  return DEFAULT_COLLECTION_TITLES.has(trimmed.toLowerCase()) ? "" : trimmed;
+}
 
 export function constructorFilename(title: string, extension: "pdf" | "pptx"): string {
   const name = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").replace(/[. ]+$/g, "").slice(0, 100);
