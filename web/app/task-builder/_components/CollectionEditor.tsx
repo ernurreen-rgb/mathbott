@@ -265,7 +265,8 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             {tasks.length >= MAX_TASKS && <p className="mt-2 text-xs text-amber-700">{t("constructor.full", { max: MAX_TASKS })}</p>}
           </section>
 
-          <section aria-labelledby="files-heading" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          {/* The file settings appear once there is something to download. */}
+          {(tasks.length > 0 || busy !== null) && <section aria-labelledby="files-heading" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 id="files-heading" className="text-lg font-bold text-slate-900">{t("constructor.files")}</h2>
             <label className="mt-3 block">
               <span className="text-sm font-semibold text-slate-800">{t("constructor.pdfHeader")}</span>
@@ -307,7 +308,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             </div>
             <p role="status" className="mt-2 text-xs text-slate-500">{progress || t("constructor.downloadHint")}</p>
             {downloadError && <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">{downloadError}</p>}
-          </section>
+          </section>}
         </aside>
       </div>
 
