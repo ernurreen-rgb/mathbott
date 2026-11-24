@@ -261,6 +261,20 @@ describe("PPTX deck", () => {
     expect(choice).not.toContain("<m:nor/>");
   });
 
+  it("sets the text in JUZ40 FONTS unless another font is chosen; formulas stay Cambria Math", () => {
+    const build = (font?: string) => buildTaskDeckFiles({ title: "T", author: "A", language: "kk", tasks: [task(1)], font }).files;
+    const juz = build();
+    expect(juz.get("ppt/theme/theme1.xml")).toContain('<a:majorFont><a:latin typeface="JUZ40 FONTS"/>');
+    expect(juz.get("ppt/theme/theme1.xml")).toContain('<a:minorFont><a:latin typeface="JUZ40 FONTS"/>');
+    const slide = juz.get("ppt/slides/slide2.xml") as string;
+    expect(slide).toContain('<a:latin typeface="JUZ40 FONTS"/>');
+    expect(slide).not.toContain('typeface="Arial"');
+    expect(slide).toContain('<a:latin typeface="Cambria Math"');
+    const calibri = build("Calibri").get("ppt/slides/slide2.xml") as string;
+    expect(calibri).toContain('<a:latin typeface="Calibri"/>');
+    expect(calibri).not.toContain("JUZ40 FONTS");
+  });
+
   it("shrinks long tasks to fit their box", () => {
     const long = task(1, { text: "Өрнекті ықшамдаңыз: " + String.raw`\frac{k^2-25}{k+3}\cdot\frac{1}{k^2+5k}`.repeat(6) });
     const { files } = buildTaskDeckFiles({ title: "T", author: "A", language: "kk", tasks: [task(2), long] });

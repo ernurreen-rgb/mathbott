@@ -85,6 +85,7 @@ class TaskCollectionRepository(BaseRepository):
         title: Optional[str] = None,
         header_text: Optional[str] = None,
         task_ids: Optional[List[int]] = None,
+        pptx_font: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Change the given fields. task_ids keeps only bank tasks that exist and are not deleted."""
         assignments: List[str] = []
@@ -95,6 +96,9 @@ class TaskCollectionRepository(BaseRepository):
         if header_text is not None:
             assignments.append("header_text = ?")
             params.append(header_text)
+        if pptx_font is not None:
+            assignments.append("pptx_font = ?")
+            params.append(pptx_font)
         async with self._write_transaction(lock_key=_LOCK_KEY) as db:
             db.row_factory = db_driver.Row
             if task_ids is not None:

@@ -9,6 +9,7 @@ import { exportTaskCollection, getTaskCollection, updateTaskCollection } from "@
 import { answerKey, downloadCollectionPptx, worksheetTasks } from "@/lib/constructor-export";
 import type { WorksheetTask } from "@/lib/bank-worksheet";
 import { useI18n } from "@/lib/i18n/provider";
+import { DEFAULT_PPTX_FONT, isPptxFont, PPTX_FONTS, type PptxFont } from "@/lib/pptx/fonts";
 import type { ConstructorTask, TaskCollection, TaskCollectionSummary } from "@/types/constructor";
 import BackgroundPicker from "./BackgroundPicker";
 import TaskBrowser from "./TaskBrowser";
@@ -18,16 +19,17 @@ const MAX_TASKS = 100;
 const SAVE_DELAY_MS = 800;
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
-type Draft = { title: string; header: string; ids: number[] };
+type Draft = { title: string; header: string; font: PptxFont; ids: number[] };
 type PdfDocument = { title: string; brand: string; tasks: WorksheetTask[]; answers: WorksheetAnswer[] };
 
-const snapshot = (draft: Draft) => JSON.stringify([draft.title.trim(), draft.header.trim(), draft.ids]);
+const snapshot = (draft: Draft) => JSON.stringify([draft.title.trim(), draft.header.trim(), draft.font, draft.ids]);
 
 export default function CollectionEditor({ collectionId, email, author }: { collectionId: number; email: string; author: string }) {
   const { t, locale } = useI18n();
   const [collection, setCollection] = useState<TaskCollection | null>(null);
   const [loadError, setLoadError] = useState<"missing" | "failed" | null>(null);
   const [title, setTitle] = useState("");
+  const [font, setFont] = useState<PptxFont>(DEFAULT_PPTX_FONT);
   const [header, setHeader] = useState("");
   const [tasks, setTasks] = useState<ConstructorTask[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -36,7 +38,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
 
-  const draft = useRef<Draft>({ title: "", header: "", ids: [] });
+  const draft = useRef<Draft>({ title: "", header: "", font: DEFAULT_PPTX_FONT, ids: [] });
   const saved = useRef("");
   const saving = useRef<Promise<boolean>>(Promise.resolve(true));
   const pdfRoot = useRef<HTMLDivElement>(null);
@@ -44,7 +46,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
 
   const ids = useMemo(() => tasks.map((task) => task.id), [tasks]);
   const selectedIds = useMemo(() => new Set(ids), [ids]);
-  draft.current = { title, header, ids };
+  draft.current = { title, header, font, ids };
 
   useEffect(() => {
     let active = true;
@@ -57,9 +59,13 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       const loaded = result.data;
       setCollection(loaded);
       setTitle(loaded.title);
+      const loadedFont = isPptxFont(loaded.pptx_font) ? loaded.pptx_font : DEFAULT_PPTX_FONT;
       setHeader(loaded.header_text);
+      setFont(loadedFont);
       setTasks(loaded.tasks);
-      saved.current = snapshot({ title: loaded.title, header: loaded.header_text, ids: loaded.tasks.map((task) => task.id) });
+      saved.current = snapshot({
+        title: loaded.title, header: loaded.header_text, font: loadedFont, ids: loaded.tasks.map((task) => task.id),
+      });
     });
     return () => {
       active = false;
@@ -77,6 +83,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       const result = await updateTaskCollection(collectionId, {
         ...(current.title.trim() ? { title: current.title.trim() } : {}),
         header_text: current.header.trim(),
+        pptx_font: current.font,
         task_ids: current.ids,
       }, email);
       if (!result.data) {
@@ -92,11 +99,11 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
 
   useEffect(() => {
     if (!collection) return;
-    if (snapshot({ title, header, ids }) === saved.current) return;
+    if (snapshot({ title, header, font, ids }) === saved.current) return;
     setSaveState("dirty");
     const timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [collection, title, header, ids, flush]);
+  }, [collection, title, header, font, ids, flush]);
 
   useEffect(() => {
     if (saveState === "saved") return;
@@ -277,6 +284,21 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
               />
               <span className="mt-1 block text-xs text-slate-500">{t("constructor.pdfHeaderHint")}</span>
+            </label>
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-slate-800">{t("constructor.pptxFont")}</span>
+              <select
+                value={font}
+                onChange={(event) => setFont(isPptxFont(event.target.value) ? event.target.value : DEFAULT_PPTX_FONT)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
+              >
+                {PPTX_FONTS.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              {/* A sample in the chosen font, as the browser has it; the deck itself only names the font. */}
+              <span className="mt-1 block truncate text-base text-slate-800" style={{ fontFamily: `"${font}", Arial, sans-serif` }}>
+                Есеп №1: Аа Әә Ғғ Ұұ 123
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">{t("constructor.pptxFontHint")}</span>
             </label>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <BackgroundPicker collectionId={collectionId} email={email} kind="title" filename={collection.title_image}

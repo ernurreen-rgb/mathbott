@@ -194,6 +194,7 @@ export async function downloadCollectionPptx(
     titleImage,
     background,
     taskImages,
+    font: collection.pptx_font,
   });
   options.signal?.throwIfAborted();
   saveFile(bytes, constructorFilename(collection.title, "pptx"), PPTX_MIME);

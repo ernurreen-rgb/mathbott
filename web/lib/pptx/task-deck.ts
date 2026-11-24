@@ -10,6 +10,7 @@
 import { splitMathRenderContent } from "@/lib/math-content";
 import { taskAnswerPieces, type AnswerPiece, type ConstructorLanguage } from "@/lib/constructor-answers";
 import type { ConstructorTask } from "@/types/constructor";
+import { DEFAULT_PPTX_FONT } from "./fonts";
 import { escapeXml, latexToOmml, parseLatex, type MathNode } from "./latex-omml";
 import {
   buildPackageFiles,
@@ -39,6 +40,8 @@ export interface DeckInput {
   /** Task id → its picture. */
   taskImages?: Map<number, DeckImage>;
   accent?: string;
+  /** The text font (see lib/pptx/fonts.ts); JUZ40 FONTS when not given. */
+  font?: string;
 }
 
 const LABELS: Record<ConstructorLanguage, { task: string; answers: string; count: (n: number) => string; true: string; false: string }> = {
@@ -98,6 +101,8 @@ function displayFormula(paragraph: Paragraph): { label: string | null; latex: st
 
 interface TextStyle {
   size: number;
+  /** The text font; formulas are Cambria Math whatever it is. */
+  font: string;
   language: string;
   color: string;
 }
@@ -143,7 +148,7 @@ function answerInlines(pieces: AnswerPiece[]): Inline[] {
 // XML pieces
 
 function textRunProperties(style: TextStyle, options: { bold?: boolean; color?: string; font?: string } = {}) {
-  const font = options.font ?? "Arial";
+  const font = escapeXml(options.font ?? style.font);
   return `<a:rPr lang="${style.language}" sz="${style.size}"${options.bold ? ' b="1"' : ""} dirty="0">`
     + `<a:solidFill><a:srgbClr val="${options.color ?? style.color}"/></a:solidFill>`
     + `<a:latin typeface="${font}"/><a:cs typeface="${font}"/></a:rPr>`;
@@ -438,6 +443,7 @@ class DeckBuilder {
   private readonly accent: string;
   private readonly labels: (typeof LABELS)[ConstructorLanguage];
   private readonly language: string;
+  private readonly font: string;
   private backgroundName: string | null = null;
   private mediaCount = 0;
 
@@ -445,6 +451,7 @@ class DeckBuilder {
     this.accent = (input.accent ?? DEFAULT_ACCENT).replace(/^#/, "").toUpperCase();
     this.labels = LABELS[input.language];
     this.language = LANG_TAG[input.language];
+    this.font = input.font?.trim() || DEFAULT_PPTX_FONT;
   }
 
   private addMedia(image: DeckImage): string {
@@ -465,7 +472,7 @@ class DeckBuilder {
 
   private header(slide: SlideWriter, text: string) {
     slide.textBox("Header", HEADER, [{ inlines: [{ kind: "text", text, bold: true, color: this.accent }], lineSpacing: 120000, spaceAfter: 0 }],
-      { size: 2000, language: this.language, color: this.accent });
+      { size: 2000, language: this.language, color: this.accent, font: this.font });
   }
 
   titleSlide() {
@@ -473,13 +480,13 @@ class DeckBuilder {
     if (this.input.titleImage) {
       slide.setBackground(this.input.titleImage, this.addMedia(this.input.titleImage));
     } else {
-      const style = { size: 4000, language: this.language, color: this.accent };
+      const style = { size: 4000, language: this.language, color: this.accent, font: this.font };
       slide.textBox("Title", { x: inch(1), y: inch(2.4), w: SLIDE_WIDTH - inch(2), h: inch(1.6) },
         [{ inlines: [{ kind: "text", text: this.input.title, bold: true }], lineSpacing: 100000, spaceAfter: 0 }],
         style, { anchor: "ctr", align: "ctr" });
       slide.textBox("Task count", { x: inch(1), y: inch(4.1), w: SLIDE_WIDTH - inch(2), h: inch(0.6) },
         [{ inlines: [{ kind: "text", text: this.labels.count(this.input.tasks.length) }], lineSpacing: 100000, spaceAfter: 0 }],
-        { size: 2000, language: this.language, color: MUTED_COLOR }, { align: "ctr" });
+        { size: 2000, language: this.language, color: MUTED_COLOR, font: this.font }, { align: "ctr" });
     }
     this.slides.push(slide.toSlide());
   }
@@ -491,7 +498,7 @@ class DeckBuilder {
     const textBox: Box = image ? { ...BODY, w: Math.round(BODY.w * 0.58) } : BODY;
     const paragraphs = taskParagraphs(task, this.input.language);
     const size = fitSize(paragraphs, textBox);
-    slide.textBox(`Task ${number}`, textBox, paragraphs, { size, language: this.language, color: TEXT_COLOR });
+    slide.textBox(`Task ${number}`, textBox, paragraphs, { size, language: this.language, color: TEXT_COLOR, font: this.font });
     if (image) {
       const area: Box = { x: BODY.x + Math.round(BODY.w * 0.62), y: BODY.y, w: Math.round(BODY.w * 0.38), h: BODY.h };
       const scale = Math.min(area.w / image.width, area.h / image.height);
@@ -520,7 +527,7 @@ class DeckBuilder {
         if (!chunk.length) break;
         const box = { x: BODY.x + column * (columnWidth + gap), y: BODY.y, w: columnWidth, h: BODY.h };
         const size = Math.min(1800, fitSize(chunk, box));
-        slide.textBox(`Answers ${column + 1}`, box, chunk, { size, language: this.language, color: TEXT_COLOR });
+        slide.textBox(`Answers ${column + 1}`, box, chunk, { size, language: this.language, color: TEXT_COLOR, font: this.font });
       }
       this.slides.push(slide.toSlide());
     }
@@ -530,7 +537,9 @@ class DeckBuilder {
     this.titleSlide();
     this.input.tasks.forEach((task, index) => this.taskSlide(task, index + 1));
     this.answerSlides();
-    return buildPackageFiles({ title: this.input.title, author: this.input.author, slides: this.slides, media: this.media });
+    return buildPackageFiles({
+      title: this.input.title, author: this.input.author, font: this.font, slides: this.slides, media: this.media,
+    });
   }
 }
 

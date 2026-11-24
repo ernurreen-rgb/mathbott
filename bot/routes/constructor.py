@@ -28,6 +28,12 @@ QUESTION_TYPES = Literal["input", "tf", "mcq", "mcq6", "select"]
 IMAGE_KINDS = Literal["title", "background"]
 _BACKGROUND_TYPES = {"image/jpeg", "image/png"}
 _TITLE_MAX = 120
+# The fonts the deck can be set in (web/lib/pptx/fonts.ts offers the same list). The deck names
+# the font and does not embed it, so PowerPoint uses it where it is installed. The first one is
+# the default: the font of the Juz40 live-lesson decks, which most teachers using this have.
+PPTX_FONTS = ("JUZ40 FONTS", "Arial", "Calibri", "Times New Roman", "Verdana")
+DEFAULT_PPTX_FONT = PPTX_FONTS[0]
+PptxFont = Literal["JUZ40 FONTS", "Arial", "Calibri", "Times New Roman", "Verdana"]
 
 
 def _clean_text(value: Optional[str]) -> Optional[str]:
@@ -52,6 +58,7 @@ class UpdateCollectionRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=_TITLE_MAX)
     header_text: Optional[str] = Field(default=None, max_length=_TITLE_MAX)
     task_ids: Optional[List[int]] = Field(default=None, max_length=MAX_COLLECTION_TASKS)
+    pptx_font: Optional[PptxFont] = None
 
     @field_validator("title")
     @classmethod
@@ -116,6 +123,7 @@ def _collection_summary(collection: Dict[str, Any]) -> Dict[str, Any]:
         "id": int(collection["id"]),
         "title": collection["title"],
         "header_text": collection.get("header_text") or "",
+        "pptx_font": collection.get("pptx_font") or DEFAULT_PPTX_FONT,
         "title_image": collection.get("title_image"),
         "background_image": collection.get("background_image"),
         "created_at": collection.get("created_at"),
@@ -236,6 +244,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
             title=payload.title,
             header_text=payload.header_text,
             task_ids=payload.task_ids,
+            pptx_font=payload.pptx_font,
         )
         if not updated:
             raise HTTPException(status_code=404, detail="Collection not found")

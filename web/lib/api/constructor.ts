@@ -61,7 +61,7 @@ export function getTaskCollection(id: number, email: string): Promise<FetchResul
 
 export function updateTaskCollection(
   id: number,
-  change: { title?: string; header_text?: string; task_ids?: number[] },
+  change: { title?: string; header_text?: string; task_ids?: number[]; pptx_font?: string },
   email: string,
 ): Promise<FetchResult<TaskCollection>> {
   return request<TaskCollection>(withEmail(`constructor/collections/${id}`, email), json("PUT", change));

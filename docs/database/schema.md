@@ -121,7 +121,7 @@ erDiagram
 
 | Table | Primary Key | Key Columns & Constraints | Description |
 |---|---|---|---|
-| `task_collections` | `id` (Identity) | `user_id FK -> users.id ON DELETE CASCADE`, `title TEXT NOT NULL` (1–120 chars), `header_text TEXT DEFAULT ''` (≤ 120), `task_ids JSONB DEFAULT '[]'` (array, ≤ 100), `title_image TEXT`, `background_image TEXT`, `created_at TEXT`, `updated_at TEXT`; index `(user_id, updated_at DESC, id DESC)` | Added in PG `0020`. A user's ordered selection of `bank_tasks` ids for the PDF/PPTX downloads, the PDF's top line and the two PPTX backgrounds (stored like task images). Deleted bank tasks are left out on read and dropped on the next save. |
+| `task_collections` | `id` (Identity) | `user_id FK -> users.id ON DELETE CASCADE`, `title TEXT NOT NULL` (1–120 chars), `header_text TEXT DEFAULT ''` (≤ 120), `pptx_font TEXT DEFAULT 'JUZ40 FONTS'` (PG `0021`), `task_ids JSONB DEFAULT '[]'` (array, ≤ 100), `title_image TEXT`, `background_image TEXT`, `created_at TEXT`, `updated_at TEXT`; index `(user_id, updated_at DESC, id DESC)` | Added in PG `0020`. A user's ordered selection of `bank_tasks` ids for the PDF/PPTX downloads, the PDF's top line and the two PPTX backgrounds (stored like task images). Deleted bank tasks are left out on read and dropped on the next save. |
 
 ### 3.6 Reports, Admin Audit & Operational Monitoring
 
@@ -157,3 +157,4 @@ erDiagram
 | `0014` | [`0014_reminder_prompt_events.sql`](../../bot/migrations/postgres/0014_reminder_prompt_events.sql) | Creates `reminder_prompt_events` to track streak-reminder prompt impressions and user actions. |
 | `0015` | [`0015_performance_and_integrity.sql`](../../bot/migrations/postgres/0015_performance_and_integrity.sql) | Adds 11 performance indexes on hot analytics/quiz/trial-test tables and replaces `ops_incidents_fingerprint_status_key` with partial unique index `uq_ops_incidents_open_fingerprint` (`WHERE status = 'open'`). |
 | `0020` | [`0020_task_collections.sql`](../../bot/migrations/postgres/0020_task_collections.sql) | Creates `task_collections` for the task constructor. |
+| `0021` | [`0021_task_collection_font.sql`](../../bot/migrations/postgres/0021_task_collection_font.sql) | Adds `task_collections.pptx_font` (default `JUZ40 FONTS`), the font of the collection's PowerPoint deck. |

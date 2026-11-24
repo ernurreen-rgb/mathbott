@@ -34,6 +34,8 @@ export interface PackageSlide {
 export interface PackageInput {
   title: string;
   author: string;
+  /** The theme's heading and body font. */
+  font?: string;
   slides: PackageSlide[];
   /** File name in ppt/media → bytes. */
   media: Map<string, Uint8Array>;
@@ -134,13 +136,13 @@ const SCHEME_COLORS = [
   ["folHlink", '<a:srgbClr val="7C3AED"/>'],
 ];
 
-const theme = XML_HEAD
+const theme = (font: string) => XML_HEAD
   + `<a:theme xmlns:a="${NS.a}" name="QazMath">`
   + '<a:themeElements>'
   + `<a:clrScheme name="QazMath">${SCHEME_COLORS.map(([name, value]) => `<a:${name}>${value}</a:${name}>`).join("")}</a:clrScheme>`
   + '<a:fontScheme name="QazMath">'
-  + '<a:majorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface="Arial"/></a:majorFont>'
-  + '<a:minorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface="Arial"/></a:minorFont>'
+  + `<a:majorFont><a:latin typeface="${escapeXml(font)}"/><a:ea typeface=""/><a:cs typeface="${escapeXml(font)}"/></a:majorFont>`
+  + `<a:minorFont><a:latin typeface="${escapeXml(font)}"/><a:ea typeface=""/><a:cs typeface="${escapeXml(font)}"/></a:minorFont>`
   + '</a:fontScheme>'
   + '<a:fmtScheme name="QazMath">'
   + '<a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
@@ -213,7 +215,7 @@ export function buildPackageFiles(input: PackageInput): Map<string, string | Uin
     ["ppt/presProps.xml", presProps],
     ["ppt/viewProps.xml", viewProps],
     ["ppt/tableStyles.xml", tableStyles],
-    ["ppt/theme/theme1.xml", theme],
+    ["ppt/theme/theme1.xml", theme(input.font || "Arial")],
     ["ppt/slideMasters/slideMaster1.xml", slideMaster],
     ["ppt/slideMasters/_rels/slideMaster1.xml.rels", slideMasterRels],
     ["ppt/slideLayouts/slideLayout1.xml", slideLayout],

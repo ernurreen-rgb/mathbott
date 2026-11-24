@@ -118,6 +118,22 @@ class TaskConstructorTests(PostgresTestCase):
             self.assertEqual((await client.delete(url, params=teacher)).json(), {"deleted": True})
             self.assertEqual((await client.get(url, params=teacher)).status_code, 404)
 
+    async def test_the_deck_font_defaults_to_juz40_and_takes_only_offered_fonts(self):
+        teacher = {"email": "teacher@example.test"}
+        async with self.client() as client:
+            created = (await client.post("/api/constructor/collections", params=teacher, json={"title": "Шрифт"})).json()
+            self.assertEqual(created["pptx_font"], "JUZ40 FONTS")
+            url = f"/api/constructor/collections/{created['id']}"
+            changed = (await client.put(url, params=teacher, json={"pptx_font": "Calibri"})).json()
+            self.assertEqual((changed["pptx_font"], changed["title"]), ("Calibri", "Шрифт"))
+            self.assertEqual((await client.get(f"{url}/export", params=teacher)).json()["pptx_font"], "Calibri")
+            for invalid in ("Comic Sans MS", "", "JUZ40 FONTS; DROP TABLE"):
+                response = await client.put(url, params=teacher, json={"pptx_font": invalid})
+                self.assertEqual(response.status_code, 422, invalid)
+            # Other changes leave the font alone.
+            kept = (await client.put(url, params=teacher, json={"header_text": "Мектеп"})).json()
+            self.assertEqual(kept["pptx_font"], "Calibri")
+
     async def test_a_user_can_keep_a_limited_number_of_collections(self):
         for index in range(MAX_COLLECTIONS_PER_USER):
             await self.db.task_collections.create(self.owner["id"], f"Жинақ {index}")

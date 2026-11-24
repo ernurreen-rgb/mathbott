@@ -183,7 +183,7 @@ Any signed-in user, students included, browses the whole bank (twins excepted) a
 | `GET` | `/api/constructor/collections` | Authenticated | The caller's collections with task counts, newest change first, and the limits (50 collections, 100 tasks each). |
 | `POST` | `/api/constructor/collections` | Authenticated | Creates a collection from `{title}`; `409` once the caller has 50. 20/minute. |
 | `GET` | `/api/constructor/collections/{id}` | Owner | The collection with its tasks in order, without answers. Deleted bank tasks are left out. |
-| `PUT` | `/api/constructor/collections/{id}` | Owner | Changes `title`, `header_text` (the PDF's top line) and/or the ordered `task_ids` (≤ 100, no repeats; unknown or deleted ids are dropped). 60/minute. |
+| `PUT` | `/api/constructor/collections/{id}` | Owner | Changes `title`, `header_text` (the PDF's top line), `pptx_font` (`JUZ40 FONTS` by default, or `Arial`, `Calibri`, `Times New Roman`, `Verdana`) and/or the ordered `task_ids` (≤ 100, no repeats; unknown or deleted ids are dropped). 60/minute. |
 | `DELETE` | `/api/constructor/collections/{id}` | Owner | Deletes the collection and its two images. |
 | `GET` | `/api/constructor/collections/{id}/export` | Owner | The collection with answers (`answer`, `accepted_answers`, each sub-question's `correct`) for the answer key of a download. 30/minute. |
 | `POST` | `/api/constructor/collections/{id}/images/{kind}` | Owner | Multipart `image` (JPG or PNG, image upload limit) as the PPTX `title` slide or task-slide `background`; the replaced file is deleted. 20/minute. |

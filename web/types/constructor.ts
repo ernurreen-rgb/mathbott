@@ -30,6 +30,8 @@ export interface TaskCollectionSummary {
   id: number;
   title: string;
   header_text: string;
+  /** The PowerPoint font, one of lib/pptx/fonts.ts PPTX_FONTS. */
+  pptx_font: string;
   title_image: string | null;
   background_image: string | null;
   created_at: string | null;

@@ -69,7 +69,9 @@ export default function BackgroundPicker({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={apiPath(`images/${filename}`)} alt={label} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-slate-400">{t("constructor.noImage")}</div>
+          <div className={`flex h-full justify-center text-xs text-slate-400 ${kind === "background" ? "items-end pb-2" : "items-center"}`}>
+            {t("constructor.noImage")}
+          </div>
         )}
         {kind === "background" && (
           // Where a slide puts "Есеп №N:" and the task text, on the background itself.
