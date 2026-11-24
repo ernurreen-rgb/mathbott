@@ -24,6 +24,11 @@ type PdfDocument = { title: string; brand: string; tasks: WorksheetTask[]; answe
 
 const snapshot = (draft: Draft) => JSON.stringify([draft.title.trim(), draft.header.trim(), draft.font, draft.ids]);
 
+const isChunkLoadError = (problem: unknown): boolean =>
+  problem instanceof Error &&
+  (problem.name === "ChunkLoadError" ||
+    /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(problem.message));
+
 export default function CollectionEditor({ collectionId, email, author }: { collectionId: number; email: string; author: string }) {
   const { t, locale } = useI18n();
   const [collection, setCollection] = useState<TaskCollection | null>(null);
@@ -35,7 +40,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [busy, setBusy] = useState<"pdf" | "pptx" | null>(null);
   const [progress, setProgress] = useState("");
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<{ message: string; reload?: boolean } | null>(null);
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
 
   const draft = useRef<Draft>({ title: "", header: "", font: DEFAULT_PPTX_FONT, ids: [] });
@@ -173,7 +178,13 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
     } catch (problem) {
       if (!controller.signal.aborted) {
         console.error("Constructor download failed", problem);
-        setDownloadError(t("constructor.downloadFailed"));
+        if (isChunkLoadError(problem)) {
+          setDownloadError({ message: t("constructor.refreshToDownload"), reload: true });
+        } else if (locale === "kk" && problem instanceof Error && /^[А-ЯЁӘҒҚҢӨҰҮҺІ]/.test(problem.message)) {
+          setDownloadError({ message: problem.message });
+        } else {
+          setDownloadError({ message: t("constructor.downloadFailed") });
+        }
       }
     } finally {
       if (!controller.signal.aborted) {
@@ -329,7 +340,19 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
               </button>
             </div>
             <p role="status" className="mt-2 text-xs text-slate-500">{progress || t("constructor.downloadHint")}</p>
-            {downloadError && <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">{downloadError}</p>}
+            {downloadError && (
+              <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">
+                {downloadError.message}
+                {downloadError.reload && (
+                  <>
+                    {" "}
+                    <button type="button" onClick={() => window.location.reload()} className="font-semibold underline">
+                      {t("constructor.reloadPage")}
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
           </section>}
         </aside>
       </div>

@@ -30,13 +30,23 @@ async function worksheetSnapshot(source: HTMLElement, signal: AbortSignal) {
   const clonedMath = Array.from(copy.querySelectorAll('math-span, math-div'));
   for (const [index, cloned] of clonedMath.entries()) {
     const original = math[index];
-    const rendered = original.shadowRoot?.querySelector<HTMLElement>('[part="render"]');
-    if (!rendered?.innerHTML || rendered.style.display === 'none') throw new Error('Формуланы PDF-ке дайындау мүмкін болмады.');
-    // Flatten shadow content into ordinary static markup. The app already loads
-    // MathLive's global static CSS/fonts. No user HTML is interpreted here.
+    const rawText = (original.textContent || '').trim();
     const staticMath = document.createElement(original.tagName === 'MATH-DIV' ? 'div' : 'span');
     staticMath.style.cssText = original.style.cssText;
     staticMath.style.display = original.tagName === 'MATH-DIV' ? 'block' : 'inline-block';
+    if (!rawText) {
+      cloned.replaceWith(staticMath);
+      continue;
+    }
+    const rendered = original.shadowRoot?.querySelector<HTMLElement>('[part="render"]');
+    if (!rendered?.innerHTML || rendered.style.display === 'none') {
+      // Fall back to the plain source text rather than aborting the entire PDF on one malformed formula.
+      staticMath.textContent = rawText;
+      cloned.replaceWith(staticMath);
+      continue;
+    }
+    // Flatten shadow content into ordinary static markup. The app already loads
+    // MathLive's global static CSS/fonts. No user HTML is interpreted here.
     staticMath.innerHTML = rendered.innerHTML;
     cloned.replaceWith(staticMath);
   }
@@ -89,6 +99,18 @@ function whiteRowCut(canvas: HTMLCanvasElement, start: number, maximum: number) 
   throw new Error('Бір есеп бетке сыймайды. Оны жинақтан алып тастаңыз немесе мәтінін қысқартыңыз.');
 }
 
+function usesKaTeXFonts(root: HTMLElement): boolean {
+  const mathRoots = root.querySelectorAll<HTMLElement>('.ML__latex');
+  for (const mathRoot of mathRoots) {
+    const elements = [mathRoot, ...Array.from(mathRoot.querySelectorAll<HTMLElement>('*'))];
+    for (const element of elements) {
+      const family = element.style.fontFamily || getComputedStyle(element).fontFamily;
+      if (/KaTeX_/i.test(family)) return true;
+    }
+  }
+  return false;
+}
+
 export async function exportBankWorksheet(
   root: HTMLElement,
   title: string,
@@ -113,7 +135,7 @@ export async function exportBankWorksheet(
     // html-to-image 1.11.13's preferredFontFormat filter retains a global regex
     // cursor and drops src from alternating font-face rules/calls. MathLive's
     // stylesheet already uses WOFF2: preserve every regular/bold/italic source.
-    const fontEmbedCSS = validateWorksheetFontCSS(await getFontEmbedCSS(root), !!root.querySelector('.ML__latex'));
+    const fontEmbedCSS = validateWorksheetFontCSS(await getFontEmbedCSS(root), usesKaTeXFonts(root));
     const pdf = await PDFDocument.create();
     pdf.setTitle(title.trim() || 'Есептер жинағы');
     pdf.setAuthor(options.author?.trim() || WORKSHEET_BRAND);
