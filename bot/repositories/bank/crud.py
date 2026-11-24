@@ -190,6 +190,30 @@ class BankTaskCrudMixin:
                         }
             return result
 
+    async def get_active_tasks_by_ids(self, task_ids: List[int]) -> List[Dict[str, Any]]:
+        """Tasks that are not deleted, in the order of `task_ids` (the task constructor's export)."""
+        ordered_ids = list(dict.fromkeys(
+            int(tid) for tid in task_ids if isinstance(tid, int) and not isinstance(tid, bool) and tid > 0
+        ))
+        if not ordered_ids:
+            return []
+        async with self._connection() as db:
+            db.row_factory = db_driver.Row
+            rows_by_id: Dict[int, Any] = {}
+            chunk_size = 500
+            for start in range(0, len(ordered_ids), chunk_size):
+                chunk = ordered_ids[start:start + chunk_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                async with db.execute(
+                    f"SELECT * FROM bank_tasks WHERE id IN ({placeholders}) AND deleted_at IS NULL",
+                    chunk,
+                ) as cursor:
+                    for row in await cursor.fetchall():
+                        rows_by_id[int(row["id"])] = row
+            present_ids = [tid for tid in ordered_ids if tid in rows_by_id]
+            topics_map = await self._fetch_topics_map(db, present_ids)
+            return [self._serialize_task_row(rows_by_id[tid], topics_map.get(tid, [])) for tid in present_ids]
+
     async def get_task_by_id(self, task_id: int, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row

@@ -9,7 +9,7 @@ import { useIsAdmin } from "@/lib/use-is-admin";
 import { useI18n } from "@/lib/i18n/provider";
 
 interface MobileNavProps {
-  currentPage?: "modules" | "profile" | "admin" | "trial-test" | "achievements" | "quizzes";
+  currentPage?: "modules" | "profile" | "admin" | "trial-test" | "achievements" | "quizzes" | "constructor";
 }
 
 export default function MobileNav({ currentPage }: MobileNavProps) {
@@ -44,6 +44,14 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
       ),
     },
     {
+      id: "constructor",
+      label: t("nav.constructor"),
+      href: "/task-builder",
+      icon: (
+        <Icon name="layers" className="w-6 h-6" />
+      ),
+    },
+    {
       id: "profile",
       label: t("nav.profile"),
       href: "/profile",
@@ -65,7 +73,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
     });
   }
 
-  const gridCols = navItems.length >= 5 ? "grid-cols-5" : navItems.length === 4 ? "grid-cols-4" : "grid-cols-3";
+  const gridCols = navItems.length >= 6 ? "grid-cols-6" : navItems.length === 5 ? "grid-cols-5" : navItems.length === 4 ? "grid-cols-4" : "grid-cols-3";
 
   return (
     <nav 
@@ -78,7 +86,8 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
           const isActive = currentPage === item.id || 
             pathname === item.href ||
             (item.id === "admin" && pathname?.startsWith("/admin")) ||
-            (item.href === "/trial-test" && pathname?.startsWith("/trial-test"));
+            (item.href === "/trial-test" && pathname?.startsWith("/trial-test")) ||
+            (item.id === "constructor" && pathname?.startsWith("/task-builder"));
           return (
             <Link
               key={item.id}
@@ -92,7 +101,7 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
               }`}
             >
               <span aria-hidden="true">{item.icon}</span>
-              <span className="w-full text-center text-xs font-medium leading-tight">{item.label}</span>
+              <span className={`w-full truncate px-0.5 text-center font-medium leading-tight ${navItems.length >= 6 ? "text-[10px]" : "text-xs"}`}>{item.label}</span>
             </Link>
           );
         })}

@@ -93,6 +93,7 @@ def _is_sensitive_identity_path(path: str, method: str = "GET") -> bool:
         return False
     sensitive_prefixes = (
         "/api/admin/",
+        "/api/constructor/",
         "/api/export/admin/",
         "/api/export/user/",
         "/api/mini-lessons",

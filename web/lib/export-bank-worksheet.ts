@@ -94,6 +94,7 @@ export async function exportBankWorksheet(
   title: string,
   onProgress: (done: number, total: number) => void,
   signal: AbortSignal,
+  options: { author?: string } = {},
 ) {
   const [{ PDFDocument, StandardFonts, rgb }, { toCanvas, getFontEmbedCSS }] = await Promise.all([
     import('pdf-lib'), import('html-to-image'), import('mathlive'),
@@ -115,7 +116,7 @@ export async function exportBankWorksheet(
     const fontEmbedCSS = validateWorksheetFontCSS(await getFontEmbedCSS(root), !!root.querySelector('.ML__latex'));
     const pdf = await PDFDocument.create();
     pdf.setTitle(title.trim() || 'Есептер жинағы');
-    pdf.setAuthor(WORKSHEET_BRAND);
+    pdf.setAuthor(options.author?.trim() || WORKSHEET_BRAND);
     pdf.setCreator('QazMath');
     let page: PDFPage = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     let y = PAGE_HEIGHT - MARGIN;
@@ -181,6 +182,12 @@ export async function exportBankWorksheet(
       }
       onProgress(index + 1, tasks.length);
       await frame();
+    }
+    // The answer key starts on a page of its own, so the worksheet can be handed out without it.
+    const answers = root.querySelector<HTMLElement>('[data-pdf-answers]');
+    if (answers) {
+      newPage();
+      await place(await capture(answers), true);
     }
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const footer = root.querySelector<HTMLElement>('[data-pdf-footer]');

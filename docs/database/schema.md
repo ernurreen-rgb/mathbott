@@ -117,6 +117,12 @@ erDiagram
 | `quiz_answers` | `id` (Identity) | `session_id FK -> quiz_sessions.id`, `participant_id FK -> quiz_participants.id ON DELETE CASCADE`, `question_id INTEGER`, `answer TEXT`, `is_correct INTEGER`, `score_awarded INTEGER`, `time_ms INTEGER` | Participant answers (`UNIQUE(session_id, participant_id, question_id)`). |
 | `quiz_entry_limits` | `(scope_type, scope_key)` | `failed_attempts INTEGER DEFAULT 0`, `window_started_at TIMESTAMPTZ`, `blocked_until TIMESTAMPTZ`, `updated_at TIMESTAMPTZ` | Added in PG `0006`. Persists PIN lookup/join rate-limit state across serverless instances. |
 
+### 3.5.1 Task Constructor (`/task-builder`)
+
+| Table | Primary Key | Key Columns & Constraints | Description |
+|---|---|---|---|
+| `task_collections` | `id` (Identity) | `user_id FK -> users.id ON DELETE CASCADE`, `title TEXT NOT NULL` (1–120 chars), `header_text TEXT DEFAULT ''` (≤ 120), `task_ids JSONB DEFAULT '[]'` (array, ≤ 100), `title_image TEXT`, `background_image TEXT`, `created_at TEXT`, `updated_at TEXT`; index `(user_id, updated_at DESC, id DESC)` | Added in PG `0020`. A user's ordered selection of `bank_tasks` ids for the PDF/PPTX downloads, the PDF's top line and the two PPTX backgrounds (stored like task images). Deleted bank tasks are left out on read and dropped on the next save. |
+
 ### 3.6 Reports, Admin Audit & Operational Monitoring
 
 | Table | Primary Key | Key Columns & Constraints | Description |
@@ -150,3 +156,4 @@ erDiagram
 | `0013` | [`0013_user_page_visits.sql`](../../bot/migrations/postgres/0013_user_page_visits.sql) | Adds `users.last_seen_path` and creates `user_page_visits` for lightweight student activity diagnostics. |
 | `0014` | [`0014_reminder_prompt_events.sql`](../../bot/migrations/postgres/0014_reminder_prompt_events.sql) | Creates `reminder_prompt_events` to track streak-reminder prompt impressions and user actions. |
 | `0015` | [`0015_performance_and_integrity.sql`](../../bot/migrations/postgres/0015_performance_and_integrity.sql) | Adds 11 performance indexes on hot analytics/quiz/trial-test tables and replaces `ops_incidents_fingerprint_status_key` with partial unique index `uq_ops_incidents_open_fingerprint` (`WHERE status = 'open'`). |
+| `0020` | [`0020_task_collections.sql`](../../bot/migrations/postgres/0020_task_collections.sql) | Creates `task_collections` for the task constructor. |

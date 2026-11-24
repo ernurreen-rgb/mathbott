@@ -141,3 +141,14 @@ Implemented in [`bot/services/ai_twins.py`](../../bot/services/ai_twins.py):
 Implemented in [`bot/routes/admin/mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py) and [`web/app/admin/mistakes/page.tsx`](../../web/app/admin/mistakes/page.tsx):
 - `GET /api/admin/mistake-analytics?period=7d|30d|all&module_id=` is open to every admin role (read-only). The period applies to the time of the first attempt.
 - Shows totals (first attempts, mistakes and rate, resolved, weak, pending, tasks without twins), the 50 tasks with the most first-attempt mistakes with their review outcomes and twin counts (linking to the bank twins tab), mistakes by bank topic, and up to 100 students ordered by weak spots with their weak topics. Review states use the same rules as the student review page. Student e-mail addresses are returned to `super_admin` only.
+
+---
+
+## 10. Task Constructor (`/task-builder`)
+
+- **Who:** every signed-in user, students included. The whole bank is visible (twins excepted), also tasks used in trial tests and lessons; lists never carry answers, only the export of the user's own collection does ([`bot/routes/constructor.py`](../../bot/routes/constructor.py)).
+- **Collections ("Мои подборки"):** up to 50 per user, up to 100 tasks each, saved on the server as the user works (`task_collections`, PG `0020`). Tasks are filtered by topic, level A/B/C, question type and text or `#id`, added with a button and reordered in the collection panel ([`web/app/task-builder/`](../../web/app/task-builder/)).
+- **PDF:** the trial-test worksheet layout ([`BankWorksheetDocument.tsx`](../../web/components/admin/BankWorksheetDocument.tsx), [`export-bank-worksheet.ts`](../../web/lib/export-bank-worksheet.ts)) with the user's own top line instead of the site brand, and an answer page after the tasks.
+- **PPTX:** built in the browser by [`web/lib/pptx/task-deck.ts`](../../web/lib/pptx/task-deck.ts) in the layout of the teacher's live-lesson deck: 16:9, a title slide (the user's title image, or the title on white), one task per slide on a white card headed "Есеп №N:" over the user's background, and answer slides (30 per slide) at the end. Formulas are native PowerPoint equations (OMML), editable in place: [`web/lib/pptx/latex-omml.ts`](../../web/lib/pptx/latex-omml.ts) parses the bank's LaTeX and writes them as PowerPoint itself stores them (each italic letter in a run of its own; a formula-only line or option is a display equation). Every text box with a formula also carries a plain-text fallback (`mc:Fallback`) for apps without equations. The text of a task is split into text and formulas exactly as the site shows it ([`web/lib/math-content.ts`](../../web/lib/math-content.ts), shared with `MathRender`).
+- **Labels** ("Есеп №", "Жауаптар" / "Задача №", "Ответы", Дұрыс/Жалған) follow the site language; the task text is shown as stored.
+

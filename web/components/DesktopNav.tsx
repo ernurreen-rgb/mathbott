@@ -10,7 +10,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { useDesktopNav } from "@/lib/desktop-nav-context";
 
 interface DesktopNavProps {
-  currentPage?: "modules" | "profile" | "admin" | "trial-test" | "achievements" | "quizzes";
+  currentPage?: "modules" | "profile" | "admin" | "trial-test" | "achievements" | "quizzes" | "constructor";
 }
 
 function SidebarIcon({ className = "w-5 h-5" }: { className?: string }) {
@@ -49,6 +49,14 @@ export default function DesktopNav(_props: DesktopNavProps) {
       href: "/quizzes",
       icon: (
         <Icon name="quiz" className="w-6 h-6" />
+      ),
+    },
+    {
+      id: "constructor",
+      label: t("nav.constructor"),
+      href: "/task-builder",
+      icon: (
+        <Icon name="layers" className="w-6 h-6" />
       ),
     },
     {
@@ -157,7 +165,8 @@ export default function DesktopNav(_props: DesktopNavProps) {
             pathname === item.href ||
             (item.href === "/profile" && pathname?.startsWith("/profile")) ||
             (item.id === "admin" && pathname?.startsWith("/admin")) ||
-            (item.href === "/trial-test" && pathname?.startsWith("/trial-test"));
+            (item.href === "/trial-test" && pathname?.startsWith("/trial-test")) ||
+            (item.id === "constructor" && pathname?.startsWith("/task-builder"));
 
           if (isCollapsed) {
             return (

@@ -5,8 +5,31 @@ import { apiPath } from '@/lib/api/client';
 import { getTaskAnswerMode } from '@/lib/answer-mode';
 import { WORKSHEET_BRAND, type WorksheetTask } from '@/lib/bank-worksheet';
 import { hasEmptyMcqOptionTexts, parseComparisonTask } from '@/lib/comparison-task';
+import type { AnswerPiece, ConstructorLanguage } from '@/lib/constructor-answers';
 
-export default function BankWorksheetDocument({ title, tasks }: { title: string; tasks: WorksheetTask[] }) {
+export interface WorksheetAnswer {
+  number: number;
+  pieces: AnswerPiece[];
+}
+
+const WORDS: Record<ConstructorLanguage, { true: string; false: string; answers: string; untitled: string }> = {
+  kk: { true: 'Дұрыс', false: 'Жалған', answers: 'Жауаптар', untitled: 'Есептер жинағы' },
+  ru: { true: 'Верно', false: 'Неверно', answers: 'Ответы', untitled: 'Сборник задач' },
+};
+
+/**
+ * The printable worksheet. `brand` is the line above the title and in the footer (the site's own
+ * when omitted, none when empty); `answerKey` adds an answer page after the tasks.
+ */
+export default function BankWorksheetDocument({ title, tasks, brand, language = 'kk', answerKey }: {
+  title: string;
+  tasks: WorksheetTask[];
+  brand?: string;
+  language?: ConstructorLanguage;
+  answerKey?: WorksheetAnswer[];
+}) {
+  const brandLine = brand === undefined ? WORKSHEET_BRAND : brand.trim();
+  const words = WORDS[language];
   const options = (task: WorksheetTask) => {
     const labelOnly = hasEmptyMcqOptionTexts(task.options);
     if (labelOnly) {
@@ -24,8 +47,8 @@ export default function BankWorksheetDocument({ title, tasks }: { title: string;
   };
   return <div style={{ width: 720, background: '#fff', color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: 17, lineHeight: 1.55 }}>
     <header data-pdf-header style={{ paddingBottom: 18, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
-      <div style={{ fontSize: 11, color: '#64748b' }}>{WORKSHEET_BRAND}</div>
-      <h1 style={{ margin: '8px 0 16px', fontSize: 25, fontWeight: 700, overflowWrap: 'anywhere' }}>{title.trim() || 'Есептер жинағы'}</h1>
+      {brandLine && <div style={{ fontSize: 11, color: '#64748b' }}>{brandLine}</div>}
+      <h1 style={{ margin: '8px 0 16px', fontSize: 25, fontWeight: 700, overflowWrap: 'anywhere' }}>{title.trim() || words.untitled}</h1>
     </header>
     {tasks.map((task, index) => {
       const comparison = parseComparisonTask(task.text);
@@ -61,11 +84,24 @@ export default function BankWorksheetDocument({ title, tasks }: { title: string;
         </div>) : (task.question_type === 'mcq' || task.question_type === 'mcq6') && getTaskAnswerMode(task) === 'choices'
           ? <div data-pdf-part>{options(task)}</div>
           : task.question_type === 'tf'
-            ? <div data-pdf-part style={{ marginTop: 12 }}>□ Дұрыс <span style={{ marginLeft: 28 }}>□ Жалған</span></div>
+            ? <div data-pdf-part style={{ marginTop: 12 }}>□ {words.true} <span style={{ marginLeft: 28 }}>□ {words.false}</span></div>
             : <div data-pdf-part style={{ height: 36, borderBottom: '1px solid #94a3b8', marginTop: 8 }} />}
       </div>
     </article>;
     })}
-    <footer data-pdf-footer style={{ fontSize: 12, lineHeight: 1.4, color: '#64748b' }}>{WORKSHEET_BRAND}</footer>
+    {answerKey && answerKey.length > 0 && <section data-pdf-answers style={{ paddingTop: 4 }}>
+      <h2 style={{ margin: '0 0 14px', fontSize: 22, fontWeight: 700 }}>{words.answers}</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 20px' }}>
+        {answerKey.map((entry) => <div key={entry.number} style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
+          <strong style={{ flexShrink: 0 }}>{entry.number})</strong>
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+            {entry.pieces.length ? entry.pieces.map((piece, index) => piece.kind === 'text'
+              ? <span key={index}>{piece.text}</span>
+              : <MathRender key={index} latex={piece.latex} inline />) : '—'}
+          </span>
+        </div>)}
+      </div>
+    </section>}
+    <footer data-pdf-footer style={{ fontSize: 12, lineHeight: 1.4, color: '#64748b', minHeight: 17 }}>{brandLine}</footer>
   </div>;
 }

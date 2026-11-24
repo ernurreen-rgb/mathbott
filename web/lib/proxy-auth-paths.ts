@@ -4,6 +4,7 @@
 
 const SENSITIVE_PREFIXES = [
   "/api/admin/",
+  "/api/constructor/",
   "/api/export/admin/",
   "/api/export/user/",
   "/api/mini-lessons",

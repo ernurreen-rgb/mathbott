@@ -172,6 +172,23 @@ The proxy treats `/api/mini-lessons` as an identity path: it always signs these 
 | `POST` | `/api/trial-test-reports` | Authenticated | Submits a student issue report for a trial test task (`trial_test_reports`). |
 | `GET` | `/api/trial-test-reports` | Authenticated | Lists trial test task reports submitted by the current user. |
 
+### 2.8 Task Constructor ([`bot/routes/constructor.py`](../../bot/routes/constructor.py))
+
+Any signed-in user, students included, browses the whole bank (twins excepted) and keeps collections of tasks that the browser turns into a PDF worksheet or a PPTX deck (`/task-builder`). `/api/constructor/` is a sensitive proxy prefix: every call carries the signed identity, and a collection is only ever read or changed by its owner (another user's id answers `404`).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/constructor/tasks` | Authenticated | Bank tasks without answers. Filters: `search` (text or `#id`), `difficulty` (`A`/`B`/`C`), `topics` (comma-separated), `topic_match`, `question_type`; `limit` ≤ 50, `offset`. 60/minute. |
+| `GET` | `/api/constructor/topics` | Authenticated | Bank topics for the filter (`q` narrows them). 60/minute. |
+| `GET` | `/api/constructor/collections` | Authenticated | The caller's collections with task counts, newest change first, and the limits (50 collections, 100 tasks each). |
+| `POST` | `/api/constructor/collections` | Authenticated | Creates a collection from `{title}`; `409` once the caller has 50. 20/minute. |
+| `GET` | `/api/constructor/collections/{id}` | Owner | The collection with its tasks in order, without answers. Deleted bank tasks are left out. |
+| `PUT` | `/api/constructor/collections/{id}` | Owner | Changes `title`, `header_text` (the PDF's top line) and/or the ordered `task_ids` (≤ 100, no repeats; unknown or deleted ids are dropped). 60/minute. |
+| `DELETE` | `/api/constructor/collections/{id}` | Owner | Deletes the collection and its two images. |
+| `GET` | `/api/constructor/collections/{id}/export` | Owner | The collection with answers (`answer`, `accepted_answers`, each sub-question's `correct`) for the answer key of a download. 30/minute. |
+| `POST` | `/api/constructor/collections/{id}/images/{kind}` | Owner | Multipart `image` (JPG or PNG, image upload limit) as the PPTX `title` slide or task-slide `background`; the replaced file is deleted. 20/minute. |
+| `DELETE` | `/api/constructor/collections/{id}/images/{kind}` | Owner | Removes that image (the slides turn white). |
+
 ---
 
 ## 3. Admin HTTP Endpoints (`bot/routes/admin/`)

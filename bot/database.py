@@ -30,6 +30,7 @@ from repositories.quiz_repository import QuizRepository
 from repositories.module_review_repository import ModuleReviewRepository
 from repositories.push_repository import PushRepository
 from repositories.client_timing_repository import ClientTimingRepository
+from repositories.task_collection_repository import TaskCollectionRepository
 from utils.connection_pool import ConnectionPool
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ class Database:
         self.module_review = ModuleReviewRepository(url, connection_pool=pool)
         self.push = PushRepository(url, connection_pool=pool)
         self.client_timings = ClientTimingRepository(url, connection_pool=pool)
+        self.task_collections = TaskCollectionRepository(url, connection_pool=pool)
 
     async def init(self):
         """Initialize database: apply PostgreSQL migrations, then idempotent seeds"""
