@@ -5,6 +5,7 @@ import Icon from "@/components/ui/Icon";
 import { getConstructorTasks, getConstructorTopics } from "@/lib/api/constructor";
 import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
+import { toggleTopicSelection } from "@/lib/topic-filter";
 import type { ConstructorQuestionType, ConstructorTask } from "@/types/constructor";
 import TaskPreview from "./TaskPreview";
 import TopicCombobox from "./TopicCombobox";
@@ -37,7 +38,8 @@ export default function TaskBrowser({
   const { t } = useI18n();
   const [searchText, setSearchText] = useState("");
   const [search, setSearch] = useState("");
-  const [topic, setTopic] = useState("");
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [topicMatch, setTopicMatch] = useState<"any" | "all">("any");
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -46,6 +48,7 @@ export default function TaskBrowser({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const generation = useRef(0);
+  const selectedTopicSet = useMemo(() => new Set(selectedTopics), [selectedTopics]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchText.trim()), 350);
@@ -65,11 +68,12 @@ export default function TaskBrowser({
   const query = useMemo(
     () => ({
       search: search || undefined,
-      topics: topic ? [topic] : undefined,
+      topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+      topicMatch: selectedTopics.length > 1 ? topicMatch : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, topic, difficulty, questionType],
+    [search, selectedTopics, topicMatch, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -113,7 +117,7 @@ export default function TaskBrowser({
           />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <TopicCombobox topics={topics} value={topic} onChange={setTopic} />
+          <TopicCombobox topics={topics} values={selectedTopics} onChange={setSelectedTopics} />
           <label className="block">
             <span className="sr-only">{t("constructor.type")}</span>
             <select
@@ -141,6 +145,47 @@ export default function TaskBrowser({
             ))}
           </div>
         </div>
+        {selectedTopics.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {selectedTopics.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center gap-1 rounded-full bg-purple-100 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-purple-800"
+              >
+                <span>{name}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTopics((prev) => prev.filter((item) => item !== name))}
+                  aria-label={t("constructor.removeTopicAria", { topic: name })}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-purple-600 hover:bg-purple-200 hover:text-purple-900"
+                >
+                  <Icon name="close" className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {selectedTopics.length > 1 && (
+              <div
+                role="group"
+                aria-label={t("constructor.topicMatchAria")}
+                className="ml-auto inline-flex rounded-lg bg-slate-200/70 p-0.5 text-xs"
+              >
+                {(["any", "all"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={topicMatch === mode}
+                    onClick={() => setTopicMatch(mode)}
+                    className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                      topicMatch === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {t(mode === "any" ? "constructor.topicMatchAny" : "constructor.topicMatchAll")}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <p role="status" className="mt-3 text-sm text-slate-500">
@@ -163,9 +208,24 @@ export default function TaskBrowser({
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-mono">#{task.id}</span>
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{task.difficulty}</span>
-                {task.topics.map((name) => (
-                  <span key={name} className="rounded-md bg-purple-50 px-1.5 py-0.5 text-purple-700">{name}</span>
-                ))}
+                {task.topics.map((name) => {
+                  const active = selectedTopicSet.has(name);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setSelectedTopics((prev) => toggleTopicSelection(prev, name))}
+                      aria-pressed={active}
+                      className={`rounded-md px-1.5 py-0.5 transition-colors ${
+                        active
+                          ? "bg-purple-600 font-semibold text-white hover:bg-purple-700"
+                          : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => onToggle(task)}

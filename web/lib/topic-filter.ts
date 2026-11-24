@@ -40,3 +40,18 @@ export function filterTopics(topics: readonly string[], rawQuery: string): strin
 
   return [...prefixMatches, ...wordStartMatches, ...otherMatches];
 }
+
+/** Toggle a topic in a multi-select filter while respecting the backend limit (20). */
+export function toggleTopicSelection(
+  selected: readonly string[],
+  topic: string,
+  maxSelected = 20,
+): string[] {
+  if (selected.includes(topic)) {
+    return selected.filter((item) => item !== topic);
+  }
+  if (selected.length >= maxSelected) {
+    return [...selected];
+  }
+  return [...selected, topic];
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterTopics } from "@/lib/topic-filter";
+import { filterTopics, toggleTopicSelection } from "@/lib/topic-filter";
 
 const SAMPLE_TOPICS = [
   "Айналу денелері",
@@ -50,5 +50,14 @@ describe("filterTopics", () => {
 
   it("returns empty array when nothing matches", () => {
     expect(filterTopics(SAMPLE_TOPICS, "вектор")).toEqual([]);
+  });
+});
+
+describe("toggleTopicSelection", () => {
+  it("adds and removes topics cleanly while enforcing max limit", () => {
+    expect(toggleTopicSelection([], "ҰБТ есебі")).toEqual(["ҰБТ есебі"]);
+    expect(toggleTopicSelection(["ҰБТ есебі"], "Интеграл")).toEqual(["ҰБТ есебі", "Интеграл"]);
+    expect(toggleTopicSelection(["ҰБТ есебі", "Интеграл"], "ҰБТ есебі")).toEqual(["Интеграл"]);
+    expect(toggleTopicSelection(["A", "B"], "C", 2)).toEqual(["A", "B"]);
   });
 });

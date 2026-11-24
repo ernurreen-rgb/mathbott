@@ -3,17 +3,21 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n/provider";
-import { filterTopics } from "@/lib/topic-filter";
+import { filterTopics, toggleTopicSelection } from "@/lib/topic-filter";
 
-/** Searchable topic dropdown for fast selection across large topic lists. */
+const MAX_SELECTED_TOPICS = 20;
+
+/** Searchable multi-select topic dropdown for fast selection of one or more tags. */
 export default function TopicCombobox({
   topics,
-  value,
+  values,
   onChange,
+  maxSelected = MAX_SELECTED_TOPICS,
 }: {
   topics: string[];
-  value: string;
-  onChange: (topic: string) => void;
+  values: string[];
+  onChange: (topics: string[]) => void;
+  maxSelected?: number;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -26,25 +30,26 @@ export default function TopicCombobox({
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listboxId = useId();
 
+  const selectedSet = useMemo(() => new Set(values), [values]);
   const filteredTopics = useMemo(() => filterTopics(topics, query), [topics, query]);
   const hasQuery = query.trim().length > 0;
 
-  // When search is empty, prepend the "All topics" option ("") at index 0.
+  // When search is empty, prepend "All topics" and show currently selected topics first so they are easy to uncheck.
   const options = useMemo<Array<{ value: string; label: string }>>(() => {
-    const items = filteredTopics.map((name) => ({ value: name, label: name }));
-    return hasQuery ? items : [{ value: "", label: t("constructor.allTopics") }, ...items];
-  }, [filteredTopics, hasQuery, t]);
+    if (hasQuery) {
+      return filteredTopics.map((name) => ({ value: name, label: name }));
+    }
+    const pinnedSelected = values.map((name) => ({ value: name, label: name }));
+    const rest = filteredTopics
+      .filter((name) => !selectedSet.has(name))
+      .map((name) => ({ value: name, label: name }));
+    return [{ value: "", label: t("constructor.allTopics") }, ...pinnedSelected, ...rest];
+  }, [filteredTopics, hasQuery, values, selectedSet, t]);
 
-  // Keep activeIndex within bounds whenever filtered options change.
   useEffect(() => {
     if (!open) return;
-    if (!hasQuery && value) {
-      const selectedIdx = options.findIndex((opt) => opt.value === value);
-      setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
-    } else {
-      setActiveIndex(0);
-    }
-  }, [open, query, hasQuery, value, options]);
+    setActiveIndex(0);
+  }, [open, query]);
 
   // Focus the search box as soon as the dropdown opens.
   useEffect(() => {
@@ -86,9 +91,17 @@ export default function TopicCombobox({
     }
   };
 
-  const selectValue = (nextValue: string) => {
-    onChange(nextValue);
-    closeMenu(true);
+  const toggleOption = (optionValue: string) => {
+    if (!optionValue) {
+      onChange([]);
+      closeMenu(true);
+      return;
+    }
+    onChange(toggleTopicSelection(values, optionValue, maxSelected));
+    if (query) {
+      setQuery("");
+    }
+    searchInputRef.current?.focus();
   };
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -116,7 +129,7 @@ export default function TopicCombobox({
       event.preventDefault();
       const picked = options[activeIndex];
       if (picked) {
-        selectValue(picked.value);
+        toggleOption(picked.value);
       }
     } else if (event.key === "Escape") {
       event.preventDefault();
@@ -125,6 +138,15 @@ export default function TopicCombobox({
       closeMenu(false);
     }
   };
+
+  const triggerLabel =
+    values.length === 0
+      ? t("constructor.allTopics")
+      : values.length === 1
+        ? values[0]
+        : t("constructor.selectedTopicsCount", { count: values.length });
+
+  const atLimit = values.length >= maxSelected;
 
   return (
     <div ref={containerRef} className="relative">
@@ -146,8 +168,8 @@ export default function TopicCombobox({
           onKeyDown={handleTriggerKeyDown}
           className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left leading-5 focus:outline-none"
         >
-          <span className={`truncate ${value ? "font-medium text-slate-900" : "text-slate-800"}`}>
-            {value || t("constructor.allTopics")}
+          <span className={`truncate ${values.length > 0 ? "font-medium text-slate-900" : "text-slate-800"}`}>
+            {triggerLabel}
           </span>
           <Icon
             name="chevronDown"
@@ -155,11 +177,11 @@ export default function TopicCombobox({
           />
         </button>
 
-        {value && (
+        {values.length > 0 && (
           <button
             type="button"
             onClick={() => {
-              onChange("");
+              onChange([]);
               setQuery("");
             }}
             aria-label={t("constructor.clearTopic")}
@@ -171,7 +193,7 @@ export default function TopicCombobox({
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:right-auto sm:min-w-[280px] sm:max-w-[360px]">
+        <div className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:right-auto sm:min-w-[300px] sm:max-w-[380px]">
           <div className="border-b border-slate-100 p-2">
             <div className="relative">
               <Icon
@@ -213,6 +235,7 @@ export default function TopicCombobox({
           <ul
             id={listboxId}
             role="listbox"
+            aria-multiselectable="true"
             aria-label={t("constructor.topic")}
             className="max-h-64 overflow-y-auto py-1"
           >
@@ -222,8 +245,10 @@ export default function TopicCombobox({
               </li>
             ) : (
               options.map((option, index) => {
-                const isSelected = option.value === value;
+                const isAll = option.value === "";
+                const isSelected = isAll ? values.length === 0 : selectedSet.has(option.value);
                 const isActive = index === activeIndex;
+                const isDisabled = !isAll && !isSelected && atLimit;
                 return (
                   <li key={option.value || "__all__"} role="presentation">
                     <button
@@ -234,22 +259,57 @@ export default function TopicCombobox({
                       type="button"
                       role="option"
                       aria-selected={isSelected}
+                      disabled={isDisabled}
                       onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => selectValue(option.value)}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                      onClick={() => toggleOption(option.value)}
+                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         isActive
                           ? "bg-purple-50 text-purple-900"
                           : "text-slate-800 hover:bg-slate-50"
-                      } ${isSelected ? "font-semibold" : ""}`}
+                      } ${isSelected ? "font-semibold text-purple-800" : ""}`}
                     >
-                      <span className="truncate">{option.label}</span>
-                      {isSelected && <Icon name="check" className="h-4 w-4 shrink-0 text-purple-600" />}
+                      {!isAll && (
+                        <span
+                          aria-hidden="true"
+                          className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                            isSelected
+                              ? "border-purple-600 bg-purple-600 text-white"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {isSelected && <Icon name="check" className="h-3 w-3" />}
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                      {isAll && isSelected && <Icon name="check" className="h-4 w-4 shrink-0 text-purple-600" />}
                     </button>
                   </li>
                 );
               })
             )}
           </ul>
+
+          {values.length > 0 && (
+            <div className="flex items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/70 px-3 py-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange([]);
+                  searchInputRef.current?.focus();
+                }}
+                className="font-semibold text-slate-500 hover:text-slate-800"
+              >
+                {t("constructor.clear")}
+              </button>
+              <button
+                type="button"
+                onClick={() => closeMenu(true)}
+                className="rounded-lg bg-purple-600 px-3 py-1 font-semibold text-white hover:bg-purple-700"
+              >
+                {t("constructor.done")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
