@@ -62,7 +62,6 @@ export default function BackgroundPicker({
   return (
     <div className="min-w-0">
       <p className="text-sm font-semibold text-slate-800">{label}</p>
-      <p className="text-xs text-slate-500">{t(kind === "title" ? "constructor.titleImageHint" : "constructor.backgroundHint")}</p>
       <div className="relative mt-2 aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white">
         {filename ? (
           // A 16:9 preview of the uploaded slide picture.
