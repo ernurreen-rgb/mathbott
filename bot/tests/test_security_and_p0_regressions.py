@@ -15,7 +15,7 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -845,6 +845,73 @@ class Sprint3RegressionTests(unittest.TestCase):
             _validate_provider_base_url("http://provider.example/v1", is_production=True)
         with self.assertRaises(AiTwinError):
             _validate_provider_base_url("https://user:pass@provider.example/v1", is_production=True)
+
+    def test_multipart_upload_with_mixed_case_boundary_passes_proxy_v2_and_fastapi(self):
+        secret = "s" * 48
+        ts = str(int(time.time()))
+        nonce = f"mp-{time.time_ns()}"
+        email = "teacher@example.com"
+        boundary = "----WebKitFormBoundaryAbCdEf123456"
+        jpeg_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+        raw_body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="image"; filename="title.jpg"\r\n'
+            f"Content-Type: image/jpeg\r\n\r\n"
+        ).encode("utf-8") + jpeg_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        content_type = f"multipart/form-data; boundary={boundary}"
+        signed_content_type = content_type.lower()
+        body_sha256 = hashlib.sha256(raw_body).hexdigest()
+        path = "/api/constructor/collections/1/images/title"
+        raw_query = "email=teacher%40example.com"
+        payload = build_canonical_proxy_payload(
+            method="POST",
+            path=path,
+            raw_query=raw_query,
+            user_email=email,
+            timestamp=ts,
+            nonce=nonce,
+            body_sha256=body_sha256,
+            content_type=signed_content_type,
+        )
+        sig_v2 = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "DATABASE_URL": "postgresql://u:p@localhost/db",
+                "INTERNAL_PROXY_SHARED_SECRET": secret,
+                "ALLOWED_ORIGINS": "https://app.qazmath.test",
+            },
+            clear=False,
+        ):
+            app = create_app()
+            app.state.db.users.ensure_user_by_email = AsyncMock(return_value={"id": 1, "email": email})
+
+            @app.post(path)
+            async def _upload(image: UploadFile = File(...)):
+                data = await image.read()
+                return {"filename": image.filename, "content_type": image.content_type, "size": len(data)}
+
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                f"{path}?{raw_query}",
+                content=raw_body,
+                headers={
+                    "Content-Type": content_type,
+                    PROXY_TS_HEADER: ts,
+                    PROXY_NONCE_HEADER: nonce,
+                    PROXY_SIGNATURE_V2_HEADER: sig_v2,
+                    PROXY_EMAIL_HEADER: email,
+                    "X-Proxy-Body-Sha256": body_sha256,
+                    "X-Proxy-Content-Type": signed_content_type,
+                },
+            )
+            self.assertEqual(resp.status_code, 200, resp.text)
+            self.assertEqual(
+                resp.json(),
+                {"filename": "title.jpg", "content_type": "image/jpeg", "size": len(jpeg_bytes)},
+            )
 
 
 if __name__ == "__main__":

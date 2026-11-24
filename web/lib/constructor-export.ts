@@ -33,12 +33,50 @@ export function saveFile(bytes: Uint8Array | Blob, filename: string, type: strin
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-async function decode(blob: Blob): Promise<ImageBitmap> {
-  try {
-    return await createImageBitmap(blob);
-  } catch {
-    throw new Error("image-decode");
+type DecodedImage = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+};
+
+const MAX_ENCODED_BACKGROUND_BYTES = 4 * 1024 * 1024;
+
+function decodeViaImageElement(blob: Blob): Promise<DecodedImage> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        source: img,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+        close: () => URL.revokeObjectURL(url),
+      });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("image-decode"));
+    };
+    img.src = url;
+  });
+}
+
+async function decode(blob: Blob): Promise<DecodedImage> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close(),
+      };
+    } catch {
+      // Fall back to HTMLImageElement for formats/EXIF quirks where createImageBitmap fails.
+    }
   }
+  return decodeViaImageElement(blob);
 }
 
 function canvasBlob(canvas: HTMLCanvasElement, type: "image/jpeg" | "image/png", quality?: number): Promise<Blob> {
@@ -53,21 +91,30 @@ function canvasBlob(canvas: HTMLCanvasElement, type: "image/jpeg" | "image/png",
  */
 export async function prepareBackground(file: File): Promise<Blob> {
   if (file.size > MAX_BACKGROUND_SOURCE_BYTES) throw new Error("image-too-large");
-  const bitmap = await decode(file);
+  const decoded = await decode(file);
   const canvas = document.createElement("canvas");
   canvas.width = BACKGROUND_WIDTH;
   canvas.height = BACKGROUND_HEIGHT;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("image-encode");
-  const scale = Math.max(BACKGROUND_WIDTH / bitmap.width, BACKGROUND_HEIGHT / bitmap.height);
-  const width = bitmap.width * scale;
-  const height = bitmap.height * scale;
+  if (!context) {
+    decoded.close();
+    throw new Error("image-encode");
+  }
+  const scale = Math.max(BACKGROUND_WIDTH / decoded.width, BACKGROUND_HEIGHT / decoded.height);
+  const width = decoded.width * scale;
+  const height = decoded.height * scale;
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, BACKGROUND_WIDTH, BACKGROUND_HEIGHT);
-  context.drawImage(bitmap, (BACKGROUND_WIDTH - width) / 2, (BACKGROUND_HEIGHT - height) / 2, width, height);
-  bitmap.close();
+  context.drawImage(decoded.source, (BACKGROUND_WIDTH - width) / 2, (BACKGROUND_HEIGHT - height) / 2, width, height);
+  decoded.close();
   try {
-    return await canvasBlob(canvas, "image/jpeg", 0.9);
+    for (const quality of [0.9, 0.8, 0.7]) {
+      const blob = await canvasBlob(canvas, "image/jpeg", quality);
+      if (blob.size <= MAX_ENCODED_BACKGROUND_BYTES || quality === 0.7) {
+        return blob;
+      }
+    }
+    throw new Error("image-encode");
   } finally {
     canvas.width = 0;
     canvas.height = 0;
@@ -79,8 +126,8 @@ export async function loadDeckImage(filename: string, signal?: AbortSignal): Pro
   const response = await fetch(apiPath(`images/${filename}`), { signal });
   if (!response.ok) throw new Error("image-load");
   const blob = await response.blob();
-  const bitmap = await decode(blob);
-  const { width, height } = bitmap;
+  const decoded = await decode(blob);
+  const { width, height } = decoded;
   try {
     const type = (response.headers.get("content-type") || blob.type).split(";")[0].trim();
     if (type === "image/png" || type === "image/jpeg") {
@@ -89,13 +136,13 @@ export async function loadDeckImage(filename: string, signal?: AbortSignal): Pro
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+    canvas.getContext("2d")?.drawImage(decoded.source, 0, 0);
     const png = await canvasBlob(canvas, "image/png");
     canvas.width = 0;
     canvas.height = 0;
     return { bytes: new Uint8Array(await png.arrayBuffer()), ext: "png", width, height };
   } finally {
-    bitmap.close();
+    decoded.close();
   }
 }
 

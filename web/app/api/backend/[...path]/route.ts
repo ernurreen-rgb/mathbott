@@ -570,10 +570,12 @@ async function proxyRequest(
       return NextResponse.json({ detail: "Request body is too large" }, { status: 413 });
     }
     const signedBodySha256 = preparedBody.bodySha256;
-    const signedContentType = (preparedBody.contentType || "").toLowerCase();
+    const outboundContentType = (preparedBody.contentType || "").trim();
+    const signedContentType = outboundContentType.toLowerCase();
 
-    if (signedContentType) {
-      headers.set("Content-Type", signedContentType);
+    if (outboundContentType) {
+      // Preserve exact parameter case (RFC 2046 multipart boundaries are case-sensitive).
+      headers.set("Content-Type", outboundContentType);
     } else if (contentType.includes("application/json") && body) {
       headers.set("Content-Type", "application/json");
     }
