@@ -163,7 +163,7 @@ export default function TaskBrowser({
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-mono">#{task.id}</span>
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{task.difficulty}</span>
-                {task.topics.slice(0, 3).map((name) => (
+                {task.topics.map((name) => (
                   <span key={name} className="rounded-md bg-purple-50 px-1.5 py-0.5 text-purple-700">{name}</span>
                 ))}
                 <button
