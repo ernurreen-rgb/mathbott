@@ -19,10 +19,11 @@ const MAX_TASKS = 100;
 const SAVE_DELAY_MS = 800;
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
+type Step = "pick" | "files";
 type Draft = { title: string; header: string; font: PptxFont; ids: number[] };
 type PdfDocument = { title: string; brand: string; tasks: WorksheetTask[]; answers: WorksheetAnswer[] };
 
-const snapshot = (draft: Draft) => JSON.stringify([draft.title.trim(), draft.header.trim(), draft.font, draft.ids]);
+const snapshot = (draft: Draft) => JSON.stringify([customCollectionTitle(draft.title), draft.header.trim(), draft.font, draft.ids]);
 
 const isChunkLoadError = (problem: unknown): boolean =>
   problem instanceof Error &&
@@ -38,12 +39,16 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [header, setHeader] = useState("");
   const [tasks, setTasks] = useState<ConstructorTask[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [step, setStep] = useState<Step>("pick");
   const [busy, setBusy] = useState<"pdf" | "pptx" | null>(null);
   const [progress, setProgress] = useState("");
   const [downloadError, setDownloadError] = useState<{ message: string; reload?: boolean } | null>(null);
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
 
   const draft = useRef<Draft>({ title: "", header: "", font: DEFAULT_PPTX_FONT, ids: [] });
+  const loadedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const defaultTitleRef = useRef(t("constructor.defaultTitle"));
   const saved = useRef("");
   const saving = useRef<Promise<boolean>>(Promise.resolve(true));
   const pdfRoot = useRef<HTMLDivElement>(null);
@@ -52,9 +57,11 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const ids = useMemo(() => tasks.map((task) => task.id), [tasks]);
   const selectedIds = useMemo(() => new Set(ids), [ids]);
   draft.current = { title, header, font, ids };
+  defaultTitleRef.current = t("constructor.defaultTitle");
 
   useEffect(() => {
     let active = true;
+    loadedRef.current = false;
     void getTaskCollection(collectionId, email).then((result) => {
       if (!active) return;
       if (!result.data) {
@@ -63,6 +70,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       }
       const loaded = result.data;
       const initialTitle = customCollectionTitle(loaded.title);
+      loadedRef.current = true;
       setCollection(loaded);
       setTitle(initialTitle);
       const loadedFont = isPptxFont(loaded.pptx_font) ? loaded.pptx_font : DEFAULT_PPTX_FONT;
@@ -80,36 +88,61 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   }, [collectionId, email]);
 
   /** Save what is on screen, after any save already under way. Resolves false when saving failed. */
-  const flush = useCallback((): Promise<boolean> => {
+  const flush = useCallback((options?: { keepalive?: boolean }): Promise<boolean> => {
+    if (!loadedRef.current) return Promise.resolve(true);
     saving.current = saving.current.then(async () => {
       const current = draft.current;
       const key = snapshot(current);
       if (key === saved.current) return true;
-      setSaveState("saving");
+      if (mountedRef.current) setSaveState("saving");
       const result = await updateTaskCollection(collectionId, {
-        title: current.title.trim() || t("constructor.defaultTitle"),
+        title: current.title.trim() || defaultTitleRef.current,
         header_text: current.header.trim(),
         pptx_font: current.font,
         task_ids: current.ids,
-      }, email);
+      }, email, options);
       if (!result.data) {
-        setSaveState("error");
+        if (mountedRef.current) setSaveState("error");
         return false;
       }
-      saved.current = key;
-      setSaveState(snapshot(draft.current) === key ? "saved" : "dirty");
+      const canonicalSavedKey = snapshot({
+        title: customCollectionTitle(result.data.title),
+        header: current.header,
+        font: current.font,
+        ids: current.ids,
+      });
+      saved.current = canonicalSavedKey;
+      if (mountedRef.current) {
+        setSaveState(snapshot(draft.current) === canonicalSavedKey ? "saved" : "dirty");
+      }
       return true;
     });
     return saving.current;
-  }, [collectionId, email, t]);
+  }, [collectionId, email]);
 
   useEffect(() => {
     if (!collection) return;
-    if (snapshot({ title, header, font, ids }) === saved.current) return;
+    if (snapshot({ title, header, font, ids }) === saved.current) {
+      setSaveState((prev) => (prev === "dirty" ? "saved" : prev));
+      return;
+    }
     setSaveState("dirty");
     const timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [collection, title, header, font, ids, flush]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const onPageHide = () => {
+      void flush({ keepalive: true });
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener("pagehide", onPageHide);
+      void flush({ keepalive: true });
+    };
+  }, [flush]);
 
   useEffect(() => {
     if (saveState === "saved") return;
@@ -217,7 +250,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   }[saveState];
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1440px] px-4 pt-6 sm:px-6 lg:px-8">
       <Link href="/task-builder" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-purple-700">
         <Icon name="arrowLeft" className="h-4 w-4" />
         {t("constructor.back")}
@@ -242,23 +275,115 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-        <div className="order-2 lg:order-1">
-          <TaskBrowser email={email} selectedIds={selectedIds} full={tasks.length >= MAX_TASKS} onToggle={toggle} />
-        </div>
+      <div
+        role="tablist"
+        aria-label={t("constructor.stepsAria")}
+        className="mt-4 inline-flex w-full rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:w-auto"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={step === "pick"}
+          onClick={() => setStep("pick")}
+          className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${
+            step === "pick" ? "bg-purple-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "pick" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+            1
+          </span>
+          {t("constructor.stepPick")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={step === "files"}
+          disabled={tasks.length === 0 && busy === null}
+          onClick={() => setStep("files")}
+          className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none ${
+            step === "files" ? "bg-purple-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "files" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+            2
+          </span>
+          {t("constructor.stepFiles")}
+          {tasks.length > 0 && (
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${step === "files" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"}`}>
+              {tasks.length}
+            </span>
+          )}
+        </button>
+      </div>
 
-        <aside className="order-1 space-y-4 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
-          <section aria-labelledby="selection-heading" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 id="selection-heading" className="text-lg font-bold text-slate-900">{t("constructor.selection")}</h2>
-              <span className="text-sm text-slate-500">{t("constructor.selectionCount", { count: tasks.length, max: MAX_TASKS })}</span>
+      {/* Step 1: full-width task browser (kept mounted so filters and loaded pages stay intact). */}
+      <div className={step === "pick" ? "mt-5" : "hidden"}>
+        <TaskBrowser email={email} selectedIds={selectedIds} full={tasks.length >= MAX_TASKS} onToggle={toggle} />
+
+        {tasks.length > 0 && (
+          <div className="sticky bottom-20 z-20 mt-6 md:bottom-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+              <div className="flex flex-wrap items-center gap-2.5 text-sm">
+                <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-purple-100 px-2 font-bold text-purple-700">
+                  {tasks.length}
+                </span>
+                <span className="font-semibold text-slate-800">
+                  {t("constructor.selectedSummary", { count: tasks.length, max: MAX_TASKS })}
+                </span>
+                {tasks.length >= MAX_TASKS && (
+                  <span className="text-xs text-amber-700">{t("constructor.full", { max: MAX_TASKS })}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("files");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-purple-700"
+              >
+                {t("constructor.proceedToFiles")}
+                <Icon name="arrowRight" className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: selected tasks order on the left, file settings and downloads on the right. */}
+      {step === "files" && (
+        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
+          <section aria-labelledby="selection-heading" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-baseline gap-2.5">
+                <h2 id="selection-heading" className="text-lg font-bold text-slate-900">{t("constructor.selection")}</h2>
+                <span className="text-sm text-slate-500">{t("constructor.selectionCount", { count: tasks.length, max: MAX_TASKS })}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStep("pick")}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+              >
+                <Icon name="plus" className="h-4 w-4" />
+                {t("constructor.addMoreTasks")}
+              </button>
             </div>
             {tasks.length === 0 ? (
-              <p className="mt-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{t("constructor.selectionEmpty")}</p>
+              <div className="mt-4 rounded-xl bg-slate-50 p-6 text-center">
+                <p className="text-sm text-slate-500">{t("constructor.selectionEmpty")}</p>
+                <button
+                  type="button"
+                  onClick={() => setStep("pick")}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-700"
+                >
+                  <Icon name="arrowLeft" className="h-4 w-4" />
+                  {t("constructor.stepPick")}
+                </button>
+              </div>
             ) : (
-              <ol className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1 lg:max-h-[38vh]">
+              <ol className="mt-4 space-y-2.5">
                 {tasks.map((task, index) => (
-                  <li key={task.id} className="flex items-start gap-2 rounded-xl border border-slate-100 p-2">
+                  <li key={task.id} className="flex items-start gap-2.5 rounded-xl border border-slate-100 p-3">
                     <span className="w-6 shrink-0 pt-0.5 text-right text-sm font-bold text-slate-700">{index + 1}.</span>
                     <div className="min-w-0 flex-1"><TaskPreview task={task} compact /></div>
                     <div className="flex shrink-0 gap-0.5">
@@ -285,79 +410,80 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             {tasks.length >= MAX_TASKS && <p className="mt-2 text-xs text-amber-700">{t("constructor.full", { max: MAX_TASKS })}</p>}
           </section>
 
-          {/* The file settings appear once there is something to download. */}
-          {(tasks.length > 0 || busy !== null) && <section aria-labelledby="files-heading" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 id="files-heading" className="text-lg font-bold text-slate-900">{t("constructor.files")}</h2>
-            <label className="mt-3 block">
-              <span className="text-sm font-semibold text-slate-800">{t("constructor.pdfHeader")}</span>
-              <input
-                value={header}
-                maxLength={120}
-                onChange={(event) => setHeader(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
-              />
-              <span className="mt-1 block text-xs text-slate-500">{t("constructor.pdfHeaderHint")}</span>
-            </label>
-            <label className="mt-4 block">
-              <span className="text-sm font-semibold text-slate-800">{t("constructor.pptxFont")}</span>
-              <select
-                value={font}
-                onChange={(event) => setFont(isPptxFont(event.target.value) ? event.target.value : DEFAULT_PPTX_FONT)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
-              >
-                {PPTX_FONTS.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-              {/* A sample in the chosen font, as the browser has it; the deck itself only names the font. */}
-              <span className="mt-1 block truncate text-base text-slate-800" style={{ fontFamily: `"${font}", Arial, sans-serif` }}>
-                Есеп №1: Аа Әә Ғғ Ұұ 123
-              </span>
-              <span className="mt-1 block text-xs text-slate-500">{t("constructor.pptxFontHint")}</span>
-            </label>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <BackgroundPicker collectionId={collectionId} email={email} kind="title" filename={collection.title_image}
-                disabled={busy !== null} onChange={onImageChange} />
-              <BackgroundPicker collectionId={collectionId} email={email} kind="background" filename={collection.background_image}
-                disabled={busy !== null} onChange={onImageChange} />
-            </div>
-            <p className="mt-2 text-xs text-slate-500">{t("constructor.imageFormats")}</p>
+          <aside className="lg:sticky lg:top-4 lg:self-start">
+            <section aria-labelledby="files-heading" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <h2 id="files-heading" className="text-lg font-bold text-slate-900">{t("constructor.files")}</h2>
+              <label className="mt-3 block">
+                <span className="text-sm font-semibold text-slate-800">{t("constructor.pdfHeader")}</span>
+                <input
+                  value={header}
+                  maxLength={120}
+                  onChange={(event) => setHeader(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                />
+                <span className="mt-1 block text-xs text-slate-500">{t("constructor.pdfHeaderHint")}</span>
+              </label>
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold text-slate-800">{t("constructor.pptxFont")}</span>
+                <select
+                  value={font}
+                  onChange={(event) => setFont(isPptxFont(event.target.value) ? event.target.value : DEFAULT_PPTX_FONT)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                >
+                  {PPTX_FONTS.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+                {/* A sample in the chosen font, as the browser has it; the deck itself only names the font. */}
+                <span className="mt-1 block truncate text-base text-slate-800" style={{ fontFamily: `"${font}", Arial, sans-serif` }}>
+                  Есеп №1: Аа Әә Ғғ Ұұ 123
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">{t("constructor.pptxFontHint")}</span>
+              </label>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <BackgroundPicker collectionId={collectionId} email={email} kind="title" filename={collection.title_image}
+                  disabled={busy !== null} onChange={onImageChange} />
+                <BackgroundPicker collectionId={collectionId} email={email} kind="background" filename={collection.background_image}
+                  disabled={busy !== null} onChange={onImageChange} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{t("constructor.imageFormats")}</p>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => void download("pdf")}
-                disabled={busy !== null || tasks.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-3 py-2.5 text-sm font-bold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
-              >
-                <Icon name={busy === "pdf" ? "loader" : "file"} className={`h-4 w-4 ${busy === "pdf" ? "animate-spin" : ""}`} />
-                {t("constructor.downloadPdf")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void download("pptx")}
-                disabled={busy !== null || tasks.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Icon name={busy === "pptx" ? "loader" : "download"} className={`h-4 w-4 ${busy === "pptx" ? "animate-spin" : ""}`} />
-                {t("constructor.downloadPptx")}
-              </button>
-            </div>
-            <p role="status" className="mt-2 text-xs text-slate-500">{progress || t("constructor.downloadHint")}</p>
-            {downloadError && (
-              <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">
-                {downloadError.message}
-                {downloadError.reload && (
-                  <>
-                    {" "}
-                    <button type="button" onClick={() => window.location.reload()} className="font-semibold underline">
-                      {t("constructor.reloadPage")}
-                    </button>
-                  </>
-                )}
-              </p>
-            )}
-          </section>}
-        </aside>
-      </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void download("pdf")}
+                  disabled={busy !== null || tasks.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-3 py-2.5 text-sm font-bold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                >
+                  <Icon name={busy === "pdf" ? "loader" : "file"} className={`h-4 w-4 ${busy === "pdf" ? "animate-spin" : ""}`} />
+                  {t("constructor.downloadPdf")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void download("pptx")}
+                  disabled={busy !== null || tasks.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  <Icon name={busy === "pptx" ? "loader" : "download"} className={`h-4 w-4 ${busy === "pptx" ? "animate-spin" : ""}`} />
+                  {t("constructor.downloadPptx")}
+                </button>
+              </div>
+              <p role="status" className="mt-2 text-xs text-slate-500">{progress || t("constructor.downloadHint")}</p>
+              {downloadError && (
+                <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">
+                  {downloadError.message}
+                  {downloadError.reload && (
+                    <>
+                      {" "}
+                      <button type="button" onClick={() => window.location.reload()} className="font-semibold underline">
+                        {t("constructor.reloadPage")}
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
+          </aside>
+        </div>
+      )}
 
       {/* The PDF is drawn from this offscreen document, like the trial-test worksheet. */}
       <div ref={pdfRoot} aria-hidden="true" style={{ position: "fixed", left: "-20000px", top: 0 }}>

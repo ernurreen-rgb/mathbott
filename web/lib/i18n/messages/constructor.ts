@@ -59,6 +59,12 @@ export const constructorMessages = {
   "constructor.loadMore": ["Тағы көрсету", "Показать ещё"],
   "constructor.selection": ["Жинақтағы есептер", "Задачи в сборнике"],
   "constructor.selectionCount": ["{count} / {max}", "{count} / {max}"],
+  "constructor.stepsAria": ["Құрастырғыш қадамдары", "Шаги конструктора"],
+  "constructor.stepPick": ["Есептерді таңдау", "Выбор задач"],
+  "constructor.stepFiles": ["Файл баптаулары", "Настройки файла"],
+  "constructor.selectedSummary": ["{count} / {max} есеп таңдалды", "Выбрано {count} из {max}"],
+  "constructor.proceedToFiles": ["Файл баптауларына өту", "Перейти к файлам"],
+  "constructor.addMoreTasks": ["Тағы есеп қосу", "Добавить ещё задачи"],
   "constructor.selectionEmpty": [
     "Тізімнен есептерді қосыңыз. Олар осында осы ретпен жиналады, содан кейін PDF пен PowerPoint баптаулары шығады.",
     "Добавьте задачи из списка. Они соберутся здесь в этом порядке, а затем появятся настройки PDF и PowerPoint.",

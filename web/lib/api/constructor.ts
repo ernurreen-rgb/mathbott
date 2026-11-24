@@ -47,7 +47,16 @@ export function getConstructorTopics(email: string): Promise<FetchResult<{ items
   return request<{ items: string[] }>(withEmail("constructor/topics", email));
 }
 
-export function listTaskCollections(email: string): Promise<FetchResult<TaskCollectionList>> {
+const pendingCollectionUpdates = new Set<Promise<unknown>>();
+
+export async function waitForPendingCollectionUpdates(): Promise<void> {
+  while (pendingCollectionUpdates.size > 0) {
+    await Promise.allSettled(Array.from(pendingCollectionUpdates));
+  }
+}
+
+export async function listTaskCollections(email: string): Promise<FetchResult<TaskCollectionList>> {
+  await waitForPendingCollectionUpdates();
   return request<TaskCollectionList>(withEmail("constructor/collections", email));
 }
 
@@ -55,7 +64,8 @@ export function createTaskCollection(title: string, email: string): Promise<Fetc
   return request<TaskCollection>(withEmail("constructor/collections", email), json("POST", { title }));
 }
 
-export function getTaskCollection(id: number, email: string): Promise<FetchResult<TaskCollection>> {
+export async function getTaskCollection(id: number, email: string): Promise<FetchResult<TaskCollection>> {
+  await waitForPendingCollectionUpdates();
   return request<TaskCollection>(withEmail(`constructor/collections/${id}`, email));
 }
 
@@ -63,8 +73,15 @@ export function updateTaskCollection(
   id: number,
   change: { title?: string; header_text?: string; task_ids?: number[]; pptx_font?: string },
   email: string,
+  options?: { keepalive?: boolean },
 ): Promise<FetchResult<TaskCollection>> {
-  return request<TaskCollection>(withEmail(`constructor/collections/${id}`, email), json("PUT", change));
+  const promise = request<TaskCollection>(
+    withEmail(`constructor/collections/${id}`, email),
+    { ...json("PUT", change), ...(options?.keepalive ? { keepalive: true } : {}) },
+  );
+  pendingCollectionUpdates.add(promise);
+  void promise.finally(() => pendingCollectionUpdates.delete(promise));
+  return promise;
 }
 
 export function deleteTaskCollection(id: number, email: string): Promise<FetchResult<{ deleted: boolean }>> {
