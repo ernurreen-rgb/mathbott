@@ -23,6 +23,23 @@ export function customCollectionTitle(title: string | null | undefined): string 
   return DEFAULT_COLLECTION_TITLES.has(trimmed.toLowerCase()) ? "" : trimmed;
 }
 
+/** Moves an item from `fromIndex` to `toIndex`, returning a new array (or a shallow copy if out of bounds / same). */
+export function reorderItems<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= items.length ||
+    toIndex >= items.length
+  ) {
+    return [...items];
+  }
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 export function constructorFilename(title: string, extension: "pdf" | "pptx"): string {
   const name = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").replace(/[. ]+$/g, "").slice(0, 100);
   return `${name || "QazMath-esepter"}.${extension}`;

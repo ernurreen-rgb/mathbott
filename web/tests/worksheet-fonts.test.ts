@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customCollectionTitle } from "@/lib/constructor-export";
+import { customCollectionTitle, reorderItems } from "@/lib/constructor-export";
 import { validateWorksheetFontCSS } from "@/lib/worksheet-fonts";
 
 const EMBEDDED_KATEX =
@@ -51,5 +51,20 @@ describe("customCollectionTitle", () => {
   it("preserves teacher-provided titles", () => {
     expect(customCollectionTitle("Туынды. 10-сынып")).toBe("Туынды. 10-сынып");
     expect(customCollectionTitle("  Тригонометрия  ")).toBe("Тригонометрия");
+  });
+});
+
+describe("reorderItems", () => {
+  it("moves an item up or down cleanly without mutating the source array", () => {
+    const src = ["a", "b", "c", "d"];
+    expect(reorderItems(src, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(reorderItems(src, 3, 1)).toEqual(["a", "d", "b", "c"]);
+    expect(src).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("returns a copy unchanged for same or out-of-range indices", () => {
+    expect(reorderItems([1, 2, 3], 1, 1)).toEqual([1, 2, 3]);
+    expect(reorderItems([1, 2, 3], -1, 1)).toEqual([1, 2, 3]);
+    expect(reorderItems([1, 2, 3], 1, 5)).toEqual([1, 2, 3]);
   });
 });

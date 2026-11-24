@@ -73,6 +73,10 @@ export const constructorMessages = {
   "constructor.removeAria": ["{n}-есепті жинақтан алып тастау", "Убрать задачу {n} из сборника"],
   "constructor.moveUpAria": ["{n}-есепті жоғары жылжыту", "Переместить задачу {n} выше"],
   "constructor.moveDownAria": ["{n}-есепті төмен жылжыту", "Переместить задачу {n} ниже"],
+  "constructor.dragToReorder": [
+    "Орын ауыстыру үшін ұстап сүйреңіз",
+    "Удерживайте и перетащите, чтобы поменять местами",
+  ],
   "constructor.imageTask": ["Суретті есеп", "Задача с рисунком"],
   "constructor.taskImageAlt": ["№{id} есептің суреті", "Рисунок к задаче №{id}"],
   "constructor.files": ["Файлдар", "Файлы"],

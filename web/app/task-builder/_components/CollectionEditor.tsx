@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import BankWorksheetDocument, { type WorksheetAnswer } from "@/components/admin/BankWorksheetDocument";
 import Icon from "@/components/ui/Icon";
 import { exportTaskCollection, getTaskCollection, updateTaskCollection } from "@/lib/api/constructor";
-import { answerKey, customCollectionTitle, downloadCollectionPptx, worksheetTasks } from "@/lib/constructor-export";
+import { answerKey, customCollectionTitle, downloadCollectionPptx, reorderItems, worksheetTasks } from "@/lib/constructor-export";
 import type { WorksheetTask } from "@/lib/bank-worksheet";
 import { useI18n } from "@/lib/i18n/provider";
 import { DEFAULT_PPTX_FONT, isPptxFont, PPTX_FONTS, type PptxFont } from "@/lib/pptx/fonts";
@@ -40,6 +40,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [tasks, setTasks] = useState<ConstructorTask[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [step, setStep] = useState<Step>("pick");
+  const [draggingId, setDraggingId] = useState<number | null>(null);
   const [busy, setBusy] = useState<"pdf" | "pptx" | null>(null);
   const [progress, setProgress] = useState("");
   const [downloadError, setDownloadError] = useState<{ message: string; reload?: boolean } | null>(null);
@@ -52,6 +53,8 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const saved = useRef("");
   const saving = useRef<Promise<boolean>>(Promise.resolve(true));
   const pdfRoot = useRef<HTMLDivElement>(null);
+  const selectionListRef = useRef<HTMLOListElement>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   const ids = useMemo(() => tasks.map((task) => task.id), [tasks]);
@@ -139,6 +142,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
     window.addEventListener("pagehide", onPageHide);
     return () => {
       mountedRef.current = false;
+      dragCleanupRef.current?.();
       window.removeEventListener("pagehide", onPageHide);
       void flush({ keepalive: true });
     };
@@ -162,13 +166,100 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   };
 
   const move = (index: number, direction: -1 | 1) => {
-    setTasks((current) => {
-      const target = index + direction;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+    setTasks((current) => reorderItems(current, index, index + direction));
+  };
+
+  const startTaskDrag = (event: React.PointerEvent<HTMLLIElement>, taskId: number) => {
+    if (tasks.length < 2) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, select, textarea")) return;
+    // On touch screens, require grabbing the dedicated handle so normal vertical scrolling still works.
+    if (event.pointerType === "touch" && !target?.closest("[data-drag-handle]")) return;
+
+    if (event.pointerType === "mouse") {
+      event.preventDefault();
+    }
+
+    const pointerId = event.pointerId;
+    const startY = event.clientY;
+    let active = event.pointerType === "touch";
+    if (active) {
+      setDraggingId(taskId);
+    }
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      if (!active) {
+        if (Math.abs(moveEvent.clientY - startY) < 5) return;
+        active = true;
+        setDraggingId(taskId);
+        document.body.style.userSelect = "none";
+      }
+      moveEvent.preventDefault();
+
+      // Gentle auto-scroll near viewport top/bottom edges.
+      const edge = 64;
+      if (moveEvent.clientY < edge) {
+        window.scrollBy(0, -10);
+      } else if (moveEvent.clientY > window.innerHeight - edge) {
+        window.scrollBy(0, 10);
+      }
+
+      const listEl = selectionListRef.current;
+      if (!listEl) return;
+      const rows = Array.from(listEl.querySelectorAll<HTMLLIElement>("[data-task-item-id]"));
+      const currentIndex = rows.findIndex((row) => Number(row.dataset.taskItemId) === taskId);
+      if (currentIndex < 0) return;
+
+      let targetIndex = currentIndex;
+      for (let i = 0; i < currentIndex; i += 1) {
+        const rect = rows[i].getBoundingClientRect();
+        if (moveEvent.clientY < rect.top + rect.height * 0.5) {
+          targetIndex = i;
+          break;
+        }
+      }
+      if (targetIndex === currentIndex) {
+        for (let i = rows.length - 1; i > currentIndex; i -= 1) {
+          const rect = rows[i].getBoundingClientRect();
+          if (moveEvent.clientY > rect.top + rect.height * 0.5) {
+            targetIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (targetIndex !== currentIndex) {
+        setTasks((current) => {
+          const from = current.findIndex((item) => item.id === taskId);
+          if (from < 0 || from === targetIndex) return current;
+          return reorderItems(current, from, targetIndex);
+        });
+      }
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      document.body.style.userSelect = "";
+      setDraggingId(null);
+      if (dragCleanupRef.current === cleanup) {
+        dragCleanupRef.current = null;
+      }
+    };
+
+    const onEnd = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId !== pointerId) return;
+      cleanup();
+    };
+
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
   };
 
   const onImageChange = (summary: TaskCollectionSummary) => {
@@ -381,30 +472,61 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                 </button>
               </div>
             ) : (
-              <ol className="mt-4 space-y-2.5">
-                {tasks.map((task, index) => (
-                  <li key={task.id} className="flex items-start gap-2.5 rounded-xl border border-slate-100 p-3">
-                    <span className="w-6 shrink-0 pt-0.5 text-right text-sm font-bold text-slate-700">{index + 1}.</span>
-                    <div className="min-w-0 flex-1"><TaskPreview task={task} compact /></div>
-                    <div className="flex shrink-0 gap-0.5">
-                      <button type="button" onClick={() => move(index, -1)} disabled={index === 0}
-                        aria-label={t("constructor.moveUpAria", { n: index + 1 })}
-                        className="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                        <Icon name="chevronUp" className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => move(index, 1)} disabled={index === tasks.length - 1}
-                        aria-label={t("constructor.moveDownAria", { n: index + 1 })}
-                        className="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                        <Icon name="chevronDown" className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => toggle(task)}
-                        aria-label={t("constructor.removeAria", { n: index + 1 })}
-                        className="rounded-md p-1 text-slate-500 hover:bg-red-50 hover:text-red-700">
-                        <Icon name="close" className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
+              <ol ref={selectionListRef} className="mt-4 space-y-2.5">
+                {tasks.map((task, index) => {
+                  const isDragging = draggingId === task.id;
+                  return (
+                    <li
+                      key={task.id}
+                      data-task-item-id={task.id}
+                      onPointerDown={(event) => startTaskDrag(event, task.id)}
+                      title={tasks.length > 1 ? t("constructor.dragToReorder") : undefined}
+                      className={`flex items-start gap-2 rounded-xl border p-3 transition-colors ${
+                        isDragging
+                          ? "relative z-10 cursor-grabbing border-purple-400 bg-purple-50/90 shadow-md ring-2 ring-purple-200"
+                          : tasks.length > 1
+                            ? "cursor-grab border-slate-100 bg-white hover:border-purple-200 hover:bg-slate-50/60"
+                            : "border-slate-100 bg-white"
+                      }`}
+                    >
+                      {tasks.length > 1 && (
+                        <span
+                          data-drag-handle
+                          aria-hidden="true"
+                          className="mt-0.5 flex shrink-0 touch-none items-center justify-center rounded p-0.5 text-slate-300 hover:text-slate-500"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+                            <circle cx="5.5" cy="3.5" r="1.25" />
+                            <circle cx="10.5" cy="3.5" r="1.25" />
+                            <circle cx="5.5" cy="8" r="1.25" />
+                            <circle cx="10.5" cy="8" r="1.25" />
+                            <circle cx="5.5" cy="12.5" r="1.25" />
+                            <circle cx="10.5" cy="12.5" r="1.25" />
+                          </svg>
+                        </span>
+                      )}
+                      <span className="w-6 shrink-0 pt-0.5 text-right text-sm font-bold text-slate-700">{index + 1}.</span>
+                      <div className="min-w-0 flex-1"><TaskPreview task={task} compact /></div>
+                      <div className="flex shrink-0 gap-0.5">
+                        <button type="button" onClick={() => move(index, -1)} disabled={index === 0}
+                          aria-label={t("constructor.moveUpAria", { n: index + 1 })}
+                          className="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                          <Icon name="chevronUp" className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => move(index, 1)} disabled={index === tasks.length - 1}
+                          aria-label={t("constructor.moveDownAria", { n: index + 1 })}
+                          className="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                          <Icon name="chevronDown" className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => toggle(task)}
+                          aria-label={t("constructor.removeAria", { n: index + 1 })}
+                          className="rounded-md p-1 text-slate-500 hover:bg-red-50 hover:text-red-700">
+                          <Icon name="close" className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
             )}
             {tasks.length >= MAX_TASKS && <p className="mt-2 text-xs text-amber-700">{t("constructor.full", { max: MAX_TASKS })}</p>}
