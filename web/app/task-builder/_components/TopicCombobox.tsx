@@ -164,12 +164,13 @@ export default function TopicCombobox({
         : included.length > 1
           ? t("constructor.selectedTopicsCount", { count: included.length })
           : excluded.length === 1
-            ? `− ${excluded[0]}`
+            ? excluded[0]
             : t("constructor.excludedTopicsCount", { count: excluded.length });
 
   const atIncludeLimit = included.length >= maxSelected;
   const atExcludeLimit = excluded.length >= maxSelected;
   const onlyExcluded = included.length === 0 && excluded.length > 0;
+  const onlySingleExcluded = included.length === 0 && excluded.length === 1;
 
   return (
     <div ref={containerRef} className="relative">
@@ -193,11 +194,13 @@ export default function TopicCombobox({
         >
           <span
             className={`truncate ${
-              onlyExcluded
-                ? "font-medium text-red-700"
-                : hasAnySelection
-                  ? "font-medium text-slate-900"
-                  : "text-slate-800"
+              onlySingleExcluded
+                ? "font-medium text-red-700 line-through"
+                : onlyExcluded
+                  ? "font-medium text-red-700"
+                  : hasAnySelection
+                    ? "font-medium text-slate-900"
+                    : "text-slate-800"
             }`}
           >
             {triggerLabel}

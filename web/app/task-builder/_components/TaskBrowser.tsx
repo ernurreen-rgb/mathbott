@@ -177,7 +177,7 @@ export default function TaskBrowser({
                 key={`exc-${name}`}
                 className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-red-700"
               >
-                <span>− {name}</span>
+                <span className="line-through">{name}</span>
                 <button
                   type="button"
                   onClick={() => setExcludedTopics((prev) => prev.filter((item) => item !== name))}
