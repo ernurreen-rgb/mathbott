@@ -67,4 +67,32 @@ describe("math-content formatting & MathRender safety", () => {
     const sub = splitMathRenderContent("Егер 2x-3=5 болса");
     expect(sub.parts.some((p) => p.type === "math" && p.value === "2x-3=5")).toBe(true);
   });
+
+  it("renders LaTeX spacing and percent escapes (e.g. #30898 and #28863) in math mode instead of raw plain text", () => {
+    const vecPrompt = "Үшбұрыш өзінің A(1;\\; 1;\\; 2),\\; B(3;\\; 4;\\; 2) және C(5;\\; 6;\\; 4) төбелерінің координаттарымен берілген.";
+    const vec = splitMathRenderContent(vecPrompt);
+    expect(vec.mode).toBe("mixed");
+    expect(vec.parts.every((p) => p.type !== "text" || !p.value.includes("\\"))).toBe(true);
+
+    const pctPrompt = "Арифметикалық прогрессияның сегізінші мүшесі төртінші мүшенің 40\\%-ын құрайды, ал қосындысы 2{,}8-ге тең.";
+    const pct = splitMathRenderContent(pctPrompt);
+    expect(pct.mode).toBe("mixed");
+    expect(pct.parts).toEqual(
+      expect.arrayContaining([
+        { type: "math", value: "40\\%" },
+        { type: "text", value: "-ын" },
+        { type: "math", value: "2{,}8" },
+        { type: "text", value: "-ге" },
+      ])
+    );
+
+    const plainPct = splitMathRenderContent("48 санының 50\\%-ын табыңыз:");
+    expect(plainPct.mode).toBe("mixed");
+    expect(plainPct.parts).toEqual(
+      expect.arrayContaining([
+        { type: "math", value: "50\\%" },
+        { type: "text", value: "-ын" },
+      ])
+    );
+  });
 });

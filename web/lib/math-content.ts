@@ -6,7 +6,7 @@ import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
 
 const HAS_CYRILLIC_RE = /[\u0400-\u04FF]/;
 const HAS_MATH_MARKERS_RE = /[\\^_{}=+\-*/<>()[\]|]/;
-const HAS_LATEX_COMMAND_RE = /\\[a-zA-Z]+/;
+const HAS_LATEX_COMMAND_RE = /\\(?:[a-zA-Z]+|[%,;:!$&_\\{}|])/;
 const HAS_STRONG_MATH_RE = /[{}^_=<>]/;
 const HAS_DIGIT_RE = /\d/;
 const IS_SINGLE_LATIN_RE = /^[A-Za-z]$/;
