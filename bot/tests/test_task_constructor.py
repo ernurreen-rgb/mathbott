@@ -261,3 +261,38 @@ class TaskConstructorTests(PostgresTestCase):
                 # Deleting first deletes only shared-title.png, NOT shared-bg.png (still used by second).
                 await client.delete(first_url, params=teacher)
                 delete.assert_awaited_once_with("shared-title.png")
+
+    async def test_quantitative_comparison_tasks_are_hidden_only_in_constructor(self):
+        teacher = {"email": "teacher@example.test"}
+        extra = await self.db.bank_tasks.create_tasks_bulk_atomic(
+            tasks=[
+                _task(9, text="Шамаларды салыстырыңыз:\n[[A]] 2^5\n[[B]] 5^2", topics=["Салыстыру"]),
+                _task(10, text="x > 0 болса, салыстырыңыз", topics=["Сандық сипаттамаларын салыстыру"]),
+                _task(11, text="Сравните количественные характеристики", topics=["Количественные характеристики"]),
+            ],
+            created_by=self.owner["id"],
+            actor_email="teacher@example.test",
+        )
+        hidden_ids = {int(t["id"]) for t in extra}
+
+        async with self.client() as client:
+            listed = (await client.get("/api/constructor/tasks", params=teacher)).json()
+            returned_ids = {item["id"] for item in listed["items"]}
+            self.assertEqual(listed["total"], 6)
+            self.assertTrue(returned_ids.isdisjoint(hidden_ids))
+
+            topics = (await client.get("/api/constructor/topics", params=teacher)).json()["items"]
+            self.assertNotIn("Салыстыру", topics)
+            self.assertNotIn("Сандық сипаттамаларын салыстыру", topics)
+            self.assertNotIn("Количественные характеристики", topics)
+
+            for hid in hidden_ids:
+                self.assertEqual(
+                    (await client.get(f"/api/constructor/tasks/{hid}/twins", params=teacher)).status_code,
+                    404,
+                )
+
+        # Tasks remain untouched in the general bank (not deleted).
+        bank_all = await self.db.bank_tasks.list_tasks(include_deleted=False, limit=100)
+        bank_ids = {int(item["id"]) for item in bank_all["items"]}
+        self.assertTrue(hidden_ids.issubset(bank_ids))

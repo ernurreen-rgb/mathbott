@@ -7,6 +7,7 @@ Any signed-in user may use it, students included, and sees the whole bank (twins
 lists never carry answers; only the export of the user's own collection does, for its answer key.
 """
 import logging
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
@@ -141,6 +142,21 @@ async def _collection_with_tasks(db: Database, collection: Dict[str, Any], *, wi
     }
 
 
+_QUANTITATIVE_LABEL_RE = re.compile(r"сандық\s+сипаттама|количественн\w*\s+характеристик", re.IGNORECASE)
+
+
+def _is_quantitative_comparison_task(task: Dict[str, Any]) -> bool:
+    text = task.get("text") or ""
+    if "[[A]]" in text and "[[B]]" in text:
+        return True
+    if _QUANTITATIVE_LABEL_RE.search(text):
+        return True
+    for label in (*(task.get("topics") or ()), *(task.get("sources") or ())):
+        if _QUANTITATIVE_LABEL_RE.search(str(label or "")):
+            return True
+    return False
+
+
 async def _owned_collection(db: Database, collection_id: int, user: dict) -> Dict[str, Any]:
     collection = await db.task_collections.get(collection_id, int(user["id"]))
     if not collection:
@@ -183,6 +199,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
             topic_match=topic_match,
             sort="newest",
             twins="exclude",
+            exclude_quantitative_comparison=True,
         )
         return {
             "items": [_public_task(task) for task in result["items"]],
@@ -201,7 +218,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
     ):
         source = await db.bank_tasks.get_task_by_id(task_id, include_deleted=False)
-        if not source or source.get("twin_source_id") is not None:
+        if not source or source.get("twin_source_id") is not None or _is_quantitative_comparison_task(source):
             raise HTTPException(status_code=404, detail="Task not found")
         twins = await db.bank_tasks.list_twins(task_id, approved_only=True)
         return {"items": [_public_task(twin) for twin in twins]}
@@ -214,7 +231,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None, max_length=80),
     ):
-        return {"items": await db.bank_tasks.list_topics(query=q, limit=None)}
+        return {"items": await db.bank_tasks.list_topics(query=q, limit=None, exclude_quantitative_comparison=True)}
 
     @app.get("/api/constructor/sources")
     @limiter.limit("60/minute")
@@ -224,7 +241,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None, max_length=80),
     ):
-        return {"items": await db.bank_tasks.list_sources(query=q, limit=None)}
+        return {"items": await db.bank_tasks.list_sources(query=q, limit=None, exclude_quantitative_comparison=True)}
 
     @app.get("/api/constructor/collections")
     @limiter.limit("60/minute")

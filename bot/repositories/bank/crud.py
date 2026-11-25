@@ -10,6 +10,34 @@ from .helpers import _TAXONOMY_TABLES, fetch_sources_for_task_safe, fetch_source
 from .twins import IS_TWIN_SQL, NOT_DRAFT_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
+# Quantitative comparison tasks ("Количественные характеристики" / "Сандық сипаттамаларын")
+# stay in the bank for modules, trial tests and admin, but are hidden from the task constructor.
+NOT_QUANTITATIVE_COMPARISON_SQL = """(
+    NOT (bt.text LIKE '%[[A]]%' AND bt.text LIKE '%[[B]]%')
+    AND LOWER(bt.text COLLATE "pg_c_utf8") NOT LIKE '%сандық сипаттама%'
+    AND LOWER(bt.text COLLATE "pg_c_utf8") NOT LIKE '%количественн%характеристик%'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM bank_task_topic_map qm
+        JOIN bank_topics qt ON qt.id = qm.topic_id
+        WHERE qm.bank_task_id = bt.id
+          AND (
+              qt.name_norm LIKE '%сандық сипаттама%'
+              OR qt.name_norm LIKE '%количественн%характеристик%'
+          )
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM bank_task_source_map qsm
+        JOIN bank_sources qs ON qs.id = qsm.source_id
+        WHERE qsm.bank_task_id = bt.id
+          AND (
+              qs.name_norm LIKE '%сандық сипаттама%'
+              OR qs.name_norm LIKE '%количественн%характеристик%'
+          )
+    )
+)"""
+
 
 class BankTaskCrudMixin:
     async def list_tasks(
@@ -29,6 +57,7 @@ class BankTaskCrudMixin:
         topic_match: str = "any",
         sort: str = "newest",
         twins: str = "exclude",
+        exclude_quantitative_comparison: bool = False,
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
@@ -38,6 +67,8 @@ class BankTaskCrudMixin:
                 where.append(NOT_TWIN_SQL)
             elif twins == "only":
                 where.append(IS_TWIN_SQL)
+            if exclude_quantitative_comparison:
+                where.append(NOT_QUANTITATIVE_COMPARISON_SQL)
 
             cleaned_search = (search or "").strip().lower()
             if cleaned_search:
@@ -959,18 +990,20 @@ class BankTaskCrudMixin:
         *,
         query: Optional[str] = None,
         limit: Optional[int] = None,
+        exclude_quantitative_comparison: bool = False,
     ) -> List[str]:
         item_table, map_table, fk_col = _TAXONOMY_TABLES[kind]
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
             limit_clause = "\n                    LIMIT ?" if limit is not None else ""
+            extra_task_clause = f"\n                          AND {NOT_QUANTITATIVE_COMPARISON_SQL}" if exclude_quantitative_comparison else ""
             active_clause = f"""EXISTS (
                         SELECT 1
                         FROM {map_table} m
                         JOIN bank_tasks bt ON bt.id = m.bank_task_id
                         WHERE m.{fk_col} = t.id
                           AND bt.deleted_at IS NULL
-                          AND {NOT_TWIN_SQL}
+                          AND {NOT_TWIN_SQL}{extra_task_clause}
                     )"""
             if normalized_query:
                 like_value = self._contains_like_pattern(normalized_query)
@@ -996,11 +1029,33 @@ class BankTaskCrudMixin:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
 
-    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
-        return await self._list_taxonomy("topic", query=query, limit=limit)
+    async def list_topics(
+        self,
+        query: Optional[str] = None,
+        limit: Optional[int] = None,
+        *,
+        exclude_quantitative_comparison: bool = False,
+    ) -> List[str]:
+        return await self._list_taxonomy(
+            "topic",
+            query=query,
+            limit=limit,
+            exclude_quantitative_comparison=exclude_quantitative_comparison,
+        )
 
-    async def list_sources(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
-        return await self._list_taxonomy("source", query=query, limit=limit)
+    async def list_sources(
+        self,
+        query: Optional[str] = None,
+        limit: Optional[int] = None,
+        *,
+        exclude_quantitative_comparison: bool = False,
+    ) -> List[str]:
+        return await self._list_taxonomy(
+            "source",
+            query=query,
+            limit=limit,
+            exclude_quantitative_comparison=exclude_quantitative_comparison,
+        )
 
     async def get_task_usage(self, task_id: int, include_deleted: bool = False) -> Dict[str, Any]:
         async with self._connection() as db:

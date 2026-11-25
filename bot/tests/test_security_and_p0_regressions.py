@@ -1196,6 +1196,74 @@ class Sprint3RegressionTests(unittest.TestCase):
         self.assertEqual(public["twin_count"], 3)
         self.assertNotIn("answer", public)
 
+    def test_constructor_hides_quantitative_comparison_tasks(self):
+        from repositories.bank.crud import BankTaskCrudMixin, NOT_QUANTITATIVE_COMPARISON_SQL
+        from repositories.bank.helpers import BankTaskHelpersMixin
+        from routes.constructor import _is_quantitative_comparison_task
+
+        executed_sql = []
+
+        class _FakeCursor:
+            def __init__(self, row=(0,), rows=None):
+                self._row = row
+                self._rows = rows or []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchone(self):
+                return self._row
+
+            async def fetchall(self):
+                return self._rows
+
+        class _FakeDb:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                executed_sql.append(sql)
+                return _FakeCursor()
+
+        class _FakeConnCtx:
+            async def __aenter__(self):
+                return _FakeDb()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeRepo(BankTaskHelpersMixin, BankTaskCrudMixin):
+            def _connection(self):
+                return _FakeConnCtx()
+
+            async def _fetch_active_usage_counts(self, db, task_ids):
+                return {}
+
+            async def _attach_twin_info(self, db, items):
+                return None
+
+        repo = _FakeRepo()
+        # Default bank listing does NOT exclude quantitative comparison tasks.
+        asyncio.run(repo.list_tasks())
+        self.assertFalse(any(NOT_QUANTITATIVE_COMPARISON_SQL in sql for sql in executed_sql))
+
+        # Constructor listing DOES exclude them in both tasks and topics/sources.
+        executed_sql.clear()
+        asyncio.run(repo.list_tasks(exclude_quantitative_comparison=True))
+        self.assertTrue(any(NOT_QUANTITATIVE_COMPARISON_SQL in sql for sql in executed_sql))
+
+        executed_sql.clear()
+        asyncio.run(repo.list_topics(exclude_quantitative_comparison=True))
+        self.assertTrue(any(NOT_QUANTITATIVE_COMPARISON_SQL in sql for sql in executed_sql))
+
+        self.assertTrue(_is_quantitative_comparison_task({"text": "[[A]] 2^5\n[[B]] 5^2"}))
+        self.assertTrue(_is_quantitative_comparison_task({"text": "Теңдеу", "topics": ["Сандық сипаттамаларын салыстыру"]}))
+        self.assertTrue(_is_quantitative_comparison_task({"text": "Задача", "topics": ["Количественные характеристики"]}))
+        self.assertTrue(_is_quantitative_comparison_task({"text": "Задача", "sources": ["Количественные характеристики"]}))
+        self.assertFalse(_is_quantitative_comparison_task({"text": "2x + 3 = 7", "topics": ["Алгебра"]}))
+
 
 if __name__ == "__main__":
     unittest.main()
