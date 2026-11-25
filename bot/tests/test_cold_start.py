@@ -68,8 +68,9 @@ class PrewarmTests(PostgresTestCase):
         storage.reset_prewarm_for_tests()
         storage.start_prewarm(self.database_url)
         storage._prewarm["done"].wait(30)
-        with patch.object(storage, "PREWARM_MAX_AGE_SECONDS", 0.0), _ConnectTimings() as timings:
-            time.sleep(0.01)
+        # Opened long before the first request: too old to trust.
+        storage._prewarm["ready_at"] = time.monotonic() - storage.PREWARM_MAX_AGE_SECONDS - 1
+        with _ConnectTimings() as timings:
             await self._open_and_close()
         self.assertEqual([prewarmed for _, prewarmed in timings], [False])
 

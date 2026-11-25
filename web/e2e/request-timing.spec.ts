@@ -8,18 +8,24 @@ test("a slow request is reported with where its time went", async ({ studentPage
     await new Promise((resolve) => setTimeout(resolve, 3200));
     await route.continue();
   });
-  const reportResponse = page.waitForResponse(
-    (response) => response.url().includes("/api/backend/client-timings") && response.request().method() === "POST",
+  type Report = { kind: string; path: string };
+  const isSlowMap = (report: Report) => report.kind === "slow" && report.path === "modules/map";
+  // Sampled reports of other requests may go in an earlier batch: wait for the one with this report.
+  const reportRequest = page.waitForRequest(
+    (request) =>
+      request.url().includes("/api/backend/client-timings") && request.method() === "POST" &&
+      (request.postDataJSON()?.reports ?? []).some(isSlowMap),
     { timeout: 30_000 },
   );
 
   await page.goto("/modules");
   await expect(page.getByRole("heading", { name: "Модуль картасы" })).toBeVisible();
 
-  const response = await reportResponse;
-  expect(response.status()).toBe(200);
-  const batch = response.request().postDataJSON();
-  const slow = batch.reports.find((report: { kind: string; path: string }) => report.kind === "slow" && report.path === "modules/map");
+  const request = await reportRequest;
+  const response = await request.response();
+  expect(response?.status()).toBe(200);
+  const batch = request.postDataJSON();
+  const slow = batch.reports.find(isSlowMap);
   expect(slow).toBeTruthy();
   expect(slow.page).toBe("/modules");
   expect(slow.duration_ms).toBeGreaterThanOrEqual(3000);
@@ -29,5 +35,5 @@ test("a slow request is reported with where its time went", async ({ studentPage
     expect(slow[part]).toBeLessThan(slow.duration_ms);
   }
   expect(JSON.stringify(batch)).not.toContain("@");
-  expect((await response.json()).recorded).toBeGreaterThanOrEqual(1);
+  expect((await response!.json()).recorded).toBeGreaterThanOrEqual(1);
 });
