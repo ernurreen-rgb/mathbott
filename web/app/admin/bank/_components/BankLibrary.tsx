@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useRef, useState, type ReactNode } from "react";
 import Icon from "@/components/ui/Icon";
 import MathRender from "@/components/ui/MathRender";
+import SourceFilterDropdown from "@/components/ui/SourceFilterDropdown";
 import { formatComparisonSummary } from "@/lib/comparison-task";
 import type { BankCatalogResponse, BankTask } from "@/types";
 import { emptyLibraryFilters, questionTypeLabel, type BankLibraryFilters, type BankSavedView } from "./library-model";
@@ -43,8 +44,7 @@ export default function BankLibrary(props: Props) {
     setTopicInput("");
   };
   const allActive = tab === "active" && !filters.topics.length && !filters.sources.length && filters.usage === "all" && !filters.hasTopics && !filters.hasSources && filters.twins !== "only";
-  const title = tab === "trash" ? "Себет" : tab === "answers" ? "Оқушы жауаптары" : filters.twins === "only" ? "Егіз есептер" : filters.sources.length === 1 && !filters.topics.length ? filters.sources[0] : filters.hasSources === "no" && !filters.topics.length ? "Дереккөзсіз есептер" : filters.topics.length === 1 ? filters.topics[0] : filters.usage === "unused" ? "Қолданылмайтын есептер" : filters.hasTopics === "no" ? "Тақырыпсыз есептер" : "Барлық есептер";
-  const sourceSelectValue = filters.hasSources === "no" ? "__none__" : filters.sources.length === 1 ? filters.sources[0] : filters.sources.length > 1 ? "__multi__" : "";
+  const title = tab === "trash" ? "Себет" : tab === "answers" ? "Оқушы жауаптары" : filters.twins === "only" ? "Егіз есептер" : filters.sources.length === 1 && !filters.topics.length ? filters.sources[0] : filters.hasSources === "no" && !filters.topics.length && !filters.sources.length ? "Дереккөзсіз есептер" : filters.topics.length === 1 ? filters.topics[0] : filters.usage === "unused" ? "Қолданылмайтын есептер" : filters.hasTopics === "no" ? "Тақырыпсыз есептер" : "Барлық есептер";
   const sourceOptions = Array.from(new Set([...(catalog?.sources?.map((s) => s.name) || []), ...filters.sources]));
 
   return <>
@@ -76,29 +76,31 @@ export default function BankLibrary(props: Props) {
           </nav>
           <nav aria-label="Есеп дереккөздері" className={styles.navGroup}>
             <p className={styles.navLabel}>Дереккөздер</p>
-            {catalog?.sources?.map((source) => (
-              <button
-                key={source.id}
-                type="button"
-                className={styles.navItem}
-                aria-pressed={tab === "active" && filters.sources.length === 1 && filters.sources[0] === source.name && filters.hasSources !== "no"}
-                onClick={() => {
-                  const alreadyOnly = filters.sources.length === 1 && filters.sources[0] === source.name && !filters.hasSources;
-                  patch({ sources: alreadyOnly ? [] : [source.name], hasSources: "" });
-                  props.onTabChange("active");
-                  setSidebarOpen(false);
-                }}
-              >
-                <span>{source.name}</span>
-                <span className={styles.count}>{source.task_count}</span>
-              </button>
-            ))}
+            {catalog?.sources?.map((source) => {
+              const checked = filters.sources.includes(source.name);
+              return (
+                <button
+                  key={source.id}
+                  type="button"
+                  className={styles.navItem}
+                  aria-pressed={tab === "active" && checked}
+                  onClick={() => {
+                    patch({ sources: checked ? filters.sources.filter((s) => s !== source.name) : [...filters.sources, source.name] });
+                    props.onTabChange("active");
+                    setSidebarOpen(false);
+                  }}
+                >
+                  <span>{source.name}</span>
+                  <span className={styles.count}>{source.task_count}</span>
+                </button>
+              );
+            })}
             <button
               type="button"
               className={styles.navItem}
               aria-pressed={tab === "active" && filters.hasSources === "no"}
               onClick={() => {
-                patch({ hasSources: filters.hasSources === "no" ? "" : "no", sources: [] });
+                patch({ hasSources: filters.hasSources === "no" ? "" : "no" });
                 props.onTabChange("active");
                 setSidebarOpen(false);
               }}
@@ -131,22 +133,22 @@ export default function BankLibrary(props: Props) {
           </div>
           <div className={styles.filters}>
             <select className={styles.select} aria-label="Күрделілік бойынша сүзгі" value={filters.difficulty} onChange={(e) => patch({ difficulty: e.target.value as BankLibraryFilters["difficulty"] })}><option value="">Барлық күрделілік</option><option value="A">A · оңай</option><option value="B">B · орташа</option><option value="C">C · қиын</option></select>
-            <select
-              className={styles.select}
-              aria-label="Дереккөз бойынша сүзгі"
-              value={sourceSelectValue}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!value) patch({ sources: [], hasSources: "" });
-                else if (value === "__none__") patch({ sources: [], hasSources: "no" });
-                else if (value !== "__multi__") patch({ sources: [value], hasSources: "" });
-              }}
-            >
-              <option value="">Барлық дереккөздер</option>
-              {filters.sources.length > 1 && <option value="__multi__">{filters.sources.length} дереккөз таңдалды</option>}
-              {sourceOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-              <option value="__none__">Дереккөзсіз</option>
-            </select>
+            <SourceFilterDropdown
+              variant="admin"
+              sources={sourceOptions}
+              selectedSources={filters.sources}
+              includeSourceless={filters.hasSources === "no"}
+              onChange={({ sources: nextSources, includeSourceless }) => patch({ sources: nextSources, hasSources: includeSourceless ? "no" : "" })}
+              allLabel="Барлық дереккөздер"
+              noneLabel="Дереккөзсіз"
+              ariaLabel="Дереккөз бойынша сүзгі"
+              clearAriaLabel="Дереккөз сүзгісін тазалау"
+              clearLabel="Тазалау"
+              doneLabel="Дайын"
+              selectedCountLabel={(count) => `${count} дереккөз`}
+              searchPlaceholder="Дереккөзді іздеу"
+              notFoundLabel="Дереккөз табылмады"
+            />
             <select className={styles.select} aria-label="Сұрақ түрі бойынша сүзгі" value={filters.questionType} onChange={(e) => patch({ questionType: e.target.value as BankLibraryFilters["questionType"] })}><option value="">Барлық сұрақ түрі</option>{["input", "tf", "mcq", "mcq6", "context", "select"].map((type) => <option key={type} value={type}>{questionTypeLabel(type)}</option>)}</select>
             <select className={styles.select} aria-label="Есептерді сұрыптау" value={filters.sort} onChange={(e) => patch({ sort: e.target.value as BankLibraryFilters["sort"] })}><option value="newest">Жаңалары алдымен</option><option value="updated">Соңғы өзгертілген</option><option value="oldest">Ескілері алдымен</option></select>
             <button type="button" className={styles.quiet} onClick={() => props.onFiltersChange(emptyLibraryFilters())}>Тазалау</button>

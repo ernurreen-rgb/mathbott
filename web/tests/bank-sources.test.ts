@@ -62,9 +62,10 @@ describe("bank task sources", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     try {
-      await getConstructorTasks({ sources: ["Рустюмова"], hasSources: false }, "u@example.com");
+      await getConstructorTasks({ sources: ["Рустюмова", "ҰБТ есебі"], hasSources: false }, "u@example.com");
       const constructorUrl = String(fetchMock.mock.calls[0]?.[0] || "");
-      expect(constructorUrl).toContain("sources=%D0%A0%D1%83%D1%81%D1%82%D1%8E%D0%BC%D0%BE%D0%B2%D0%B0");
+      expect(constructorUrl).toContain("%D0%A0%D1%83%D1%81%D1%82%D1%8E%D0%BC%D0%BE%D0%B2%D0%B0");
+      expect(constructorUrl).toContain("%D2%B0%D0%91%D0%A2");
       expect(constructorUrl).toContain("has_sources=false");
 
       await getConstructorSources("u@example.com");

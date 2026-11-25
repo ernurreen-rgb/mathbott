@@ -68,23 +68,24 @@ class BankTaskCrudMixin:
                 topic_clause = "EXISTS (SELECT 1 FROM bank_task_topic_map m WHERE m.bank_task_id = bt.id)"
                 where.append(topic_clause if has_topics else f"NOT {topic_clause}")
 
-            if has_sources is not None:
-                source_clause = "EXISTS (SELECT 1 FROM bank_task_source_map sm WHERE sm.bank_task_id = bt.id)"
-                where.append(source_clause if has_sources else f"NOT {source_clause}")
-
             normalized_sources = [self._normalize_topic(s) for s in self._normalize_topics(sources)]
+            source_exists_clause = "EXISTS (SELECT 1 FROM bank_task_source_map sm WHERE sm.bank_task_id = bt.id)"
             if normalized_sources:
                 placeholders = ",".join(["?"] * len(normalized_sources))
-                where.append(f"""
-                EXISTS (
+                matching_source_clause = f"""EXISTS (
                     SELECT 1
                     FROM bank_task_source_map sm
                     JOIN bank_sources s ON s.id = sm.source_id
                     WHERE sm.bank_task_id = bt.id
                       AND s.name_norm IN ({placeholders})
-                )
-                """)
+                )"""
+                if has_sources is False:
+                    where.append(f"({matching_source_clause} OR NOT {source_exists_clause})")
+                else:
+                    where.append(matching_source_clause)
                 params.extend(normalized_sources)
+            elif has_sources is not None:
+                where.append(source_exists_clause if has_sources else f"NOT {source_exists_clause}")
 
             normalized_topics = [self._normalize_topic(t) for t in self._normalize_topics(topics)]
             if normalized_topics:

@@ -158,6 +158,11 @@ class BankCatalogTests(PostgresTestCase):
 
         only_rust = await self.db.bank_tasks.list_tasks(sources=["Рустюмова"])
         self.assertEqual([item["id"] for item in only_rust["items"]], [t1["id"]])
+        multi_src = await self.db.bank_tasks.list_tasks(sources=["Рустюмова", "Шың"])
+        self.assertEqual({item["id"] for item in multi_src["items"]}, {t1["id"], t2["id"]})
+        src_plus_none = await self.db.bank_tasks.list_tasks(sources=["Шың"], has_sources=False, limit=100)
+        self.assertEqual(src_plus_none["total"], 9991)
+        self.assertEqual(src_plus_none["items"][0]["id"], t2["id"])
         no_src = await self.db.bank_tasks.list_tasks(has_sources=False, limit=10)
         self.assertEqual(no_src["total"], 9990)
 
@@ -181,9 +186,17 @@ class BankCatalogTests(PostgresTestCase):
             self.assertEqual([item["id"] for item in c_filtered.json()["items"]], [t2["id"]])
             self.assertEqual(c_filtered.json()["items"][0]["sources"], ["Шың"])
 
+            c_multi = await client.get("/api/constructor/tasks", params={"email": "student@example.test", "sources": "Рустюмова,Шың"})
+            self.assertEqual(c_multi.status_code, 200)
+            self.assertEqual({item["id"] for item in c_multi.json()["items"]}, {t1["id"], t2["id"]})
+
             c_none = await client.get("/api/constructor/tasks", params={"email": "student@example.test", "has_sources": "false", "limit": 5})
             self.assertEqual(c_none.status_code, 200)
             self.assertEqual(c_none.json()["total"], 9990)
+
+            c_mix = await client.get("/api/constructor/tasks", params={"email": "student@example.test", "sources": "Шың", "has_sources": "false", "limit": 5})
+            self.assertEqual(c_mix.status_code, 200)
+            self.assertEqual(c_mix.json()["total"], 9991)
 
             created = await client.post("/api/admin/bank/tasks", data={
                 "email": "bank-admin@example.test",

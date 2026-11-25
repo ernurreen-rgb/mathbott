@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { toggleIncludedTopic } from "@/lib/topic-filter";
 import type { ConstructorQuestionType, ConstructorTask } from "@/types/constructor";
+import SourceFilterDropdown from "@/components/ui/SourceFilterDropdown";
 import TaskPreview from "./TaskPreview";
 import TopicCombobox from "./TopicCombobox";
 
@@ -41,7 +42,8 @@ export default function TaskBrowser({
   const [search, setSearch] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [excludedTopics, setExcludedTopics] = useState<string[]>([]);
-  const [sourceFilter, setSourceFilter] = useState<string>("");
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [includeSourceless, setIncludeSourceless] = useState(false);
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -58,6 +60,7 @@ export default function TaskBrowser({
   const mountedRef = useRef(true);
   const inFlightTwinsRef = useRef<Set<number>>(new Set());
   const selectedTopicSet = useMemo(() => new Set(selectedTopics), [selectedTopics]);
+  const selectedSourceSet = useMemo(() => new Set(selectedSources), [selectedSources]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -132,13 +135,13 @@ export default function TaskBrowser({
       search: search || undefined,
       topics: selectedTopics.length > 0 ? selectedTopics : undefined,
       excludeTopics: excludedTopics.length > 0 ? excludedTopics : undefined,
-      sources: sourceFilter && sourceFilter !== "__none__" ? [sourceFilter] : undefined,
-      hasSources: sourceFilter === "__none__" ? false : undefined,
+      sources: selectedSources.length > 0 ? selectedSources : undefined,
+      hasSources: includeSourceless ? false : undefined,
       topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, excludedTopics, sourceFilter, difficulty, questionType],
+    [search, selectedTopics, excludedTopics, selectedSources, includeSourceless, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -191,18 +194,24 @@ export default function TaskBrowser({
               setExcludedTopics(excluded);
             }}
           />
-          <label className="block">
-            <span className="sr-only">{t("constructor.source")}</span>
-            <select
-              value={sourceFilter}
-              onChange={(event) => setSourceFilter(event.target.value)}
-              className={selectClass}
-            >
-              <option value="">{t("constructor.allSources")}</option>
-              {sources.map((name) => <option key={name} value={name}>{name}</option>)}
-              <option value="__none__">{t("constructor.noSource")}</option>
-            </select>
-          </label>
+          <SourceFilterDropdown
+            sources={sources}
+            selectedSources={selectedSources}
+            includeSourceless={includeSourceless}
+            onChange={({ sources: nextSources, includeSourceless: nextSourceless }) => {
+              setSelectedSources(nextSources);
+              setIncludeSourceless(nextSourceless);
+            }}
+            allLabel={t("constructor.allSources")}
+            noneLabel={t("constructor.noSource")}
+            ariaLabel={t("constructor.source")}
+            clearAriaLabel={t("constructor.clearSource")}
+            clearLabel={t("constructor.clear")}
+            doneLabel={t("constructor.done")}
+            selectedCountLabel={(count) => t("constructor.selectedSourcesCount", { count })}
+            searchPlaceholder={t("constructor.findSource")}
+            notFoundLabel={t("constructor.sourceNotFound")}
+          />
           <label className="block">
             <span className="sr-only">{t("constructor.type")}</span>
             <select
@@ -230,8 +239,40 @@ export default function TaskBrowser({
             ))}
           </div>
         </div>
-        {(selectedTopics.length > 0 || excludedTopics.length > 0) && (
+        {(selectedTopics.length > 0 || excludedTopics.length > 0 || selectedSources.length > 0 || includeSourceless) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {selectedSources.map((name) => (
+              <span
+                key={`src-chip-${name}`}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-amber-900"
+              >
+                <span>{name}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSources((prev) => prev.filter((item) => item !== name))}
+                  aria-label={t("constructor.removeSourceAria", { source: name })}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200 hover:text-amber-950"
+                >
+                  <Icon name="close" className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {includeSourceless && (
+              <span
+                key="src-chip-none"
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-amber-900"
+              >
+                <span>{t("constructor.noSource")}</span>
+                <button
+                  type="button"
+                  onClick={() => setIncludeSourceless(false)}
+                  aria-label={t("constructor.removeSourceAria", { source: t("constructor.noSource") })}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200 hover:text-amber-950"
+                >
+                  <Icon name="close" className="h-3 w-3" />
+                </button>
+              </span>
+            )}
             {selectedTopics.map((name) => (
               <span
                 key={`inc-${name}`}
@@ -314,14 +355,16 @@ export default function TaskBrowser({
                 <span className="font-mono">#{task.id}</span>
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{task.difficulty}</span>
                 {(task.sources || []).map((name) => {
-                  const active = sourceFilter === name;
+                  const active = selectedSourceSet.has(name);
                   return (
                     <button
                       key={`src-${name}`}
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setSourceFilter((prev) => (prev === name ? "" : name));
+                        setSelectedSources((prev) =>
+                          prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name],
+                        );
                       }}
                       aria-pressed={active}
                       aria-label={t("constructor.filterBySourceAria", { source: name })}
