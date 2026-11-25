@@ -275,6 +275,14 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
     return result.data;
   };
 
+  const cancelDownload = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(null);
+    setProgress("");
+    setPdfDocument(null);
+  };
+
   const download = async (kind: "pdf" | "pptx") => {
     if (busy || !tasks.length) return;
     const controller = new AbortController();
@@ -320,7 +328,8 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
         }
       }
     } finally {
-      if (!controller.signal.aborted) {
+      if (abort.current === controller) {
+        abort.current = null;
         setBusy(null);
         setProgress("");
         setPdfDocument(null);
@@ -621,9 +630,20 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                   {t("constructor.downloadPptx")}
                 </button>
               </div>
-              <p role="status" className="mt-2 text-xs text-slate-500">
-                {progress || t(includeAnswers ? "constructor.downloadHint" : "constructor.downloadHintNoAnswers")}
-              </p>
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                <p role="status">
+                  {progress || t(includeAnswers ? "constructor.downloadHint" : "constructor.downloadHintNoAnswers")}
+                </p>
+                {busy !== null && (
+                  <button
+                    type="button"
+                    onClick={cancelDownload}
+                    className="shrink-0 font-semibold text-slate-600 underline hover:text-slate-900"
+                  >
+                    {t("constructor.cancelDownload")}
+                  </button>
+                )}
+              </div>
               {downloadError && (
                 <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">
                   {downloadError.message}

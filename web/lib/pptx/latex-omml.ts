@@ -76,8 +76,10 @@ const SPACES: Record<string, string> = {
 const FUNCTIONS = new Set([
   "sin", "cos", "tan", "tg", "cot", "ctg", "cotg", "sec", "csc", "cosec", "arcsin", "arccos", "arctan",
   "arctg", "arccot", "arcctg", "sinh", "cosh", "tanh", "coth", "th", "ch", "sh", "cth", "ln", "lg", "log",
-  "exp", "det", "deg", "dim", "gcd", "hom", "ker", "arg", "sgn", "Pr", "lcm", "НОД", "НОК",
+  "exp", "det", "deg", "dim", "gcd", "hom", "ker", "arg", "sgn", "Pr", "lcm", "НОД", "НОК", "ЕҮОБ", "ЕКОЕ",
 ]);
+const CMD_LETTER = /[A-Za-zА-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]/;
+const CYRILLIC_FUNC_START = /^(?:НОД|НОК|ЕҮОБ|ЕКОЕ)(?![A-Za-zА-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі])/;
 const LIMIT_FUNCTIONS = new Set(["lim", "limsup", "liminf", "max", "min", "sup", "inf"]);
 const LIMIT_NAMES: Record<string, string> = { limsup: "lim sup", liminf: "lim inf" };
 
@@ -155,8 +157,8 @@ class LatexParser {
   private readCommand(): string {
     this.i += 1; // backslash
     const start = this.i;
-    if (/[A-Za-z]/.test(this.peek())) {
-      while (/[A-Za-z]/.test(this.peek())) this.i += 1;
+    if (CMD_LETTER.test(this.peek())) {
+      while (CMD_LETTER.test(this.peek())) this.i += 1;
       if (this.peek() === "*") this.i += 1;
       const name = this.s.slice(start, this.i);
       this.skipSpaces();
@@ -215,12 +217,24 @@ class LatexParser {
       }
       if (OPEN_BRACKETS[ch]) {
         this.i += 1;
+        if (ch === "[" && this.isReversedCloseBracket(items, openBrackets)) {
+          const opened = openBrackets.pop() as number;
+          const open = (items[opened] as { text: string }).text;
+          const body = items.splice(opened);
+          items.push({ t: "delim", open, close: "[", body: row(body.slice(1)) });
+          continue;
+        }
         openBrackets.push(items.length);
         items.push(run(ch));
         continue;
       }
       if (CLOSE_BRACKETS[ch]) {
         this.i += 1;
+        if (ch === "]" && openBrackets.length === 0 && this.isReversedOpenBracket(items)) {
+          openBrackets.push(items.length);
+          items.push(run("]"));
+          continue;
+        }
         const opened = openBrackets.pop();
         if (opened === undefined) {
           items.push(run(ch));
@@ -295,10 +309,90 @@ class LatexParser {
     return ch === "." ? "" : ch === "<" ? "⟨" : ch === ">" ? "⟩" : ch;
   }
 
+  /** True when `[` (already consumed at `this.i - 1`) closes a French open interval like `[0; 5[` or `]0; 5[`. */
+  private isReversedCloseBracket(items: MathNode[], openBrackets: number[]): boolean {
+    if (!openBrackets.length) return false;
+    const opened = openBrackets[openBrackets.length - 1];
+    const openNode = items[opened];
+    if (!openNode || openNode.t !== "run" || (openNode.text !== "[" && openNode.text !== "]")) return false;
+    const slice = items.slice(opened + 1);
+    if (slice.length < 2) return false;
+    if (!slice.some((node) => node.t === "run" && /[;,]/.test(node.text))) return false;
+    const prev = slice[slice.length - 1];
+    if (prev.t === "run" && /[;,+\-−=<>≤≥≠]\s*$/.test(prev.text)) return false;
+    const after = this.s.slice(this.i).trimStart();
+    if (!after) return true;
+    if (/^[,;}$&)]/.test(after)) return true;
+    return /^\\(?:cup|cap|setminus|smallsetminus|right|end|\\|quad|qquad|,|;|:|!|\s)(?![A-Za-z])/.test(after);
+  }
+
+  /** True when `]` (already consumed at `this.i - 1`) opens a French interval like `]0; 5]` or `]0; 5[`. */
+  private isReversedOpenBracket(items: MathNode[]): boolean {
+    if (items.length > 0) {
+      const last = items[items.length - 1];
+      if (last.t !== "run" || !/[=<>≤≥≠∈∉⊂⊆∪∩∖,;:\s]$/.test(last.text)) return false;
+    }
+    let sawSeparator = false;
+    let braceDepth = 0;
+    let parenDepth = 0;
+    for (let k = this.i; k < this.s.length; k += 1) {
+      const c = this.s[k];
+      if (c === "\\") {
+        const rest = this.s.slice(k + 1);
+        if (/^(?:right|end|\\)(?![A-Za-z])/.test(rest)) return false;
+        const sqrtMatch = /^sqrt\s*\[/.exec(rest);
+        if (sqrtMatch) {
+          const closeOpt = this.s.indexOf("]", k + 1 + sqrtMatch[0].length);
+          if (closeOpt === -1) return false;
+          k = closeOpt;
+          continue;
+        }
+        const word = rest.match(/^[A-Za-z]+/)?.[0];
+        k += word ? word.length : 1;
+        continue;
+      }
+      if (c === "{") {
+        braceDepth += 1;
+        continue;
+      }
+      if (c === "}") {
+        if (braceDepth === 0) return false;
+        braceDepth -= 1;
+        continue;
+      }
+      if (braceDepth > 0) continue;
+      if (c === "(") {
+        parenDepth += 1;
+        continue;
+      }
+      if (c === ")") {
+        if (parenDepth === 0) return false;
+        parenDepth -= 1;
+        continue;
+      }
+      if (parenDepth > 0) continue;
+      if (c === ";") {
+        sawSeparator = true;
+        continue;
+      }
+      if (c === "[" || c === "]") {
+        return sawSeparator;
+      }
+    }
+    return false;
+  }
+
   parseAtom(single: boolean): MathNode | null {
     const ch = this.peek();
     if (ch === "{") return this.parseGroup();
     if (ch === "\\") return this.parseCommand(this.readCommand());
+    if (!single) {
+      const cyrFunc = CYRILLIC_FUNC_START.exec(this.s.slice(this.i));
+      if (cyrFunc) {
+        this.i += cyrFunc[0].length;
+        return this.parseFunction(run(cyrFunc[0], "plain"), false);
+      }
+    }
     this.i += 1;
     if (ch === "$") return null;
     if (ch === "~") return run(" ");

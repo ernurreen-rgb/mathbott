@@ -156,17 +156,20 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         search: Optional[str] = Query(None, max_length=200),
         difficulty: Optional[Literal["A", "B", "C"]] = Query(None),
         topics: Optional[str] = Query(None, max_length=2000, description="Comma-separated topics"),
+        exclude_topics: Optional[str] = Query(None, max_length=2000, description="Comma-separated excluded topics"),
         topic_match: Literal["any", "all"] = Query("any"),
         question_type: Optional[QUESTION_TYPES] = Query(None),
         limit: int = Query(20, ge=1, le=50),
         offset: int = Query(0, ge=0, le=100_000),
     ):
         topic_names = [name.strip() for name in (topics or "").split(",") if name.strip()][:20]
+        excluded_topic_names = [name.strip() for name in (exclude_topics or "").split(",") if name.strip()][:20]
         result = await db.bank_tasks.list_tasks(
             include_deleted=False,
             search=search,
             difficulty=difficulty,
             topics=topic_names,
+            exclude_topics=excluded_topic_names,
             limit=limit,
             offset=offset,
             question_type=question_type,
@@ -193,7 +196,9 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         return {"items": await db.bank_tasks.list_topics(query=q, limit=None)}
 
     @app.get("/api/constructor/collections")
+    @limiter.limit("60/minute")
     async def list_task_collections(
+        request: Request,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
     ):
@@ -221,7 +226,9 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await _collection_with_tasks(db, collection, with_answers=False)
 
     @app.get("/api/constructor/collections/{collection_id}")
+    @limiter.limit("60/minute")
     async def get_task_collection(
+        request: Request,
         collection_id: int,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -251,7 +258,9 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         return await _collection_with_tasks(db, updated, with_answers=False)
 
     @app.delete("/api/constructor/collections/{collection_id}")
+    @limiter.limit("30/minute")
     async def delete_task_collection(
+        request: Request,
         collection_id: int,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
@@ -307,7 +316,9 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         return _collection_summary(collection)
 
     @app.delete("/api/constructor/collections/{collection_id}/images/{kind}")
+    @limiter.limit("30/minute")
     async def delete_task_collection_image(
+        request: Request,
         collection_id: int,
         kind: IMAGE_KINDS,
         current_user: dict = Depends(require_internal_identity),

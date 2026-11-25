@@ -17,6 +17,7 @@ class BankTaskCrudMixin:
         search: Optional[str] = None,
         difficulty: Optional[str] = None,
         topics: Optional[List[str]] = None,
+        exclude_topics: Optional[List[str]] = None,
         limit: int = 20,
         offset: int = 0,
         question_type: Optional[str] = None,
@@ -85,6 +86,20 @@ class BankTaskCrudMixin:
                     )
                     """)
                     params.extend(normalized_topics)
+
+            normalized_excluded = [self._normalize_topic(t) for t in self._normalize_topics(exclude_topics)]
+            if normalized_excluded:
+                placeholders = ",".join(["?"] * len(normalized_excluded))
+                where.append(f"""
+                NOT EXISTS (
+                    SELECT 1
+                    FROM bank_task_topic_map m
+                    JOIN bank_topics t ON t.id = m.topic_id
+                    WHERE m.bank_task_id = bt.id
+                      AND t.name_norm IN ({placeholders})
+                )
+                """)
+                params.extend(normalized_excluded)
 
             where_clause = " AND ".join(where)
             async with db.execute(
@@ -854,20 +869,30 @@ class BankTaskCrudMixin:
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
             limit_clause = "\n                    LIMIT ?" if limit is not None else ""
+            active_clause = f"""EXISTS (
+                        SELECT 1
+                        FROM bank_task_topic_map m
+                        JOIN bank_tasks bt ON bt.id = m.bank_task_id
+                        WHERE m.topic_id = t.id
+                          AND bt.deleted_at IS NULL
+                          AND {NOT_TWIN_SQL}
+                    )"""
             if normalized_query:
                 like_value = self._contains_like_pattern(normalized_query)
                 sql = f"""
-                    SELECT name
-                    FROM bank_topics
-                    WHERE name_norm LIKE ? ESCAPE '\\'
-                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC{limit_clause}
+                    SELECT t.name
+                    FROM bank_topics t
+                    WHERE t.name_norm LIKE ? ESCAPE '\\'
+                      AND {active_clause}
+                    ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
                 """
                 params: List[Any] = [like_value]
             else:
                 sql = f"""
-                    SELECT name
-                    FROM bank_topics
-                    ORDER BY LOWER(name COLLATE "pg_c_utf8") ASC{limit_clause}
+                    SELECT t.name
+                    FROM bank_topics t
+                    WHERE {active_clause}
+                    ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
                 """
                 params = []
             if limit is not None:

@@ -147,6 +147,27 @@ describe("LaTeX to PowerPoint equations", () => {
     expect(omml).toContain("&amp;");
     expectWellFormed(omml);
   });
+
+  it("parses Cyrillic math functions and French open intervals cleanly", () => {
+    for (const expr of [String.raw`\НОД(12; 18)`, "НОК(6; 8)", String.raw`\ЕҮОБ(15; 25)`]) {
+      const { omml, unsupported } = latexToOmml(expr, OPTIONS);
+      expect(unsupported, expr).toEqual([]);
+      expectWellFormed(omml);
+      expect(omml, expr).toContain("<m:func>");
+    }
+
+    const union = latexToOmml(String.raw`[0; 5[ \cup ]5; 10]`, OPTIONS);
+    expect(union.unsupported).toEqual([]);
+    expectWellFormed(union.omml);
+    expect(union.omml).toContain('<m:begChr m:val="["/><m:endChr m:val="["/>');
+    expect(union.omml).toContain('<m:begChr m:val="]"/><m:endChr m:val="]"/>');
+    expect(union.text).toBe("[0;5[∪]5;10]");
+
+    const openFrac = latexToOmml(String.raw`]-\frac{1}{2}; \frac{3}{4}[`, OPTIONS);
+    expect(openFrac.unsupported).toEqual([]);
+    expectWellFormed(openFrac.omml);
+    expect(openFrac.omml).toContain('<m:begChr m:val="]"/><m:endChr m:val="["/>');
+  });
 });
 
 describe("task text into slide paragraphs", () => {
@@ -367,5 +388,26 @@ describe("PPTX deck", () => {
         expect(content).not.toContain("Жауаптар");
       }
     }
+  });
+
+  it("stores a shared task diagram once in ppt/media when multiple tasks reference the same image", () => {
+    const sharedDiagram = { bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), ext: "png" as const, width: 640, height: 480 };
+    const { files } = buildTaskDeckFiles({
+      title: "Геометрия",
+      author: "A",
+      language: "kk",
+      tasks: [
+        task(10, { image_filename: "shared.png" }),
+        task(11, { image_filename: "shared.png" }),
+        task(12, { image_filename: "shared.png" }),
+      ],
+      taskImages: new Map([
+        [10, sharedDiagram],
+        [11, sharedDiagram],
+        [12, sharedDiagram],
+      ]),
+    });
+    const mediaFiles = Array.from(files.keys()).filter((path) => path.startsWith("ppt/media/"));
+    expect(mediaFiles).toEqual(["ppt/media/image1.png"]);
   });
 });

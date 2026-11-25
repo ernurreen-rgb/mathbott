@@ -55,3 +55,50 @@ export function toggleTopicSelection(
   }
   return [...selected, topic];
 }
+
+export interface TopicSelectionState {
+  included: string[];
+  excluded: string[];
+}
+
+/** Toggle a topic as included (removing it from excluded if present). */
+export function toggleIncludedTopic(
+  state: TopicSelectionState,
+  topic: string,
+  maxPerGroup = 20,
+): TopicSelectionState {
+  if (state.included.includes(topic)) {
+    return {
+      included: state.included.filter((item) => item !== topic),
+      excluded: [...state.excluded],
+    };
+  }
+  if (state.included.length >= maxPerGroup) {
+    return { included: [...state.included], excluded: [...state.excluded] };
+  }
+  return {
+    included: [...state.included, topic],
+    excluded: state.excluded.filter((item) => item !== topic),
+  };
+}
+
+/** Toggle a topic as excluded (removing it from included if present). */
+export function toggleExcludedTopic(
+  state: TopicSelectionState,
+  topic: string,
+  maxPerGroup = 20,
+): TopicSelectionState {
+  if (state.excluded.includes(topic)) {
+    return {
+      included: [...state.included],
+      excluded: state.excluded.filter((item) => item !== topic),
+    };
+  }
+  if (state.excluded.length >= maxPerGroup) {
+    return { included: [...state.included], excluded: [...state.excluded] };
+  }
+  return {
+    included: state.included.filter((item) => item !== topic),
+    excluded: [...state.excluded, topic],
+  };
+}

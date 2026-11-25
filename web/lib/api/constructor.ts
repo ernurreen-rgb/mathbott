@@ -25,6 +25,7 @@ export interface ConstructorTaskQuery {
   search?: string;
   difficulty?: "A" | "B" | "C";
   topics?: string[];
+  excludeTopics?: string[];
   topicMatch?: "any" | "all";
   questionType?: ConstructorQuestionType;
   limit?: number;
@@ -36,6 +37,7 @@ export function getConstructorTasks(query: ConstructorTaskQuery, email: string):
   if (query.search?.trim()) params.set("search", query.search.trim());
   if (query.difficulty) params.set("difficulty", query.difficulty);
   if (query.topics?.length) params.set("topics", query.topics.join(","));
+  if (query.excludeTopics?.length) params.set("exclude_topics", query.excludeTopics.join(","));
   if (query.topicMatch && query.topicMatch !== "any") params.set("topic_match", query.topicMatch);
   if (query.questionType) params.set("question_type", query.questionType);
   params.set("limit", String(query.limit ?? 20));

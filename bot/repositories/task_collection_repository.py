@@ -16,7 +16,10 @@ MAX_COLLECTIONS_PER_USER = 50
 MAX_COLLECTION_TASKS = 100
 IMAGE_COLUMNS = {"title": "title_image", "background": "background_image"}
 _NOW = "to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
-_LOCK_KEY = "task_collections"
+
+
+def _lock_key(user_id: int) -> str:
+    return f"task_collections:{int(user_id)}"
 
 
 class TaskCollectionLimitError(Exception):
@@ -69,7 +72,7 @@ class TaskCollectionRepository(BaseRepository):
         return _serialize(row) if row else None
 
     async def create(self, user_id: int, title: str) -> Dict[str, Any]:
-        async with self._write_transaction(lock_key=_LOCK_KEY) as db:
+        async with self._write_transaction(lock_key=_lock_key(user_id)) as db:
             db.row_factory = db_driver.Row
             async with db.execute("SELECT COUNT(*) FROM task_collections WHERE user_id = ?", (user_id,)) as cursor:
                 row = await cursor.fetchone()
@@ -128,7 +131,7 @@ class TaskCollectionRepository(BaseRepository):
         if pptx_font is not None:
             assignments.append("pptx_font = ?")
             params.append(pptx_font)
-        async with self._write_transaction(lock_key=_LOCK_KEY) as db:
+        async with self._write_transaction(lock_key=_lock_key(user_id)) as db:
             db.row_factory = db_driver.Row
             if task_ids is not None:
                 kept = await self._existing_bank_task_ids(db, task_ids)
@@ -149,7 +152,7 @@ class TaskCollectionRepository(BaseRepository):
 
         Returns (found, previous filename to delete) — only when no other collection still uses it."""
         column = IMAGE_COLUMNS[kind]
-        async with self._write_transaction(lock_key=_LOCK_KEY) as db:
+        async with self._write_transaction(lock_key=_lock_key(user_id)) as db:
             async with db.execute(
                 f"SELECT {column} FROM task_collections WHERE id = ? AND user_id = ?", (collection_id, user_id)
             ) as cursor:
@@ -170,7 +173,7 @@ class TaskCollectionRepository(BaseRepository):
 
     async def delete(self, collection_id: int, user_id: int) -> Tuple[bool, List[str]]:
         """Delete the collection. Returns (found, unreferenced image filenames) so the caller removes only unused files."""
-        async with self._write_transaction(lock_key=_LOCK_KEY) as db:
+        async with self._write_transaction(lock_key=_lock_key(user_id)) as db:
             async with db.execute(
                 "DELETE FROM task_collections WHERE id = ? AND user_id = ? RETURNING title_image, background_image",
                 (collection_id, user_id),

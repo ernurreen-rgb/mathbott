@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterTopics, toggleTopicSelection } from "@/lib/topic-filter";
+import { filterTopics, toggleExcludedTopic, toggleIncludedTopic, toggleTopicSelection } from "@/lib/topic-filter";
 
 const SAMPLE_TOPICS = [
   "Айналу денелері",
@@ -59,5 +59,28 @@ describe("toggleTopicSelection", () => {
     expect(toggleTopicSelection(["ҰБТ есебі"], "Интеграл")).toEqual(["ҰБТ есебі", "Интеграл"]);
     expect(toggleTopicSelection(["ҰБТ есебі", "Интеграл"], "ҰБТ есебі")).toEqual(["Интеграл"]);
     expect(toggleTopicSelection(["A", "B"], "C", 2)).toEqual(["A", "B"]);
+  });
+});
+
+describe("toggleIncludedTopic / toggleExcludedTopic", () => {
+  it("keeps included and excluded sets mutually exclusive", () => {
+    let state = { included: [] as string[], excluded: [] as string[] };
+    state = toggleIncludedTopic(state, "Виет теоремасы");
+    expect(state).toEqual({ included: ["Виет теоремасы"], excluded: [] });
+
+    state = toggleExcludedTopic(state, "Параметрлі теңдеу");
+    expect(state).toEqual({ included: ["Виет теоремасы"], excluded: ["Параметрлі теңдеу"] });
+
+    // Excluding an already-included tag moves it out of included.
+    state = toggleExcludedTopic(state, "Виет теоремасы");
+    expect(state).toEqual({ included: [], excluded: ["Параметрлі теңдеу", "Виет теоремасы"] });
+
+    // Including an already-excluded tag moves it back to included.
+    state = toggleIncludedTopic(state, "Виет теоремасы");
+    expect(state).toEqual({ included: ["Виет теоремасы"], excluded: ["Параметрлі теңдеу"] });
+
+    // Clicking exclude again removes the exclusion.
+    state = toggleExcludedTopic(state, "Параметрлі теңдеу");
+    expect(state).toEqual({ included: ["Виет теоремасы"], excluded: [] });
   });
 });

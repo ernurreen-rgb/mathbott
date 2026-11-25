@@ -45,6 +45,17 @@ export const constructorMessages = {
     "{count} тақырып таңдалды",
     "Выбрана {count} тема|Выбраны {count} темы|Выбрано {count} тем",
   ],
+  "constructor.excludedTopicsCount": [
+    "{count} тег алынып тасталды",
+    "Исключён {count} тег|Исключены {count} тега|Исключено {count} тегов",
+  ],
+  "constructor.topicsFilterSummary": ["+{included} · −{excluded} тег", "+{included} · −{excluded} тег."],
+  "constructor.topicLegend": [
+    "Атауын басу — қосу · «−» — көрсетпеу",
+    "Нажатие — включить · «−» — исключить",
+  ],
+  "constructor.excludeTopicAria": ["«{topic}» тегін көрсетпеу", "Исключить тег «{topic}»"],
+  "constructor.unexcludeTopicAria": ["«{topic}» шектеуін алу", "Убрать исключение «{topic}»"],
   "constructor.removeTopicAria": ["«{topic}» тегін алып тастау", "Убрать тег «{topic}»"],
   "constructor.done": ["Дайын", "Готово"],
   "constructor.clear": ["Тазалау", "Сбросить"],
@@ -117,6 +128,7 @@ export const constructorMessages = {
   "constructor.downloadPptx": ["PowerPoint жүктеу", "Скачать PowerPoint"],
   "constructor.preparing": ["Дайындалуда: {done} / {total}", "Готовится: {done} / {total}"],
   "constructor.preparingShort": ["Дайындалуда…", "Готовится…"],
+  "constructor.cancelDownload": ["Тоқтату", "Отменить"],
   "constructor.downloadFailed": ["Файлды жасау мүмкін болмады. Қайта көріңіз.", "Не удалось создать файл. Попробуйте ещё раз."],
   "constructor.refreshToDownload": [
     "Сайт жаңартылды. Файлды жүктеу үшін бетті жаңартыңыз.",

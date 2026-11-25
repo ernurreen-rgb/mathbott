@@ -5,7 +5,7 @@ import Icon from "@/components/ui/Icon";
 import { getConstructorTasks, getConstructorTopics } from "@/lib/api/constructor";
 import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
-import { toggleTopicSelection } from "@/lib/topic-filter";
+import { toggleIncludedTopic } from "@/lib/topic-filter";
 import type { ConstructorQuestionType, ConstructorTask } from "@/types/constructor";
 import TaskPreview from "./TaskPreview";
 import TopicCombobox from "./TopicCombobox";
@@ -39,6 +39,7 @@ export default function TaskBrowser({
   const [searchText, setSearchText] = useState("");
   const [search, setSearch] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [excludedTopics, setExcludedTopics] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -68,11 +69,12 @@ export default function TaskBrowser({
     () => ({
       search: search || undefined,
       topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+      excludeTopics: excludedTopics.length > 0 ? excludedTopics : undefined,
       topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, difficulty, questionType],
+    [search, selectedTopics, excludedTopics, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -116,7 +118,15 @@ export default function TaskBrowser({
           />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <TopicCombobox topics={topics} values={selectedTopics} onChange={setSelectedTopics} />
+          <TopicCombobox
+            topics={topics}
+            included={selectedTopics}
+            excluded={excludedTopics}
+            onChange={({ included, excluded }) => {
+              setSelectedTopics(included);
+              setExcludedTopics(excluded);
+            }}
+          />
           <label className="block">
             <span className="sr-only">{t("constructor.type")}</span>
             <select
@@ -144,11 +154,11 @@ export default function TaskBrowser({
             ))}
           </div>
         </div>
-        {selectedTopics.length > 0 && (
+        {(selectedTopics.length > 0 || excludedTopics.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             {selectedTopics.map((name) => (
               <span
-                key={name}
+                key={`inc-${name}`}
                 className="inline-flex items-center gap-1 rounded-full bg-purple-100 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-purple-800"
               >
                 <span>{name}</span>
@@ -157,6 +167,22 @@ export default function TaskBrowser({
                   onClick={() => setSelectedTopics((prev) => prev.filter((item) => item !== name))}
                   aria-label={t("constructor.removeTopicAria", { topic: name })}
                   className="inline-flex h-4 w-4 items-center justify-center rounded-full text-purple-600 hover:bg-purple-200 hover:text-purple-900"
+                >
+                  <Icon name="close" className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {excludedTopics.map((name) => (
+              <span
+                key={`exc-${name}`}
+                className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-red-700"
+              >
+                <span>− {name}</span>
+                <button
+                  type="button"
+                  onClick={() => setExcludedTopics((prev) => prev.filter((item) => item !== name))}
+                  aria-label={t("constructor.unexcludeTopicAria", { topic: name })}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-red-500 hover:bg-red-100 hover:text-red-800"
                 >
                   <Icon name="close" className="h-3 w-3" />
                 </button>
@@ -192,7 +218,14 @@ export default function TaskBrowser({
                     <button
                       key={name}
                       type="button"
-                      onClick={() => setSelectedTopics((prev) => toggleTopicSelection(prev, name))}
+                      onClick={() => {
+                        const next = toggleIncludedTopic(
+                          { included: selectedTopics, excluded: excludedTopics },
+                          name,
+                        );
+                        setSelectedTopics(next.included);
+                        setExcludedTopics(next.excluded);
+                      }}
                       aria-pressed={active}
                       className={`rounded-md px-1.5 py-0.5 transition-colors ${
                         active

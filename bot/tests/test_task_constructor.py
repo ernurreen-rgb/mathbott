@@ -11,7 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from postgres_test_db import PostgresTestCase
-from repositories.task_collection_repository import MAX_COLLECTIONS_PER_USER
+from repositories.task_collection_repository import MAX_COLLECTIONS_PER_USER, _lock_key
 from routes.constructor import setup_constructor_routes
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -35,7 +35,9 @@ class TaskConstructorTests(PostgresTestCase):
         self.owner = await self.db.users.create_user_by_email("teacher@example.test")
         self.other = await self.db.users.create_user_by_email("student@example.test")
         created = await self.db.bank_tasks.create_tasks_bulk_atomic(
-            tasks=[_task(i) for i in range(1, 7)] + [
+            tasks=[_task(i) for i in range(1, 5)] + [
+                _task(5, topics=["Егіз тақырып"]),
+                _task(6, topics=["Жойылған тақырып"]),
                 _task(7, question_type="input", answer_mode="written", answer="15", options=None,
                       accepted_answers=["15,0"]),
                 _task(8, question_type="select", answer='["A", "C"]',
@@ -74,6 +76,9 @@ class TaskConstructorTests(PostgresTestCase):
             self.assertTrue(all(item["difficulty"] == "A" for item in by_difficulty["items"]))
             by_topic = (await client.get("/api/constructor/tasks", params={**teacher, "topics": "Логарифм"})).json()
             self.assertTrue(all("Логарифм" in item["topics"] for item in by_topic["items"]))
+            excluded = (await client.get("/api/constructor/tasks", params={**teacher, "exclude_topics": "Логарифм"})).json()
+            self.assertTrue(excluded["items"])
+            self.assertTrue(all("Логарифм" not in item["topics"] for item in excluded["items"]))
             typed = (await client.get("/api/constructor/tasks", params={**teacher, "question_type": "input"})).json()
             self.assertEqual([item["id"] for item in typed["items"]], [self.ids[6]])
             for invalid in ({"limit": 51}, {"difficulty": "D"}, {"question_type": "essay"}):
@@ -82,6 +87,9 @@ class TaskConstructorTests(PostgresTestCase):
                 )
             topics = (await client.get("/api/constructor/topics", params=teacher)).json()["items"]
             self.assertEqual(set(topics), {"Логарифм", "Түбір"})
+            filtered_topics = (await client.get("/api/constructor/topics", params={**teacher, "q": "лог"})).json()["items"]
+            self.assertEqual(filtered_topics, ["Логарифм"])
+            self.assertNotEqual(_lock_key(self.owner["id"]), _lock_key(self.other["id"]))
 
     async def test_collections_belong_to_their_owner_and_keep_task_order(self):
         teacher, student = {"email": "teacher@example.test"}, {"email": "student@example.test"}

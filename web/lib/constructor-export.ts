@@ -116,6 +116,10 @@ function canvasBlob(canvas: HTMLCanvasElement, type: "image/jpeg" | "image/png",
 export async function prepareBackground(file: File): Promise<Blob> {
   if (file.size > MAX_BACKGROUND_SOURCE_BYTES) throw new Error("image-too-large");
   const decoded = await decode(file);
+  if (!decoded.width || !decoded.height) {
+    decoded.close();
+    throw new Error("image-decode");
+  }
   const canvas = document.createElement("canvas");
   canvas.width = BACKGROUND_WIDTH;
   canvas.height = BACKGROUND_HEIGHT;
@@ -198,8 +202,10 @@ export async function downloadCollectionPptx(
   },
 ) {
   const { buildTaskDeck } = await import("@/lib/pptx/task-deck");
-  const withImages = collection.tasks.filter((task) => task.image_filename);
-  const total = withImages.length + (collection.title_image ? 1 : 0) + (collection.background_image ? 1 : 0);
+  const uniqueTaskFilenames = Array.from(
+    new Set(collection.tasks.map((task) => task.image_filename).filter((name): name is string => Boolean(name))),
+  );
+  const total = uniqueTaskFilenames.length + (collection.title_image ? 1 : 0) + (collection.background_image ? 1 : 0);
   let done = 0;
   const step = <T,>(value: T) => {
     done += 1;
@@ -210,10 +216,22 @@ export async function downloadCollectionPptx(
     collection.title_image ? loadDeckImage(collection.title_image, options.signal).then(step) : null,
     collection.background_image ? loadDeckImage(collection.background_image, options.signal).then(step) : null,
   ]);
-  const taskImages = new Map<number, DeckImage>();
-  for (const task of withImages) {
+  const loadedByFilename = new Map<string, DeckImage>();
+  const IMAGE_FETCH_CONCURRENCY = 4;
+  for (let i = 0; i < uniqueTaskFilenames.length; i += IMAGE_FETCH_CONCURRENCY) {
     options.signal?.throwIfAborted();
-    taskImages.set(task.id, step(await loadDeckImage(task.image_filename as string, options.signal)));
+    const batch = uniqueTaskFilenames.slice(i, i + IMAGE_FETCH_CONCURRENCY);
+    const images = await Promise.all(
+      batch.map((name) => loadDeckImage(name, options.signal).then(step)),
+    );
+    batch.forEach((name, idx) => loadedByFilename.set(name, images[idx]));
+  }
+  const taskImages = new Map<number, DeckImage>();
+  for (const task of collection.tasks) {
+    if (task.image_filename) {
+      const image = loadedByFilename.get(task.image_filename);
+      if (image) taskImages.set(task.id, image);
+    }
   }
   options.signal?.throwIfAborted();
   const { bytes } = await buildTaskDeck({

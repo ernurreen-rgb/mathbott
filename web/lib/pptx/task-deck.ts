@@ -599,7 +599,7 @@ class DeckBuilder {
   private readonly labels: (typeof LABELS)[ConstructorLanguage];
   private readonly language: string;
   private readonly font: string;
-  private backgroundName: string | null = null;
+  private readonly mediaNames = new Map<DeckImage, string>();
   private mediaCount = 0;
 
   constructor(private readonly input: DeckInput) {
@@ -610,17 +610,19 @@ class DeckBuilder {
   }
 
   private addMedia(image: DeckImage): string {
+    const existing = this.mediaNames.get(image);
+    if (existing) return existing;
     this.mediaCount += 1;
     const name = `image${this.mediaCount}.${image.ext}`;
     this.media.set(name, image.bytes);
+    this.mediaNames.set(image, name);
     return name;
   }
 
   private taskSlideFrame(): SlideWriter {
     const slide = new SlideWriter(this);
     if (this.input.background) {
-      this.backgroundName ??= this.addMedia(this.input.background);
-      slide.setBackground(this.input.background, this.backgroundName);
+      slide.setBackground(this.input.background, this.addMedia(this.input.background));
     }
     return slide;
   }

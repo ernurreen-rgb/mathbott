@@ -957,6 +957,75 @@ class Sprint3RegressionTests(unittest.TestCase):
         self.assertNotIn("LIMIT", executed[0][0].upper())
         self.assertEqual(executed[0][1], [])
 
+    def test_list_tasks_with_exclude_topics_emits_not_exists_sql(self):
+        from repositories.bank.crud import BankTaskCrudMixin
+
+        executed = []
+
+        class _FakeCursor:
+            def __init__(self, rows):
+                self._rows = rows
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchone(self):
+                return (0,)
+
+            async def fetchall(self):
+                return self._rows
+
+        class _FakeDb:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                executed.append((sql, list(params)))
+                return _FakeCursor([])
+
+        class _FakeConnCtx:
+            async def __aenter__(self):
+                return _FakeDb()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeRepo(BankTaskCrudMixin):
+            def _connection(self):
+                return _FakeConnCtx()
+
+            def _normalize_topic(self, text: str) -> str:
+                return text.strip().lower()
+
+            def _normalize_topics(self, values):
+                return [v for v in (values or []) if v and v.strip()]
+
+            async def _fetch_topics_map(self, db, task_ids):
+                return {}
+
+            async def _fetch_active_usage_counts(self, db, task_ids):
+                return {}
+
+            async def _attach_twin_info(self, db, items):
+                return None
+
+        repo = _FakeRepo()
+        res = asyncio.run(
+            repo.list_tasks(
+                topics=["Виет теоремасы"],
+                exclude_topics=["Параметрлі теңдеу", "Рустюмова"],
+                topic_match="all",
+            )
+        )
+        self.assertEqual(res["total"], 0)
+        count_sql, count_params = executed[0]
+        self.assertIn("NOT EXISTS", count_sql)
+        self.assertIn("виет теоремасы", count_params)
+        self.assertIn("параметрлі теңдеу", count_params)
+        self.assertIn("рустюмова", count_params)
+
     def test_task_collection_inherits_latest_template_and_preserves_shared_images(self):
         from repositories.task_collection_repository import TaskCollectionRepository
 
