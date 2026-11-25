@@ -73,7 +73,7 @@ const BODY_TOP = AREA.y + inch(0.68);
 const BODY = { x: AREA.x + inch(0.2), y: BODY_TOP, w: AREA.w - inch(0.4), h: SLIDE_HEIGHT - inch(0.5) - BODY_TOP };
 /** The estimate of a text's height runs low on stacked fractions; keep this much room spare. */
 const FIT_MARGIN = 1.12;
-const BODY_SIZES = [2400, 2200, 2000, 1800, 1600];
+const BODY_SIZES = [1800, 1600, 1400];
 const ANSWERS_PER_COLUMN = 10;
 const ANSWER_COLUMNS = 3;
 

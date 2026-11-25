@@ -350,13 +350,16 @@ describe("PPTX deck", () => {
     expect(calibri).not.toContain("JUZ40 FONTS");
   });
 
-  it("shrinks long tasks to fit their box", () => {
-    const long = task(1, { text: "Өрнекті ықшамдаңыз: " + String.raw`\frac{k^2-25}{k+3}\cdot\frac{1}{k^2+5k}`.repeat(6) });
+  it("defaults task body text to 18pt and shrinks very long tasks to fit their box", () => {
+    const long = task(1, { text: "Өрнекті ықшамдаңыз: " + String.raw`\frac{k^2-25}{k+3}\cdot\frac{1}{k^2+5k}`.repeat(14) });
     const { files } = buildTaskDeckFiles({ title: "T", author: "A", language: "kk", tasks: [task(2), long] });
     const size = (xml: string) => Number(xml.match(/<a:p><a:pPr[^>]*>.*?sz="(\d+)"/)?.[1]);
     const short = files.get("ppt/slides/slide2.xml") as string;
     const crowded = files.get("ppt/slides/slide3.xml") as string;
-    expect(size(crowded.slice(crowded.indexOf('name="Task 2"')))).toBeLessThan(size(short.slice(short.indexOf('name="Task 1"'))));
+    const shortSize = size(short.slice(short.indexOf('name="Task 1"')));
+    const crowdedSize = size(crowded.slice(crowded.indexOf('name="Task 2"')));
+    expect(shortSize).toBe(1800);
+    expect(crowdedSize).toBeLessThan(shortSize);
   });
 
   it("formats [[A]] / [[B]] comparison tasks and label-only MCQ choices cleanly", () => {
