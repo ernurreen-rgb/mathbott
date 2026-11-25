@@ -5,7 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import BankWorksheetDocument, { type WorksheetAnswer } from "@/components/admin/BankWorksheetDocument";
 import Icon from "@/components/ui/Icon";
-import { exportTaskCollection, getTaskCollection, updateTaskCollection } from "@/lib/api/constructor";
+import {
+  createTaskCollection,
+  deleteTaskCollection,
+  exportTaskCollection,
+  getTaskCollection,
+  trackCollectionMutation,
+  updateTaskCollection,
+} from "@/lib/api/constructor";
 import { answerKey, customCollectionTitle, downloadCollectionPptx, reorderItems, worksheetTasks } from "@/lib/constructor-export";
 import type { WorksheetTask } from "@/lib/bank-worksheet";
 import { useI18n } from "@/lib/i18n/provider";
@@ -16,12 +23,25 @@ import TaskBrowser from "./TaskBrowser";
 import TaskPreview from "./TaskPreview";
 
 const MAX_TASKS = 100;
+const MAX_COLLECTIONS = 50;
 const SAVE_DELAY_MS = 800;
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type Step = "pick" | "files";
 type Draft = { title: string; header: string; font: PptxFont; ids: number[] };
 type PdfDocument = { title: string; brand: string; tasks: WorksheetTask[]; answers: WorksheetAnswer[] };
+
+const EMPTY_DRAFT_COLLECTION: TaskCollection = {
+  id: 0,
+  title: "",
+  header_text: "",
+  pptx_font: DEFAULT_PPTX_FONT,
+  title_image: null,
+  background_image: null,
+  created_at: null,
+  updated_at: null,
+  tasks: [],
+};
 
 const snapshot = (draft: Draft) => JSON.stringify([customCollectionTitle(draft.title), draft.header.trim(), draft.font, draft.ids]);
 
@@ -30,10 +50,14 @@ const isChunkLoadError = (problem: unknown): boolean =>
   (problem.name === "ChunkLoadError" ||
     /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(problem.message));
 
-export default function CollectionEditor({ collectionId, email, author }: { collectionId: number; email: string; author: string }) {
+export default function CollectionEditor({ collectionId, email, author }: { collectionId: number | null; email: string; author: string }) {
   const { t, locale } = useI18n();
-  const [collection, setCollection] = useState<TaskCollection | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(collectionId);
+  const [collection, setCollection] = useState<TaskCollection | null>(
+    collectionId === null ? EMPTY_DRAFT_COLLECTION : null,
+  );
   const [loadError, setLoadError] = useState<"missing" | "failed" | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
   const [title, setTitle] = useState("");
   const [font, setFont] = useState<PptxFont>(DEFAULT_PPTX_FONT);
   const [header, setHeader] = useState("");
@@ -47,11 +71,18 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [downloadError, setDownloadError] = useState<{ message: string; reload?: boolean } | null>(null);
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
 
+  const activeIdRef = useRef<number | null>(collectionId);
   const draft = useRef<Draft>({ title: "", header: "", font: DEFAULT_PPTX_FONT, ids: [] });
-  const loadedRef = useRef(false);
+  const loadedRef = useRef(collectionId === null);
   const mountedRef = useRef(true);
+  const headerTouchedRef = useRef(false);
+  const fontTouchedRef = useRef(false);
   const defaultTitleRef = useRef(t("constructor.defaultTitle"));
-  const saved = useRef("");
+  const saved = useRef(
+    collectionId === null
+      ? snapshot({ title: "", header: "", font: DEFAULT_PPTX_FONT, ids: [] })
+      : "",
+  );
   const saving = useRef<Promise<boolean>>(Promise.resolve(true));
   const pdfRoot = useRef<HTMLDivElement>(null);
   const selectionListRef = useRef<HTMLOListElement>(null);
@@ -64,6 +95,12 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   defaultTitleRef.current = t("constructor.defaultTitle");
 
   useEffect(() => {
+    if (collectionId === null) {
+      loadedRef.current = true;
+      return () => {
+        abort.current?.abort();
+      };
+    }
     let active = true;
     loadedRef.current = false;
     void getTaskCollection(collectionId, email).then((result) => {
@@ -75,6 +112,8 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       const loaded = result.data;
       const initialTitle = customCollectionTitle(loaded.title);
       loadedRef.current = true;
+      activeIdRef.current = loaded.id;
+      setActiveId(loaded.id);
       setCollection(loaded);
       setTitle(initialTitle);
       const loadedFont = isPptxFont(loaded.pptx_font) ? loaded.pptx_font : DEFAULT_PPTX_FONT;
@@ -94,16 +133,80 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   /** Save what is on screen, after any save already under way. Resolves false when saving failed. */
   const flush = useCallback((options?: { keepalive?: boolean }): Promise<boolean> => {
     if (!loadedRef.current) return Promise.resolve(true);
-    saving.current = saving.current.then(async () => {
+    const run = saving.current.then(async () => {
       const current = draft.current;
+      // Never persist a brand-new or emptied 0-task collection.
+      if (current.ids.length === 0) return true;
       const key = snapshot(current);
-      if (key === saved.current) return true;
-      if (mountedRef.current) setSaveState("saving");
-      const result = await updateTaskCollection(collectionId, {
-        title: current.title.trim() || defaultTitleRef.current,
-        header_text: current.header.trim(),
-        pptx_font: current.font,
-        task_ids: current.ids,
+      if (activeIdRef.current !== null && key === saved.current) return true;
+      if (mountedRef.current) {
+        setSaveState("saving");
+        setLimitReached(false);
+      }
+
+      let targetId = activeIdRef.current;
+      let effectiveHeader = current.header.trim();
+      let effectiveFont = current.font;
+      let latest = current;
+
+      if (targetId === null) {
+        const createdResult = await createTaskCollection(
+          current.title.trim() || defaultTitleRef.current,
+          email,
+          options,
+        );
+        if (!createdResult.data) {
+          if (mountedRef.current) {
+            if (createdResult.status === 409) setLimitReached(true);
+            setSaveState("error");
+          }
+          return false;
+        }
+        const created = createdResult.data;
+        const inheritedFont = isPptxFont(created.pptx_font) ? created.pptx_font : DEFAULT_PPTX_FONT;
+        const inheritedHeader = created.header_text || "";
+        targetId = created.id;
+        activeIdRef.current = created.id;
+
+        if (!headerTouchedRef.current) {
+          effectiveHeader = inheritedHeader.trim();
+          draft.current = { ...draft.current, header: inheritedHeader };
+        }
+        if (!fontTouchedRef.current) {
+          effectiveFont = inheritedFont;
+          draft.current = { ...draft.current, font: inheritedFont };
+        }
+        if (mountedRef.current) {
+          setActiveId(created.id);
+          setCollection(created);
+          if (!headerTouchedRef.current) setHeader(inheritedHeader);
+          if (!fontTouchedRef.current) setFont(inheritedFont);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(null, "", `/task-builder/${created.id}`);
+          }
+        }
+
+        // Re-read the latest draft so tasks toggled while POST was in flight are included.
+        latest = draft.current;
+        if (latest.ids.length === 0) {
+          saved.current = snapshot({
+            title: customCollectionTitle(created.title),
+            header: effectiveHeader,
+            font: effectiveFont,
+            ids: [],
+          });
+          if (mountedRef.current) setSaveState("saved");
+          return true;
+        }
+        if (headerTouchedRef.current) effectiveHeader = latest.header.trim();
+        if (fontTouchedRef.current) effectiveFont = latest.font;
+      }
+
+      const result = await updateTaskCollection(targetId, {
+        title: latest.title.trim() || defaultTitleRef.current,
+        header_text: effectiveHeader,
+        pptx_font: effectiveFont,
+        task_ids: latest.ids,
       }, email, options);
       if (!result.data) {
         if (mountedRef.current) setSaveState("error");
@@ -111,9 +214,9 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       }
       const canonicalSavedKey = snapshot({
         title: customCollectionTitle(result.data.title),
-        header: current.header,
-        font: current.font,
-        ids: current.ids,
+        header: effectiveHeader,
+        font: effectiveFont,
+        ids: latest.ids,
       });
       saved.current = canonicalSavedKey;
       if (mountedRef.current) {
@@ -121,23 +224,49 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       }
       return true;
     });
-    return saving.current;
-  }, [collectionId, email]);
+    saving.current = run;
+    return trackCollectionMutation(run);
+  }, [email]);
+
+  /** If an existing collection has 0 tasks when leaving, delete it so no empty drafts clutter the list. */
+  const deleteEmptyIfNeeded = useCallback((options?: { keepalive?: boolean }): Promise<boolean> => {
+    if (!loadedRef.current) return Promise.resolve(true);
+    const run = saving.current.then(async () => {
+      const targetId = activeIdRef.current;
+      if (targetId === null || draft.current.ids.length > 0) return true;
+      activeIdRef.current = null;
+      await deleteTaskCollection(targetId, email, options);
+      return true;
+    });
+    saving.current = run;
+    return trackCollectionMutation(run);
+  }, [email]);
 
   useEffect(() => {
     if (!collection) return;
-    if (snapshot({ title, header, font, ids }) === saved.current) {
+    if (ids.length === 0) {
+      setSaveState("saved");
+      return;
+    }
+    if (activeIdRef.current !== null && snapshot({ title, header, font, ids }) === saved.current) {
       setSaveState((prev) => (prev === "dirty" ? "saved" : prev));
       return;
     }
     setSaveState("dirty");
-    const timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
+    const delay = activeIdRef.current === null ? 0 : SAVE_DELAY_MS;
+    const timer = setTimeout(() => void flush(), delay);
     return () => clearTimeout(timer);
   }, [collection, title, header, font, ids, flush]);
 
   useEffect(() => {
     mountedRef.current = true;
-    const onPageHide = () => {
+    const onPageHide = (event: PageTransitionEvent) => {
+      if (draft.current.ids.length === 0) {
+        if (!event.persisted) {
+          void deleteEmptyIfNeeded({ keepalive: true });
+        }
+        return;
+      }
       void flush({ keepalive: true });
     };
     window.addEventListener("pagehide", onPageHide);
@@ -145,9 +274,13 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       mountedRef.current = false;
       dragCleanupRef.current?.();
       window.removeEventListener("pagehide", onPageHide);
-      void flush({ keepalive: true });
+      if (draft.current.ids.length === 0) {
+        void deleteEmptyIfNeeded({ keepalive: true });
+      } else {
+        void flush({ keepalive: true });
+      }
     };
-  }, [flush]);
+  }, [flush, deleteEmptyIfNeeded]);
 
   useEffect(() => {
     if (saveState === "saved") return;
@@ -270,7 +403,9 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   /** Save, then read the collection back with answers: the files show exactly what was saved. */
   const exported = async (): Promise<TaskCollection> => {
     if (!(await flush())) throw new Error("save");
-    const result = await exportTaskCollection(collectionId, email);
+    const targetId = activeIdRef.current;
+    if (targetId === null) throw new Error("save");
+    const result = await exportTaskCollection(targetId, email);
     if (!result.data) throw new Error("export");
     return result.data;
   };
@@ -373,13 +508,15 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-2xl font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 hover:border-slate-200 focus:border-purple-400 focus:bg-white focus:outline-none sm:text-3xl"
           />
         </label>
-        <p role="status" className={`flex items-center gap-1.5 text-sm ${saveState === "error" ? "text-red-700" : "text-slate-500"}`}>
-          <Icon name={saveState === "saved" ? "checkCircle" : saveState === "error" ? "alert" : "clock"} className="h-4 w-4" />
-          {statusText}
-          {saveState === "error" && (
-            <button type="button" onClick={() => void flush()} className="font-semibold underline">{t("constructor.retry")}</button>
-          )}
-        </p>
+        {(activeId !== null || tasks.length > 0) && (
+          <p role="status" className={`flex items-center gap-1.5 text-sm ${saveState === "error" ? "text-red-700" : "text-slate-500"}`}>
+            <Icon name={saveState === "saved" ? "checkCircle" : saveState === "error" ? "alert" : "clock"} className="h-4 w-4" />
+            {limitReached ? t("constructor.limitReached", { max: MAX_COLLECTIONS }) : statusText}
+            {saveState === "error" && !limitReached && (
+              <button type="button" onClick={() => void flush()} className="font-semibold underline">{t("constructor.retry")}</button>
+            )}
+          </p>
+        )}
       </div>
 
       <div
@@ -556,7 +693,10 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                 <input
                   value={header}
                   maxLength={120}
-                  onChange={(event) => setHeader(event.target.value)}
+                  onChange={(event) => {
+                    headerTouchedRef.current = true;
+                    setHeader(event.target.value);
+                  }}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
                 />
                 <span className="mt-1 block text-xs text-slate-500">{t("constructor.pdfHeaderHint")}</span>
@@ -565,7 +705,10 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                 <span className="text-sm font-semibold text-slate-800">{t("constructor.pptxFont")}</span>
                 <select
                   value={font}
-                  onChange={(event) => setFont(isPptxFont(event.target.value) ? event.target.value : DEFAULT_PPTX_FONT)}
+                  onChange={(event) => {
+                    fontTouchedRef.current = true;
+                    setFont(isPptxFont(event.target.value) ? event.target.value : DEFAULT_PPTX_FONT);
+                  }}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
                 >
                   {PPTX_FONTS.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -577,10 +720,10 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                 <span className="mt-1 block text-xs text-slate-500">{t("constructor.pptxFontHint")}</span>
               </label>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <BackgroundPicker collectionId={collectionId} email={email} kind="title" filename={collection.title_image}
-                  disabled={busy !== null} onChange={onImageChange} />
-                <BackgroundPicker collectionId={collectionId} email={email} kind="background" filename={collection.background_image}
-                  disabled={busy !== null} onChange={onImageChange} />
+                <BackgroundPicker collectionId={activeId ?? 0} email={email} kind="title" filename={collection.title_image}
+                  disabled={busy !== null || activeId === null} onChange={onImageChange} />
+                <BackgroundPicker collectionId={activeId ?? 0} email={email} kind="background" filename={collection.background_image}
+                  disabled={busy !== null || activeId === null} onChange={onImageChange} />
               </div>
               <p className="mt-2 text-xs text-slate-500">{t("constructor.imageFormats")}</p>
 

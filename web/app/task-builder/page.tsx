@@ -7,7 +7,7 @@ import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import DesktopNav from "@/components/DesktopNav";
 import MobileNav from "@/components/MobileNav";
 import Icon from "@/components/ui/Icon";
-import { createTaskCollection, deleteTaskCollection, listTaskCollections } from "@/lib/api/constructor";
+import { deleteTaskCollection, listTaskCollections } from "@/lib/api/constructor";
 import { useI18n } from "@/lib/i18n/provider";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import type { TaskCollectionList } from "@/types/constructor";
@@ -20,7 +20,6 @@ export default function ConstructorPage() {
   const { t, intlLocale } = useI18n();
   const [list, setList] = useState<TaskCollectionList | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!email) return;
@@ -37,16 +36,13 @@ export default function ConstructorPage() {
     void load();
   }, [load]);
 
-  const create = async () => {
-    if (!email || busy) return;
-    setBusy(true);
-    const result = await createTaskCollection(t("constructor.defaultTitle"), email);
-    if (result.data) {
-      router.push(`/task-builder/${result.data.id}`);
+  const create = () => {
+    if (!email || !list) return;
+    if (list.items.length >= list.max_collections) {
+      setError(t("constructor.limitReached", { max: list.max_collections }));
       return;
     }
-    setBusy(false);
-    setError(result.status === 409 ? t("constructor.limitReached", { max: list?.max_collections ?? 50 }) : t("constructor.loadError"));
+    router.push("/task-builder/new");
   };
 
   const remove = async (id: number, title: string) => {
@@ -77,11 +73,11 @@ export default function ConstructorPage() {
           </div>
           <button
             type="button"
-            onClick={() => void create()}
-            disabled={busy || !list}
+            onClick={create}
+            disabled={!list}
             className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-purple-700 disabled:opacity-50"
           >
-            <Icon name={busy ? "loader" : "plus"} className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
+            <Icon name="plus" className="h-4 w-4" />
             {t("constructor.new")}
           </button>
         </header>

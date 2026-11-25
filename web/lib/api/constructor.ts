@@ -51,6 +51,12 @@ export function getConstructorTopics(email: string): Promise<FetchResult<{ items
 
 const pendingCollectionUpdates = new Set<Promise<unknown>>();
 
+export function trackCollectionMutation<T>(promise: Promise<T>): Promise<T> {
+  pendingCollectionUpdates.add(promise);
+  void promise.finally(() => pendingCollectionUpdates.delete(promise));
+  return promise;
+}
+
 export async function waitForPendingCollectionUpdates(): Promise<void> {
   while (pendingCollectionUpdates.size > 0) {
     await Promise.allSettled(Array.from(pendingCollectionUpdates));
@@ -62,8 +68,17 @@ export async function listTaskCollections(email: string): Promise<FetchResult<Ta
   return request<TaskCollectionList>(withEmail("constructor/collections", email));
 }
 
-export function createTaskCollection(title: string, email: string): Promise<FetchResult<TaskCollection>> {
-  return request<TaskCollection>(withEmail("constructor/collections", email), json("POST", { title }));
+export function createTaskCollection(
+  title: string,
+  email: string,
+  options?: { keepalive?: boolean },
+): Promise<FetchResult<TaskCollection>> {
+  return trackCollectionMutation(
+    request<TaskCollection>(
+      withEmail("constructor/collections", email),
+      { ...json("POST", { title }), ...(options?.keepalive ? { keepalive: true } : {}) },
+    ),
+  );
 }
 
 export async function getTaskCollection(id: number, email: string): Promise<FetchResult<TaskCollection>> {
@@ -77,17 +92,25 @@ export function updateTaskCollection(
   email: string,
   options?: { keepalive?: boolean },
 ): Promise<FetchResult<TaskCollection>> {
-  const promise = request<TaskCollection>(
-    withEmail(`constructor/collections/${id}`, email),
-    { ...json("PUT", change), ...(options?.keepalive ? { keepalive: true } : {}) },
+  return trackCollectionMutation(
+    request<TaskCollection>(
+      withEmail(`constructor/collections/${id}`, email),
+      { ...json("PUT", change), ...(options?.keepalive ? { keepalive: true } : {}) },
+    ),
   );
-  pendingCollectionUpdates.add(promise);
-  void promise.finally(() => pendingCollectionUpdates.delete(promise));
-  return promise;
 }
 
-export function deleteTaskCollection(id: number, email: string): Promise<FetchResult<{ deleted: boolean }>> {
-  return request<{ deleted: boolean }>(withEmail(`constructor/collections/${id}`, email), { method: "DELETE" });
+export function deleteTaskCollection(
+  id: number,
+  email: string,
+  options?: { keepalive?: boolean },
+): Promise<FetchResult<{ deleted: boolean }>> {
+  return trackCollectionMutation(
+    request<{ deleted: boolean }>(withEmail(`constructor/collections/${id}`, email), {
+      method: "DELETE",
+      ...(options?.keepalive ? { keepalive: true } : {}),
+    }),
+  );
 }
 
 /** The collection with answers, for the answer key of a download. */
