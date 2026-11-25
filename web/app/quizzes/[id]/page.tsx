@@ -28,6 +28,7 @@ import {
 import { QuizAvatar } from "@/components/quiz/QuizAvatar";
 import toast from "react-hot-toast";
 import { useI18n } from "@/lib/i18n/provider";
+import { formatShortDateTime } from "@/lib/date-format";
 import { tr } from "@/lib/i18n/translate";
 
 interface PageProps {
@@ -252,19 +253,7 @@ export default function QuizDetailPage({ params }: PageProps) {
     }
   };
 
-  const formatSessionDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleString(intlLocale, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const formatSessionDate = (dateStr: string) => formatShortDateTime(dateStr, intlLocale);
 
   if (loading) {
     return (
