@@ -50,9 +50,15 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
   };
   return <div style={{ width: 720, background: '#fff', color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: 17, lineHeight: 1.55 }}>
     {showHeader && (
-      <header data-pdf-header style={{ paddingBottom: heading ? 18 : 10, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
-        {brandLine && <div style={{ fontSize: 11, color: '#64748b' }}>{brandLine}</div>}
-        {heading && <h1 style={{ margin: '8px 0 16px', fontSize: 25, fontWeight: 700, overflowWrap: 'anywhere' }}>{heading}</h1>}
+      <header data-pdf-header style={{ paddingBottom: 14, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
+        {brandLine && !heading ? (
+          <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 700, color: '#111827', overflowWrap: 'anywhere' }}>{brandLine}</h1>
+        ) : (
+          <>
+            {brandLine && <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', overflowWrap: 'anywhere' }}>{brandLine}</div>}
+            {heading && <h1 style={{ margin: brandLine ? '6px 0 4px' : '0 0 4px', fontSize: 26, fontWeight: 700, color: '#111827', overflowWrap: 'anywhere' }}>{heading}</h1>}
+          </>
+        )}
       </header>
     )}
     {tasks.map((task, index) => {
