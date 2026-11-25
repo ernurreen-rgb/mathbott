@@ -39,7 +39,6 @@ export default function TaskBrowser({
   const [searchText, setSearchText] = useState("");
   const [search, setSearch] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
-  const [topicMatch, setTopicMatch] = useState<"any" | "all">("any");
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -69,11 +68,11 @@ export default function TaskBrowser({
     () => ({
       search: search || undefined,
       topics: selectedTopics.length > 0 ? selectedTopics : undefined,
-      topicMatch: selectedTopics.length > 1 ? topicMatch : undefined,
+      topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, topicMatch, difficulty, questionType],
+    [search, selectedTopics, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -163,27 +162,6 @@ export default function TaskBrowser({
                 </button>
               </span>
             ))}
-            {selectedTopics.length > 1 && (
-              <div
-                role="group"
-                aria-label={t("constructor.topicMatchAria")}
-                className="ml-auto inline-flex rounded-lg bg-slate-200/70 p-0.5 text-xs"
-              >
-                {(["any", "all"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={topicMatch === mode}
-                    onClick={() => setTopicMatch(mode)}
-                    className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                      topicMatch === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {t(mode === "any" ? "constructor.topicMatchAny" : "constructor.topicMatchAll")}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>
