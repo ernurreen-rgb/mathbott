@@ -15,7 +15,7 @@ import { Card, clampPage, Empty, Meter, Pager, ShareBar, SortHeader, sortRows, S
 
 /** "silent" is a new student who has not answered anything yet. */
 export type StudentSegment = "all" | "active" | "new" | "churned" | "silent" | "never";
-type SortKey = "nickname" | "registered_at" | "last_seen_at" | "attempts" | "accuracy" | "active_days" | "trial_attempts" | "quiz_answers" | "total_solved" | "streak";
+type SortKey = "nickname" | "registered_at" | "last_seen_at" | "attempts" | "accuracy" | "active_days" | "trial_attempts" | "quiz_answers" | "collections" | "total_solved" | "streak";
 
 const PAGE_SIZE = 25;
 const SEGMENTS: Array<{ key: StudentSegment; label: string; match: (student: StatisticsStudent) => boolean }> = [
@@ -35,6 +35,7 @@ const SORT_VALUE: Record<SortKey, (student: StatisticsStudent) => number | strin
   active_days: (student) => student.active_days,
   trial_attempts: (student) => student.trial_attempts,
   quiz_answers: (student) => student.quiz_answers * 1000 + student.quiz_sessions,
+  collections: (student) => student.collection_downloads * 1000 + student.collections,
   total_solved: (student) => student.total_solved,
   streak: (student) => student.streak,
 };
@@ -117,6 +118,21 @@ function StudentActivityDetail({ entry }: { entry: ActivityEntry | undefined }) 
             </div>
           </div>
         )}
+        {!!activity.collections?.length && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Есеп жинақтары</div>
+            <div className={styles.list}>
+              {activity.collections.map((collection) => (
+                <div key={collection.collection_id} className={styles.listItem} style={{ padding: "4px 0" }}>
+                  <span className={styles.listMain}>{collection.title}</span>
+                  <span className={styles.listSide}>
+                    <small>{formatNumber(collection.task_count)} есеп · {collection.pptx_font} · {formatDateTime(collection.updated_at)}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -175,7 +191,8 @@ export default function StudentsTab({ data, initialSegment = "all", viewerEmail 
     ["ID", "Оқушы", ...(data.emails_visible ? ["Email"] : []), "Тіркелген", "Соңғы рет көрінді", "Соңғы бет", "Қаралған беттер",
       "Жауаптар", "Дұрыс", "Дәлдік %",
       "Белсенді күндер", "Сынақ тесттері", "Тесттің орташа нәтижесі %", "Тест черновигі", "Черновик жауаптары",
-      "Квиздер", "Квиз жауаптары", "Квиз дәлдігі %", "Барлығы шешілген", "Серия"],
+      "Квиздер", "Квиз жауаптары", "Квиз дәлдігі %", "Жинақтар", "Жинақтағы есептер", "Жинақ жүктеулері",
+      "Барлығы шешілген", "Серия"],
     visible.map((student) => [
       student.user_id, student.nickname, ...(data.emails_visible ? [student.email] : []), formatDateTime(student.registered_at),
       formatDateTime(student.last_seen_at), student.last_seen_path || "", student.page_visits,
@@ -184,6 +201,7 @@ export default function StudentsTab({ data, initialSegment = "all", viewerEmail 
       student.trial_average === null ? "" : Math.round(student.trial_average * 1000) / 10,
       student.trial_drafts, student.trial_draft_answers, student.quiz_sessions, student.quiz_answers,
       student.quiz_accuracy === null ? "" : Math.round(student.quiz_accuracy * 1000) / 10,
+      student.collections, student.collection_tasks, student.collection_downloads,
       student.total_solved, student.streak,
     ]),
   );
@@ -262,7 +280,7 @@ export default function StudentsTab({ data, initialSegment = "all", viewerEmail 
       </div>
       {!visible.length ? <Empty>Бұл шарттарға сай оқушы табылмады.</Empty> : (
         <div className={styles.tableWrap}>
-          <table className={styles.table} style={{ minWidth: 960 }}>
+          <table className={styles.table} style={{ minWidth: 1040 }}>
             <thead><tr>
               <SortHeader label="Оқушы" column="nickname" sort={sort} onSort={reset(setSort)} />
               <SortHeader label="Соңғы рет көрінді" column="last_seen_at" sort={sort} onSort={reset(setSort)} hint="Белсенді көрініп тұрған соңғы уақыты мен беті. Басып соңғы ашқан беттерін көруге болады" />
@@ -271,6 +289,7 @@ export default function StudentsTab({ data, initialSegment = "all", viewerEmail 
               <SortHeader label="Белсенді күн" column="active_days" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде неше түрлі күні оқыды" />
               <SortHeader label="Сынақ тест" column="trial_attempts" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңде тапсырылған тест саны, орташа нәтижесі және аяқталмаған черновиктер" />
               <SortHeader label="Квиз" column="quiz_answers" sort={sort} onSort={reset(setSort)} numeric hint="Кезеңдегі тікелей квиз ойындары мен жауаптар" />
+              <SortHeader label="Жинақ" column="collections" sort={sort} onSort={reset(setSort)} numeric hint="Есеп құрастырғыштағы жинақтары (барлық уақытта) және кезеңдегі PDF/PowerPoint жүктеулері" />
               <SortHeader label="Барлығы шешілген" column="total_solved" sort={sort} onSort={reset(setSort)} numeric hint="Барлық уақытта дұрыс шығарылған есептер" />
               <SortHeader label="Серия" column="streak" sort={sort} onSort={reset(setSort)} numeric hint="Қатарынан неше күн оқып келеді" />
               <SortHeader label="Тіркелген" column="registered_at" sort={sort} onSort={reset(setSort)} numeric />
@@ -352,13 +371,21 @@ export default function StudentsTab({ data, initialSegment = "all", viewerEmail 
                             : <>{formatNumber(student.quiz_sessions)} <span className={styles.muted}>· 0 жауап</span></>
                           : <span className={styles.muted}>—</span>}
                       </td>
+                      <td
+                        className={styles.num}
+                        title={student.collections > 0 ? `${formatNumber(student.collection_tasks)} есеп` : undefined}
+                      >
+                        {student.collections > 0 || student.collection_downloads > 0
+                          ? <>{formatNumber(student.collections)} <span className={styles.muted}>· {formatNumber(student.collection_downloads)} жүктеу</span></>
+                          : <span className={styles.muted}>—</span>}
+                      </td>
                       <td className={styles.num}>{formatNumber(student.total_solved)}</td>
                       <td className={styles.num}>{student.streak ? `${student.streak} күн` : <span className={styles.muted}>—</span>}</td>
                       <td className={styles.num}>{formatDate(student.registered_at)}</td>
                     </tr>
                     {open && (
                       <tr className={styles.expanded}>
-                        <td colSpan={10}>
+                        <td colSpan={11}>
                           <StudentActivityDetail entry={activityMap[student.user_id]} />
                         </td>
                       </tr>

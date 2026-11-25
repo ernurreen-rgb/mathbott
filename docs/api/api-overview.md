@@ -185,7 +185,7 @@ Any signed-in user, students included, browses the whole bank (twins excepted) a
 | `GET` | `/api/constructor/collections/{id}` | Owner | The collection with its tasks in order, without answers. Deleted bank tasks are left out. |
 | `PUT` | `/api/constructor/collections/{id}` | Owner | Changes `title`, `header_text` (the PDF's top line), `pptx_font` (`JUZ40 FONTS` by default, or `Arial`, `Calibri`, `Times New Roman`, `Verdana`) and/or the ordered `task_ids` (≤ 100, no repeats; unknown or deleted ids are dropped). 60/minute. |
 | `DELETE` | `/api/constructor/collections/{id}` | Owner | Deletes the collection and its two images. |
-| `GET` | `/api/constructor/collections/{id}/export` | Owner | The collection with answers (`answer`, `accepted_answers`, each sub-question's `correct`) for the answer key of a download. 30/minute. |
+| `GET` | `/api/constructor/collections/{id}/export` | Owner | The collection with answers (`answer`, `accepted_answers`, each sub-question's `correct`) for the answer key of a download. 30/minute. With `format` (`pdf`/`pptx`) it is a download and is recorded in `task_collection_downloads` with `include_answers` for the statistics. |
 | `POST` | `/api/constructor/collections/{id}/images/{kind}` | Owner | Multipart `image` (JPG or PNG, image upload limit) as the PPTX `title` slide or task-slide `background`; the replaced file is deleted. 20/minute. |
 | `DELETE` | `/api/constructor/collections/{id}/images/{kind}` | Owner | Removes that image (the slides turn white). |
 
@@ -320,6 +320,7 @@ Any signed-in user, students included, browses the whole bank (twins excepted) a
 | `GET` | `/api/admin/statistics/modules` | `review_manage` | Per module, lesson and mini-lesson: students who started and completed (current state) plus answers and accuracy in the period. |
 | `GET` | `/api/admin/statistics/trial-tests` | `review_manage` | Attempts, students, average/median/best score with the previous period, score distribution, per-test figures with accuracy per question, and the latest 20 attempts. |
 | `GET` | `/api/admin/statistics/quizzes` | `review_manage` | Live quiz sessions, participants, guests, answers and accuracy with the previous period, per-quiz figures and the latest 20 sessions. Never filtered by admin accounts. |
+| `GET` | `/api/admin/statistics/task-builder` | `review_manage` | Task constructor: collections created, active authors and PDF/PPTX downloads with the previous period, downloads with answers, bank coverage, design (PDF header, slide images, fonts), topics and most collected bank tasks, authors and recent collections; `exclude_admins` leaves admins out, emails for super admins only. |
 | `GET` | `/api/admin/mistake-analytics` | Any admin | First-attempt mistakes in module lessons (`period=7d\|30d\|all`, optional `module_id`): summary, top 50 tasks with review outcomes and twin counts, topics, and up to 100 students by weak spots. E-mail addresses only for `super_admin` ([`mistake_analytics.py`](../../bot/routes/admin/mistake_analytics.py)). |
 | `GET` | `/api/admin/ops/health/summary` | `ops.view` | Returns live operational health status, latency `p95`, error rate, DB status, and online count. |
 | `GET` | `/api/admin/ops/health/timeseries` | `ops.view` | Returns historical time-series samples from `ops_health_samples` (`range=1h\|24h\|7d`). |

@@ -272,6 +272,7 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["today"], {"online_now": 1, "active_users": 1, "attempts": 1, "new_users": 1})
         self.assertEqual(data["totals"], {
             "users": 7, "modules": 2, "lessons": 3, "module_tasks": 5, "bank_tasks": 5, "trial_tests": 2, "quizzes": 1,
+            "task_collections": 0,
         })
         self.assertEqual([step["count"] for step in data["journey"]], [3, 2, 2, 2, 2])
         self.assertEqual([step["key"] for step in data["journey"]],
@@ -579,7 +580,7 @@ class StatisticsTests(unittest.IsolatedAsyncioTestCase):
         async def get(tab, email=ADMIN, **params):
             return await self.client.get(f"/api/admin/statistics/{tab}", params={**({"email": email} if email else {}), **params})
 
-        for tab in ("overview", "students", "tasks", "modules", "trial-tests", "quizzes"):
+        for tab in ("overview", "students", "tasks", "modules", "trial-tests", "quizzes", "task-builder"):
             response = await get(tab, period="all")
             self.assertEqual(response.status_code, 200, f"{tab}: {response.text}")
             self.assertEqual(response.json()["period"]["key"], "all")

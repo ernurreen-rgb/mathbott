@@ -141,6 +141,7 @@ export default function OverviewTab({ data, onNavigate }: Props) {
         <div className={styles.fact}><dt>Банктегі есептер</dt><dd>{formatNumber(totals.bank_tasks)}</dd></div>
         <div className={styles.fact}><dt>Сынақ тесттері</dt><dd>{formatNumber(totals.trial_tests)}</dd></div>
         <div className={styles.fact}><dt>Квиздер</dt><dd>{formatNumber(totals.quizzes)}</dd></div>
+        <div className={styles.fact}><dt>Есеп жинақтары</dt><dd>{formatNumber(totals.task_collections ?? 0)}</dd></div>
       </dl>
     </Card>
   </>;

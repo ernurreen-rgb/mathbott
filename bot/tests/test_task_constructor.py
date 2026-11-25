@@ -59,6 +59,24 @@ class TaskConstructorTests(PostgresTestCase):
     def client(self):
         return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://constructor.test")
 
+    async def test_exports_for_a_download_are_recorded_for_the_statistics(self):
+        teacher = {"email": "teacher@example.test"}
+        async with self.client() as client:
+            created = (await client.post("/api/constructor/collections", params=teacher, json={"title": "Скачать"})).json()
+            url = f"/api/constructor/collections/{created['id']}"
+            await client.put(url, params=teacher, json={"task_ids": [self.ids[0], self.ids[1]]})
+            self.assertEqual((await client.get(f"{url}/export", params=teacher)).status_code, 200)  # not a download
+            pptx = await client.get(f"{url}/export", params={**teacher, "format": "pptx", "include_answers": "false"})
+            self.assertEqual(len(pptx.json()["tasks"]), 2)
+            await client.get(f"{url}/export", params={**teacher, "format": "pdf"})
+            self.assertEqual((await client.get(f"{url}/export", params={**teacher, "format": "docx"})).status_code, 422)
+        async with self.connect() as connection:
+            async with connection.execute(
+                "SELECT format, include_answers, task_count, collection_title FROM task_collection_downloads ORDER BY id"
+            ) as cursor:
+                rows = [tuple(row) for row in await cursor.fetchall()]
+        self.assertEqual(rows, [("pptx", 0, 2, "Скачать"), ("pdf", 1, 2, "Скачать")])
+
     async def test_several_sources_match_all_of_them_or_any_of_them(self):
         created = await self.db.bank_tasks.create_tasks_bulk_atomic(
             tasks=[_task(20, sources=["Educon"]), _task(21, sources=["Рустюмова"]),

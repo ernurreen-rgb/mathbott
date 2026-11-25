@@ -130,8 +130,15 @@ export function deleteTaskCollection(
 }
 
 /** The collection with answers, for the answer key of a download. */
-export function exportTaskCollection(id: number, email: string): Promise<FetchResult<TaskCollection>> {
-  return request<TaskCollection>(withEmail(`constructor/collections/${id}/export`, email));
+export function exportTaskCollection(
+  id: number,
+  email: string,
+  options?: { format?: "pdf" | "pptx"; includeAnswers?: boolean },
+): Promise<FetchResult<TaskCollection>> {
+  const params = new URLSearchParams();
+  if (options?.format) params.set("format", options.format);
+  if (options?.includeAnswers !== undefined) params.set("include_answers", String(options.includeAnswers));
+  return request<TaskCollection>(withEmail(`constructor/collections/${id}/export`, email, params));
 }
 
 export function uploadTaskCollectionImage(

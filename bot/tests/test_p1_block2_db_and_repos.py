@@ -451,7 +451,7 @@ class H14StatisticsTests(unittest.TestCase):
             if "SELECT DISTINCT user_id FROM quiz_participants" in sql:
                 return [(9,)]
             if "SELECT COUNT(*) FROM" in sql or "SELECT\n                    (SELECT COUNT(*)" in sql:
-                return [(0,) * 10]
+                return [(0,) * 11]  # the overview totals include the task constructor's collections
             return []
 
         @asynccontextmanager
@@ -461,6 +461,7 @@ class H14StatisticsTests(unittest.TestCase):
         repo._connection = fake_conn
         repo._rows = fake_rows
         repo._has_page_visit_tracking = AsyncMock(return_value=False)
+        repo._has_collection_download_tracking = AsyncMock(return_value=False)
 
         window = build_window("30d", 300, now=datetime(2026, 11, 11, 7, 0, 0))
         students_resp = asyncio.run(repo.get_students(window))

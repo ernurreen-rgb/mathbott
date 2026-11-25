@@ -18,6 +18,7 @@ import storage as db_driver
 from settings import get_settings
 from utils.timezone import APP_TZ
 
+from .bank.twins import NOT_DRAFT_TWIN_SQL
 from .base import BaseRepository
 
 PERIOD_DAYS: Dict[str, Optional[int]] = {"7d": 7, "30d": 30, "90d": 90, "all": None}
@@ -198,6 +199,8 @@ _STATIC_VISIT_LABELS: Dict[str, str] = {
     "/quizzes/create": "Квиз құру",
     "/join": "Квизге қосылу",
     "/quiz/history": "Квиз тарихы",
+    "/task-builder": "Есеп құрастырғыш",
+    "/task-builder/new": "Жаңа жинақ",
     "/profile": "Профиль",
     "/profile/export": "Деректер экспорты",
     "/achievements": "Жетістіктер",
@@ -242,6 +245,8 @@ def parse_visit_route(path: Optional[str]) -> Tuple[str, Optional[Tuple[str, int
             return f"Квиз талдауы #{entity_id}", None
         if parts[1] == "host":
             return f"Квиз жүргізу #{entity_id}", None
+    if parts[0] == "task-builder" and len(parts) == 2 and (entity_id := _pos_int(parts[1])):
+        return f"Жинақ #{entity_id}", ("collection", entity_id)
     if parts[0] == "profile" and len(parts) == 2 and (entity_id := _pos_int(parts[1])):
         return f"Оқушы профилі #{entity_id}", None
     if parts[0] == "admin":
@@ -512,7 +517,8 @@ class StatisticsRepository(BaseRepository):
                     (SELECT COUNT(*) FROM quizzes),
                     (SELECT COUNT(*) FROM reports WHERE status = 'pending'),
                     (SELECT COUNT(*) FROM trial_test_reports WHERE status = 'pending'),
-                    (SELECT COUNT(*) FROM users WHERE last_active >= ?{users_admins})
+                    (SELECT COUNT(*) FROM users WHERE last_active >= ?{users_admins}),
+                    (SELECT COUNT(*) FROM task_collections WHERE TRUE{answers_admins})
             """, (online_since,)))[0]
 
         current = activity.totals(window.start, window.today)
@@ -573,6 +579,7 @@ class StatisticsRepository(BaseRepository):
                 "bank_tasks": _int(totals_row[4]),
                 "trial_tests": _int(totals_row[5]),
                 "quizzes": _int(totals_row[6]),
+                "task_collections": _int(totals_row[10]),
             },
             "thresholds": {"hard_task_min_attempts": HARD_TASK_MIN_ATTEMPTS, "hard_task_max_accuracy": HARD_TASK_MAX_ACCURACY},
         }
@@ -581,6 +588,7 @@ class StatisticsRepository(BaseRepository):
                            include_email: bool = False) -> Dict[str, Any]:
         async with self._connection() as db:
             track_pages = await self._has_page_visit_tracking(db)
+            track_downloads = await self._has_collection_download_tracking(db)
             activity = await self._load_activity(db, window, exclude_admins)
             registrations = await self._load_registrations(db, window, exclude_admins)
             last_seen_path_col = "last_seen_path" if track_pages else "NULL"
@@ -650,8 +658,25 @@ class StatisticsRepository(BaseRepository):
                 WHERE visited_at >= ? AND visited_at < ?{_without_admins("user_id", exclude_admins)}
                 GROUP BY user_id
             """, (window.start_utc, window.end_utc)) if track_pages else []
+            collection_rows = await self._rows(db, f"""
+                SELECT user_id, COUNT(*), COALESCE(SUM(jsonb_array_length(task_ids)), 0)
+                FROM task_collections
+                WHERE TRUE{_without_admins("user_id", exclude_admins)}
+                GROUP BY user_id
+            """)
+            download_rows = await self._rows(db, f"""
+                SELECT user_id, COUNT(*)
+                FROM task_collection_downloads
+                WHERE created_at >= ? AND created_at < ?{_without_admins("user_id", exclude_admins)}
+                GROUP BY user_id
+            """, (window.start_utc, window.end_utc)) if track_downloads else []
 
         visits_by_user: Dict[int, int] = {int(row[0]): _int(row[1]) for row in visit_rows}
+        collections_by_user: Dict[int, Dict[str, int]] = {
+            int(row[0]): {"count": _int(row[1]), "tasks": _int(row[2])}
+            for row in collection_rows
+        }
+        downloads_by_user: Dict[int, int] = {int(row[0]): _int(row[1]) for row in download_rows}
         quiz_by_user: Dict[int, Dict[str, int]] = {
             int(row[0]): {"sessions": _int(row[1]), "answers": _int(row[2]), "correct": _int(row[3])}
             for row in quiz_rows
@@ -680,6 +705,7 @@ class StatisticsRepository(BaseRepository):
             quiz_answers = quiz_cell["answers"] if quiz_cell else 0
             quiz_correct = quiz_cell["correct"] if quiz_cell else 0
             draft_cell = drafts_by_user.get(user_id)
+            coll_cell = collections_by_user.get(user_id)
             student = {
                 "user_id": user_id,
                 "nickname": row[1],
@@ -700,6 +726,9 @@ class StatisticsRepository(BaseRepository):
                 "quiz_correct": quiz_correct,
                 "quiz_accuracy": _ratio(quiz_correct, quiz_answers),
                 "has_quiz_history": user_id in ever_quiz,
+                "collections": coll_cell["count"] if coll_cell else 0,
+                "collection_tasks": coll_cell["tasks"] if coll_cell else 0,
+                "collection_downloads": downloads_by_user.get(user_id, 0),
                 "total_solved": _int(row[5]),
                 "streak": effective_streak(row[6], row[7], almaty_today),
                 "is_admin": bool(row[8]),
@@ -766,6 +795,7 @@ class StatisticsRepository(BaseRepository):
             "lesson": ("lessons", "title", "Сабақ"),
             "trial_test": ("trial_tests", "title", "Тест"),
             "quiz": ("quizzes", "title", "Квиз"),
+            "collection": ("task_collections", "title", "Жинақ"),
         }
         names: Dict[Tuple[str, int], str] = {}
         for kind, ids in ids_by_kind.items():
@@ -835,6 +865,15 @@ class StatisticsRepository(BaseRepository):
                    LIMIT 20""",
                 (user_id,),
             )
+            collection_rows = await self._rows(
+                db,
+                """SELECT id, title, jsonb_array_length(task_ids), pptx_font, updated_at
+                   FROM task_collections
+                   WHERE user_id = ?
+                   ORDER BY updated_at DESC, id DESC
+                   LIMIT 10""",
+                (user_id,),
+            )
 
             all_paths = {str(row[1]) for row in visit_rows if row[1]}
             if user_row[4]:
@@ -883,6 +922,16 @@ class StatisticsRepository(BaseRepository):
                     "correct": _int(row[5]),
                 }
                 for row in quiz_rows
+            ],
+            "collections": [
+                {
+                    "collection_id": int(row[0]),
+                    "title": row[1],
+                    "task_count": _int(row[2]),
+                    "pptx_font": row[3] or "JUZ40 FONTS",
+                    "updated_at": _iso(row[4]),
+                }
+                for row in collection_rows
             ],
         }
         if include_email:
@@ -1404,4 +1453,445 @@ class StatisticsRepository(BaseRepository):
                 )}
                 for item in sorted(current, key=lambda item: -item["session_id"])[:RECENT_LIMIT]
             ],
+        }
+
+    async def get_constructor(
+        self,
+        window: StatsWindow,
+        *,
+        exclude_admins: bool = False,
+        include_email: bool = False,
+    ) -> Dict[str, Any]:
+        """Task constructor (/task-builder) analytics: saved collections, bank coverage, branding and downloads."""
+        tc_admins = _without_admins("tc.user_id", exclude_admins)
+        dl_admins = _without_admins("d.user_id", exclude_admins)
+        async with self._connection() as db:
+            track_downloads = await self._has_collection_download_tracking(db)
+            collection_rows = await self._rows(db, f"""
+                SELECT tc.id, tc.user_id, u.nickname, u.email, u.is_admin,
+                       tc.title, tc.header_text, tc.pptx_font, tc.task_ids,
+                       tc.title_image, tc.background_image,
+                       tc.created_at, tc.updated_at,
+                       {window.local_day("tc.created_at")},
+                       {window.local_day("tc.updated_at")}
+                FROM task_collections tc
+                LEFT JOIN users u ON u.id = tc.user_id
+                WHERE TRUE{tc_admins}
+                ORDER BY tc.updated_at DESC, tc.id DESC
+            """)
+            bank_tasks_total = _int((await self._rows(db, f"""
+                SELECT COUNT(*)
+                FROM bank_tasks bt
+                WHERE bt.deleted_at IS NULL AND {NOT_DRAFT_TWIN_SQL}
+            """))[0][0])
+
+            download_rows = await self._rows(db, f"""
+                SELECT d.id, d.collection_id, d.collection_title, d.user_id,
+                       u.nickname, u.email, u.is_admin,
+                       d.format, d.include_answers, d.task_count,
+                       d.created_at, {window.local_day("d.created_at")}
+                FROM task_collection_downloads d
+                LEFT JOIN users u ON u.id = d.user_id
+                WHERE d.created_at >= ? AND d.created_at < ?{dl_admins}
+                ORDER BY d.id DESC
+            """, (window.previous_start_utc, window.end_utc)) if track_downloads else []
+
+            all_download_counts = await self._rows(db, f"""
+                SELECT d.collection_id, COUNT(*)
+                FROM task_collection_downloads d
+                WHERE d.collection_id IS NOT NULL{dl_admins}
+                GROUP BY d.collection_id
+            """) if track_downloads else []
+
+            ever_download_users = {
+                int(row[0]) for row in await self._rows(db, f"""
+                    SELECT DISTINCT d.user_id
+                    FROM task_collection_downloads d
+                    WHERE TRUE{dl_admins}
+                """)
+            } if track_downloads else set()
+
+            def _parse_ids(raw: Any) -> List[int]:
+                if isinstance(raw, str):
+                    try:
+                        raw = json.loads(raw)
+                    except ValueError:
+                        return []
+                if not isinstance(raw, list):
+                    return []
+                return list(dict.fromkeys(
+                    item for item in raw if isinstance(item, int) and not isinstance(item, bool) and item > 0
+                ))
+
+            parsed_ids_by_collection: Dict[int, List[int]] = {}
+            all_referenced_ids: Set[int] = set()
+            for row in collection_rows:
+                c_ids = _parse_ids(row[8])
+                parsed_ids_by_collection[int(row[0])] = c_ids
+                all_referenced_ids.update(c_ids)
+
+            active_tasks_by_id: Dict[int, Dict[str, Any]] = {}
+            if all_referenced_ids:
+                sorted_ids = sorted(all_referenced_ids)
+                for start_idx in range(0, len(sorted_ids), 500):
+                    chunk = sorted_ids[start_idx : start_idx + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    for trow in await self._rows(db, f"""
+                        SELECT bt.id, bt.text, bt.question_type, bt.difficulty,
+                               ARRAY(
+                                   SELECT topic.name
+                                   FROM bank_task_topic_map map
+                                   JOIN bank_topics topic ON topic.id = map.topic_id
+                                   WHERE map.bank_task_id = bt.id
+                                   ORDER BY topic.name_norm
+                               ),
+                               ARRAY(
+                                   SELECT src.name
+                                   FROM bank_task_source_map smap
+                                   JOIN bank_sources src ON src.id = smap.source_id
+                                   WHERE smap.bank_task_id = bt.id
+                                   ORDER BY src.name_norm
+                               )
+                        FROM bank_tasks bt
+                        WHERE bt.id IN ({placeholders})
+                          AND bt.deleted_at IS NULL
+                          AND {NOT_DRAFT_TWIN_SQL}
+                    """, chunk):
+                        active_tasks_by_id[int(trow[0])] = {
+                            "bank_task_id": int(trow[0]),
+                            "text_preview": _preview(trow[1], 300),
+                            "question_type": trow[2] or "input",
+                            "difficulty": trow[3],
+                            "topics": list(trow[4] or []),
+                            "sources": list(trow[5] or []),
+                        }
+
+        total_downloads_by_collection: Dict[int, int] = {
+            int(row[0]): _int(row[1]) for row in all_download_counts if row[0] is not None
+        }
+
+        def _in_current(day: Optional[date]) -> bool:
+            return day is not None and day <= window.today and (window.start is None or day >= window.start)
+
+        def _in_previous(day: Optional[date]) -> bool:
+            return (
+                window.previous_start is not None
+                and window.previous_end is not None
+                and day is not None
+                and window.previous_start <= day <= window.previous_end
+            )
+
+        collections: List[Dict[str, Any]] = []
+        for row in collection_rows:
+            cid = int(row[0])
+            active_ids = [tid for tid in parsed_ids_by_collection[cid] if tid in active_tasks_by_id]
+            collections.append({
+                "collection_id": cid,
+                "user_id": int(row[1]),
+                "nickname": row[2],
+                "email": row[3],
+                "is_admin": bool(row[4]),
+                "title": row[5] or f"Жинақ #{cid}",
+                "header_text": (row[6] or "").strip(),
+                "pptx_font": row[7] or "JUZ40 FONTS",
+                "active_ids": active_ids,
+                "task_count": len(active_ids),
+                "has_title_image": bool(row[9]),
+                "has_background_image": bool(row[10]),
+                "created_at": _iso(row[11]),
+                "updated_at": _iso(row[12]),
+                "created_day": row[13],
+                "updated_day": row[14],
+            })
+
+        downloads = [
+            {
+                "id": int(row[0]),
+                "collection_id": int(row[1]) if row[1] is not None else None,
+                "collection_title": row[2] or "",
+                "user_id": int(row[3]),
+                "nickname": row[4],
+                "email": row[5],
+                "is_admin": bool(row[6]),
+                "format": row[7],
+                "include_answers": bool(row[8]),
+                "task_count": _int(row[9]),
+                "created_at": _iso(row[10]),
+                "day": row[11],
+            }
+            for row in download_rows
+        ]
+        current_downloads = [item for item in downloads if _in_current(item["day"])]
+        previous_downloads = [item for item in downloads if _in_previous(item["day"])]
+
+        created_current = sum(1 for item in collections if _in_current(item["created_day"]))
+        created_previous = sum(1 for item in collections if _in_previous(item["created_day"]))
+
+        current_authors: Set[int] = set()
+        previous_authors: Set[int] = set()
+        authors_by_day: Dict[date, Set[int]] = {}
+        for item in collections:
+            uid = item["user_id"]
+            for day in (item["created_day"], item["updated_day"]):
+                if day is None:
+                    continue
+                if _in_current(day):
+                    current_authors.add(uid)
+                    authors_by_day.setdefault(day, set()).add(uid)
+                elif _in_previous(day):
+                    previous_authors.add(uid)
+        for item in downloads:
+            day = item["day"]
+            uid = item["user_id"]
+            if _in_current(day):
+                current_authors.add(uid)
+                if day is not None:
+                    authors_by_day.setdefault(day, set()).add(uid)
+            elif _in_previous(day):
+                previous_authors.add(uid)
+
+        pdf_current = sum(1 for item in current_downloads if item["format"] == "pdf")
+        pptx_current = sum(1 for item in current_downloads if item["format"] == "pptx")
+        with_answers_current = sum(1 for item in current_downloads if item["include_answers"])
+
+        collections_total = len(collections)
+        non_empty = [item for item in collections if item["task_count"] > 0]
+        tasks_in_collections = sum(item["task_count"] for item in collections)
+        unique_used_ids = {tid for item in collections for tid in item["active_ids"]}
+        authors_total = len({item["user_id"] for item in collections} | ever_download_users)
+
+        custom_header_count = sum(1 for item in collections if item["header_text"])
+        custom_title_image_count = sum(1 for item in collections if item["has_title_image"])
+        custom_background_image_count = sum(1 for item in collections if item["has_background_image"])
+        custom_images_count = sum(
+            1 for item in collections if item["has_title_image"] or item["has_background_image"]
+        )
+        branded_count = sum(
+            1
+            for item in collections
+            if item["header_text"]
+            or item["has_title_image"]
+            or item["has_background_image"]
+            or item["pptx_font"] != "JUZ40 FONTS"
+        )
+
+        # Font distribution across saved collections.
+        font_counts: Dict[str, int] = {}
+        for item in collections:
+            font_counts[item["pptx_font"]] = font_counts.get(item["pptx_font"], 0) + 1
+        by_font = [
+            {"font": font, "collections": count, "share": _ratio(count, collections_total)}
+            for font, count in sorted(font_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+        ]
+
+        # Popular bank tasks & topics across saved collections.
+        task_usage: Dict[int, Dict[str, Set[int]]] = {}
+        topic_collections: Dict[str, Set[int]] = {}
+        topic_tasks: Dict[str, Set[int]] = {}
+        for item in collections:
+            cid = item["collection_id"]
+            uid = item["user_id"]
+            for tid in item["active_ids"]:
+                usage = task_usage.setdefault(tid, {"collections": set(), "authors": set()})
+                usage["collections"].add(cid)
+                usage["authors"].add(uid)
+                meta = active_tasks_by_id[tid]
+                for topic in (meta["topics"] or [""]):
+                    topic_collections.setdefault(topic, set()).add(cid)
+                    topic_tasks.setdefault(topic, set()).add(tid)
+
+        popular_tasks = [
+            {
+                **active_tasks_by_id[tid],
+                "collections_count": len(usage["collections"]),
+                "authors_count": len(usage["authors"]),
+            }
+            for tid, usage in sorted(
+                task_usage.items(),
+                key=lambda pair: (-len(pair[1]["collections"]), -len(pair[1]["authors"]), pair[0]),
+            )[:100]
+        ]
+        by_topic = [
+            {
+                "topic": topic,
+                "collections": len(cids),
+                "tasks": len(topic_tasks.get(topic, set())),
+                "share": _ratio(len(cids), len(non_empty)),
+            }
+            for topic, cids in sorted(
+                topic_collections.items(),
+                key=lambda pair: (-len(pair[1]), -len(topic_tasks.get(pair[0], set())), pair[0]),
+            )[:TOPIC_LIMIT]
+        ]
+
+        # Per-author constructor summary (saved collections + period activity/downloads).
+        author_map: Dict[int, Dict[str, Any]] = {}
+        for item in collections:
+            uid = item["user_id"]
+            entry = author_map.setdefault(uid, {
+                "user_id": uid,
+                "nickname": item["nickname"],
+                "email": item["email"],
+                "is_admin": item["is_admin"],
+                "collections": 0,
+                "collections_in_period": 0,
+                "total_tasks": 0,
+                "downloads": 0,
+                "pdf_downloads": 0,
+                "pptx_downloads": 0,
+                "last_activity_at": None,
+            })
+            entry["collections"] += 1
+            entry["total_tasks"] += item["task_count"]
+            if _in_current(item["created_day"]) or _in_current(item["updated_day"]):
+                entry["collections_in_period"] += 1
+            if item["updated_at"] and (not entry["last_activity_at"] or item["updated_at"] > entry["last_activity_at"]):
+                entry["last_activity_at"] = item["updated_at"]
+
+        period_downloads_by_collection: Dict[int, int] = {}
+        for dl in current_downloads:
+            if dl["collection_id"] is not None:
+                period_downloads_by_collection[dl["collection_id"]] = (
+                    period_downloads_by_collection.get(dl["collection_id"], 0) + 1
+                )
+            uid = dl["user_id"]
+            entry = author_map.setdefault(uid, {
+                "user_id": uid,
+                "nickname": dl["nickname"],
+                "email": dl["email"],
+                "is_admin": dl["is_admin"],
+                "collections": 0,
+                "collections_in_period": 0,
+                "total_tasks": 0,
+                "downloads": 0,
+                "pdf_downloads": 0,
+                "pptx_downloads": 0,
+                "last_activity_at": None,
+            })
+            entry["downloads"] += 1
+            if dl["format"] == "pdf":
+                entry["pdf_downloads"] += 1
+            elif dl["format"] == "pptx":
+                entry["pptx_downloads"] += 1
+            if dl["created_at"] and (not entry["last_activity_at"] or dl["created_at"] > entry["last_activity_at"]):
+                entry["last_activity_at"] = dl["created_at"]
+
+        authors = []
+        for entry in sorted(
+            author_map.values(),
+            key=lambda item: (
+                -item["downloads"],
+                -item["collections_in_period"],
+                -item["collections"],
+                -item["total_tasks"],
+                item["user_id"],
+            ),
+        )[:200]:
+            row_out = {k: v for k, v in entry.items() if k != "email"}
+            if include_email:
+                row_out["email"] = entry["email"]
+            authors.append(row_out)
+
+        # Recent collections created or updated in the period (or all collections for "all").
+        scoped_collections = [
+            item
+            for item in collections
+            if _in_current(item["created_day"])
+            or _in_current(item["updated_day"])
+            or period_downloads_by_collection.get(item["collection_id"], 0) > 0
+        ]
+        recent_collections = []
+        for item in scoped_collections[:100]:
+            cid = item["collection_id"]
+            coll_out: Dict[str, Any] = {
+                "collection_id": cid,
+                "title": item["title"],
+                "header_text": item["header_text"],
+                "user_id": item["user_id"],
+                "nickname": item["nickname"],
+                "is_admin": item["is_admin"],
+                "task_count": item["task_count"],
+                "pptx_font": item["pptx_font"],
+                "has_title_image": item["has_title_image"],
+                "has_background_image": item["has_background_image"],
+                "downloads": period_downloads_by_collection.get(cid, 0),
+                "total_downloads": total_downloads_by_collection.get(cid, 0),
+                "created_at": item["created_at"],
+                "updated_at": item["updated_at"],
+            }
+            if include_email:
+                coll_out["email"] = item["email"]
+            recent_collections.append(coll_out)
+
+        # Time-series buckets across the selected period.
+        first = window.start
+        if first is None:
+            known_days = [
+                day
+                for day in (
+                    *(c["created_day"] for c in collections),
+                    *(d["day"] for d in current_downloads),
+                )
+                if day is not None
+            ]
+            first = min(known_days) if known_days else window.today - timedelta(days=29)
+        granularity, buckets = bucket_plan(first, window.today)
+        points = []
+        for start, end in buckets:
+            bucket_authors: Set[int] = set()
+            day_cursor = start
+            while day_cursor <= end:
+                bucket_authors |= authors_by_day.get(day_cursor, set())
+                day_cursor += timedelta(days=1)
+            b_pdf = sum(
+                1 for d in current_downloads if d["format"] == "pdf" and d["day"] is not None and start <= d["day"] <= end
+            )
+            b_pptx = sum(
+                1 for d in current_downloads if d["format"] == "pptx" and d["day"] is not None and start <= d["day"] <= end
+            )
+            points.append({
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "collections_created": sum(
+                    1 for c in collections if c["created_day"] is not None and start <= c["created_day"] <= end
+                ),
+                "pdf_downloads": b_pdf,
+                "pptx_downloads": b_pptx,
+                "downloads": b_pdf + b_pptx,
+                "active_authors": len(bucket_authors),
+            })
+
+        return {
+            "period": window.describe(),
+            "summary": {
+                "collections_created": self._kpi(window, created_current, created_previous),
+                "active_authors": self._kpi(window, len(current_authors), len(previous_authors)),
+                "downloads": self._kpi(window, len(current_downloads), len(previous_downloads)),
+                "pdf_downloads": pdf_current,
+                "pptx_downloads": pptx_current,
+                "downloads_with_answers": with_answers_current,
+                "with_answers_share": _ratio(with_answers_current, len(current_downloads)),
+                "collections_total": collections_total,
+                "non_empty_collections": len(non_empty),
+                "empty_collections": collections_total - len(non_empty),
+                "authors_total": authors_total,
+                "tasks_in_collections": tasks_in_collections,
+                "unique_bank_tasks": len(unique_used_ids),
+                "bank_tasks_total": bank_tasks_total,
+                "avg_tasks_per_collection": round(tasks_in_collections / len(non_empty), 1) if non_empty else None,
+                "custom_header_count": custom_header_count,
+                "custom_title_image_count": custom_title_image_count,
+                "custom_background_image_count": custom_background_image_count,
+                "custom_images_count": custom_images_count,
+                "branded_count": branded_count,
+                "branded_share": _ratio(branded_count, collections_total),
+            },
+            "series": {"granularity": granularity, "points": points},
+            "by_font": by_font,
+            "by_topic": by_topic,
+            "popular_tasks": popular_tasks,
+            "authors": authors,
+            "recent_collections": recent_collections,
+            "download_tracking_enabled": track_downloads,
+            "emails_visible": include_email,
         }

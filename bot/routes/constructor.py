@@ -329,10 +329,25 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         collection_id: int,
         current_user: dict = Depends(require_internal_identity),
         db: Database = Depends(get_db),
+        format: Optional[Literal["pdf", "pptx"]] = Query(None),
+        include_answers: bool = Query(True),
     ):
         """The collection with answers, for the answer key of the PDF and the PPTX."""
         collection = await _owned_collection(db, collection_id, current_user)
-        return await _collection_with_tasks(db, collection, with_answers=True)
+        payload = await _collection_with_tasks(db, collection, with_answers=True)
+        if format in ("pdf", "pptx"):
+            try:
+                await db.task_collections.record_download(
+                    int(collection["id"]),
+                    int(current_user["id"]),
+                    collection_title=collection.get("title") or "",
+                    fmt=format,
+                    include_answers=include_answers,
+                    task_count=len(payload["tasks"]),
+                )
+            except Exception:
+                logger.warning("Failed to record collection download telemetry", exc_info=True)
+        return payload
 
     @app.post("/api/constructor/collections/{collection_id}/images/{kind}")
     @limiter.limit("20/minute")

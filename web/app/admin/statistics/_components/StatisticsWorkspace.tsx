@@ -16,6 +16,7 @@ import ModulesTab from "./ModulesTab";
 import OverviewTab from "./OverviewTab";
 import QuizzesTab from "./QuizzesTab";
 import StudentsTab, { type StudentSegment } from "./StudentsTab";
+import TaskBuilderTab from "./TaskBuilderTab";
 import TasksTab, { type TaskFilter } from "./TasksTab";
 import TrialTestsTab from "./TrialTestsTab";
 
@@ -26,6 +27,7 @@ const TABS: Array<{ key: StatisticsTab; label: string; icon: IconName }> = [
   { key: "modules", label: "Модульдер", icon: "book" },
   { key: "trial-tests", label: "Сынақ тесттері", icon: "test" },
   { key: "quizzes", label: "Квиздер", icon: "quiz" },
+  { key: "task-builder", label: "Құрастырғыш", icon: "layers" },
 ];
 const isTab = (value: string | null): value is StatisticsTab => TABS.some((tab) => tab.key === value);
 const isPeriod = (value: string | null): value is StatisticsPeriodKey => PERIODS.some((period) => period.key === value);
@@ -219,6 +221,7 @@ export default function StatisticsWorkspace() {
                 {tab === "modules" && <ModulesTab data={data as StatisticsByTab["modules"]} />}
                 {tab === "trial-tests" && <TrialTestsTab data={data as StatisticsByTab["trial-tests"]} />}
                 {tab === "quizzes" && <QuizzesTab data={data as StatisticsByTab["quizzes"]} />}
+                {tab === "task-builder" && <TaskBuilderTab data={data as StatisticsByTab["task-builder"]} />}
               </div>
             )}
           </div>

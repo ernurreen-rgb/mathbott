@@ -1,7 +1,7 @@
 /** Admin statistics workspace: one response shape per tab, all scoped by the same period. */
 
 export type StatisticsPeriodKey = "7d" | "30d" | "90d" | "all";
-export type StatisticsTab = "overview" | "students" | "tasks" | "modules" | "trial-tests" | "quizzes";
+export type StatisticsTab = "overview" | "students" | "tasks" | "modules" | "trial-tests" | "quizzes" | "task-builder";
 export type StatisticsGranularity = "day" | "week" | "month";
 
 export interface StatisticsPeriod {
@@ -82,6 +82,8 @@ export interface StatisticsOverview {
     bank_tasks: number;
     trial_tests: number;
     quizzes: number;
+    /** Saved task constructor collections, all time. */
+    task_collections: number;
   };
   thresholds: StatisticsThresholds;
 }
@@ -108,6 +110,11 @@ export interface StatisticsStudent {
   quiz_correct: number;
   quiz_accuracy: number | null;
   has_quiz_history: boolean;
+  /** Task constructor collections the user keeps (all time) and the bank tasks in them. */
+  collections: number;
+  collection_tasks: number;
+  /** PDF and PPTX downloads in the period. */
+  collection_downloads: number;
   total_solved: number;
   streak: number;
   is_admin: boolean;
@@ -147,6 +154,14 @@ export interface StatisticsStudentActivity {
     is_finished: boolean;
     answers: number;
     correct: number;
+  }>;
+  /** The user's latest task constructor collections. */
+  collections?: Array<{
+    collection_id: number;
+    title: string;
+    task_count: number;
+    pptx_font: string;
+    updated_at: string | null;
   }>;
 }
 
@@ -364,6 +379,86 @@ export interface StatisticsQuizzes {
   }>;
 }
 
+/** Task constructor (/task-builder): saved collections and their PDF/PPTX downloads. */
+export interface StatisticsConstructor {
+  period: StatisticsPeriod;
+  summary: {
+    collections_created: StatisticsKpi;
+    active_authors: StatisticsKpi;
+    downloads: StatisticsKpi;
+    pdf_downloads: number;
+    pptx_downloads: number;
+    downloads_with_answers: number;
+    with_answers_share: number | null;
+    collections_total: number;
+    non_empty_collections: number;
+    empty_collections: number;
+    authors_total: number;
+    tasks_in_collections: number;
+    unique_bank_tasks: number;
+    bank_tasks_total: number;
+    avg_tasks_per_collection: number | null;
+    custom_header_count: number;
+    custom_title_image_count: number;
+    custom_background_image_count: number;
+    custom_images_count: number;
+    branded_count: number;
+    branded_share: number | null;
+  };
+  series: StatisticsSeries<StatisticsBucket & {
+    collections_created: number;
+    pdf_downloads: number;
+    pptx_downloads: number;
+    downloads: number;
+    active_authors: number;
+  }>;
+  by_font: Array<{ font: string; collections: number; share: number | null }>;
+  by_topic: Array<{ topic: string; collections: number; tasks: number; share: number | null }>;
+  popular_tasks: Array<{
+    bank_task_id: number;
+    text_preview: string;
+    question_type: string;
+    difficulty: string | null;
+    topics: string[];
+    sources: string[];
+    collections_count: number;
+    authors_count: number;
+  }>;
+  authors: Array<{
+    user_id: number;
+    nickname: string | null;
+    email?: string | null;
+    is_admin: boolean;
+    collections: number;
+    collections_in_period: number;
+    total_tasks: number;
+    downloads: number;
+    pdf_downloads: number;
+    pptx_downloads: number;
+    last_activity_at: string | null;
+  }>;
+  recent_collections: Array<{
+    collection_id: number;
+    title: string;
+    header_text: string;
+    user_id: number;
+    nickname: string | null;
+    email?: string | null;
+    is_admin: boolean;
+    task_count: number;
+    pptx_font: string;
+    has_title_image: boolean;
+    has_background_image: boolean;
+    downloads: number;
+    total_downloads: number;
+    created_at: string | null;
+    updated_at: string | null;
+  }>;
+  /** False until migration 0024 is applied: downloads read as zero then. */
+  download_tracking_enabled: boolean;
+  emails_visible: boolean;
+}
+
 export interface StatisticsByTab {
   overview: StatisticsOverview;
   students: StatisticsStudents;
@@ -371,4 +466,5 @@ export interface StatisticsByTab {
   modules: StatisticsModules;
   "trial-tests": StatisticsTrialTests;
   quizzes: StatisticsQuizzes;
+  "task-builder": StatisticsConstructor;
 }

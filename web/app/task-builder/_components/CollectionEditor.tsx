@@ -401,11 +401,14 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   };
 
   /** Save, then read the collection back with answers: the files show exactly what was saved. */
-  const exported = async (): Promise<TaskCollection> => {
+  const exported = async (kind: "pdf" | "pptx"): Promise<TaskCollection> => {
     if (!(await flush())) throw new Error("save");
     const targetId = activeIdRef.current;
     if (targetId === null) throw new Error("save");
-    const result = await exportTaskCollection(targetId, email);
+    const result = await exportTaskCollection(targetId, email, {
+      format: kind,
+      includeAnswers,
+    });
     if (!result.data) throw new Error("export");
     return result.data;
   };
@@ -429,7 +432,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
       if (!controller.signal.aborted) setProgress(t("constructor.preparing", { done, total }));
     };
     try {
-      const full = await exported();
+      const full = await exported(kind);
       if (kind === "pptx") {
         await downloadCollectionPptx(full, {
           language: locale,

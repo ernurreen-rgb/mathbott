@@ -94,6 +94,19 @@ def register_statistics_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         return await db.statistics.get_quizzes(window)
 
+    # "task-builder", like the page: a "constructor" key would read Object.prototype.constructor in the web app.
+    @app.get("/api/admin/statistics/task-builder")
+    async def get_statistics_constructor(
+        admin_user: dict = Depends(require_admin_review_manage),
+        db: Database = Depends(get_db),
+        window: StatsWindow = Depends(statistics_window),
+        exclude_admins: bool = Query(False),
+    ):
+        # Other roles see nicknames only; email is personal data.
+        return await db.statistics.get_constructor(
+            window, exclude_admins=exclude_admins, include_email=bool(admin_user.get("is_super_admin")),
+        )
+
     @app.get("/api/admin/statistics/students/{user_id}/activity")
     async def get_student_activity_detail(
         user_id: int = Path(..., gt=0),

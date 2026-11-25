@@ -269,3 +269,16 @@ class BaseRepository:
         if ready:
             self._page_visit_tracking_ready = True
         return ready
+
+    async def _has_collection_download_tracking(self, conn: db_driver.Connection) -> bool:
+        """True once migration 0024_task_collection_downloads has been applied; safe before rollout."""
+        if getattr(self, "_collection_download_tracking_ready", False):
+            return True
+        async with conn.execute(
+            "SELECT (to_regclass(current_schema() || '.task_collection_downloads') IS NOT NULL)::int"
+        ) as cursor:
+            row = await cursor.fetchone()
+        ready = bool(row and row[0])
+        if ready:
+            self._collection_download_tracking_ready = True
+        return ready

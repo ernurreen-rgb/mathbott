@@ -185,6 +185,34 @@ class TaskCollectionRepository(BaseRepository):
             deletable = [name for name in candidates if not await self._is_image_referenced(db, name)]
         return True, deletable
 
+    async def record_download(
+        self,
+        collection_id: int,
+        user_id: int,
+        *,
+        collection_title: str,
+        fmt: str,
+        include_answers: bool,
+        task_count: int,
+    ) -> None:
+        """Record a PDF or PPTX export event once migration 0024 is applied."""
+        async with self._write_transaction() as db:
+            if not await self._has_collection_download_tracking(db):
+                return
+            await db.execute(
+                """INSERT INTO task_collection_downloads
+                       (collection_id, collection_title, user_id, format, include_answers, task_count)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    int(collection_id),
+                    (collection_title or "")[:120],
+                    int(user_id),
+                    fmt,
+                    1 if include_answers else 0,
+                    max(0, int(task_count)),
+                ),
+            )
+
     async def _is_image_referenced(self, db, filename: str) -> bool:
         async with db.execute(
             "SELECT 1 FROM task_collections WHERE title_image = ? OR background_image = ? LIMIT 1",
