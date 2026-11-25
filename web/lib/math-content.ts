@@ -70,7 +70,14 @@ export const normalizeSpacesForMathDisplay = (value: string): string => {
       output += ch;
     }
   }
-  return output.split(textSpaceToken).join(" ");
+  let result = output.split(textSpaceToken).join(" ").trim();
+  while (/^(?:\\\s+)+/.test(result)) {
+    result = result.replace(/^(?:\\\s+)+/, "").trim();
+  }
+  while (/(?:^|[^\\])(?:\\\\)*\\\s*$/.test(result)) {
+    result = result.replace(/((?:^|[^\\])(?:\\\\)*)\\\s*$/, "$1").trim();
+  }
+  return result;
 };
 
 const stackFractionsInText = (text: string): string => {
@@ -339,8 +346,18 @@ const splitEmbeddedLatexCommands = (value: string): MixedContentPart[] => {
   return parts;
 };
 
-const containsStrongRawMath = (value: string): boolean =>
-  /[{}^_=+\-*/<>|]/.test(value) && /[A-Za-z0-9]/.test(value);
+const isCyrillicHyphenSuffix = (value: string, index: number): boolean =>
+  value[index] === "-" && HAS_CYRILLIC_RE.test(value[index + 1] ?? "");
+
+const containsStrongRawMath = (value: string): boolean => {
+  if (!/[A-Za-z0-9]/.test(value)) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const ch = value[index];
+    if (ch === "-" && isCyrillicHyphenSuffix(value, index)) continue;
+    if (/[{}^_=+\-*/<>|]/.test(ch)) return true;
+  }
+  return false;
+};
 
 const consumeRawMathRun = (value: string, start: number): number => {
   let cursor = start;
@@ -359,6 +376,7 @@ const consumeRawMathRun = (value: string, start: number): number => {
       }
     }
 
+    if (isCyrillicHyphenSuffix(value, cursor)) break;
     if (!RAW_MATH_CHAR_RE.test(value[cursor])) break;
     cursor += 1;
   }
@@ -725,6 +743,7 @@ const splitMixedContent = (value: string): MixedContentPart[] =>
 const needsImplicitBoundarySpace = (left: MixedContentPart, right: MixedContentPart): boolean => {
   if (left.type === "space" || right.type === "space") return false;
   if (left.type === right.type) return false;
+  if (left.type === "math" && /^-[\u0400-\u04FF]/.test(right.value)) return false;
 
   const textPart = left.type === "text" ? left : right.type === "text" ? right : null;
   if (!textPart) return false;
@@ -819,6 +838,25 @@ export const splitBreakableMathToken = (value: string): Array<{ type: "math" | "
 
   return parts;
 };
+
+export type BreakableMathRenderSegment =
+  | { type: "operator"; value: string }
+  | { type: "math"; latex: string; leadingSpace: boolean; trailingSpace: boolean };
+
+export const toBreakableMathRenderSegments = (value: string): BreakableMathRenderSegment[] =>
+  splitBreakableMathToken(value).map((segment) => {
+    if (segment.type === "operator") {
+      return { type: "operator", value: segment.value };
+    }
+    const leadingSpace = /^\s/.test(segment.value) || /^(?:\\\s)/.test(segment.value);
+    const trailingSpace = /\s$/.test(segment.value) || /(?:^|[^\\])(?:\\\\)*\\\s*$/.test(segment.value);
+    return {
+      type: "math",
+      latex: normalizeSpacesForMathDisplay(segment.value),
+      leadingSpace,
+      trailingSpace,
+    };
+  });
 
 export type MathContentPart = MixedContentPart;
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import type { CSSProperties } from "react";
 import {
   LATEX_ENVIRONMENT_RE,
   makeRenderKey,
   normalizeSpacesForMathDisplay,
-  splitBreakableMathToken,
   splitMathRenderContent,
+  toBreakableMathRenderSegments,
 } from "@/lib/math-content";
 
 export { splitMathRenderContent, type MathContentPart } from "@/lib/math-content";
@@ -37,7 +37,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
     );
   }
 
-  const segments = splitBreakableMathToken(value);
+  const segments = toBreakableMathRenderSegments(value);
 
   if (segments.length <= 1) {
     return (
@@ -48,7 +48,7 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
   }
 
   return segments.map((segment, index) => {
-    const segmentKey = makeRenderKey(segment.value);
+    const segmentKey = makeRenderKey(segment.type === "operator" ? segment.value : segment.latex);
 
     if (segment.type === "operator") {
       return (
@@ -61,9 +61,15 @@ const renderBreakableMathSegments = (value: string, keyPrefix: string, className
     }
 
     return (
-      <math-span key={`${keyPrefix}-math-${index}-${segmentKey}`} className={className}>
-        {normalizeSpacesForMathDisplay(segment.value)}
-      </math-span>
+      <Fragment key={`${keyPrefix}-math-${index}-${segmentKey}`}>
+        {segment.leadingSpace ? " " : null}
+        {segment.latex ? (
+          <math-span className={className}>
+            {segment.latex}
+          </math-span>
+        ) : null}
+        {segment.trailingSpace && (segment.latex || !segment.leadingSpace) ? " " : null}
+      </Fragment>
     );
   });
 };
