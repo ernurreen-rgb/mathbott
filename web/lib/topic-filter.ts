@@ -41,11 +41,11 @@ export function filterTopics(topics: readonly string[], rawQuery: string): strin
   return [...prefixMatches, ...wordStartMatches, ...otherMatches];
 }
 
-/** Toggle a topic in a multi-select filter while respecting the backend limit (20). */
+/** Toggle a topic in a multi-select filter (unlimited by default unless maxSelected is passed). */
 export function toggleTopicSelection(
   selected: readonly string[],
   topic: string,
-  maxSelected = 20,
+  maxSelected = Number.POSITIVE_INFINITY,
 ): string[] {
   if (selected.includes(topic)) {
     return selected.filter((item) => item !== topic);
@@ -65,7 +65,7 @@ export interface TopicSelectionState {
 export function toggleIncludedTopic(
   state: TopicSelectionState,
   topic: string,
-  maxPerGroup = 20,
+  maxPerGroup = Number.POSITIVE_INFINITY,
 ): TopicSelectionState {
   if (state.included.includes(topic)) {
     return {
@@ -86,7 +86,7 @@ export function toggleIncludedTopic(
 export function toggleExcludedTopic(
   state: TopicSelectionState,
   topic: string,
-  maxPerGroup = 20,
+  maxPerGroup = Number.POSITIVE_INFINITY,
 ): TopicSelectionState {
   if (state.excluded.includes(topic)) {
     return {

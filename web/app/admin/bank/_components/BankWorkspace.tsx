@@ -125,7 +125,7 @@ export default function BankWorkspace() {
     if (!email || !authorized || !formTopicInput.trim()) { setFormTopicSuggestions([]); return; }
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const { data } = await getAdminBankTopics(email, formTopicInput.trim(), 10);
+      const { data } = await getAdminBankTopics(email, formTopicInput.trim());
       if (!cancelled) setFormTopicSuggestions((data?.items || []).filter((name) => !form.topics.includes(name)));
     }, 180);
     return () => { cancelled = true; clearTimeout(timer); };

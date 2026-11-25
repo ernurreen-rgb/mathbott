@@ -474,7 +474,7 @@ export default function LessonPage() {
       } else {
         const qType = task.question_type || "input";
         const isChoicesMode = getTaskAnswerMode(task) === "choices";
-        const isChoicesMcq = (qType === "mcq" || qType === "mcq6") && isChoicesMode;
+        const isChoicesMcq = (qType === "mcq" || qType === "mcq6" || qType === "context") && isChoicesMode;
         const rawCorrect = data.correct_answer ?? "";
         let correctMath: string[] = [];
         let correctText: string | null = data.correct_answer ?? null;
@@ -484,7 +484,7 @@ export default function LessonPage() {
             .map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || label)
             .filter(Boolean);
           correctText = correctMath.length > 0 ? null : data.correct_answer ?? null;
-        } else if (!isChoicesMode && (qType === "mcq" || qType === "mcq6" || qType === "select") && rawCorrect) {
+        } else if (!isChoicesMode && (qType === "mcq" || qType === "mcq6" || qType === "context" || qType === "select") && rawCorrect) {
           const count = qType === "select" ? 2 : getTaskMcqCorrectCount(task);
           const slots = parseWrittenAnswerSlots(rawCorrect, count).filter(Boolean);
           if (slots.length > 0) {

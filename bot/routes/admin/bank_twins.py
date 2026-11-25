@@ -114,11 +114,11 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
             if exc.kind != "not_configured":
                 await db.bank_tasks.record_twin_check(task_id, status="error", answer=None, version=version)
             raise HTTPException(status_code=_AI_ERROR_STATUS.get(exc.kind, 502), detail=str(exc))
-        # solve_task always instructs the LLM to return option labels for mcq/mcq6/select,
+        # solve_task always instructs the LLM to return option labels for mcq/mcq6/context/select,
         # even when students answer those tasks in answer_mode="written".
         check_task = (
             {**task, "answer_mode": "choices"}
-            if (task.get("question_type") or "input").strip().lower() in {"mcq", "mcq6", "select"}
+            if (task.get("question_type") or "input").strip().lower() in {"mcq", "mcq6", "context", "select"}
             else task
         )
         status = "match" if is_task_answer_correct(check_task, solved) else "mismatch"

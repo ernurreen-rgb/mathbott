@@ -17,7 +17,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
-        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select"]] = Query(None),
+        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select", "context"]] = Query(None),
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
@@ -46,7 +46,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
-        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select"]] = Query(None),
+        question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select", "context"]] = Query(None),
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
@@ -71,7 +71,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_any_admin),
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None),
-        limit: int = Query(100, ge=1, le=200),
+        limit: Optional[int] = Query(None, ge=1),
     ):
         return await db.bank_tasks.get_catalog(query=q, limit=limit)
 
@@ -164,10 +164,10 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         question_type_value: Optional[str] = None
         if question_type is not None and question_type.strip():
             normalized_question_type = question_type.strip().lower()
-            if normalized_question_type not in {"input", "tf", "mcq", "mcq6", "select"}:
+            if normalized_question_type not in {"input", "tf", "mcq", "mcq6", "select", "context"}:
                 raise HTTPException(
                     status_code=400,
-                    detail="question_type must be one of input, tf, mcq, mcq6, select",
+                    detail="question_type must be one of input, tf, mcq, mcq6, select, context",
                 )
             question_type_value = normalized_question_type
 
@@ -857,7 +857,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         admin_user: dict = Depends(require_admin_any_admin),
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None),
-        limit: int = Query(20, ge=1, le=100),
+        limit: Optional[int] = Query(None, ge=1),
     ):
         items = await db.bank_tasks.list_topics(query=q, limit=limit)
         return {"items": items}

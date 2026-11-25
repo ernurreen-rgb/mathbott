@@ -63,7 +63,8 @@ export function taskAnswerPieces(task: ConstructorTask, language: ConstructorLan
       return answer ? [{ kind: "text", text: answer }] : [];
     }
     case "mcq":
-    case "mcq6": {
+    case "mcq6":
+    case "context": {
       const labels = parseAnswerLabels(answer);
       return joinPieces(labels.map((label) => labelOrText(task, label, written)), written ? "; " : ", ");
     }

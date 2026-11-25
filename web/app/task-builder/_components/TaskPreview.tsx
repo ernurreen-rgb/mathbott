@@ -28,7 +28,7 @@ export default function TaskPreview({ task, compact = false }: { task: Construct
       ? <MathRender latex={task.text} className="text-slate-900" />
       : <span className="italic text-slate-500">{t("constructor.imageTask")}</span>;
 
-  const showOptions = task.answer_mode !== "written" && (task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "select");
+  const showOptions = task.answer_mode !== "written" && (task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context" || task.question_type === "select");
   const labelOnly = showOptions && hasEmptyMcqOptionTexts(task.options);
   const options = labelOnly ? task.options : task.options.filter((option) => option.text.trim());
   return (

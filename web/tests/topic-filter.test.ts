@@ -54,11 +54,13 @@ describe("filterTopics", () => {
 });
 
 describe("toggleTopicSelection", () => {
-  it("adds and removes topics cleanly while enforcing max limit", () => {
+  it("adds and removes topics cleanly with unlimited default and honors explicit max", () => {
     expect(toggleTopicSelection([], "ҰБТ есебі")).toEqual(["ҰБТ есебі"]);
     expect(toggleTopicSelection(["ҰБТ есебі"], "Интеграл")).toEqual(["ҰБТ есебі", "Интеграл"]);
     expect(toggleTopicSelection(["ҰБТ есебі", "Интеграл"], "ҰБТ есебі")).toEqual(["Интеграл"]);
     expect(toggleTopicSelection(["A", "B"], "C", 2)).toEqual(["A", "B"]);
+    const existing = Array.from({ length: 25 }, (_, i) => `Тақырып ${i + 1}`);
+    expect(toggleTopicSelection(existing, "Тақырып 26")).toHaveLength(26);
   });
 });
 

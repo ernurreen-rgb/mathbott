@@ -122,7 +122,7 @@ export async function getAdminBankTasks(
 }
 
 export async function getAdminBankCatalog(email: string, search: string = "") {
-  const query = new URLSearchParams({ email, limit: "100" });
+  const query = new URLSearchParams({ email });
   if (search.trim()) query.set("q", search.trim());
   return fetchWithErrorHandling<BankCatalogResponse>(`${apiPath("admin/bank/catalog")}?${query.toString()}`, { cache: "no-store" });
 }
@@ -519,11 +519,11 @@ export async function permanentlyDeleteAdminBankTask(
 export async function getAdminBankTopics(
   email: string,
   q?: string,
-  limit: number = 20
+  limit?: number
 ): Promise<{ data: { items: string[] } | null; error: string | null }> {
   const query = new URLSearchParams();
   query.set("email", email);
-  query.set("limit", String(limit));
+  if (typeof limit === "number") query.set("limit", String(limit));
   if (q && q.trim()) query.set("q", q.trim());
   return fetchWithErrorHandling<{ items: string[] }>(
     `${apiPath("admin/bank/topics")}?${query.toString()}`

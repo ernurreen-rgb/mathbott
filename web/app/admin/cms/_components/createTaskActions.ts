@@ -9,7 +9,7 @@ import type { CreateTaskFormState } from "./model";
 import { parseBankTaskId, parseBankTopicsRaw } from "./model";
 
 const getRequiredOptionError = (form: CreateTaskFormState): string | null => {
-  if (!["mcq", "mcq6", "select"].includes(form.question_type)) return null;
+  if (!["mcq", "mcq6", "context", "select"].includes(form.question_type)) return null;
   const options = [form.optionA, form.optionB, form.optionC, form.optionD, form.optionE, form.optionF];
   const emptyIndex = options.slice(0, form.question_type === "mcq6" ? 6 : 4).findIndex((text) => !text.trim());
   return emptyIndex >= 0 ? `${MCQ_OPTION_LABELS[emptyIndex]} жауап нұсқасын толтырыңыз` : null;
@@ -69,7 +69,7 @@ export function createTaskActions({
     } else {
       formData.append("text", normalizeMathFieldValueForStorage(taskForm.text));
       formData.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(taskForm.accepted_answers.map(normalizeMathFieldValueForStorage))));
-      if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") {
+      if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context") {
         const options = [
           { label: "A", text: taskForm.optionA },
           { label: "B", text: taskForm.optionB },

@@ -24,7 +24,7 @@ export const JOURNEY_LABELS: Record<JourneyStepKey, { label: string; hint: strin
 export const ACTIVE_DAY_LABELS: Record<string, string> = { "1": "1 күн", "2-3": "2–3 күн", "4-7": "4–7 күн", "8+": "8 күн және одан көп" };
 export const DIFFICULTY_LABELS: Record<string, string> = { A: "A — жеңіл", B: "B — орташа", C: "C — күрделі", "": "Деңгейі жоқ" };
 export const questionTypeLabel = (type: string) =>
-  ({ input: "Жазбаша", tf: "Шын / Жалған", mcq: "4 нұсқа", mcq6: "6 нұсқа", select: "Сәйкестендіру" })[type] || type;
+  ({ input: "Жазбаша", tf: "Шын / Жалған", mcq: "4 нұсқа", mcq6: "6 нұсқа", context: "Контекст", select: "Сәйкестендіру" })[type] || type;
 export const QUIZ_STATUS_LABELS: Record<string, string> = { lobby: "Күту залы", in_progress: "Жүріп жатыр", finished: "Аяқталды" };
 
 /**

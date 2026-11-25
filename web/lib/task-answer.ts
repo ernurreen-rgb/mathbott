@@ -22,7 +22,7 @@ export const isTaskAnswerComplete = (task: LessonTask, value?: string): boolean 
       ? isWrittenAnswerComplete(value, 2)
       : isSelectAnswerComplete(value);
   }
-  if (task.question_type === "mcq" || task.question_type === "mcq6") {
+  if (task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context") {
     return getTaskAnswerMode(task) === "written"
       ? isWrittenAnswerComplete(value, getTaskMcqCorrectCount(task))
       : isMcqAnswerComplete(value, 1);

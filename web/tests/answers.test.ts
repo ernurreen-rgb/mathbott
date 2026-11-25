@@ -115,6 +115,15 @@ describe("isTaskAnswerComplete (enables «Тексеру»)", () => {
     const written = makeTask({ question_type: "mcq6", answer_mode: "written", answer: "A,C", correct_count: 2 });
     expect(isTaskAnswerComplete(written, "1")).toBe(false);
     expect(isTaskAnswerComplete(written, '["1","-0.5"]')).toBe(true);
+
+    const ctx = makeTask({ question_type: "context", answer: "B", correct_count: 1 });
+    expect(getMcqSelectableCount(ctx)).toBe(1);
+    expect(getTaskAnswerMode(ctx)).toBe("choices");
+    expect(isTaskAnswerComplete(ctx, "")).toBe(false);
+    expect(isTaskAnswerComplete(ctx, "B")).toBe(true);
+    const ctxWritten = makeTask({ question_type: "context", answer_mode: "written", answer: "B" });
+    expect(getTaskAnswerMode(ctxWritten)).toBe("written");
+    expect(isTaskAnswerComplete(ctxWritten, "20")).toBe(true);
   });
 
   it("needs both rows of a matching task, chosen or written", () => {

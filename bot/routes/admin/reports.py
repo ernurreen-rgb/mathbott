@@ -110,7 +110,7 @@ async def _update_task_from_report_common(
         if normalized_tf not in {"true", "false"}:
             raise HTTPException(status_code=400, detail="tf answer must be 'true' or 'false'")
         answer = normalized_tf
-    if question_type not in {"mcq", "mcq6", "select"}:
+    if question_type not in {"mcq", "mcq6", "context", "select"}:
         options_list = []
     if question_type != "select":
         subquestions_list = []

@@ -79,6 +79,13 @@ describe("P0 audit fixes (frontend)", () => {
     expect(asTf.subquestions).toBeUndefined();
     expect(asTf.options).toBeUndefined();
     expect(asTf.answer).toBe("true");
+
+    const asContext = normalizeTaskForQuestionType(selectTask, "context");
+    expect(asContext.question_type).toBe("context");
+    expect(asContext.subquestions).toBeUndefined();
+    expect(asContext.options).toHaveLength(4);
+    expect(asContext.answer).toBe("B");
+    expect(asContext.answer_mode).toBe("choices");
   });
 
   it("C-10: proxy allows unauthenticated GET to public trial-test catalog while protecting private routes", () => {

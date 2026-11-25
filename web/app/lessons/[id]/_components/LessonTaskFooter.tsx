@@ -45,7 +45,7 @@ const formatStoredAnswer = (value: string, t: Translate, questionType?: string):
     if (lowered === "false" || lowered === "0") return `\\text{${t("footer.tfFalse")}}`;
   }
   if (
-    (questionType === "select" || questionType === "mcq" || questionType === "mcq6") &&
+    (questionType === "select" || questionType === "mcq" || questionType === "mcq6" || questionType === "context") &&
     trimmed.startsWith("[")
   ) {
     try {

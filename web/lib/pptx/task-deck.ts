@@ -585,7 +585,7 @@ function taskParagraphs(task: ConstructorTask, language: ConstructorLanguage, ac
     const words = LABELS[language];
     return [...statement, { inlines: [{ kind: "text", text: `□ ${words.true}        □ ${words.false}` }], lineSpacing: 120000, spaceAfter: 0 }];
   }
-  if ((task.question_type === "mcq" || task.question_type === "mcq6") && choices) {
+  if ((task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context") && choices) {
     return [...statement, ...optionParagraphs(task)];
   }
   return statement;

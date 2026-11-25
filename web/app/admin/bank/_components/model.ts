@@ -75,7 +75,7 @@ export type JsonEditState = {
   canForceSave: boolean;
 };
 
-export const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "input", "select"];
+export const JSON_EDIT_QUESTION_TYPES: QuestionType[] = ["tf", "mcq", "mcq6", "context", "input", "select"];
 
 export const JSON_EDIT_DIFFICULTIES: BankDifficulty[] = ["A", "B", "C"];
 

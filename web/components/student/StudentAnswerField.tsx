@@ -96,7 +96,7 @@ export default function StudentAnswerField({ task, value, onChange, result, onSu
     );
   }
 
-  if (questionType === "select" || questionType === "mcq" || questionType === "mcq6") {
+  if (questionType === "select" || questionType === "mcq" || questionType === "mcq6" || questionType === "context") {
     const isSelect = questionType === "select";
     const count = isSelect ? 2 : getTaskMcqCorrectCount(task);
 

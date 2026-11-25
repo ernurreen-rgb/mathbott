@@ -214,6 +214,30 @@ class EntScoringTests(unittest.TestCase):
         self.assertEqual(grade_task_answer(written_task, ["99", "0.5"]), (1, 2))
         self.assertEqual(grade_task_answer(written_task, ["0.5", "-1"]), (0, 2))
 
+    def test_context_question_type_behaves_like_four_option_mcq(self):
+        choices_ctx = {
+            "question_type": "context",
+            "answer_mode": "choices",
+            "answer": "B",
+            "options": json.dumps([
+                {"label": "A", "text": "10"},
+                {"label": "B", "text": "20"},
+                {"label": "C", "text": "30"},
+                {"label": "D", "text": "40"},
+            ]),
+        }
+        self.assertFalse(is_six_option_mcq(choices_ctx))
+        self.assertEqual(get_task_max_score(choices_ctx), 1)
+        self.assertTrue(is_task_answer_correct(choices_ctx, "B"))
+        self.assertFalse(is_task_answer_correct(choices_ctx, "A"))
+        self.assertEqual(grade_task_answer(choices_ctx, "B"), (1, 1))
+        self.assertEqual(grade_task_answer(choices_ctx, '["B", "C"]'), (0, 1))
+
+        written_ctx = {**choices_ctx, "answer_mode": "written"}
+        self.assertTrue(is_task_answer_correct(written_ctx, "20"))
+        self.assertFalse(is_task_answer_correct(written_ctx, "B"))
+        self.assertEqual(grade_task_answer(written_ctx, "20"), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

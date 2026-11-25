@@ -30,7 +30,7 @@ BANK_IMPORT_PREVIEW_TOKEN_TTL_SECONDS = 15 * 60
 BANK_IMPORT_PREVIEW_TOKEN_VERSION = 1
 
 
-MCQ_QUESTION_TYPES = {"mcq", "mcq6"}
+MCQ_QUESTION_TYPES = {"mcq", "mcq6", "context"}
 
 
 MCQ_OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"]
@@ -131,7 +131,7 @@ def _normalize_answer_mode_or_raise(value: Any, question_type: str) -> str:
     if value is not None and not isinstance(value, str):
         raise HTTPException(status_code=400, detail="answer_mode must be choices or written")
     raw = str(value or "").strip().lower()
-    if question_type in {"mcq", "mcq6", "select"} and raw and raw not in {"choices", "written"}:
+    if question_type in {"mcq", "mcq6", "context", "select"} and raw and raw not in {"choices", "written"}:
         raise HTTPException(status_code=400, detail="answer_mode must be choices or written")
     return normalize_answer_mode(raw, question_type)
 
@@ -188,7 +188,7 @@ def _validate_trial_like_payload(
     options_list: Optional[List[dict]],
     subquestions_list: Optional[List[dict]],
 ) -> None:
-    allowed_types = {"input", "tf", "mcq", "mcq6", "select"}
+    allowed_types = {"input", "tf", "mcq", "mcq6", "select", "context"}
     if question_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported question_type: {question_type}")
 
@@ -254,7 +254,7 @@ def _normalize_mcq_answer_or_raise(
 ) -> str:
     labels = parse_mcq_answer_labels(raw_answer)
     if not labels:
-        raise HTTPException(status_code=400, detail="answer is required for mcq/mcq6")
+        raise HTTPException(status_code=400, detail="answer is required for mcq/mcq6/context")
     allowed = _get_allowed_mcq_answer_labels(options_list)
     if len(allowed) == 4 and len(labels) != 1:
         raise HTTPException(status_code=400, detail="Four-option questions require exactly one correct answer")

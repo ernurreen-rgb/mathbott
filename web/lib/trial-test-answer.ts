@@ -26,7 +26,7 @@ export const isTrialTaskAnswered = (task: LessonTask, value?: string): boolean =
       ? parseWrittenAnswerSlots(value, 2).some((item) => item.trim().length > 0)
       : hasAnySelectAnswer(value);
   }
-  if (task.question_type === "mcq" || task.question_type === "mcq6") {
+  if (task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context") {
     return getTaskAnswerMode(task) === "written"
       ? parseWrittenAnswerSlots(value, getTaskMcqCorrectCount(task)).some((item) => item.trim().length > 0)
       : parseMcqAnswerLabels(value).length > 0;

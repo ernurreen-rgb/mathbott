@@ -157,14 +157,14 @@ export const buildSlotPreviewTask = (form: SlotForm): LessonTask => ({
 
 export const getPlacementQuestionType = (placement: BankPlacementTask | null): QuestionType => {
   const raw = placement?.question_type || placement?.bank_task?.question_type || "input";
-  if (raw === "mcq" || raw === "mcq6" || raw === "input" || raw === "tf" || raw === "select") {
+  if (raw === "mcq" || raw === "mcq6" || raw === "context" || raw === "input" || raw === "tf" || raw === "select") {
     return raw;
   }
   return "input";
 };
 
 export const trialQuestionTypeLabel = (type?: string | null): string => {
-  if (type === "mcq" || type === "mcq6") return "Нұсқалы жауап";
+  if (type === "mcq" || type === "mcq6" || type === "context") return "Нұсқалы жауап";
   if (type === "tf") return "Дұрыс / Жалған";
   if (type === "select") return "Сәйкестендіру";
   return "Жауап енгізу";

@@ -95,7 +95,7 @@ def _normalize_import_mcq_answer(
 ) -> str:
     labels = parse_mcq_answer_labels(raw_answer)
     if not labels:
-        raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6")
+        raise ImportTaskValidationError("answer", "answer is required for mcq/mcq6/context")
     allowed = _get_allowed_mcq_answer_labels(options)
     if len(allowed) == 4 and len(labels) != 1:
         raise ImportTaskValidationError("answer", "Four-option questions require exactly one correct answer")

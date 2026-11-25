@@ -20,7 +20,7 @@ from utils.math_final_form import matches_key_form
 MCQ_ANSWER_LABELS = tuple("ABCDEFGH")
 MAX_MCQ_CORRECT_OPTIONS = 3
 ANSWER_MODES = {"choices", "written"}
-ANSWER_MODE_SWITCH_QUESTION_TYPES = {"mcq", "mcq6", "select"}
+ANSWER_MODE_SWITCH_QUESTION_TYPES = {"mcq", "mcq6", "context", "select"}
 MAX_ACCEPTED_ANSWERS = 20
 
 _MATH_CHAR_TRANSLATION = str.maketrans({
@@ -589,7 +589,7 @@ def normalize_task_answer_for_compare(task: dict, user_answer: Any, *, strict_mo
     """Normalize user answer depending on task type (mcq/tf/input)."""
     qt = (task.get("question_type") or "input").strip().lower()
     ans = "" if user_answer is None else str(user_answer).strip()
-    if qt in {"mcq", "mcq6"}:
+    if qt in {"mcq", "mcq6", "context"}:
         return _normalize_choice_or_written_answer_for_compare(
             task, user_answer, ordered=False, strict_mode=strict_mode
         )

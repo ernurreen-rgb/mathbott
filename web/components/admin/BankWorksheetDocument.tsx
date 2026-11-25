@@ -86,7 +86,7 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
         {task.question_type === 'select' ? task.subquestions.map((subquestion, subIndex) => <div key={subIndex} data-pdf-part style={{ marginTop: 12 }}>
           <strong>{String.fromCharCode(65 + subIndex)}) </strong><MathRender latex={subquestion.text} inline />
           {getTaskAnswerMode(task) === 'choices' ? options(task) : <div style={{ height: 30, borderBottom: '1px solid #94a3b8' }} />}
-        </div>) : (task.question_type === 'mcq' || task.question_type === 'mcq6') && getTaskAnswerMode(task) === 'choices'
+        </div>) : (task.question_type === 'mcq' || task.question_type === 'mcq6' || task.question_type === 'context') && getTaskAnswerMode(task) === 'choices'
           ? <div data-pdf-part>{options(task)}</div>
           : task.question_type === 'tf'
             ? <div data-pdf-part style={{ marginTop: 12 }}>□ {words.true} <span style={{ marginLeft: 28 }}>□ {words.false}</span></div>

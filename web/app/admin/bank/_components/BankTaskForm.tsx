@@ -133,6 +133,7 @@ export default function BankTaskForm({
                   <option value="tf">Шын/Жалған</option>
                   <option value="mcq">Көп таңдаулы (4 жауап)</option>
                   <option value="mcq6">Көп таңдаулы (6 жауап)</option>
+                  <option value="context">Контекст</option>
                   <option value="select">Сәйкестендіру</option>
                 </select>
               </div>

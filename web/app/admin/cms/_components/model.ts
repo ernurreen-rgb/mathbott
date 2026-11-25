@@ -44,7 +44,7 @@ export interface MiniLessonTask {
   text: string;
   answer: string;
   accepted_answers?: string[] | null;
-  question_type?: "tf" | "mcq" | "mcq6" | "input" | "select";
+  question_type?: "tf" | "mcq" | "mcq6" | "context" | "input" | "select";
   answer_mode?: AnswerMode | null;
   options?: string | any[] | null;
   subquestions?: string | any[] | null;
@@ -100,7 +100,7 @@ export const TASK_TEXT_SCALE_OPTIONS: Array<{ value: TaskTextScale; label: strin
 
 export type CreateTaskFormState = {
   text: string;
-  question_type: "tf" | "mcq" | "mcq6" | "input" | "select";
+  question_type: "tf" | "mcq" | "mcq6" | "context" | "input" | "select";
   text_scale: TaskTextScale;
   answer: string;
   accepted_answers: string[];

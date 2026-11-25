@@ -96,7 +96,7 @@ export default function BankLibrary(props: Props) {
           </div>
           <div className={styles.filters}>
             <select className={styles.select} aria-label="Күрделілік бойынша сүзгі" value={filters.difficulty} onChange={(e) => patch({ difficulty: e.target.value as BankLibraryFilters["difficulty"] })}><option value="">Барлық күрделілік</option><option value="A">A · оңай</option><option value="B">B · орташа</option><option value="C">C · қиын</option></select>
-            <select className={styles.select} aria-label="Сұрақ түрі бойынша сүзгі" value={filters.questionType} onChange={(e) => patch({ questionType: e.target.value as BankLibraryFilters["questionType"] })}><option value="">Барлық сұрақ түрі</option>{["input", "tf", "mcq", "mcq6", "select"].map((type) => <option key={type} value={type}>{questionTypeLabel(type)}</option>)}</select>
+            <select className={styles.select} aria-label="Сұрақ түрі бойынша сүзгі" value={filters.questionType} onChange={(e) => patch({ questionType: e.target.value as BankLibraryFilters["questionType"] })}><option value="">Барлық сұрақ түрі</option>{["input", "tf", "mcq", "mcq6", "context", "select"].map((type) => <option key={type} value={type}>{questionTypeLabel(type)}</option>)}</select>
             <select className={styles.select} aria-label="Есептерді сұрыптау" value={filters.sort} onChange={(e) => patch({ sort: e.target.value as BankLibraryFilters["sort"] })}><option value="newest">Жаңалары алдымен</option><option value="updated">Соңғы өзгертілген</option><option value="oldest">Ескілері алдымен</option></select>
             <button type="button" className={styles.quiet} onClick={() => props.onFiltersChange(emptyLibraryFilters())}>Тазалау</button>
           </div>

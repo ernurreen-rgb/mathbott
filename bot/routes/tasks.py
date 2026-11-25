@@ -28,7 +28,7 @@ def setup_tasks_routes(app, db, limiter: Limiter):
         questions = await db.progress.get_task_questions(task_id)
         public_questions = (
             public_options(questions)
-            if task.get("question_type") in {"mcq", "mcq6", "select"}
+            if task.get("question_type") in {"mcq", "mcq6", "context", "select"}
             else strip_solution_fields(questions)
         )
         

@@ -1,6 +1,6 @@
 /** Task constructor (/constructor): bank tasks a user collects and downloads as PDF or PPTX. */
 
-export type ConstructorQuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
+export type ConstructorQuestionType = "input" | "tf" | "mcq" | "mcq6" | "select" | "context";
 
 export interface ConstructorTask {
   id: number;

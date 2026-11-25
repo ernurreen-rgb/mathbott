@@ -579,6 +579,7 @@ export default function AdminBankQualityPage() {
                       <option value="tf">tf</option>
                       <option value="mcq">mcq</option>
                       <option value="mcq6">mcq6</option>
+                      <option value="context">context</option>
                       <option value="select">select</option>
                     </select>
                   </div>

@@ -5,8 +5,6 @@ import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n/provider";
 import { filterTopics, toggleExcludedTopic, toggleIncludedTopic } from "@/lib/topic-filter";
 
-const MAX_SELECTED_TOPICS = 20;
-
 /**
  * Searchable multi-select topic dropdown supporting both inclusion ("must have tag")
  * and exclusion ("must NOT have tag") inside one control.
@@ -16,7 +14,7 @@ export default function TopicCombobox({
   included,
   excluded,
   onChange,
-  maxSelected = MAX_SELECTED_TOPICS,
+  maxSelected = Number.POSITIVE_INFINITY,
 }: {
   topics: string[];
   included: string[];

@@ -81,7 +81,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
   const [lessonForm, setLessonForm] = useState({ lesson_number: 1, title: "", sort_order: 0 });
   const [taskForm, setTaskForm] = useState({
     text: "",
-    question_type: "mcq" as "tf" | "mcq" | "mcq6" | "input" | "select",
+    question_type: "mcq" as "tf" | "mcq" | "mcq6" | "context" | "input" | "select",
     text_scale: "md" as TaskTextScale,
     answer: "",
     accepted_answers: [] as string[],
@@ -561,7 +561,7 @@ export default function CmsWorkspace({ moduleId, sectionId, lessonId, miniLesson
                               );
 
                               let answer = taskData.answer || "";
-                              if (taskData.question_type === "mcq" || taskData.question_type === "mcq6") {
+                              if (taskData.question_type === "mcq" || taskData.question_type === "mcq6" || taskData.question_type === "context") {
                                 answer = taskData.answer || "";
                                 formData.append("options", JSON.stringify((taskData.options || []).map((option) => ({ ...option, text: normalizeMathFieldValueForStorage(option.text) }))));
                               } else if (taskData.question_type === "tf") {

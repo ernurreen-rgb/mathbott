@@ -1,7 +1,7 @@
 import type { AnswerMode, QuestionType } from "@/types";
 
 export const supportsAnswerModeSwitch = (questionType?: QuestionType | string | null): boolean =>
-  questionType === "mcq" || questionType === "mcq6" || questionType === "select";
+  questionType === "mcq" || questionType === "mcq6" || questionType === "context" || questionType === "select";
 
 export const getTaskAnswerMode = (task: {
   question_type?: QuestionType | string | null;

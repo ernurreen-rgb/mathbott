@@ -7,7 +7,7 @@ from .twins import IS_TWIN_SQL, NOT_TWIN_SQL
 
 
 class BankTaskCatalogMixin:
-    async def get_catalog(self, query: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+    async def get_catalog(self, query: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             # Library counts match the default list, which leaves twins to their source task.
@@ -40,6 +40,8 @@ class BankTaskCatalogMixin:
                 WHERE 1 = 1 {condition}
             """, params) as cursor:
                 topic_total = int((await cursor.fetchone())["total"])
+            limit_clause = " LIMIT ?" if limit is not None else ""
+            exec_params = [*params, limit] if limit is not None else list(params)
             async with db.execute(f"""
                 SELECT t.id, t.name, COUNT(DISTINCT bt.id) AS task_count
                 FROM bank_topics t
@@ -47,8 +49,8 @@ class BankTaskCatalogMixin:
                 JOIN bank_tasks bt ON bt.id = m.bank_task_id AND bt.deleted_at IS NULL AND {NOT_TWIN_SQL}
                 WHERE 1 = 1 {condition}
                 GROUP BY t.id, t.name, t.name_norm
-                ORDER BY t.name_norm ASC, t.id ASC LIMIT ?
-            """, [*params, limit]) as cursor:
+                ORDER BY t.name_norm ASC, t.id ASC{limit_clause}
+            """, exec_params) as cursor:
                 topics = [{"id": int(row["id"]), "name": row["name"], "task_count": int(row["task_count"])}
                           for row in await cursor.fetchall()]
             return {**summary, "topics": topics, "topics_total": topic_total, "has_more_topics": topic_total > len(topics)}

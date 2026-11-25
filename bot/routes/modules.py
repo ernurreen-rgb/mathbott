@@ -272,7 +272,7 @@ def setup_modules_routes(app, db, limiter):
                     "answer_mode": normalize_answer_mode(t.get("answer_mode"), t.get("question_type")),
                     "correct_count": (
                         get_mcq_answer_count(t.get("answer"))
-                        if (t.get("question_type") or "input") in {"mcq", "mcq6"}
+                        if (t.get("question_type") or "input") in {"mcq", "mcq6", "context"}
                         else 1
                     ),
                     "text_scale": t.get("text_scale", "md"),

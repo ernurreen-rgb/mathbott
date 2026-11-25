@@ -70,7 +70,7 @@ def _public_task_field(key: str, value: Any, question_type: Any) -> Any:
             value = json.loads(value)
         except (ValueError, TypeError):
             value = None
-    if key == "options" and isinstance(question_type, str) and question_type in {"mcq", "mcq6", "select"}:
+    if key == "options" and isinstance(question_type, str) and question_type in {"mcq", "mcq6", "context", "select"}:
         return public_options(value)
     if key == "subquestions":
         return public_subquestions(value)
@@ -99,7 +99,7 @@ def task_review_snapshot(task: Dict[str, Any]) -> Dict[str, Any]:
         "id", "text", "text_scale", "question_type", "sort_order", "image_filename",
     )}
     snapshot["answer_mode"] = normalize_answer_mode(task.get("answer_mode"), task.get("question_type"))
-    snapshot["correct_count"] = get_mcq_answer_count(task.get("answer")) if task.get("question_type") in {"mcq", "mcq6"} else 1
+    snapshot["correct_count"] = get_mcq_answer_count(task.get("answer")) if task.get("question_type") in {"mcq", "mcq6", "context"} else 1
     for key in ("options", "subquestions"):
         snapshot[key] = _public_task_field(key, task.get(key), task.get("question_type"))
     return snapshot

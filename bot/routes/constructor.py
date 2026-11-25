@@ -24,7 +24,7 @@ from utils.file_storage import delete_image_file_async, save_image_upload
 
 logger = logging.getLogger(__name__)
 
-QUESTION_TYPES = Literal["input", "tf", "mcq", "mcq6", "select"]
+QUESTION_TYPES = Literal["input", "tf", "mcq", "mcq6", "select", "context"]
 IMAGE_KINDS = Literal["title", "background"]
 _BACKGROUND_TYPES = {"image/jpeg", "image/png"}
 _TITLE_MAX = 120
@@ -155,15 +155,15 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         search: Optional[str] = Query(None, max_length=200),
         difficulty: Optional[Literal["A", "B", "C"]] = Query(None),
-        topics: Optional[str] = Query(None, max_length=2000, description="Comma-separated topics"),
-        exclude_topics: Optional[str] = Query(None, max_length=2000, description="Comma-separated excluded topics"),
+        topics: Optional[str] = Query(None, max_length=20000, description="Comma-separated topics"),
+        exclude_topics: Optional[str] = Query(None, max_length=20000, description="Comma-separated excluded topics"),
         topic_match: Literal["any", "all"] = Query("any"),
         question_type: Optional[QUESTION_TYPES] = Query(None),
         limit: int = Query(20, ge=1, le=50),
         offset: int = Query(0, ge=0, le=100_000),
     ):
-        topic_names = [name.strip() for name in (topics or "").split(",") if name.strip()][:20]
-        excluded_topic_names = [name.strip() for name in (exclude_topics or "").split(",") if name.strip()][:20]
+        topic_names = [name.strip() for name in (topics or "").split(",") if name.strip()]
+        excluded_topic_names = [name.strip() for name in (exclude_topics or "").split(",") if name.strip()]
         result = await db.bank_tasks.list_tasks(
             include_deleted=False,
             search=search,

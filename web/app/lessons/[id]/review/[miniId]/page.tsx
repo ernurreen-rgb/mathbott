@@ -41,7 +41,7 @@ function correctAnswerParts(task: LessonTask, raw: string, t: Translate): string
     const lowered = raw.trim().toLowerCase();
     return [`\\text{${lowered === "false" || lowered === "0" ? t("footer.tfFalse") : t("footer.tfTrue")}}`];
   }
-  if ((task.question_type === "mcq" || task.question_type === "mcq6") && getTaskAnswerMode(task) === "choices") {
+  if ((task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context") && getTaskAnswerMode(task) === "choices") {
     return parseMcqAnswerLabels(raw).map((label) => task.options?.find((option) => option.label.toUpperCase() === label)?.text || label);
   }
   if (task.question_type === "select" && getTaskAnswerMode(task) === "choices") {
@@ -50,7 +50,7 @@ function correctAnswerParts(task: LessonTask, raw: string, t: Translate): string
       if (Array.isArray(labels)) return labels.map((label, index) => `${index + 1}\\to ${String(label)}`);
     } catch { /* Fall through to the raw answer. */ }
   }
-  const count = task.question_type === "select" ? 2 : task.question_type === "mcq" || task.question_type === "mcq6" ? getTaskMcqCorrectCount(task) : 1;
+  const count = task.question_type === "select" ? 2 : task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context" ? getTaskMcqCorrectCount(task) : 1;
   const slots = parseWrittenAnswerSlots(raw, count).filter(Boolean);
   return slots.length ? slots : [raw];
 }

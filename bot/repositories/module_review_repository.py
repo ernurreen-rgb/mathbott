@@ -108,7 +108,7 @@ def _public_review_task(row: Dict[str, Any]) -> Dict[str, Any]:
         "image_filename": row.get("image_filename"),
         "question_type": question_type,
         "answer_mode": normalize_answer_mode(row.get("answer_mode"), question_type),
-        "correct_count": get_mcq_answer_count(row.get("answer")) if question_type in {"mcq", "mcq6"} else 1,
+        "correct_count": get_mcq_answer_count(row.get("answer")) if question_type in {"mcq", "mcq6", "context"} else 1,
         "text_scale": row.get("text_scale") or "md",
         "options": public_options(parse(row.get("options"))),
         "subquestions": public_subquestions(parse(row.get("subquestions"))),

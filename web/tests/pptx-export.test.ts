@@ -243,6 +243,9 @@ describe("answer key", () => {
     expect(taskAnswerPieces(task(1, { question_type: "mcq6", answer: '["A","C"]' }), "kk")).toEqual([
       { kind: "text", text: "A" }, { kind: "text", text: ", " }, { kind: "text", text: "C" },
     ]);
+    expect(taskAnswerPieces(task(1, { question_type: "context", answer: "B" }), "kk")).toEqual([
+      { kind: "text", text: "B" },
+    ]);
     expect(taskAnswerPieces(task(1, { answer_mode: "written", answer: "D" }), "kk")).toEqual([
       { kind: "math", latex: String.raw`\log_2 51` },
     ]);

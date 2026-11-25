@@ -65,6 +65,7 @@ export const constructorMessages = {
   "constructor.allTypes": ["Барлық түрлері", "Все типы"],
   "constructor.type.mcq": ["Бір жауапты", "Один ответ"],
   "constructor.type.mcq6": ["Бірнеше жауапты", "Несколько ответов"],
+  "constructor.type.context": ["Контекст", "Контекст"],
   "constructor.type.input": ["Жауабын жазатын", "С вводом ответа"],
   "constructor.type.tf": ["Дұрыс / жалған", "Верно / неверно"],
   "constructor.type.select": ["Сәйкестендіру", "Соответствие"],

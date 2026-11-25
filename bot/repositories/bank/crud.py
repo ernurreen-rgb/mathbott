@@ -865,7 +865,7 @@ class BankTaskCrudMixin:
 
         return deleted_count
 
-    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = 20) -> List[str]:
+    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
             limit_clause = "\n                    LIMIT ?" if limit is not None else ""

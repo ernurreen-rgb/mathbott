@@ -29,6 +29,7 @@ _ANSWER_FORMATS = {
     "input": 'the final value only, written like the source answer (LaTeX allowed, e.g. "35" or "\\frac{3}{4}")',
     "mcq": 'the label of the correct option, e.g. "B"; several correct options as a JSON array string, e.g. "[\\"A\\", \\"C\\"]"',
     "mcq6": 'the label of the correct option, e.g. "B"; several correct options as a JSON array string, e.g. "[\\"A\\", \\"C\\"]"',
+    "context": 'the label of the correct option, e.g. "B"; several correct options as a JSON array string, e.g. "[\\"A\\", \\"C\\"]"',
     "tf": '"true" or "false"',
     "select": 'a JSON array string with the correct option label for each sub-question in order, e.g. "[\\"A\\", \\"C\\"]"',
 }

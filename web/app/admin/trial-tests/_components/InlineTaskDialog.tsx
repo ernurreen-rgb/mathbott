@@ -54,7 +54,7 @@ export default function InlineTaskDialog({
                   setSlotForm((p) => ({ ...p, question_type: questionType,
                       correctOptions: p.correctOptions.filter((label) => getMcqEditorLabels(questionType).includes(label)).slice(0, getMcqCorrectOptionLimit(questionType)), answer_mode: getTaskAnswerMode({ question_type: questionType }) }));
                 }}>
-                  <option value="mcq">Көп таңдаулы (4 жауап)</option><option value="mcq6">Көп таңдаулы (6 жауап)</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
+                  <option value="mcq">Көп таңдаулы (4 жауап)</option><option value="mcq6">Көп таңдаулы (6 жауап)</option><option value="context">Контекст</option><option value="input">Енгізу</option><option value="tf">Ш/Ж</option><option value="select">Сәйкестендіру</option>
                 </select>
                 <select aria-label="Күрделілігі" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={slotForm.difficulty} onChange={(e) => setSlotForm((p) => ({ ...p, difficulty: e.target.value as BankDifficulty }))}>
                   <option value="A">A</option><option value="B">B</option><option value="C">C</option>

@@ -106,7 +106,7 @@ export default function CurrentSlotControls({ currentPlacement, previewAnswers, 
     );
   }
 
-  if ((questionType === "mcq" || questionType === "mcq6") && answerMode !== "written") {
+  if ((questionType === "mcq" || questionType === "mcq6" || questionType === "context") && answerMode !== "written") {
     const selectedLabels = parseMcqAnswerLabels(value);
     const labelOnly = hasEmptyMcqOptionTexts(options);
     return (

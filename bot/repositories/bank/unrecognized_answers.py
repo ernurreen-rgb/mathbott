@@ -19,7 +19,7 @@ from .versions import BankTaskVersionConflictError
 _WRITTEN_BANK_TASK_SQL = """(
     LOWER(TRIM(COALESCE(bt.question_type, 'input'))) = 'input'
     OR (
-        LOWER(TRIM(COALESCE(bt.question_type, ''))) IN ('mcq', 'mcq6', 'select')
+        LOWER(TRIM(COALESCE(bt.question_type, ''))) IN ('mcq', 'mcq6', 'context', 'select')
         AND LOWER(TRIM(COALESCE(bt.answer_mode, ''))) = 'written'
     )
 )"""

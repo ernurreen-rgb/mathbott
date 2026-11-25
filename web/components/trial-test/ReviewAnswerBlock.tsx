@@ -9,7 +9,7 @@ import { TrialTestDetails } from "@/types";
 import type { ReviewAnswer } from "@/lib/trial-test-review";
 import { useI18n } from "@/lib/i18n/provider";
 
-type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select";
+type QuestionType = "input" | "tf" | "mcq" | "mcq6" | "select" | "context";
 
 export type TrialTestReviewAnswer = ReviewAnswer;
 
@@ -82,7 +82,7 @@ export function ReviewAnswerBlock({
   const userMcqLabels = parseMcqAnswerLabels(userAnswerRaw);
   const correctMcqLabels = parseMcqAnswerLabels(correctAnswer);
   const renderAnswerBlock = () => {
-    if (qt === "mcq" || qt === "mcq6") {
+    if (qt === "mcq" || qt === "mcq6" || qt === "context") {
       const options = task.options || [];
       const isWrittenAnswer = getTaskAnswerMode(task) === "written";
       const writtenAnswers = parseWrittenAnswerSlots(userAnswerRaw, getTaskMcqCorrectCount(task)).filter((item) => item.trim());

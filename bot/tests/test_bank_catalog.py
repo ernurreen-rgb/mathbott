@@ -101,8 +101,19 @@ class BankCatalogTests(PostgresTestCase):
             response = await client.get("/api/admin/bank/tasks", params={**params, "usage": "used", "question_type": "mcq", "limit": 50})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["total"], 2)
-            for endpoint, invalid in [("tasks", {"sort": "DROP TABLE bank_tasks"}), ("tasks/trash", {"topic_match": "invalid"}), ("tasks", {"question_type": "invalid"}), ("catalog", {"limit": 201})]:
+            for endpoint, invalid in [("tasks", {"sort": "DROP TABLE bank_tasks"}), ("tasks/trash", {"topic_match": "invalid"}), ("tasks", {"question_type": "invalid"}), ("catalog", {"limit": 0})]:
                 self.assertEqual((await client.get(f"/api/admin/bank/{endpoint}", params={**params, **invalid})).status_code, 422)
+            large_catalog = await client.get("/api/admin/bank/catalog", params={**params, "limit": 201})
+            self.assertEqual(large_catalog.status_code, 200)
+            ctx_task = await self.db.bank_tasks.create_task(
+                text="Context test task", answer="B", question_type="context", answer_mode="choices", difficulty="B",
+                options=[{"label": label, "text": str(idx)} for idx, label in enumerate("ABCD")],
+                topics=["Алгебра"],
+            )
+            self.assertEqual(ctx_task["question_type"], "context")
+            ctx_list = await client.get("/api/admin/bank/tasks", params={**params, "question_type": "context"})
+            self.assertEqual(ctx_list.status_code, 200)
+            self.assertEqual(ctx_list.json()["total"], 1)
 
     async def test_editing_a_matching_task_can_clear_obsolete_options_and_subquestions(self):
         task = await self.db.bank_tasks.create_task(

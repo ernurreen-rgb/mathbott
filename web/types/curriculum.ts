@@ -16,7 +16,7 @@ export interface SectionProgress extends Progress {
 }
 
 
-export type QuestionType = "tf" | "mcq" | "mcq6" | "input" | "select";
+export type QuestionType = "tf" | "mcq" | "mcq6" | "input" | "select" | "context";
 export type AnswerMode = "choices" | "written";
 
 

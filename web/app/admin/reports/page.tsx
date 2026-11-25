@@ -70,7 +70,7 @@ function ReportsPageContent() {
   const [taskForm, setTaskForm] = useState({
     text: "",
     answer: "",
-    question_type: "input" as "tf" | "mcq" | "mcq6" | "input" | "select",
+    question_type: "input" as "tf" | "mcq" | "mcq6" | "context" | "input" | "select",
     text_scale: "md",
     optionA: "",
     optionB: "",
@@ -235,7 +235,7 @@ function ReportsPageContent() {
     const validSelectLabel = (v: string): "A" | "B" | "C" | "D" =>
       (["A", "B", "C", "D"].includes(v) ? v : "A") as "A" | "B" | "C" | "D";
 
-    const qType = (report.task_question_type || "input") as "tf" | "mcq" | "mcq6" | "input" | "select";
+    const qType = (report.task_question_type || "input") as "tf" | "mcq" | "mcq6" | "context" | "input" | "select";
     const parsedCorrectMcq = parseMcqAnswerLabels(report.task_answer || "");
 
     setEditingTask({ reportId: report.id, task: report });
@@ -269,7 +269,7 @@ function ReportsPageContent() {
       formData.append("question_type", taskForm.question_type);
       formData.append("text_scale", taskForm.text_scale || "md");
 
-      if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") {
+      if (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context") {
         const options = [
           { label: "A", text: taskForm.optionA },
           { label: "B", text: taskForm.optionB },
@@ -666,7 +666,7 @@ function ReportsPageContent() {
                   <select
                     value={taskForm.question_type}
                     onChange={(e) => {
-                      const nextType = e.target.value as "tf" | "mcq" | "mcq6" | "input" | "select";
+                      const nextType = e.target.value as "tf" | "mcq" | "mcq6" | "context" | "input" | "select";
                       const filteredCorrect = taskForm.correctOptions
                         .filter((label) => getMcqEditorLabels(nextType).includes(label))
                         .slice(0, getMcqCorrectOptionLimit(nextType));
@@ -682,11 +682,12 @@ function ReportsPageContent() {
                     <option value="tf">Шын/Жалған</option>
                     <option value="mcq">Көп таңдаулы (4 жауап)</option>
                     <option value="mcq6">Көп таңдаулы (6 жауап)</option>
+                    <option value="context">Контекст</option>
                     <option value="select">Сәйкестендіру</option>
                   </select>
                 </div>
 
-                {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "select") && (
+                {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context" || taskForm.question_type === "select") && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-gray-900">Нұсқалар:</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -749,7 +750,7 @@ function ReportsPageContent() {
                         </>
                       )}
                     </div>
-                    {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6") && (
+                    {(taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context") && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Дұрыс жауап

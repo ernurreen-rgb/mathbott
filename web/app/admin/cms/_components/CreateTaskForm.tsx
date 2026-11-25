@@ -146,6 +146,7 @@ export default function CreateTaskForm({
             <option value="tf">Дұрыс / Жалған</option>
             <option value="mcq">Көп таңдаулы (4 жауап)</option>
             <option value="mcq6">Көп таңдаулы (6 жауап)</option>
+            <option value="context">Контекст</option>
             <option value="select">Тізімнен таңдау</option>
           </select>
           {!createUsesBank && supportsAnswerModeSwitch(taskForm.question_type) && (
@@ -186,7 +187,7 @@ export default function CreateTaskForm({
               <option value="true">Дұрыс</option>
               <option value="false">Қате</option>
             </select>
-          ) : taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" ? (
+          ) : taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context" ? (
             <div className="flex flex-wrap gap-2">
               {MCQ_OPTION_LABELS.slice(0, taskForm.question_type === "mcq6" ? 6 : 4).map((label) => {
                 const isSelected = taskForm.correctOptions.includes(label);
@@ -236,7 +237,7 @@ export default function CreateTaskForm({
           />
         )}
 
-        {!createUsesBank && (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "select") && (
+        {!createUsesBank && (taskForm.question_type === "mcq" || taskForm.question_type === "mcq6" || taskForm.question_type === "context" || taskForm.question_type === "select") && (
           <div className="grid grid-cols-1 gap-2">
             <MathFieldInput
               value={taskForm.optionA}

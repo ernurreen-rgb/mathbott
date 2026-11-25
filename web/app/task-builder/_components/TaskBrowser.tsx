@@ -15,6 +15,7 @@ const LEVELS = ["A", "B", "C"] as const;
 const TYPES: Array<{ value: ConstructorQuestionType; label: MessageKey }> = [
   { value: "mcq", label: "constructor.type.mcq" },
   { value: "mcq6", label: "constructor.type.mcq6" },
+  { value: "context", label: "constructor.type.context" },
   { value: "input", label: "constructor.type.input" },
   { value: "tf", label: "constructor.type.tf" },
   { value: "select", label: "constructor.type.select" },

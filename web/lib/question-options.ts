@@ -21,7 +21,7 @@ export function getMcqEditorQuestionType<T extends string>(questionType: T, opti
 }
 
 export const isMcqQuestionType = (questionType?: string | null): boolean =>
-  questionType === "mcq" || questionType === "mcq6";
+  questionType === "mcq" || questionType === "mcq6" || questionType === "context";
 
 /** Six-option tasks always let students select up to 3 choices without revealing key count. */
 export function getMcqSelectableCount(task: {
