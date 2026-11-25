@@ -178,7 +178,7 @@ Any signed-in user, students included, browses the whole bank (twins excepted) a
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/constructor/tasks` | Authenticated | Bank tasks without answers. Filters: `search` (text or `#id`), `difficulty` (`A`/`B`/`C`), `topics` (comma-separated), `topic_match`, `question_type`; `limit` ≤ 50, `offset`. 60/minute. |
+| `GET` | `/api/constructor/tasks` | Authenticated | Bank tasks without answers. Filters: `search` (text or `#id`), `difficulty` (`A`/`B`/`C`), `topics` (comma-separated), `topic_match`, `sources` (comma-separated) with `source_match` (`any`: in at least one of them, the default; `all`: in every one, as the constructor asks for several sources), `question_type`; `limit` ≤ 100, `offset`. 60/minute. |
 | `GET` | `/api/constructor/topics` | Authenticated | Bank topics for the filter (`q` narrows them). 60/minute. |
 | `GET` | `/api/constructor/collections` | Authenticated | The caller's collections with task counts, newest change first, and the limits (50 collections, 100 tasks each). |
 | `POST` | `/api/constructor/collections` | Authenticated | Creates a collection from `{title}`; `409` once the caller has 50. 20/minute. |

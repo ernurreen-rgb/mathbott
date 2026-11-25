@@ -59,6 +59,28 @@ class TaskConstructorTests(PostgresTestCase):
     def client(self):
         return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://constructor.test")
 
+    async def test_several_sources_match_all_of_them_or_any_of_them(self):
+        created = await self.db.bank_tasks.create_tasks_bulk_atomic(
+            tasks=[_task(20, sources=["Educon"]), _task(21, sources=["Рустюмова"]),
+                   _task(22, sources=["Educon", "Рустюмова"]), _task(23, sources=["Educon", "AI"])],
+            created_by=self.owner["id"], actor_email="teacher@example.test",
+        )
+        educon, rustyumova, both, educon_ai = (int(task["id"]) for task in created)
+        query = {"email": "teacher@example.test", "sources": "Educon,Рустюмова"}
+        async with self.client() as client:
+            listed = lambda params: client.get("/api/constructor/tasks", params={**query, **params})
+            union = (await listed({})).json()
+            self.assertEqual({item["id"] for item in union["items"]}, {educon, rustyumova, both, educon_ai})
+            self.assertEqual(
+                {item["id"] for item in (await listed({"source_match": "any"})).json()["items"]},
+                {educon, rustyumova, both, educon_ai},
+            )
+            intersection = (await listed({"source_match": "all"})).json()
+            self.assertEqual(([item["id"] for item in intersection["items"]], intersection["total"]), ([both], 1))
+            single = (await listed({"sources": "Educon", "source_match": "all"})).json()
+            self.assertEqual({item["id"] for item in single["items"]}, {educon, both, educon_ai})
+            self.assertEqual((await listed({"source_match": "every"})).status_code, 422)
+
     async def test_task_list_has_no_answers_twins_or_deleted_tasks(self):
         teacher = {"email": "teacher@example.test"}
         async with self.client() as client:

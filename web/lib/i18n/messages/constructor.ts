@@ -69,6 +69,17 @@ export const constructorMessages = {
     "Выбран {count} источник|Выбраны {count} источника|Выбрано {count} источников",
   ],
   "constructor.removeSourceAria": ["«{source}» дереккөзін алып тастау", "Убрать источник «{source}»"],
+  "constructor.sourceMatchAria": ["Бірнеше дереккөз қалай ескеріледі", "Как учитывать несколько источников"],
+  "constructor.sourceMatchAll": ["Барлығында бар", "Есть во всех"],
+  "constructor.sourceMatchAny": ["Кез келгенінде бар", "Есть в любом"],
+  "constructor.sourceMatchAllHint": [
+    "Тек таңдалған дереккөздердің барлығында кездесетін есептер",
+    "Только задачи, которые есть во всех выбранных источниках",
+  ],
+  "constructor.sourceMatchAnyHint": [
+    "Таңдалған дереккөздердің кем дегенде біреуіндегі есептер",
+    "Задачи хотя бы из одного выбранного источника",
+  ],
   "constructor.filterBySourceAria": ["«{source}» дереккөзі бойынша сүзгілеу", "Фильтр по источнику «{source}»"],
   "constructor.level": ["Деңгей", "Уровень"],
   "constructor.allLevels": ["Барлығы", "Все"],

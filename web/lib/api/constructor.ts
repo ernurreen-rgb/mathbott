@@ -30,6 +30,8 @@ export interface ConstructorTaskQuery {
   sources?: string[];
   hasSources?: boolean;
   topicMatch?: "any" | "all";
+  /** "all": tasks in every chosen source (their intersection); "any": in at least one. */
+  sourceMatch?: "any" | "all";
   questionType?: ConstructorQuestionType;
   limit?: number;
   offset?: number;
@@ -44,6 +46,7 @@ export function getConstructorTasks(query: ConstructorTaskQuery, email: string):
   if (query.sources?.length) params.set("sources", query.sources.join(","));
   if (query.hasSources !== undefined) params.set("has_sources", String(query.hasSources));
   if (query.topicMatch && query.topicMatch !== "any") params.set("topic_match", query.topicMatch);
+  if (query.sourceMatch && query.sourceMatch !== "any") params.set("source_match", query.sourceMatch);
   if (query.questionType) params.set("question_type", query.questionType);
   params.set("limit", String(query.limit ?? 100));
   if (query.offset) params.set("offset", String(query.offset));

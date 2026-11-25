@@ -43,6 +43,8 @@ export default function TaskBrowser({
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [excludedTopics, setExcludedTopics] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  // With several sources: tasks found in all of them (the default) or in any one of them.
+  const [sourceMatch, setSourceMatch] = useState<"all" | "any">("all");
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -136,10 +138,11 @@ export default function TaskBrowser({
       excludeTopics: excludedTopics.length > 0 ? excludedTopics : undefined,
       sources: selectedSources.length > 0 ? selectedSources : undefined,
       topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
+      sourceMatch: selectedSources.length > 1 ? sourceMatch : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, excludedTopics, selectedSources, difficulty, questionType],
+    [search, selectedTopics, excludedTopics, selectedSources, sourceMatch, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -236,6 +239,24 @@ export default function TaskBrowser({
         </div>
         {(selectedTopics.length > 0 || excludedTopics.length > 0 || selectedSources.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {selectedSources.length > 1 && (
+              <div role="group" aria-label={t("constructor.sourceMatchAria")} className="inline-flex rounded-full bg-amber-50 p-0.5 ring-1 ring-amber-200">
+                {(["all", "any"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={sourceMatch === mode}
+                    onClick={() => setSourceMatch(mode)}
+                    title={t(mode === "all" ? "constructor.sourceMatchAllHint" : "constructor.sourceMatchAnyHint")}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+                      sourceMatch === mode ? "bg-amber-500 text-white shadow-sm" : "text-amber-800 hover:bg-amber-100"
+                    }`}
+                  >
+                    {t(mode === "all" ? "constructor.sourceMatchAll" : "constructor.sourceMatchAny")}
+                  </button>
+                ))}
+              </div>
+            )}
             {selectedSources.map((name) => (
               <span
                 key={`src-chip-${name}`}

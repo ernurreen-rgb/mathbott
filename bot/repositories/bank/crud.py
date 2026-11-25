@@ -58,6 +58,7 @@ class BankTaskCrudMixin:
         sort: str = "newest",
         twins: str = "exclude",
         exclude_quantitative_comparison: bool = False,
+        source_match: str = "any",
     ) -> Dict[str, Any]:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
@@ -103,18 +104,30 @@ class BankTaskCrudMixin:
             source_exists_clause = "EXISTS (SELECT 1 FROM bank_task_source_map sm WHERE sm.bank_task_id = bt.id)"
             if normalized_sources:
                 placeholders = ",".join(["?"] * len(normalized_sources))
-                matching_source_clause = f"""EXISTS (
-                    SELECT 1
-                    FROM bank_task_source_map sm
-                    JOIN bank_sources s ON s.id = sm.source_id
-                    WHERE sm.bank_task_id = bt.id
-                      AND s.name_norm IN ({placeholders})
-                )"""
+                source_params: List[Any] = list(normalized_sources)
+                if source_match == "all":
+                    # In every chosen source (their intersection), not just in one of them.
+                    matching_source_clause = f"""(
+                        SELECT COUNT(DISTINCT s.name_norm)
+                        FROM bank_task_source_map sm
+                        JOIN bank_sources s ON s.id = sm.source_id
+                        WHERE sm.bank_task_id = bt.id
+                          AND s.name_norm IN ({placeholders})
+                    ) = ?"""
+                    source_params.append(len(set(normalized_sources)))
+                else:
+                    matching_source_clause = f"""EXISTS (
+                        SELECT 1
+                        FROM bank_task_source_map sm
+                        JOIN bank_sources s ON s.id = sm.source_id
+                        WHERE sm.bank_task_id = bt.id
+                          AND s.name_norm IN ({placeholders})
+                    )"""
                 if has_sources is False:
                     where.append(f"({matching_source_clause} OR NOT {source_exists_clause})")
                 else:
                     where.append(matching_source_clause)
-                params.extend(normalized_sources)
+                params.extend(source_params)
             elif has_sources is not None:
                 where.append(source_exists_clause if has_sources else f"NOT {source_exists_clause}")
 
