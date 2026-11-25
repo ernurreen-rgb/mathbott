@@ -13,6 +13,8 @@ export interface ConstructorTask {
   image_filename: string | null;
   options: { label: string; text: string }[];
   subquestions: { text: string; correct?: string }[];
+  /** Number of active approved twin variants nested under this source task. */
+  twin_count?: number;
   /** Only in a collection's export, for the answer key. */
   answer?: string;
   accepted_answers?: string[];

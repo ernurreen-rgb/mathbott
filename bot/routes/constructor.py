@@ -111,6 +111,7 @@ def _public_task(task: Dict[str, Any], *, with_answers: bool = False) -> Dict[st
         "image_filename": task.get("image_filename") or None,
         "options": options,
         "subquestions": subquestions,
+        "twin_count": int(task.get("twin_count") or 0),
     }
     if with_answers:
         item["answer"] = task.get("answer") or ""
@@ -132,7 +133,7 @@ def _collection_summary(collection: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _collection_with_tasks(db: Database, collection: Dict[str, Any], *, with_answers: bool) -> Dict[str, Any]:
-    tasks = await db.bank_tasks.get_active_tasks_by_ids(collection["task_ids"])
+    tasks = await db.bank_tasks.get_active_tasks_by_ids(collection["task_ids"], allow_approved_twins=True)
     return {
         **_collection_summary(collection),
         "tasks": [_public_task(task, with_answers=with_answers) for task in tasks],
@@ -184,6 +185,20 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
             "offset": result["offset"],
             "has_more": result["has_more"],
         }
+
+    @app.get("/api/constructor/tasks/{task_id}/twins")
+    @limiter.limit("60/minute")
+    async def list_constructor_task_twins(
+        request: Request,
+        task_id: int,
+        current_user: dict = Depends(require_internal_identity),
+        db: Database = Depends(get_db),
+    ):
+        source = await db.bank_tasks.get_task_by_id(task_id, include_deleted=False)
+        if not source or source.get("twin_source_id") is not None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        twins = await db.bank_tasks.list_twins(task_id, approved_only=True)
+        return {"items": [_public_task(twin) for twin in twins]}
 
     @app.get("/api/constructor/topics")
     @limiter.limit("60/minute")

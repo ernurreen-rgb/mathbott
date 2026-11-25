@@ -67,10 +67,23 @@ class TaskConstructorTests(PostgresTestCase):
             listed_ids = {item["id"] for item in listed["items"]}
             self.assertEqual(listed_ids, set(self.ids) - {self.ids[4], self.ids[5]})
             self.assertEqual(listed["total"], 6)
+            by_id = {item["id"]: item for item in listed["items"]}
+            self.assertEqual(by_id[self.ids[0]]["twin_count"], 1)
+            self.assertEqual(by_id[self.ids[1]]["twin_count"], 0)
             for item in listed["items"]:
                 self.assertNotIn("answer", item)
                 self.assertNotIn("accepted_answers", item)
                 self.assertTrue(all("correct" not in sub for sub in item["subquestions"]))
+            # Nested twins endpoint returns active approved twins without answers, and rejects twin/deleted ids.
+            twins_resp = (await client.get(f"/api/constructor/tasks/{self.ids[0]}/twins", params=teacher)).json()
+            self.assertEqual([item["id"] for item in twins_resp["items"]], [self.ids[4]])
+            self.assertNotIn("answer", twins_resp["items"][0])
+            self.assertEqual(
+                (await client.get(f"/api/constructor/tasks/{self.ids[4]}/twins", params=teacher)).status_code, 404
+            )
+            self.assertEqual(
+                (await client.get(f"/api/constructor/tasks/{self.ids[5]}/twins", params=teacher)).status_code, 404
+            )
             by_difficulty = (await client.get("/api/constructor/tasks", params={**teacher, "difficulty": "A"})).json()
             self.assertTrue(by_difficulty["items"])
             self.assertTrue(all(item["difficulty"] == "A" for item in by_difficulty["items"]))
@@ -102,17 +115,17 @@ class TaskConstructorTests(PostgresTestCase):
             order = [self.ids[7], self.ids[4], self.ids[0], self.ids[5], 999999, self.ids[2]]
             saved = (await client.put(url, params=teacher, json={
                 "task_ids": order, "header_text": " Ернұр  ағайдан ", "title": "Логарифм"})).json()
-            # Twin tasks, deleted tasks, and unknown ids are left out; the rest keep the given order.
-            self.assertEqual([task["id"] for task in saved["tasks"]], [self.ids[7], self.ids[0], self.ids[2]])
+            # Approved twins are allowed; deleted tasks and unknown ids are left out; the rest keep the given order.
+            self.assertEqual([task["id"] for task in saved["tasks"]], [self.ids[7], self.ids[4], self.ids[0], self.ids[2]])
             self.assertEqual((saved["title"], saved["header_text"]), ("Логарифм", "Ернұр ағайдан"))
             self.assertTrue(all("answer" not in task for task in saved["tasks"]))
 
             exported = (await client.get(f"{url}/export", params=teacher)).json()
-            self.assertEqual([task["answer"] for task in exported["tasks"]], ['["A", "C"]', "C", "C"])
+            self.assertEqual([task["answer"] for task in exported["tasks"]], ['["A", "C"]', "C", "C", "C"])
             self.assertEqual([sub["correct"] for sub in exported["tasks"][0]["subquestions"]], ["A", "C"])
 
             listed = (await client.get("/api/constructor/collections", params=teacher)).json()
-            self.assertEqual([(item["id"], item["task_count"]) for item in listed["items"]], [(created["id"], 3)])
+            self.assertEqual([(item["id"], item["task_count"]) for item in listed["items"]], [(created["id"], 4)])
             self.assertEqual((await client.get("/api/constructor/collections", params=student)).json()["items"], [])
             for request in (client.get(url, params=student), client.get(f"{url}/export", params=student),
                             client.put(url, params=student, json={"title": "Менікі"}),
@@ -150,6 +163,9 @@ class TaskConstructorTests(PostgresTestCase):
             self.assertEqual([t["id"] for t in fetched["tasks"]], [self.ids[0]])
             exported = (await client.get(f"{url}/export", params=student)).json()
             self.assertEqual([t["id"] for t in exported["tasks"]], [self.ids[0]])
+            # Draft twins also never appear under GET /api/constructor/tasks/{id}/twins.
+            twins_resp = (await client.get(f"/api/constructor/tasks/{self.ids[0]}/twins", params=student)).json()
+            self.assertEqual([t["id"] for t in twins_resp["items"]], [self.ids[4]])
 
     async def test_the_deck_font_defaults_to_juz40_and_takes_only_offered_fonts(self):
         teacher = {"email": "teacher@example.test"}

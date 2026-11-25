@@ -1140,6 +1140,62 @@ class Sprint3RegressionTests(unittest.TestCase):
         self.assertTrue(found)
         self.assertEqual(set(deleted_files), {"title2.jpg", "bg.jpg"})
 
+    def test_constructor_approved_twins_sql_and_public_payload(self):
+        from repositories.bank.crud import BankTaskCrudMixin
+        from repositories.bank.twins import BankTaskTwinsMixin, NOT_DRAFT_TWIN_SQL
+        from repositories.task_collection_repository import TaskCollectionRepository
+        from routes.constructor import _public_task
+
+        executed_sql = []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchall(self):
+                return []
+
+        class _FakeDb:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                executed_sql.append(sql)
+                return _FakeCursor()
+
+        class _FakeConnCtx:
+            async def __aenter__(self):
+                return _FakeDb()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeBankRepo(BankTaskTwinsMixin, BankTaskCrudMixin):
+            def _connection(self):
+                return _FakeConnCtx()
+
+            async def _fetch_topics_map(self, db, task_ids):
+                return {}
+
+        bank_repo = _FakeBankRepo()
+        asyncio.run(bank_repo.list_twins(10, approved_only=True))
+        self.assertTrue(any("tw.status = 'approved'" in sql for sql in executed_sql))
+
+        executed_sql.clear()
+        asyncio.run(bank_repo.get_active_tasks_by_ids([10, 11], allow_approved_twins=True))
+        self.assertTrue(any(NOT_DRAFT_TWIN_SQL in sql for sql in executed_sql))
+
+        executed_sql.clear()
+        col_repo = TaskCollectionRepository.__new__(TaskCollectionRepository)
+        asyncio.run(col_repo._existing_bank_task_ids(_FakeDb(), [10, 11]))
+        self.assertTrue(any(NOT_DRAFT_TWIN_SQL in sql for sql in executed_sql))
+
+        public = _public_task({"id": 5, "text": "x=1", "answer": "1", "twin_count": 3}, with_answers=False)
+        self.assertEqual(public["twin_count"], 3)
+        self.assertNotIn("answer", public)
+
 
 if __name__ == "__main__":
     unittest.main()

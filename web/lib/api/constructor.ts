@@ -1,6 +1,7 @@
 import { apiPath, fetchWithErrorHandling as fetchBase, type FetchResult } from "./client";
 import type {
   ConstructorQuestionType,
+  ConstructorTask,
   ConstructorTaskPage,
   TaskCollection,
   TaskCollectionImageKind,
@@ -43,6 +44,10 @@ export function getConstructorTasks(query: ConstructorTaskQuery, email: string):
   params.set("limit", String(query.limit ?? 20));
   if (query.offset) params.set("offset", String(query.offset));
   return request<ConstructorTaskPage>(withEmail("constructor/tasks", email, params));
+}
+
+export function getConstructorTaskTwins(taskId: number, email: string): Promise<FetchResult<{ items: ConstructorTask[] }>> {
+  return request<{ items: ConstructorTask[] }>(withEmail(`constructor/tasks/${taskId}/twins`, email));
 }
 
 export function getConstructorTopics(email: string): Promise<FetchResult<{ items: string[] }>> {

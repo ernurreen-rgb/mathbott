@@ -10,6 +10,11 @@ from utils.validation import normalize_task_answer_for_compare
 # Twins live in the bank but stay out of the library, pickers and quality reports.
 NOT_TWIN_SQL = "NOT EXISTS (SELECT 1 FROM bank_task_twins tw WHERE tw.twin_bank_task_id = bt.id)"
 IS_TWIN_SQL = "EXISTS (SELECT 1 FROM bank_task_twins tw WHERE tw.twin_bank_task_id = bt.id)"
+# Approved twins are published variants; unapproved AI drafts stay internal to admins.
+NOT_DRAFT_TWIN_SQL = (
+    "NOT EXISTS (SELECT 1 FROM bank_task_twins tw "
+    "WHERE tw.twin_bank_task_id = bt.id AND tw.status <> 'approved')"
+)
 
 
 def _canonical(value: Any) -> str:
@@ -80,17 +85,18 @@ class BankTaskTwinsMixin:
                 counts["drafts"].update(info["drafts"])
         return counts
 
-    async def list_twins(self, source_task_id: int) -> List[Dict[str, Any]]:
+    async def list_twins(self, source_task_id: int, *, approved_only: bool = False) -> List[Dict[str, Any]]:
+        status_clause = " AND tw.status = 'approved'" if approved_only else ""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             async with db.execute(
-                """
+                f"""
                 SELECT bt.*, tw.status AS twin_status, tw.origin AS twin_origin, tw.ai_model AS twin_ai_model,
                        tw.ai_check_status AS check_status, tw.ai_check_answer AS check_answer,
                        tw.ai_checked_version AS checked_version
                 FROM bank_task_twins tw
                 JOIN bank_tasks bt ON bt.id = tw.twin_bank_task_id
-                WHERE tw.source_bank_task_id = ? AND bt.deleted_at IS NULL
+                WHERE tw.source_bank_task_id = ? AND bt.deleted_at IS NULL{status_clause}
                 ORDER BY tw.sort_order ASC, tw.id ASC
                 """,
                 (source_task_id,),

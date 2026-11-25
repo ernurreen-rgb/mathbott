@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import storage as db_driver
 
-from .bank.twins import NOT_TWIN_SQL
+from .bank.twins import NOT_DRAFT_TWIN_SQL
 from .base import BaseRepository
 
 MAX_COLLECTIONS_PER_USER = 50
@@ -202,7 +202,7 @@ class TaskCollectionRepository(BaseRepository):
             chunk = unique_ids[start:start + chunk_size]
             placeholders = ",".join(["?"] * len(chunk))
             async with db.execute(
-                f"SELECT bt.id FROM bank_tasks bt WHERE bt.id IN ({placeholders}) AND bt.deleted_at IS NULL AND {NOT_TWIN_SQL}",
+                f"SELECT bt.id FROM bank_tasks bt WHERE bt.id IN ({placeholders}) AND bt.deleted_at IS NULL AND {NOT_DRAFT_TWIN_SQL}",
                 tuple(chunk),
             ) as cursor:
                 existing.update(int(row[0]) for row in await cursor.fetchall())

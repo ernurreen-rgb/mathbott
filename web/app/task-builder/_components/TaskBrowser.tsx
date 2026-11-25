@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
-import { getConstructorTasks, getConstructorTopics } from "@/lib/api/constructor";
+import { getConstructorTasks, getConstructorTaskTwins, getConstructorTopics } from "@/lib/api/constructor";
 import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { toggleIncludedTopic } from "@/lib/topic-filter";
@@ -48,8 +48,65 @@ export default function TaskBrowser({
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [expandedTwinIds, setExpandedTwinIds] = useState<Set<number>>(() => new Set());
+  const [twinsByTaskId, setTwinsByTaskId] = useState<Record<number, ConstructorTask[]>>({});
+  const [loadingTwinsIds, setLoadingTwinsIds] = useState<Set<number>>(() => new Set());
+  const [twinsErrorIds, setTwinsErrorIds] = useState<Set<number>>(() => new Set());
   const generation = useRef(0);
+  const mountedRef = useRef(true);
+  const inFlightTwinsRef = useRef<Set<number>>(new Set());
   const selectedTopicSet = useMemo(() => new Set(selectedTopics), [selectedTopics]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const fetchTwins = async (taskId: number) => {
+    if (inFlightTwinsRef.current.has(taskId)) return;
+    inFlightTwinsRef.current.add(taskId);
+    setLoadingTwinsIds((prev) => new Set(prev).add(taskId));
+    setTwinsErrorIds((prev) => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+    try {
+      const result = await getConstructorTaskTwins(taskId, email);
+      if (!mountedRef.current) return;
+      if (!result.data) {
+        setTwinsErrorIds((prev) => new Set(prev).add(taskId));
+        return;
+      }
+      setTwinsByTaskId((prev) => ({ ...prev, [taskId]: result.data!.items }));
+    } finally {
+      inFlightTwinsRef.current.delete(taskId);
+      if (mountedRef.current) {
+        setLoadingTwinsIds((prev) => {
+          if (!prev.has(taskId)) return prev;
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      }
+    }
+  };
+
+  const toggleTwins = (taskId: number) => {
+    const isOpen = expandedTwinIds.has(taskId);
+    setExpandedTwinIds((prev) => {
+      const next = new Set(prev);
+      if (isOpen) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+    if (!isOpen && twinsByTaskId[taskId] === undefined) {
+      void fetchTwins(taskId);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchText.trim()), 350);
@@ -209,12 +266,20 @@ export default function TaskBrowser({
         {items.map((task) => {
           const added = selectedIds.has(task.id);
           const canToggle = added || !full;
+          const twinCount = task.twin_count ?? 0;
+          const twinsOpen = expandedTwinIds.has(task.id);
+          const loadedTwins = twinsByTaskId[task.id];
+          const twinsLoading = loadingTwinsIds.has(task.id);
+          const twinsError = twinsErrorIds.has(task.id);
+          const selectedTwinsCount = loadedTwins
+            ? loadedTwins.reduce((count, twin) => count + (selectedIds.has(twin.id) ? 1 : 0), 0)
+            : 0;
           return (
             <li
               key={task.id}
               onClick={(event) => {
                 if (!canToggle) return;
-                if ((event.target as HTMLElement | null)?.closest("button, a, input, select, textarea")) return;
+                if ((event.target as HTMLElement | null)?.closest("button, a, input, select, textarea, [data-twins-panel]")) return;
                 const selection = typeof window !== "undefined" ? window.getSelection() : null;
                 if (selection && selection.toString().trim().length > 0) return;
                 onToggle(task);
@@ -274,6 +339,107 @@ export default function TaskBrowser({
                 </button>
               </div>
               <TaskPreview task={task} />
+              {twinCount > 0 && (
+                <div
+                  data-twins-panel
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-3 cursor-default border-t border-slate-100 pt-2.5"
+                >
+                  <button
+                    type="button"
+                    aria-expanded={twinsOpen}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleTwins(task.id);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+                  >
+                    <Icon
+                      name="chevronDown"
+                      className={`h-3.5 w-3.5 transition-transform ${twinsOpen ? "rotate-180" : ""}`}
+                    />
+                    <span>{t("constructor.twinsCount", { count: twinCount })}</span>
+                    {selectedTwinsCount > 0 && (
+                      <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[11px] font-bold text-purple-700">
+                        {t("constructor.twinsSelectedCount", { count: selectedTwinsCount })}
+                      </span>
+                    )}
+                  </button>
+                  {twinsOpen && (
+                    <div className="mt-2 space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-2.5">
+                      {twinsLoading && !loadedTwins ? (
+                        <p className="flex items-center gap-2 px-1 py-1.5 text-xs text-slate-500">
+                          <Icon name="loader" className="h-3.5 w-3.5 animate-spin" />
+                          {t("constructor.twinsLoading")}
+                        </p>
+                      ) : twinsError ? (
+                        <p role="alert" className="px-1 py-1 text-xs text-red-700">
+                          {t("constructor.loadError")}{" "}
+                          <button
+                            type="button"
+                            onClick={() => void fetchTwins(task.id)}
+                            className="font-semibold underline"
+                          >
+                            {t("constructor.retry")}
+                          </button>
+                        </p>
+                      ) : loadedTwins && loadedTwins.length === 0 ? (
+                        <p className="px-1 py-1 text-xs text-slate-500">{t("constructor.twinsEmpty")}</p>
+                      ) : loadedTwins ? (
+                        loadedTwins.map((twin, twinIndex) => {
+                          const twinAdded = selectedIds.has(twin.id);
+                          const twinCanToggle = twinAdded || !full;
+                          return (
+                            <div
+                              key={twin.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!twinCanToggle) return;
+                                if ((event.target as HTMLElement | null)?.closest("button, a, input, select, textarea")) return;
+                                const selection = typeof window !== "undefined" ? window.getSelection() : null;
+                                if (selection && selection.toString().trim().length > 0) return;
+                                onToggle(twin);
+                              }}
+                              className={`rounded-xl border p-3 transition-colors ${
+                                twinAdded
+                                  ? "cursor-pointer border-purple-300 bg-purple-50/40 ring-1 ring-purple-200 hover:border-purple-400"
+                                  : twinCanToggle
+                                    ? "cursor-pointer border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/20"
+                                    : "border-slate-200 bg-white"
+                              }`}
+                            >
+                              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                <span className="font-mono">#{twin.id}</span>
+                                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{twin.difficulty}</span>
+                                <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-700">
+                                  {t("constructor.twinLabel", { n: twinIndex + 1 })}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onToggle(twin);
+                                  }}
+                                  disabled={!twinAdded && full}
+                                  aria-pressed={twinAdded}
+                                  aria-label={t(twinAdded ? "constructor.removeAddedAria" : "constructor.addAria", { id: twin.id })}
+                                  className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-colors disabled:opacity-40 ${
+                                    twinAdded ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                                  }`}
+                                >
+                                  <Icon name={twinAdded ? "check" : "plus"} className="h-3.5 w-3.5" />
+                                  {t(twinAdded ? "constructor.added" : "constructor.add")}
+                                </button>
+                              </div>
+                              <TaskPreview task={twin} />
+                            </div>
+                          );
+                        })
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

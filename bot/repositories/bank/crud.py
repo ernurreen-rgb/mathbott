@@ -6,7 +6,7 @@ import json
 import storage as db_driver
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
-from .twins import IS_TWIN_SQL, NOT_TWIN_SQL
+from .twins import IS_TWIN_SQL, NOT_DRAFT_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
 
@@ -205,14 +205,25 @@ class BankTaskCrudMixin:
                         }
             return result
 
-    async def get_active_tasks_by_ids(self, task_ids: List[int], *, exclude_twins: bool = True) -> List[Dict[str, Any]]:
+    async def get_active_tasks_by_ids(
+        self,
+        task_ids: List[int],
+        *,
+        exclude_twins: bool = True,
+        allow_approved_twins: bool = False,
+    ) -> List[Dict[str, Any]]:
         """Tasks that are not deleted (and not twins by default), in the order of `task_ids`."""
         ordered_ids = list(dict.fromkeys(
             int(tid) for tid in task_ids if isinstance(tid, int) and not isinstance(tid, bool) and tid > 0
         ))
         if not ordered_ids:
             return []
-        twin_clause = f" AND {NOT_TWIN_SQL}" if exclude_twins else ""
+        if allow_approved_twins:
+            twin_clause = f" AND {NOT_DRAFT_TWIN_SQL}"
+        elif exclude_twins:
+            twin_clause = f" AND {NOT_TWIN_SQL}"
+        else:
+            twin_clause = ""
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             rows_by_id: Dict[int, Any] = {}
