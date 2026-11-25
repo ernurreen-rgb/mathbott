@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { customCollectionTitle, reorderItems, worksheetTasks } from "@/lib/constructor-export";
 import { validateWorksheetFontCSS } from "@/lib/worksheet-fonts";
+import { fitWorksheetLayout } from "@/lib/worksheet-layout";
 
 const EMBEDDED_KATEX =
   `@font-face { font-family: KaTeX_Main; src: url("data:application/font-woff;base64,AAAA") format("woff2"); }`;
@@ -87,5 +88,137 @@ describe("worksheetTasks", () => {
     ]);
     expect(mapped).toHaveLength(1);
     expect(mapped[0].difficulty).toBe("C");
+  });
+});
+
+describe("fitWorksheetLayout", () => {
+  type FakeEl = {
+    style: Record<string, string>;
+    clientWidth: number;
+    scrollWidth: number;
+    getBoundingClientRect: () => { left: number; right: number; width: number };
+    querySelectorAll: (selector: string) => FakeEl[];
+  };
+
+  function makeEl(config: {
+    clientWidth: number;
+    scrollWidth: () => number;
+    left?: number;
+    right?: () => number;
+    style?: Record<string, string>;
+    children?: Record<string, FakeEl[]>;
+  }): FakeEl {
+    const left = config.left ?? -20000;
+    const el: FakeEl = {
+      style: { ...(config.style ?? {}) },
+      clientWidth: config.clientWidth,
+      get scrollWidth() {
+        return config.scrollWidth();
+      },
+      getBoundingClientRect: () => {
+        const right = config.right ? config.right() : left + config.clientWidth;
+        return { left, right, width: right - left };
+      },
+      querySelectorAll: (selector: string) => config.children?.[selector] ?? [],
+    };
+    return el;
+  }
+
+  it("keeps 2-column options when they fit, and switches overflowing option grids to 1 column even offscreen (left: -20000px)", () => {
+    const shortGrid = makeEl({
+      clientWidth: 692,
+      scrollWidth: () => 692,
+      left: -19972,
+      style: { gridTemplateColumns: "1fr 1fr" },
+      children: {
+        "[data-pdf-option]": [
+          makeEl({ clientWidth: 334, scrollWidth: () => 280, left: -19972, right: () => -19638 }),
+          makeEl({ clientWidth: 334, scrollWidth: () => 280, left: -19614, right: () => -19280 }),
+        ],
+      },
+    });
+
+    const longGrid = makeEl({
+      clientWidth: 692,
+      scrollWidth: () => (longGrid.style.gridTemplateColumns === "minmax(0, 1fr)" ? 580 : 692),
+      left: -19972,
+      style: { gridTemplateColumns: "1fr 1fr" },
+      children: {
+        "[data-pdf-option]": [
+          makeEl({ clientWidth: 458, scrollWidth: () => 458, left: -19972, right: () => -19514 }),
+          makeEl({
+            clientWidth: 458,
+            scrollWidth: () => 458,
+            left: -19490,
+            right: () => (longGrid.style.gridTemplateColumns === "minmax(0, 1fr)" ? -19514 : -19032),
+          }),
+        ],
+      },
+    });
+
+    const ultraWideOption = makeEl({
+      clientWidth: 692,
+      scrollWidth: () => {
+        const size = parseFloat(ultraWideGrid.style.fontSize || "17");
+        return Math.round(860 * (size / 17));
+      },
+      left: -19972,
+      right: () => -19972 + ultraWideOption.scrollWidth,
+    });
+    const ultraWideGrid: FakeEl = makeEl({
+      clientWidth: 692,
+      scrollWidth: () => {
+        if (ultraWideGrid.style.gridTemplateColumns !== "minmax(0, 1fr)") return 1600;
+        return ultraWideOption.scrollWidth;
+      },
+      left: -19972,
+      style: { gridTemplateColumns: "1fr 1fr" },
+      children: {
+        "[data-pdf-option]": [ultraWideOption],
+      },
+    });
+
+    const root = makeEl({
+      clientWidth: 720,
+      scrollWidth: () => 720,
+      children: {
+        "[data-pdf-options-grid]": [shortGrid, longGrid, ultraWideGrid],
+      },
+    });
+
+    fitWorksheetLayout(root as unknown as HTMLElement);
+
+    expect(shortGrid.style.gridTemplateColumns).toBe("1fr 1fr");
+    expect(shortGrid.style.fontSize).toBeUndefined();
+
+    expect(longGrid.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+    expect(longGrid.style.fontSize).toBeUndefined();
+
+    expect(ultraWideGrid.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+    expect(parseFloat(ultraWideGrid.style.fontSize)).toBeLessThan(17);
+    expect(parseFloat(ultraWideGrid.style.fontSize)).toBeGreaterThanOrEqual(11);
+  });
+
+  it("steps down the answer-key grid from 3 columns to 2 or 1 when answers overflow", () => {
+    const answersGrid = makeEl({
+      clientWidth: 720,
+      scrollWidth: () => {
+        if (answersGrid.style.gridTemplateColumns === "minmax(0, 1fr)") return 600;
+        if (answersGrid.style.gridTemplateColumns === "repeat(2, minmax(0, 1fr))") return 820;
+        return 1100;
+      },
+      style: { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" },
+      children: { "[data-pdf-answer-item]": [] },
+    });
+
+    const root = makeEl({
+      clientWidth: 720,
+      scrollWidth: () => 720,
+      children: { "[data-pdf-answers-grid]": [answersGrid] },
+    });
+
+    fitWorksheetLayout(root as unknown as HTMLElement);
+
+    expect(answersGrid.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
   });
 });

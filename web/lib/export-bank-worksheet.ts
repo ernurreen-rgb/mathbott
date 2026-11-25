@@ -1,6 +1,7 @@
 import type { PDFPage } from 'pdf-lib';
 import { WORKSHEET_BRAND, worksheetFilename } from './bank-worksheet';
 import { validateWorksheetFontCSS } from './worksheet-fonts';
+import { fitWorksheetLayout } from './worksheet-layout';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -131,6 +132,8 @@ export async function exportBankWorksheet(
       if (!image.naturalWidth) throw new Error('Есептің суреті жүктелмеді. Қайта көріңіз.');
     }));
     await document.fonts.ready;
+    fitWorksheetLayout(root);
+    await frame();
     signal.throwIfAborted();
     // html-to-image 1.11.13's preferredFontFormat filter retains a global regex
     // cursor and drops src from alternating font-face rules/calls. MathLive's

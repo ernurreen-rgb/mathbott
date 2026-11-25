@@ -42,9 +42,9 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
         </div>)}
       </div>;
     }
-    return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', marginTop: 10 }}>
-      {task.options.map((option) => <div key={option.label} data-pdf-part style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-        <strong>{option.label})</strong><MathRender latex={option.text} inline />
+    return <div data-pdf-options-grid style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', marginTop: 10 }}>
+      {task.options.map((option) => <div key={option.label} data-pdf-part data-pdf-option style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+        <strong style={{ flexShrink: 0 }}>{option.label})</strong><MathRender latex={option.text} inline />
       </div>)}
     </div>;
   };
@@ -61,7 +61,7 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
       return <article key={task.id} data-pdf-task data-task-id={task.id} style={{ padding: '12px 0 18px' }}>
       <div data-pdf-part style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
         <strong style={{ flexShrink: 0 }}>{index + 1}.{difficulty ? ` (${difficulty})` : ''}</strong>
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div data-pdf-statement style={{ minWidth: 0, flex: 1 }}>
           {comparison ? <div>
             {comparison.condition && <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 8 }}><MathRender latex={comparison.condition} /></div>}
             <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden' }}>
@@ -97,8 +97,8 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
     })}
     {answerKey && answerKey.length > 0 && <section data-pdf-answers style={{ paddingTop: 4 }}>
       <h2 style={{ margin: '0 0 14px', fontSize: 22, fontWeight: 700 }}>{words.answers}</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 20px' }}>
-        {answerKey.map((entry) => <div key={entry.number} style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
+      <div data-pdf-answers-grid style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 20px' }}>
+        {answerKey.map((entry) => <div key={entry.number} data-pdf-answer-item style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
           <strong style={{ flexShrink: 0 }}>{entry.number})</strong>
           <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {entry.pieces.length ? entry.pieces.map((piece, index) => piece.kind === 'text'
