@@ -160,7 +160,7 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         exclude_topics: Optional[str] = Query(None, max_length=20000, description="Comma-separated excluded topics"),
         topic_match: Literal["any", "all"] = Query("any"),
         question_type: Optional[QUESTION_TYPES] = Query(None),
-        limit: int = Query(20, ge=1, le=50),
+        limit: int = Query(100, ge=1, le=100),
         offset: int = Query(0, ge=0, le=100_000),
     ):
         topic_names = [name.strip() for name in (topics or "").split(",") if name.strip()]

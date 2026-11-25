@@ -10,7 +10,7 @@ import type { ConstructorQuestionType, ConstructorTask } from "@/types/construct
 import TaskPreview from "./TaskPreview";
 import TopicCombobox from "./TopicCombobox";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 100;
 const LEVELS = ["A", "B", "C"] as const;
 const TYPES: Array<{ value: ConstructorQuestionType; label: MessageKey }> = [
   { value: "mcq", label: "constructor.type.mcq" },

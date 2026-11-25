@@ -94,7 +94,10 @@ class TaskConstructorTests(PostgresTestCase):
             self.assertTrue(all("Логарифм" not in item["topics"] for item in excluded["items"]))
             typed = (await client.get("/api/constructor/tasks", params={**teacher, "question_type": "input"})).json()
             self.assertEqual([item["id"] for item in typed["items"]], [self.ids[6]])
-            for invalid in ({"limit": 51}, {"difficulty": "D"}, {"question_type": "essay"}):
+            self.assertEqual(
+                (await client.get("/api/constructor/tasks", params={**teacher, "limit": 100})).status_code, 200
+            )
+            for invalid in ({"limit": 101}, {"difficulty": "D"}, {"question_type": "essay"}):
                 self.assertEqual(
                     (await client.get("/api/constructor/tasks", params={**teacher, **invalid})).status_code, 422
                 )

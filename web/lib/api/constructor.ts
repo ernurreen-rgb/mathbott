@@ -41,7 +41,7 @@ export function getConstructorTasks(query: ConstructorTaskQuery, email: string):
   if (query.excludeTopics?.length) params.set("exclude_topics", query.excludeTopics.join(","));
   if (query.topicMatch && query.topicMatch !== "any") params.set("topic_match", query.topicMatch);
   if (query.questionType) params.set("question_type", query.questionType);
-  params.set("limit", String(query.limit ?? 20));
+  params.set("limit", String(query.limit ?? 100));
   if (query.offset) params.set("offset", String(query.offset));
   return request<ConstructorTaskPage>(withEmail("constructor/tasks", email, params));
 }
