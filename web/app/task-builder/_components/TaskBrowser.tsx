@@ -207,8 +207,25 @@ export default function TaskBrowser({
       <ul className="mt-2 space-y-3">
         {items.map((task) => {
           const added = selectedIds.has(task.id);
+          const canToggle = added || !full;
           return (
-            <li key={task.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${added ? "border-purple-300 ring-1 ring-purple-200" : "border-slate-200"}`}>
+            <li
+              key={task.id}
+              onClick={(event) => {
+                if (!canToggle) return;
+                if ((event.target as HTMLElement | null)?.closest("button, a, input, select, textarea")) return;
+                const selection = typeof window !== "undefined" ? window.getSelection() : null;
+                if (selection && selection.toString().trim().length > 0) return;
+                onToggle(task);
+              }}
+              className={`rounded-2xl border p-4 shadow-sm transition-colors ${
+                added
+                  ? "cursor-pointer border-purple-300 bg-purple-50/30 ring-1 ring-purple-200 hover:border-purple-400"
+                  : canToggle
+                    ? "cursor-pointer border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/20"
+                    : "border-slate-200 bg-white"
+              }`}
+            >
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-mono">#{task.id}</span>
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{task.difficulty}</span>
@@ -218,7 +235,8 @@ export default function TaskBrowser({
                     <button
                       key={name}
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         const next = toggleIncludedTopic(
                           { included: selectedTopics, excluded: excludedTopics },
                           name,
@@ -239,7 +257,10 @@ export default function TaskBrowser({
                 })}
                 <button
                   type="button"
-                  onClick={() => onToggle(task)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggle(task);
+                  }}
                   disabled={!added && full}
                   aria-pressed={added}
                   aria-label={t(added ? "constructor.removeAddedAria" : "constructor.addAria", { id: task.id })}
