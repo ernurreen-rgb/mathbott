@@ -110,6 +110,9 @@ export const constructorMessages = {
     "Не удалось загрузить картинку. Выберите картинку JPG или PNG.",
   ],
   "constructor.imageTooLarge": ["Сурет тым үлкен (20 МБ-тан артық).", "Картинка слишком большая (больше 20 МБ)."],
+  "constructor.answersOption": ["Жауаптар беті", "Страница ответов"],
+  "constructor.withAnswers": ["Жауаптармен", "С ответами"],
+  "constructor.withoutAnswers": ["Жауаптарсыз", "Без ответов"],
   "constructor.downloadPdf": ["PDF жүктеу", "Скачать PDF"],
   "constructor.downloadPptx": ["PowerPoint жүктеу", "Скачать PowerPoint"],
   "constructor.preparing": ["Дайындалуда: {done} / {total}", "Готовится: {done} / {total}"],
@@ -123,5 +126,9 @@ export const constructorMessages = {
   "constructor.downloadHint": [
     "Екі файлдың соңында жауаптар беті бар. PowerPoint-те формулалар мен мәтінді слайдта тікелей өзгертуге болады.",
     "В конце обоих файлов есть страница с ответами. В PowerPoint формулы и текст можно править прямо на слайде.",
+  ],
+  "constructor.downloadHintNoAnswers": [
+    "Файлдар жауаптар бетінсіз жасалады. PowerPoint-те формулалар мен мәтінді слайдта тікелей өзгертуге болады.",
+    "Файлы создаются без страницы ответов. В PowerPoint формулы и текст можно править прямо на слайде.",
   ],
 } satisfies MessageTable;

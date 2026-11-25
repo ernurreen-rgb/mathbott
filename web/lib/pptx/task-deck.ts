@@ -44,6 +44,8 @@ export interface DeckInput {
   accent?: string;
   /** The text font (see lib/pptx/fonts.ts); JUZ40 FONTS when not given. */
   font?: string;
+  /** Whether to append the answer-key slide(s) at the end (defaults to true). */
+  includeAnswers?: boolean;
 }
 
 const LABELS: Record<ConstructorLanguage, { task: string; answers: string; count: (n: number) => string; true: string; false: string }> = {
@@ -689,7 +691,9 @@ class DeckBuilder {
   build() {
     this.titleSlide();
     this.input.tasks.forEach((task, index) => this.taskSlide(task, index + 1));
-    this.answerSlides();
+    if (this.input.includeAnswers !== false) {
+      this.answerSlides();
+    }
     return buildPackageFiles({
       title: this.input.title, author: this.input.author, font: this.font, slides: this.slides, media: this.media,
     });

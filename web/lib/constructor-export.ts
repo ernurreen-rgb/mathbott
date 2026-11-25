@@ -189,7 +189,13 @@ export function answerKey(tasks: ConstructorTask[], language: ConstructorLanguag
 /** Build the collection's PPTX in the browser and save it. */
 export async function downloadCollectionPptx(
   collection: TaskCollection,
-  options: { language: ConstructorLanguage; author: string; signal?: AbortSignal; onProgress?: (done: number, total: number) => void },
+  options: {
+    language: ConstructorLanguage;
+    author: string;
+    includeAnswers?: boolean;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+  },
 ) {
   const { buildTaskDeck } = await import("@/lib/pptx/task-deck");
   const withImages = collection.tasks.filter((task) => task.image_filename);
@@ -219,6 +225,7 @@ export async function downloadCollectionPptx(
     background,
     taskImages,
     font: collection.pptx_font,
+    includeAnswers: options.includeAnswers,
   });
   options.signal?.throwIfAborted();
   saveFile(bytes, constructorFilename(collection.title, "pptx"), PPTX_MIME);

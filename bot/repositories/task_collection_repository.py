@@ -75,10 +75,35 @@ class TaskCollectionRepository(BaseRepository):
                 row = await cursor.fetchone()
             if int(row[0]) >= MAX_COLLECTIONS_PER_USER:
                 raise TaskCollectionLimitError()
+            # Inherit the teacher's latest design settings (PDF header, PPTX font, slide images).
             async with db.execute(
-                "INSERT INTO task_collections (user_id, title) VALUES (?, ?) RETURNING *", (user_id, title)
+                """SELECT header_text, pptx_font, title_image, background_image
+                   FROM task_collections
+                   WHERE user_id = ?
+                   ORDER BY updated_at DESC, id DESC
+                   LIMIT 1""",
+                (user_id,),
             ) as cursor:
-                created = await cursor.fetchone()
+                template = await cursor.fetchone()
+            if template:
+                async with db.execute(
+                    """INSERT INTO task_collections (user_id, title, header_text, pptx_font, title_image, background_image)
+                       VALUES (?, ?, ?, ?, ?, ?) RETURNING *""",
+                    (
+                        user_id,
+                        title,
+                        template["header_text"] or "",
+                        template["pptx_font"] or "JUZ40 FONTS",
+                        template["title_image"],
+                        template["background_image"],
+                    ),
+                ) as cursor:
+                    created = await cursor.fetchone()
+            else:
+                async with db.execute(
+                    "INSERT INTO task_collections (user_id, title) VALUES (?, ?) RETURNING *", (user_id, title)
+                ) as cursor:
+                    created = await cursor.fetchone()
         return _serialize(created)
 
     async def update(
@@ -122,7 +147,7 @@ class TaskCollectionRepository(BaseRepository):
     ) -> Tuple[bool, Optional[str]]:
         """Point the title or background image at `filename` (None removes it).
 
-        Returns (found, previous filename) so the caller can delete the replaced file."""
+        Returns (found, previous filename to delete) — only when no other collection still uses it."""
         column = IMAGE_COLUMNS[kind]
         async with self._write_transaction(lock_key=_LOCK_KEY) as db:
             async with db.execute(
@@ -131,23 +156,38 @@ class TaskCollectionRepository(BaseRepository):
                 row = await cursor.fetchone()
             if not row:
                 return False, None
+            previous = row[0]
             await db.execute(
                 f"UPDATE task_collections SET {column} = ?, updated_at = {_NOW} WHERE id = ? AND user_id = ?",
                 (filename, collection_id, user_id),
             )
-        return True, row[0]
+            deletable = (
+                previous
+                if previous and previous != filename and not await self._is_image_referenced(db, previous)
+                else None
+            )
+        return True, deletable
 
     async def delete(self, collection_id: int, user_id: int) -> Tuple[bool, List[str]]:
-        """Delete the collection. Returns (found, its image filenames) so the caller removes the files."""
+        """Delete the collection. Returns (found, unreferenced image filenames) so the caller removes only unused files."""
         async with self._write_transaction(lock_key=_LOCK_KEY) as db:
             async with db.execute(
                 "DELETE FROM task_collections WHERE id = ? AND user_id = ? RETURNING title_image, background_image",
                 (collection_id, user_id),
             ) as cursor:
                 row = await cursor.fetchone()
-        if not row:
-            return False, []
-        return True, [name for name in row if name]
+            if not row:
+                return False, []
+            candidates = list(dict.fromkeys(name for name in row if name))
+            deletable = [name for name in candidates if not await self._is_image_referenced(db, name)]
+        return True, deletable
+
+    async def _is_image_referenced(self, db, filename: str) -> bool:
+        async with db.execute(
+            "SELECT 1 FROM task_collections WHERE title_image = ? OR background_image = ? LIMIT 1",
+            (filename, filename),
+        ) as cursor:
+            return (await cursor.fetchone()) is not None
 
     async def _existing_bank_task_ids(self, db, task_ids: List[int]) -> List[int]:
         unique_ids = list(dict.fromkeys(task_ids))

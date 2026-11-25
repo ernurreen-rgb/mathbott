@@ -957,6 +957,120 @@ class Sprint3RegressionTests(unittest.TestCase):
         self.assertNotIn("LIMIT", executed[0][0].upper())
         self.assertEqual(executed[0][1], [])
 
+    def test_task_collection_inherits_latest_template_and_preserves_shared_images(self):
+        from repositories.task_collection_repository import TaskCollectionRepository
+
+        rows = {
+            1: {
+                "id": 1,
+                "user_id": 7,
+                "title": "Бірінші",
+                "header_text": "Ернұр ағай",
+                "pptx_font": "Calibri",
+                "title_image": "title.jpg",
+                "background_image": "bg.jpg",
+                "task_ids": [],
+                "updated_at": "2026-11-25 00:00:00",
+            }
+        }
+        next_id = [2]
+
+        class _FakeCursor:
+            def __init__(self, one=None):
+                self._one = one
+
+            def __await__(self):
+                async def _done():
+                    return self
+                return _done().__await__()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchone(self):
+                return self._one
+
+        class _FakeDb:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                s = " ".join(sql.split())
+                if s.startswith("SELECT COUNT(*) FROM task_collections"):
+                    uid = params[0]
+                    return _FakeCursor((sum(1 for r in rows.values() if r["user_id"] == uid),))
+                if s.startswith("SELECT header_text, pptx_font, title_image, background_image"):
+                    uid = params[0]
+                    user_rows = [r for r in rows.values() if r["user_id"] == uid]
+                    user_rows.sort(key=lambda r: (r["updated_at"], r["id"]), reverse=True)
+                    return _FakeCursor(user_rows[0] if user_rows else None)
+                if s.startswith("INSERT INTO task_collections (user_id, title, header_text, pptx_font, title_image, background_image)"):
+                    cid = next_id[0]
+                    next_id[0] += 1
+                    row = {
+                        "id": cid,
+                        "user_id": params[0],
+                        "title": params[1],
+                        "header_text": params[2],
+                        "pptx_font": params[3],
+                        "title_image": params[4],
+                        "background_image": params[5],
+                        "task_ids": [],
+                        "updated_at": "2026-11-25 00:01:00",
+                    }
+                    rows[cid] = row
+                    return _FakeCursor(row)
+                if s.startswith("SELECT title_image FROM task_collections") or s.startswith("SELECT background_image FROM task_collections"):
+                    col = "title_image" if "SELECT title_image" in s else "background_image"
+                    r = rows.get(params[0])
+                    return _FakeCursor((r[col],) if r and r["user_id"] == params[1] else None)
+                if s.startswith("UPDATE task_collections SET title_image = ?"):
+                    rows[params[1]]["title_image"] = params[0]
+                    return _FakeCursor(None)
+                if s.startswith("DELETE FROM task_collections"):
+                    r = rows.pop(params[0], None)
+                    return _FakeCursor((r["title_image"], r["background_image"]) if r and r["user_id"] == params[1] else None)
+                if s.startswith("SELECT 1 FROM task_collections WHERE title_image = ? OR background_image = ?"):
+                    fn = params[0]
+                    used = any(r["title_image"] == fn or r["background_image"] == fn for r in rows.values())
+                    return _FakeCursor((1,) if used else None)
+                raise AssertionError(f"Unexpected SQL: {s}")
+
+        class _FakeTx:
+            async def __aenter__(self):
+                return _FakeDb()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeRepo(TaskCollectionRepository):
+            def __init__(self):
+                pass
+
+            def _write_transaction(self, lock_key=None):
+                return _FakeTx()
+
+        repo = _FakeRepo()
+        created = asyncio.run(repo.create(7, "Екінші"))
+        self.assertEqual(
+            (created["header_text"], created["pptx_font"], created["title_image"], created["background_image"]),
+            ("Ернұр ағай", "Calibri", "title.jpg", "bg.jpg"),
+        )
+        # Replacing title.jpg on collection #2 must NOT delete title.jpg while collection #1 still uses it.
+        found, deletable = asyncio.run(repo.set_image(created["id"], 7, "title", "title2.jpg"))
+        self.assertTrue(found)
+        self.assertIsNone(deletable)
+        # Deleting collection #1 deletes title.jpg (now unreferenced) but keeps bg.jpg (still used by #2).
+        found, deleted_files = asyncio.run(repo.delete(1, 7))
+        self.assertTrue(found)
+        self.assertEqual(deleted_files, ["title.jpg"])
+        # Deleting collection #2 deletes both remaining images (title2.jpg and bg.jpg).
+        found, deleted_files = asyncio.run(repo.delete(created["id"], 7))
+        self.assertTrue(found)
+        self.assertEqual(set(deleted_files), {"title2.jpg", "bg.jpg"})
+
 
 if __name__ == "__main__":
     unittest.main()

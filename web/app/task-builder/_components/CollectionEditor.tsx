@@ -40,6 +40,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
   const [tasks, setTasks] = useState<ConstructorTask[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [step, setStep] = useState<Step>("pick");
+  const [includeAnswers, setIncludeAnswers] = useState(true);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [busy, setBusy] = useState<"pdf" | "pptx" | null>(null);
   const [progress, setProgress] = useState("");
@@ -287,14 +288,20 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
     try {
       const full = await exported();
       if (kind === "pptx") {
-        await downloadCollectionPptx(full, { language: locale, author: header.trim() || author, signal: controller.signal, onProgress });
+        await downloadCollectionPptx(full, {
+          language: locale,
+          author: header.trim() || author,
+          includeAnswers,
+          signal: controller.signal,
+          onProgress,
+        });
       } else {
         const pdfTitle = customCollectionTitle(full.title);
         flushSync(() => setPdfDocument({
           title: pdfTitle,
           brand: full.header_text,
           tasks: worksheetTasks(full.tasks),
-          answers: answerKey(full.tasks, locale),
+          answers: includeAnswers ? answerKey(full.tasks, locale) : [],
         }));
         const documentRoot = pdfRoot.current?.firstElementChild;
         if (!(documentRoot instanceof HTMLElement)) throw new Error("render");
@@ -568,6 +575,32 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
               </div>
               <p className="mt-2 text-xs text-slate-500">{t("constructor.imageFormats")}</p>
 
+              <div className="mt-4">
+                <span className="block text-sm font-semibold text-slate-800">{t("constructor.answersOption")}</span>
+                <div
+                  role="group"
+                  aria-label={t("constructor.answersOption")}
+                  className="mt-1.5 flex rounded-xl bg-slate-200/70 p-1"
+                >
+                  {([true, false] as const).map((value) => (
+                    <button
+                      key={value ? "with" : "without"}
+                      type="button"
+                      disabled={busy !== null}
+                      aria-pressed={includeAnswers === value}
+                      onClick={() => setIncludeAnswers(value)}
+                      className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                        includeAnswers === value
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {t(value ? "constructor.withAnswers" : "constructor.withoutAnswers")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -588,7 +621,9 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
                   {t("constructor.downloadPptx")}
                 </button>
               </div>
-              <p role="status" className="mt-2 text-xs text-slate-500">{progress || t("constructor.downloadHint")}</p>
+              <p role="status" className="mt-2 text-xs text-slate-500">
+                {progress || t(includeAnswers ? "constructor.downloadHint" : "constructor.downloadHintNoAnswers")}
+              </p>
               {downloadError && (
                 <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">
                   {downloadError.message}

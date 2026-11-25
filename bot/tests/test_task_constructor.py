@@ -202,3 +202,35 @@ class TaskConstructorTests(PostgresTestCase):
                 delete.reset_mock()
                 await client.delete(f"/api/constructor/collections/{collection['id']}", params=teacher)
                 delete.assert_awaited_once_with("third.png")
+
+    async def test_new_collection_inherits_previous_design_template_without_breaking_shared_images(self):
+        teacher = {"email": "teacher@example.test"}
+        saved_names = iter(["shared-title.png", "shared-bg.png", "override-title.png"])
+        save = AsyncMock(side_effect=lambda image: next(saved_names))
+        delete = AsyncMock()
+        with patch("routes.constructor.save_image_upload", save), \
+                patch("routes.constructor.delete_image_file_async", delete):
+            async with self.client() as client:
+                first = (await client.post("/api/constructor/collections", params=teacher, json={"title": "Бірінші"})).json()
+                first_url = f"/api/constructor/collections/{first['id']}"
+                await client.put(first_url, params=teacher, json={"header_text": "Ернұр ағай", "pptx_font": "Calibri"})
+                await client.post(f"{first_url}/images/title", params=teacher, files={"image": ("t.png", PNG, "image/png")})
+                await client.post(f"{first_url}/images/background", params=teacher, files={"image": ("b.png", PNG, "image/png")})
+
+                second = (await client.post("/api/constructor/collections", params=teacher, json={"title": "Екінші"})).json()
+                self.assertEqual(second["header_text"], "Ернұр ағай")
+                self.assertEqual(second["pptx_font"], "Calibri")
+                self.assertEqual(second["title_image"], "shared-title.png")
+                self.assertEqual(second["background_image"], "shared-bg.png")
+
+                # Replacing title on second keeps shared-title.png intact for first.
+                await client.post(
+                    f"/api/constructor/collections/{second['id']}/images/title",
+                    params=teacher,
+                    files={"image": ("t2.png", PNG, "image/png")},
+                )
+                delete.assert_not_awaited()
+
+                # Deleting first deletes only shared-title.png, NOT shared-bg.png (still used by second).
+                await client.delete(first_url, params=teacher)
+                delete.assert_awaited_once_with("shared-title.png")

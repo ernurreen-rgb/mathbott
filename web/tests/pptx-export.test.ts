@@ -342,4 +342,30 @@ describe("PPTX deck", () => {
     expect(slide).toContain(">B:   </m:t>");
     expect(slide).toContain("□ A        □ B        □ C        □ D");
   });
+
+  it("omits answer slides when includeAnswers is false", () => {
+    const withAnswers = buildTaskDeckFiles({
+      title: "Жинақ",
+      author: "A",
+      language: "kk",
+      tasks: [task(1), task(2)],
+      includeAnswers: true,
+    }).files;
+    const withoutAnswers = buildTaskDeckFiles({
+      title: "Жинақ",
+      author: "A",
+      language: "kk",
+      tasks: [task(1), task(2)],
+      includeAnswers: false,
+    }).files;
+    const countSlides = (files: Map<string, string | Uint8Array>) =>
+      Array.from(files.keys()).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path)).length;
+    expect(countSlides(withAnswers)).toBe(4); // title + 2 tasks + answers
+    expect(countSlides(withoutAnswers)).toBe(3); // title + 2 tasks only
+    for (const [path, content] of withoutAnswers) {
+      if (path.startsWith("ppt/slides/slide") && typeof content === "string") {
+        expect(content).not.toContain("Жауаптар");
+      }
+    }
+  });
 });
