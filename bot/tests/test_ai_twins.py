@@ -84,6 +84,8 @@ class AiTwinTests(PostgresTestCase):
                          {("draft", "ai", "test-model")})
         source = await self.db.bank_tasks.get_task_by_id(self.source["id"])
         self.assertEqual((source["twin_count"], source["twin_draft_count"]), (0, 2))
+        self.assertIn("AI", source["sources"])
+        self.assertIn("AI", listed[0]["sources"])
 
         review = await self.db.module_review.get_review(self.student["id"], 1)
         self.assertEqual(review["current"]["kind"], "original")  # drafts are never served

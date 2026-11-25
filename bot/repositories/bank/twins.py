@@ -223,6 +223,8 @@ class BankTaskTwinsMixin:
                 raise BankTwinError("unchanged", "Егіз бастапқы есептен өзгеше болуы керек: сандарды және жауапты өзгертіңіз.")
 
             resolved_image = image_filename or (source.get("image_filename") if keep_source_image else None)
+            parent_sources = await fetch_sources_for_task_safe(self, db, source_task_id)
+            twin_sources = self._normalize_topics([*(parent_sources if sources is None else sources), "AI"])
             twin_id = await self._insert_bank_task(
                 db,
                 text=text,
@@ -233,7 +235,7 @@ class BankTaskTwinsMixin:
                 accepted_answers=accepted_answers,
                 text_scale=text_scale,
                 topics=topics,
-                sources=sources,
+                sources=twin_sources,
                 options=options,
                 subquestions=subquestions,
                 image_filename=resolved_image,
@@ -242,6 +244,9 @@ class BankTaskTwinsMixin:
                 source="admin_bank_twin_create" if origin == "manual" else "ai_twin_draft",
                 reason=f"Twin of bank task #{source_task_id}",
             )
+            ensure_source = getattr(self, "_ensure_task_source", None)
+            if callable(ensure_source):
+                await ensure_source(db, source_task_id, "AI")
             async with db.execute(
                 "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM bank_task_twins WHERE source_bank_task_id = ?",
                 (source_task_id,),

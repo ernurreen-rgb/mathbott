@@ -192,33 +192,40 @@ class BankTaskHelpersMixin:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-    async def _set_task_labels(self, db: db_driver.Connection, task_id: int, labels: List[str], kind: str) -> None:
+    async def _ensure_task_label(self, db: db_driver.Connection, task_id: int, label: str, kind: str) -> None:
         item_table, map_table, fk_col = _TAXONOMY_TABLES[kind]
-        await db.execute(f"DELETE FROM {map_table} WHERE bank_task_id = ?", (task_id,))
-        normalized_labels = self._normalize_topics(labels)
-        if not normalized_labels:
+        cleaned = self._normalize_topics([label])
+        if not cleaned:
             return
-        for label in normalized_labels:
-            name_norm = self._normalize_topic(label)
-            await db.execute(
-                f"INSERT INTO {item_table} (name, name_norm) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                (label, name_norm),
-            )
-            async with db.execute(
-                f"SELECT id FROM {item_table} WHERE name_norm = ?",
-                (name_norm,),
-            ) as label_cursor:
-                label_row = await label_cursor.fetchone()
-            if not label_row:
-                continue
-            label_id = label_row[0]
-            await db.execute(
-                f"INSERT INTO {map_table} (bank_task_id, {fk_col}) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                (task_id, label_id),
-            )
+        canonical = cleaned[0]
+        name_norm = self._normalize_topic(canonical)
+        await db.execute(
+            f"INSERT INTO {item_table} (name, name_norm) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            (canonical, name_norm),
+        )
+        async with db.execute(
+            f"SELECT id FROM {item_table} WHERE name_norm = ?",
+            (name_norm,),
+        ) as label_cursor:
+            label_row = await label_cursor.fetchone()
+        if not label_row:
+            return
+        await db.execute(
+            f"INSERT INTO {map_table} (bank_task_id, {fk_col}) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            (task_id, label_row[0]),
+        )
+
+    async def _set_task_labels(self, db: db_driver.Connection, task_id: int, labels: List[str], kind: str) -> None:
+        _, map_table, _ = _TAXONOMY_TABLES[kind]
+        await db.execute(f"DELETE FROM {map_table} WHERE bank_task_id = ?", (task_id,))
+        for label in self._normalize_topics(labels):
+            await self._ensure_task_label(db, task_id, label, kind)
 
     async def _set_task_topics(self, db: db_driver.Connection, task_id: int, topics: List[str]) -> None:
         await self._set_task_labels(db, task_id, topics, "topic")
 
     async def _set_task_sources(self, db: db_driver.Connection, task_id: int, sources: List[str]) -> None:
         await self._set_task_labels(db, task_id, sources, "source")
+
+    async def _ensure_task_source(self, db: db_driver.Connection, task_id: int, source: str) -> None:
+        await self._ensure_task_label(db, task_id, source, "source")
