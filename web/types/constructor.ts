@@ -10,6 +10,7 @@ export interface ConstructorTask {
   answer_mode: "choices" | "written";
   difficulty: "A" | "B" | "C";
   topics: string[];
+  sources?: string[];
   image_filename: string | null;
   options: { label: string; text: string }[];
   subquestions: { text: string; correct?: string }[];

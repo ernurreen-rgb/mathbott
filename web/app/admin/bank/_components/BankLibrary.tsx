@@ -42,8 +42,10 @@ export default function BankLibrary(props: Props) {
     if (name && name.length <= 64 && filters.topics.length < 20 && !filters.topics.some((t) => t.toLowerCase() === name.toLowerCase())) patch({ topics: [...filters.topics, name] });
     setTopicInput("");
   };
-  const allActive = tab === "active" && !filters.topics.length && filters.usage === "all" && !filters.hasTopics && filters.twins !== "only";
-  const title = tab === "trash" ? "Себет" : tab === "answers" ? "Оқушы жауаптары" : filters.twins === "only" ? "Егіз есептер" : filters.topics.length === 1 ? filters.topics[0] : filters.usage === "unused" ? "Қолданылмайтын есептер" : filters.hasTopics === "no" ? "Тақырыпсыз есептер" : "Барлық есептер";
+  const allActive = tab === "active" && !filters.topics.length && !filters.sources.length && filters.usage === "all" && !filters.hasTopics && !filters.hasSources && filters.twins !== "only";
+  const title = tab === "trash" ? "Себет" : tab === "answers" ? "Оқушы жауаптары" : filters.twins === "only" ? "Егіз есептер" : filters.sources.length === 1 && !filters.topics.length ? filters.sources[0] : filters.hasSources === "no" && !filters.topics.length ? "Дереккөзсіз есептер" : filters.topics.length === 1 ? filters.topics[0] : filters.usage === "unused" ? "Қолданылмайтын есептер" : filters.hasTopics === "no" ? "Тақырыпсыз есептер" : "Барлық есептер";
+  const sourceSelectValue = filters.hasSources === "no" ? "__none__" : filters.sources.length === 1 ? filters.sources[0] : filters.sources.length > 1 ? "__multi__" : "";
+  const sourceOptions = Array.from(new Set([...(catalog?.sources?.map((s) => s.name) || []), ...filters.sources]));
 
   return <>
     <header className={styles.header}>
@@ -72,6 +74,39 @@ export default function BankLibrary(props: Props) {
             <button type="button" className={styles.navItem} aria-pressed={tab === "active" && filters.hasTopics === "no"} onClick={() => activate({ hasTopics: "no" })}><span><Icon name="tag" /> Тақырыпсыз</span><span className={styles.count}>{catalog?.no_topics_total ?? "—"}</span></button>
             <button type="button" className={styles.navItem} aria-pressed={tab === "active" && filters.twins === "only"} onClick={() => activate({ twins: "only" })} title="Қателерді талдауда берілетін егіз есептер. Әдетте олар бастапқы есептің «Егіздер» бөлімінде көрінеді."><span><Icon name="copy" /> Егіз есептер</span><span className={styles.count}>{catalog?.twins_total ?? "—"}</span></button>
           </nav>
+          <nav aria-label="Есеп дереккөздері" className={styles.navGroup}>
+            <p className={styles.navLabel}>Дереккөздер</p>
+            {catalog?.sources?.map((source) => (
+              <button
+                key={source.id}
+                type="button"
+                className={styles.navItem}
+                aria-pressed={tab === "active" && filters.sources.length === 1 && filters.sources[0] === source.name && filters.hasSources !== "no"}
+                onClick={() => {
+                  const alreadyOnly = filters.sources.length === 1 && filters.sources[0] === source.name && !filters.hasSources;
+                  patch({ sources: alreadyOnly ? [] : [source.name], hasSources: "" });
+                  props.onTabChange("active");
+                  setSidebarOpen(false);
+                }}
+              >
+                <span>{source.name}</span>
+                <span className={styles.count}>{source.task_count}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={styles.navItem}
+              aria-pressed={tab === "active" && filters.hasSources === "no"}
+              onClick={() => {
+                patch({ hasSources: filters.hasSources === "no" ? "" : "no", sources: [] });
+                props.onTabChange("active");
+                setSidebarOpen(false);
+              }}
+            >
+              <span>Дереккөзсіз</span>
+              <span className={styles.count}>{catalog?.no_sources_total ?? "—"}</span>
+            </button>
+          </nav>
           <nav aria-label="Есеп тақырыптары" className={styles.navGroup}>
             <p className={styles.navLabel}>Тақырыптар</p>
             <input type="search" aria-label="Каталогтан тақырып іздеу" placeholder="Тақырып іздеу" value={props.topicSearch} onChange={(e) => props.onTopicSearchChange(e.target.value)} className={styles.topicSearch} />
@@ -96,6 +131,22 @@ export default function BankLibrary(props: Props) {
           </div>
           <div className={styles.filters}>
             <select className={styles.select} aria-label="Күрделілік бойынша сүзгі" value={filters.difficulty} onChange={(e) => patch({ difficulty: e.target.value as BankLibraryFilters["difficulty"] })}><option value="">Барлық күрделілік</option><option value="A">A · оңай</option><option value="B">B · орташа</option><option value="C">C · қиын</option></select>
+            <select
+              className={styles.select}
+              aria-label="Дереккөз бойынша сүзгі"
+              value={sourceSelectValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (!value) patch({ sources: [], hasSources: "" });
+                else if (value === "__none__") patch({ sources: [], hasSources: "no" });
+                else if (value !== "__multi__") patch({ sources: [value], hasSources: "" });
+              }}
+            >
+              <option value="">Барлық дереккөздер</option>
+              {filters.sources.length > 1 && <option value="__multi__">{filters.sources.length} дереккөз таңдалды</option>}
+              {sourceOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              <option value="__none__">Дереккөзсіз</option>
+            </select>
             <select className={styles.select} aria-label="Сұрақ түрі бойынша сүзгі" value={filters.questionType} onChange={(e) => patch({ questionType: e.target.value as BankLibraryFilters["questionType"] })}><option value="">Барлық сұрақ түрі</option>{["input", "tf", "mcq", "mcq6", "context", "select"].map((type) => <option key={type} value={type}>{questionTypeLabel(type)}</option>)}</select>
             <select className={styles.select} aria-label="Есептерді сұрыптау" value={filters.sort} onChange={(e) => patch({ sort: e.target.value as BankLibraryFilters["sort"] })}><option value="newest">Жаңалары алдымен</option><option value="updated">Соңғы өзгертілген</option><option value="oldest">Ескілері алдымен</option></select>
             <button type="button" className={styles.quiet} onClick={() => props.onFiltersChange(emptyLibraryFilters())}>Тазалау</button>
@@ -106,12 +157,12 @@ export default function BankLibrary(props: Props) {
             <label className={styles.field}>Сүзгіге тақырып қосу<input value={topicInput} placeholder="Тақырыпты жазып, Enter басыңыз" list="bank-catalog-topics" onChange={(e) => setTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTopic(); } }} maxLength={64} /><datalist id="bank-catalog-topics">{catalog?.topics.map((t) => <option key={t.id} value={t.name} />)}</datalist></label>
             <label className={styles.field}>Бірнеше тақырыпты сәйкестендіру<select className={styles.select} value={filters.topicMatch} onChange={(e) => patch({ topicMatch: e.target.value as "any" | "all" })}><option value="any">Кемінде бір тақырып сәйкес</option><option value="all">Барлық тақырып сәйкес</option></select></label>
           </div></details>
-          {filters.topics.length > 0 && <div className={styles.chips} aria-label="Таңдалған тақырыптар">{filters.topics.map((topic) => <button key={topic} type="button" className={styles.chip} onClick={() => patch({ topics: filters.topics.filter((t) => t !== topic) })}>{topic}<Icon name="close" /></button>)}</div>}
+          {(filters.topics.length > 0 || filters.sources.length > 0 || filters.hasSources === "no") && <div className={styles.chips} aria-label="Таңдалған сүзгілер">{filters.sources.map((source) => <button key={`src-${source}`} type="button" className={styles.chip} onClick={() => patch({ sources: filters.sources.filter((s) => s !== source) })}>{source}<Icon name="close" /></button>)}{filters.hasSources === "no" && <button key="no-src" type="button" className={styles.chip} onClick={() => patch({ hasSources: "" })}>Дереккөзсіз<Icon name="close" /></button>}{filters.topics.map((topic) => <button key={topic} type="button" className={styles.chip} onClick={() => patch({ topics: filters.topics.filter((t) => t !== topic) })}>{topic}<Icon name="close" /></button>)}</div>}
           <div className={styles.listHeading}><h2>{title}</h2><p role="status" aria-live="polite">{loading ? "Жүктелуде..." : `${total.toLocaleString("kk-KZ")} есеп`}</p></div>
           {tab === "trash" && <p className={styles.subtitle}>Себеттегі есептер 30 күннен кейін автоматты жойылады.</p>}
           <table className={styles.table} aria-label="Банктегі есептер" aria-busy={loading}>
             <thead><tr><th scope="col" className={styles.idColumn}>ID</th><th scope="col">Есеп</th><th scope="col" className={styles.levelColumn}>Деңгей</th><th scope="col" className={styles.typeColumn}>Түрі</th><th scope="col" className={styles.usageColumn}>{tab === "trash" ? "Әрекеттер" : "Қолданыста"}</th></tr></thead>
-            <tbody>{!loading && tasks.map((task) => <tr key={task.id} data-testid="bank-task-row"><td className={`${styles.idCell} ${styles.idColumn}`}>#{task.id}</td><td><button type="button" className={styles.taskTitle} aria-label={`Банк №${task.id} есебін ашу`} onClick={() => props.onOpen(task)}><span className={styles.taskExcerpt}>{task.text ? <MathRender latex={formatComparisonSummary(task.text)} /> : `Есеп #${task.id}`}</span></button><div className={styles.taskTopics}>{task.twin_source_id ? <span className={styles.twinBadge}>№{task.twin_source_id} {task.twin_status === "draft" ? "черновигі" : "егізі"}</span> : task.twin_count ? <span className={styles.twinBadge}>{task.twin_count} егіз</span> : null}{task.topics.slice(0, 3).map((topic) => <span key={topic}>{topic}</span>)}{task.topics.length > 3 && <span>+{task.topics.length - 3}</span>}</div><div className={styles.mobileMeta}>#{task.id} · {task.difficulty} · {questionTypeLabel(task.question_type)} · v{task.current_version ?? 1}</div></td><td className={styles.levelColumn}><span className={styles.level}>{task.difficulty}</span></td><td className={`${styles.metadataCell} ${styles.typeColumn}`}>{questionTypeLabel(task.question_type)}</td><td className={`${styles.metadataCell} ${styles.usageColumn}`}>{tab === "active" ? task.active_usage_count ?? 0 : <div className={styles.rowActions}><button type="button" className={styles.button} onClick={() => props.onRestore(task.id)}>Қалпына келтіру</button>{props.canDeletePermanently && <button type="button" className={styles.danger} onClick={() => props.onDeletePermanently(task.id)}>Жою</button>}</div>}</td></tr>)}</tbody>
+            <tbody>{!loading && tasks.map((task) => <tr key={task.id} data-testid="bank-task-row"><td className={`${styles.idCell} ${styles.idColumn}`}>#{task.id}</td><td><button type="button" className={styles.taskTitle} aria-label={`Банк №${task.id} есебін ашу`} onClick={() => props.onOpen(task)}><span className={styles.taskExcerpt}>{task.text ? <MathRender latex={formatComparisonSummary(task.text)} /> : `Есеп #${task.id}`}</span></button><div className={styles.taskTopics}>{task.twin_source_id ? <span className={styles.twinBadge}>№{task.twin_source_id} {task.twin_status === "draft" ? "черновигі" : "егізі"}</span> : task.twin_count ? <span className={styles.twinBadge}>{task.twin_count} егіз</span> : null}{(task.sources || []).map((source) => <span key={`src-${source}`} className={styles.sourceBadge}>{source}</span>)}{task.topics.slice(0, 3).map((topic) => <span key={topic}>{topic}</span>)}{task.topics.length > 3 && <span>+{task.topics.length - 3}</span>}</div><div className={styles.mobileMeta}>#{task.id} · {task.difficulty} · {questionTypeLabel(task.question_type)} · v{task.current_version ?? 1}</div></td><td className={styles.levelColumn}><span className={styles.level}>{task.difficulty}</span></td><td className={`${styles.metadataCell} ${styles.typeColumn}`}>{questionTypeLabel(task.question_type)}</td><td className={`${styles.metadataCell} ${styles.usageColumn}`}>{tab === "active" ? task.active_usage_count ?? 0 : <div className={styles.rowActions}><button type="button" className={styles.button} onClick={() => props.onRestore(task.id)}>Қалпына келтіру</button>{props.canDeletePermanently && <button type="button" className={styles.danger} onClick={() => props.onDeletePermanently(task.id)}>Жою</button>}</div>}</td></tr>)}</tbody>
           </table>
           {loading ? <div className={styles.loading}>Есептер жүктелуде...</div> : !tasks.length && <div className={styles.empty}>Сүзгілерге сәйкес есеп табылмады.<br /><button type="button" className={styles.quiet} onClick={() => props.onFiltersChange(emptyLibraryFilters())}>Сүзгілерді тазалау</button></div>}
           <div className={styles.pagination}><div className={styles.actions}><span>{total ? filters.offset + 1 : 0}–{Math.min(filters.offset + tasks.length, total)} / {total.toLocaleString("kk-KZ")}</span><select className={styles.select} aria-label="Бір беттегі есеп саны" value={filters.limit} onChange={(e) => patch({ limit: Number(e.target.value) })}>{[20, 50, 100].map((n) => <option key={n} value={n}>{n} есеп</option>)}</select></div><nav aria-label="Есептер беттері" className={styles.pages}><button type="button" className={styles.pageButton} aria-label="Алдыңғы бет" disabled={loading || filters.offset === 0} onClick={() => patch({ offset: Math.max(0, filters.offset - filters.limit) })}><Icon name="arrowLeft" /></button>{pagination.map((number, index) => <Fragment key={number}>{index > 0 && number - pagination[index - 1] > 1 && <span>…</span>}<button type="button" className={styles.pageButton} aria-current={number === page ? "page" : undefined} disabled={loading || number === page} onClick={() => patch({ offset: (number - 1) * filters.limit })}>{number}</button></Fragment>)}<button type="button" className={styles.pageButton} aria-label="Келесі бет" disabled={loading || filters.offset + filters.limit >= total} onClick={() => patch({ offset: filters.offset + filters.limit })}><Icon name="arrowRight" /></button></nav></div>

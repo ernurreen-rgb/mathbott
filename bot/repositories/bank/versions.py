@@ -272,7 +272,8 @@ class BankTaskVersionsMixin:
                 return None
 
             current_topics = await self._fetch_topics_for_task(db, task_id)
-            before_snapshot = self._build_snapshot(current_row, current_topics)
+            current_sources = await self._fetch_sources_for_task(db, task_id)
+            before_snapshot = self._build_snapshot(current_row, current_topics, current_sources)
 
             await db.execute(
                 """
@@ -310,12 +311,15 @@ class BankTaskVersionsMixin:
                 ),
             )
             await self._set_task_topics(db, task_id, self._normalize_topics(target_snapshot.get("topics") or []))
+            if "sources" in target_snapshot:
+                await self._set_task_sources(db, task_id, self._normalize_topics(target_snapshot.get("sources") or []))
 
             updated_row = await self._fetch_task_row(db, task_id)
             if not updated_row:
                 return None
             updated_topics = await self._fetch_topics_for_task(db, task_id)
-            after_snapshot = self._build_snapshot(updated_row, updated_topics)
+            updated_sources = await self._fetch_sources_for_task(db, task_id)
+            after_snapshot = self._build_snapshot(updated_row, updated_topics, updated_sources)
             changed_fields = self._changed_fields(before_snapshot, after_snapshot)
             new_current_version = previous_current_version
             if changed_fields:

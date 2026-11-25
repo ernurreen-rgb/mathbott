@@ -27,6 +27,8 @@ export interface ConstructorTaskQuery {
   difficulty?: "A" | "B" | "C";
   topics?: string[];
   excludeTopics?: string[];
+  sources?: string[];
+  hasSources?: boolean;
   topicMatch?: "any" | "all";
   questionType?: ConstructorQuestionType;
   limit?: number;
@@ -39,6 +41,8 @@ export function getConstructorTasks(query: ConstructorTaskQuery, email: string):
   if (query.difficulty) params.set("difficulty", query.difficulty);
   if (query.topics?.length) params.set("topics", query.topics.join(","));
   if (query.excludeTopics?.length) params.set("exclude_topics", query.excludeTopics.join(","));
+  if (query.sources?.length) params.set("sources", query.sources.join(","));
+  if (query.hasSources !== undefined) params.set("has_sources", String(query.hasSources));
   if (query.topicMatch && query.topicMatch !== "any") params.set("topic_match", query.topicMatch);
   if (query.questionType) params.set("question_type", query.questionType);
   params.set("limit", String(query.limit ?? 100));
@@ -52,6 +56,10 @@ export function getConstructorTaskTwins(taskId: number, email: string): Promise<
 
 export function getConstructorTopics(email: string): Promise<FetchResult<{ items: string[] }>> {
   return request<{ items: string[] }>(withEmail("constructor/topics", email));
+}
+
+export function getConstructorSources(email: string): Promise<FetchResult<{ items: string[] }>> {
+  return request<{ items: string[] }>(withEmail("constructor/sources", email));
 }
 
 const pendingCollectionUpdates = new Set<Promise<unknown>>();

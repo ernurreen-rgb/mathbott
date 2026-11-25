@@ -74,6 +74,8 @@ from .content_validation import (
     ImportTaskValidationError,
     _normalize_topic_name,
     _validate_bank_topics,
+    _validate_bank_sources,
+    _parse_bank_labels_json,
     _validate_bank_difficulty,
     _normalize_text_scale,
     _normalize_answer_mode_or_raise,

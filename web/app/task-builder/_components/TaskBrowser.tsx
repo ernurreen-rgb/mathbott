@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
-import { getConstructorTasks, getConstructorTaskTwins, getConstructorTopics } from "@/lib/api/constructor";
+import { getConstructorSources, getConstructorTasks, getConstructorTaskTwins, getConstructorTopics } from "@/lib/api/constructor";
 import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { toggleIncludedTopic } from "@/lib/topic-filter";
@@ -41,9 +41,11 @@ export default function TaskBrowser({
   const [search, setSearch] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [excludedTopics, setExcludedTopics] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string>("");
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
   const [items, setItems] = useState<ConstructorTask[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -115,8 +117,10 @@ export default function TaskBrowser({
 
   useEffect(() => {
     let active = true;
-    void getConstructorTopics(email).then((result) => {
-      if (active && result.data) setTopics(result.data.items);
+    void Promise.all([getConstructorTopics(email), getConstructorSources(email)]).then(([topicsRes, sourcesRes]) => {
+      if (!active) return;
+      if (topicsRes.data) setTopics(topicsRes.data.items);
+      if (sourcesRes.data) setSources(sourcesRes.data.items);
     });
     return () => {
       active = false;
@@ -128,11 +132,13 @@ export default function TaskBrowser({
       search: search || undefined,
       topics: selectedTopics.length > 0 ? selectedTopics : undefined,
       excludeTopics: excludedTopics.length > 0 ? excludedTopics : undefined,
+      sources: sourceFilter && sourceFilter !== "__none__" ? [sourceFilter] : undefined,
+      hasSources: sourceFilter === "__none__" ? false : undefined,
       topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, excludedTopics, difficulty, questionType],
+    [search, selectedTopics, excludedTopics, sourceFilter, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -175,7 +181,7 @@ export default function TaskBrowser({
             className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
           />
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <TopicCombobox
             topics={topics}
             included={selectedTopics}
@@ -185,6 +191,18 @@ export default function TaskBrowser({
               setExcludedTopics(excluded);
             }}
           />
+          <label className="block">
+            <span className="sr-only">{t("constructor.source")}</span>
+            <select
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value)}
+              className={selectClass}
+            >
+              <option value="">{t("constructor.allSources")}</option>
+              {sources.map((name) => <option key={name} value={name}>{name}</option>)}
+              <option value="__none__">{t("constructor.noSource")}</option>
+            </select>
+          </label>
           <label className="block">
             <span className="sr-only">{t("constructor.type")}</span>
             <select
@@ -295,6 +313,28 @@ export default function TaskBrowser({
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-mono">#{task.id}</span>
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{task.difficulty}</span>
+                {(task.sources || []).map((name) => {
+                  const active = sourceFilter === name;
+                  return (
+                    <button
+                      key={`src-${name}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSourceFilter((prev) => (prev === name ? "" : name));
+                      }}
+                      aria-pressed={active}
+                      aria-label={t("constructor.filterBySourceAria", { source: name })}
+                      className={`rounded-md border px-1.5 py-0.5 font-medium transition-colors ${
+                        active
+                          ? "border-amber-600 bg-amber-600 text-white hover:bg-amber-700"
+                          : "border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
                 {task.topics.map((name) => {
                   const active = selectedTopicSet.has(name);
                   return (

@@ -124,6 +124,8 @@
 .dialog .field { margin-bottom: 18px; }
 .loading { padding: 55px 20px; color: #7d8797; text-align: center; }
 .twinBadge { display: inline-block; padding: 0 6px; border-radius: 5px; background: #f1ebfc; color: #6a3fb8; font-weight: 600; }
+.sourceBadge { display: inline-block; padding: 0 6px; border-radius: 5px; background: #fef3c7; color: #92400e; font-weight: 600; }
+.taskTopics .sourceBadge + span:before, .taskTopics .twinBadge + span:before { content: ""; margin-right: 0; }
 .twinBanner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; padding: 12px 15px; border: 1px solid #e3d8f8; border-radius: 9px; background: #f7f3fe; color: #5b3a96; font-size: 13px; line-height: 1.6; }
 .twinIntro { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
 .twinIntro p { max-width: 620px; color: #697384; font-size: 13px; line-height: 1.7; }

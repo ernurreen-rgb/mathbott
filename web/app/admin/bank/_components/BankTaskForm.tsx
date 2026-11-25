@@ -35,6 +35,11 @@ type Props = {
   setFormTopicInput: Dispatch<SetStateAction<string>>;
   addFormTopic: (rawTopic: string) => void;
   formTopicSuggestions: string[];
+  removeFormSource?: (source: string) => void;
+  formSourceInput?: string;
+  setFormSourceInput?: Dispatch<SetStateAction<string>>;
+  addFormSource?: (rawSource: string) => void;
+  formSourceSuggestions?: string[];
   formPreviewTask: { id: number; text: string; answer?: string; accepted_answers?: string[] | null; question_type: QuestionType; answer_mode?: AnswerMode | null; correct_count?: number | null; text_scale?: TaskTextScale | null; options?: LessonTaskOption[] | null; subquestions?: LessonTaskSubquestion[] | null; image_filename?: string | null; solution_filename?: string | null; bank_task_id?: number | null; bank_difficulty?: BankDifficulty | null; bank_topics?: string[]; sort_order: number; status?: "not_started" | "in_progress" | "completed"; };
   formImagePreview: string | null;
   saving: boolean;
@@ -48,6 +53,72 @@ type Props = {
   lockQuestionType?: boolean;
 };
 
+type LabelListFieldProps = {
+  label: string;
+  placeholder: string;
+  addAriaLabel: string;
+  pillClassName: string;
+  items: string[];
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onAdd: (rawValue: string) => void;
+  onRemove: (value: string) => void;
+  suggestions: string[];
+};
+
+function LabelListField({
+  label,
+  placeholder,
+  addAriaLabel,
+  pillClassName,
+  items,
+  inputValue,
+  onInputChange,
+  onAdd,
+  onRemove,
+  suggestions,
+}: LabelListFieldProps) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {items.map((item) => (
+          <button key={item} type="button" onClick={() => onRemove(item)} className={pillClassName}>
+            {item} <Icon name="close" />
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onAdd(inputValue);
+            }
+          }}
+          placeholder={placeholder}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+        />
+        <button aria-label={addAriaLabel} type="button" onClick={() => onAdd(inputValue)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3">
+          <Icon name="plus" />
+        </button>
+      </div>
+      {suggestions.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {suggestions.map((item) => (
+            <button key={item} type="button" onClick={() => onAdd(item)} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
+              {item}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BankTaskForm({
   tab,
   showForm,
@@ -60,6 +131,11 @@ export default function BankTaskForm({
   setFormTopicInput,
   addFormTopic,
   formTopicSuggestions,
+  removeFormSource,
+  formSourceInput = "",
+  setFormSourceInput,
+  addFormSource,
+  formSourceSuggestions = [],
   formPreviewTask,
   formImagePreview,
   saving,
@@ -174,41 +250,32 @@ export default function BankTaskForm({
                 </div>
               </div>
             )}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Тақырыптар</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {form.topics.map((topic) => (
-                  <button key={topic} type="button" onClick={() => removeFormTopic(topic)} className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                    {topic} <Icon name="close" />
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={formTopicInput}
-                  onChange={(e) => setFormTopicInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addFormTopic(formTopicInput);
-                    }
-                  }}
-                  placeholder="Тақырып қосу"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                />
-                <button aria-label="Тақырып қосу" type="button" onClick={() => addFormTopic(formTopicInput)} className="bg-gray-200 hover:bg-gray-300 rounded-lg px-3"><Icon name="plus" /></button>
-              </div>
-              {formTopicSuggestions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {formTopicSuggestions.map((topic) => (
-                    <button key={topic} type="button" onClick={() => addFormTopic(topic)} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
-                      {topic}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LabelListField
+              label="Тақырыптар"
+              placeholder="Тақырып қосу"
+              addAriaLabel="Тақырып қосу"
+              pillClassName="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded"
+              items={form.topics}
+              inputValue={formTopicInput}
+              onInputChange={setFormTopicInput}
+              onAdd={addFormTopic}
+              onRemove={removeFormTopic}
+              suggestions={formTopicSuggestions}
+            />
+            {addFormSource && removeFormSource && setFormSourceInput && (
+              <LabelListField
+                label="Дереккөздер (источник)"
+                placeholder="Дереккөз қосу (мыс. Рустюмова, ҰБТ есебі)"
+                addAriaLabel="Дереккөз қосу"
+                pillClassName="text-sm bg-amber-100 text-amber-800 px-2 py-1 rounded"
+                items={form.sources}
+                inputValue={formSourceInput}
+                onInputChange={setFormSourceInput}
+                onAdd={addFormSource}
+                onRemove={removeFormSource}
+                suggestions={formSourceSuggestions}
+              />
+            )}
 
             {form.question_type === "input" && (
               <div>

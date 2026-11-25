@@ -14,6 +14,9 @@ def _serialize_bank_task_for_import_export(task: dict) -> Dict[str, Any]:
     topics = task.get("topics")
     topics_value = topics if isinstance(topics, list) else []
 
+    sources = task.get("sources")
+    sources_value = sources if isinstance(sources, list) else []
+
     options = _parse_json_safe(task.get("options"))
     options_value = options if isinstance(options, list) else None
 
@@ -47,6 +50,7 @@ def _serialize_bank_task_for_import_export(task: dict) -> Dict[str, Any]:
         "text_scale": text_scale,
         "difficulty": difficulty,
         "topics": topics_value,
+        "sources": sources_value,
         "options": options_value,
         "subquestions": subquestions_value,
         "image_filename": image_filename,

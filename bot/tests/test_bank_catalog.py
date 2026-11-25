@@ -137,6 +137,75 @@ class BankCatalogTests(PostgresTestCase):
             self.assertFalse(updated["subquestions"])
             self.assertEqual(updated["current_version"], task["current_version"] + 1)
 
+    async def test_sources_filter_catalog_crud_and_constructor_routes(self):
+        from routes.constructor import setup_constructor_routes
+
+        t1 = await self.db.bank_tasks.create_task(
+            text="Rustyumova geometry source test", answer="5", question_type="input", difficulty="B",
+            topics=["Геометрия", "Планиметрия"], sources=["Рустюмова", "ҰБТ есебі"],
+        )
+        t2 = await self.db.bank_tasks.create_task(
+            text="Custom new source test", answer="7", question_type="input", difficulty="A",
+            topics=["Алгебра"], sources=["Шың"],
+        )
+        self.assertEqual(t1["sources"], ["Рустюмова", "ҰБТ есебі"])
+        self.assertEqual(t2["sources"], ["Шың"])
+
+        catalog = await self.db.bank_tasks.get_catalog()
+        src_counts = {s["name"]: s["task_count"] for s in catalog["sources"]}
+        self.assertEqual(src_counts, {"Рустюмова": 1, "ҰБТ есебі": 1, "Шың": 1})
+        self.assertEqual(catalog["no_sources_total"], 9990)
+
+        only_rust = await self.db.bank_tasks.list_tasks(sources=["Рустюмова"])
+        self.assertEqual([item["id"] for item in only_rust["items"]], [t1["id"]])
+        no_src = await self.db.bank_tasks.list_tasks(has_sources=False, limit=10)
+        self.assertEqual(no_src["total"], 9990)
+
+        app = FastAPI()
+        app.state.db = self.db
+        limiter = Limiter(key_func=get_remote_address)
+        register_bank_routes(app, self.db, limiter)
+        setup_constructor_routes(app, self.db, limiter)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://bank.test") as client:
+            admin_params = {"email": "bank-admin@example.test"}
+            src_res = await client.get("/api/admin/bank/sources", params=admin_params)
+            self.assertEqual(src_res.status_code, 200)
+            self.assertEqual(set(src_res.json()["items"]), {"Рустюмова", "ҰБТ есебі", "Шың"})
+
+            c_src = await client.get("/api/constructor/sources", params={"email": "student@example.test"})
+            self.assertEqual(c_src.status_code, 200)
+            self.assertEqual(set(c_src.json()["items"]), {"Рустюмова", "ҰБТ есебі", "Шың"})
+
+            c_filtered = await client.get("/api/constructor/tasks", params={"email": "student@example.test", "sources": "Шың"})
+            self.assertEqual(c_filtered.status_code, 200)
+            self.assertEqual([item["id"] for item in c_filtered.json()["items"]], [t2["id"]])
+            self.assertEqual(c_filtered.json()["items"][0]["sources"], ["Шың"])
+
+            c_none = await client.get("/api/constructor/tasks", params={"email": "student@example.test", "has_sources": "false", "limit": 5})
+            self.assertEqual(c_none.status_code, 200)
+            self.assertEqual(c_none.json()["total"], 9990)
+
+            created = await client.post("/api/admin/bank/tasks", data={
+                "email": "bank-admin@example.test",
+                "text": "Admin form created with source",
+                "answer": "12",
+                "question_type": "input",
+                "difficulty": "A",
+                "topics": '["Алгебра"]',
+                "sources": '["ҰБТ есебі"]',
+            })
+            self.assertEqual(created.status_code, 200, created.text)
+            self.assertEqual(created.json()["sources"], ["ҰБТ есебі"])
+
+            updated = await client.put(f"/api/admin/bank/tasks/{created.json()['id']}", data={
+                "email": "bank-admin@example.test",
+                "sources": '["Рустюмова", "ҰБТ есебі"]',
+                "expected_current_version": str(created.json()["current_version"]),
+                "dedup_confirmed": "true",
+            })
+            self.assertEqual(updated.status_code, 200, updated.text)
+            self.assertEqual(updated.json()["sources"], ["Рустюмова", "ҰБТ есебі"])
+
 
 if __name__ == "__main__":
     unittest.main()

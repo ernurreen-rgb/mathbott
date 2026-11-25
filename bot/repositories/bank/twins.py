@@ -6,6 +6,7 @@ import json
 import storage as db_driver
 
 from utils.validation import normalize_task_answer_for_compare
+from .helpers import fetch_sources_for_task_safe, fetch_sources_map_safe, with_snapshot_sources
 
 # Twins live in the bank but stay out of the library, pickers and quality reports.
 NOT_TWIN_SQL = "NOT EXISTS (SELECT 1 FROM bank_task_twins tw WHERE tw.twin_bank_task_id = bt.id)"
@@ -104,9 +105,12 @@ class BankTaskTwinsMixin:
                 rows = await cursor.fetchall()
             task_ids = [int(row["id"]) for row in rows]
             topics_map = await self._fetch_topics_map(db, task_ids)
+            sources_map = await fetch_sources_map_safe(self, db, task_ids)
             items: List[Dict[str, Any]] = []
             for row in rows:
-                item = self._serialize_task_row(row, topics_map.get(int(row["id"]), []))
+                task_id = int(row["id"])
+                item = self._serialize_task_row(row, topics_map.get(task_id, []))
+                item["sources"] = sources_map.get(task_id, [])
                 for key in ("check_status", "check_answer", "checked_version"):
                     item.pop(key, None)
                 item["current_version"] = int(item.get("current_version") or 1)
@@ -185,6 +189,7 @@ class BankTaskTwinsMixin:
         text_scale: str,
         difficulty: str,
         topics: List[str],
+        sources: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]],
         subquestions: Optional[List[Dict[str, Any]]],
         image_filename: Optional[str],
@@ -228,6 +233,7 @@ class BankTaskTwinsMixin:
                 accepted_answers=accepted_answers,
                 text_scale=text_scale,
                 topics=topics,
+                sources=sources,
                 options=options,
                 subquestions=subquestions,
                 image_filename=resolved_image,
@@ -312,7 +318,8 @@ class BankTaskTwinsMixin:
             if not updated:
                 continue
             updated_topics = await self._fetch_topics_for_task(db, twin_id)
-            updated_snapshot = self._build_snapshot(updated, updated_topics)
+            updated_sources = await fetch_sources_for_task_safe(self, db, twin_id)
+            updated_snapshot = with_snapshot_sources(self._build_snapshot(updated, updated_topics), updated_sources)
             await self._record_version_event(
                 db,
                 task_id=twin_id,

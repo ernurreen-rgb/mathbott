@@ -12,6 +12,7 @@ from utils.validation import (
     normalize_answer_mode,
     normalize_task_answer_for_compare,
 )
+from .helpers import fetch_sources_for_task_safe, with_snapshot_sources
 from .versions import BankTaskVersionConflictError
 
 # Pre-filter written-answer tasks in SQL BEFORE LIMIT so MCQ/TF attempts
@@ -314,7 +315,9 @@ class BankTaskUnrecognizedAnswersMixin:
                 return None, False
 
             existing_topics = await self._fetch_topics_for_task(db, task_id)
+            existing_sources = await fetch_sources_for_task_safe(self, db, task_id)
             serialized = self._serialize_task_row(existing, existing_topics)
+            serialized["sources"] = existing_sources
             current_version = int(existing.get("current_version") or 1)
             if expected_current_version is not None and current_version != int(expected_current_version):
                 raise BankTaskVersionConflictError(
@@ -344,7 +347,8 @@ class BankTaskUnrecognizedAnswersMixin:
             if not updated_row:
                 return None, False
             updated_topics = await self._fetch_topics_for_task(db, task_id)
-            after_snapshot = self._build_snapshot(updated_row, updated_topics)
+            updated_sources = await fetch_sources_for_task_safe(self, db, task_id)
+            after_snapshot = with_snapshot_sources(self._build_snapshot(updated_row, updated_topics), updated_sources)
             await self._record_version_event(
                 db,
                 task_id=task_id,

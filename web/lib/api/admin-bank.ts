@@ -82,12 +82,14 @@ export async function getAdminBankTasks(
     search?: string;
     difficulty?: BankDifficulty | "";
     topics?: string[];
+    sources?: string[];
     limit?: number;
     offset?: number;
     trash?: boolean;
     questionType?: QuestionType | "";
     usage?: BankTaskUsageFilter;
     hasTopics?: boolean;
+    hasSources?: boolean;
     topicMatch?: "any" | "all";
     sort?: BankTaskSort;
     twins?: BankTwinsFilter;
@@ -96,6 +98,7 @@ export async function getAdminBankTasks(
   const search = params?.search?.trim();
   const difficulty = params?.difficulty?.trim();
   const topics = params?.topics || [];
+  const sources = params?.sources || [];
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
   const trash = params?.trash ?? false;
@@ -108,9 +111,11 @@ export async function getAdminBankTasks(
   if (search) query.set("search", search);
   if (difficulty) query.set("difficulty", difficulty);
   if (topics.length > 0) query.set("topics", topics.join(","));
+  if (sources.length > 0) query.set("sources", sources.join(","));
   if (params?.questionType) query.set("question_type", params.questionType);
   if (params?.usage && params.usage !== "all") query.set("usage", params.usage);
   if (params?.hasTopics !== undefined) query.set("has_topics", String(params.hasTopics));
+  if (params?.hasSources !== undefined) query.set("has_sources", String(params.hasSources));
   if (params?.topicMatch) query.set("topic_match", params.topicMatch);
   if (params?.sort) query.set("sort", params.sort);
   if (params?.twins && params.twins !== "exclude" && !trash) query.set("twins", params.twins);
@@ -516,7 +521,8 @@ export async function permanentlyDeleteAdminBankTask(
 }
 
 
-export async function getAdminBankTopics(
+async function getAdminBankTaxonomy(
+  kind: "topics" | "sources",
   email: string,
   q?: string,
   limit?: number
@@ -526,8 +532,16 @@ export async function getAdminBankTopics(
   if (typeof limit === "number") query.set("limit", String(limit));
   if (q && q.trim()) query.set("q", q.trim());
   return fetchWithErrorHandling<{ items: string[] }>(
-    `${apiPath("admin/bank/topics")}?${query.toString()}`
+    `${apiPath(`admin/bank/${kind}`)}?${query.toString()}`
   );
+}
+
+export function getAdminBankTopics(email: string, q?: string, limit?: number) {
+  return getAdminBankTaxonomy("topics", email, q, limit);
+}
+
+export function getAdminBankSources(email: string, q?: string, limit?: number) {
+  return getAdminBankTaxonomy("sources", email, q, limit);
 }
 
 

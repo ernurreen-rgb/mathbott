@@ -6,6 +6,7 @@ import json
 import storage as db_driver
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
+from .helpers import _TAXONOMY_TABLES, fetch_sources_for_task_safe, fetch_sources_map_safe, with_snapshot_sources
 from .twins import IS_TWIN_SQL, NOT_DRAFT_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
@@ -18,11 +19,13 @@ class BankTaskCrudMixin:
         difficulty: Optional[str] = None,
         topics: Optional[List[str]] = None,
         exclude_topics: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
         limit: int = 20,
         offset: int = 0,
         question_type: Optional[str] = None,
         usage: str = "all",
         has_topics: Optional[bool] = None,
+        has_sources: Optional[bool] = None,
         topic_match: str = "any",
         sort: str = "newest",
         twins: str = "exclude",
@@ -64,6 +67,24 @@ class BankTaskCrudMixin:
             if has_topics is not None:
                 topic_clause = "EXISTS (SELECT 1 FROM bank_task_topic_map m WHERE m.bank_task_id = bt.id)"
                 where.append(topic_clause if has_topics else f"NOT {topic_clause}")
+
+            if has_sources is not None:
+                source_clause = "EXISTS (SELECT 1 FROM bank_task_source_map sm WHERE sm.bank_task_id = bt.id)"
+                where.append(source_clause if has_sources else f"NOT {source_clause}")
+
+            normalized_sources = [self._normalize_topic(s) for s in self._normalize_topics(sources)]
+            if normalized_sources:
+                placeholders = ",".join(["?"] * len(normalized_sources))
+                where.append(f"""
+                EXISTS (
+                    SELECT 1
+                    FROM bank_task_source_map sm
+                    JOIN bank_sources s ON s.id = sm.source_id
+                    WHERE sm.bank_task_id = bt.id
+                      AND s.name_norm IN ({placeholders})
+                )
+                """)
+                params.extend(normalized_sources)
 
             normalized_topics = [self._normalize_topic(t) for t in self._normalize_topics(topics)]
             if normalized_topics:
@@ -129,12 +150,15 @@ class BankTaskCrudMixin:
 
             task_ids = [int(row["id"]) for row in rows]
             topics_map = await self._fetch_topics_map(db, task_ids)
+            sources_map = await fetch_sources_map_safe(self, db, task_ids)
             usage_counts = await self._fetch_active_usage_counts(db, task_ids)
 
             items: List[Dict[str, Any]] = []
             for row in rows:
-                item = self._serialize_task_row(row, topics_map.get(int(row["id"]), []))
-                item["active_usage_count"] = usage_counts.get(int(row["id"]), 0)
+                task_id = int(row["id"])
+                item = self._serialize_task_row(row, topics_map.get(task_id, []))
+                item["sources"] = sources_map.get(task_id, [])
+                item["active_usage_count"] = usage_counts.get(task_id, 0)
                 item["current_version"] = int(item.get("current_version") or 1)
                 items.append(item)
             await self._attach_twin_info(db, items)
@@ -172,10 +196,13 @@ class BankTaskCrudMixin:
 
             task_ids = [int(row["id"]) for row in rows]
             topics_map = await self._fetch_topics_map(db, task_ids)
+            sources_map = await fetch_sources_map_safe(self, db, task_ids)
 
             items: List[Dict[str, Any]] = []
             for row in rows:
-                item = self._serialize_task_row(row, topics_map.get(int(row["id"]), []))
+                task_id = int(row["id"])
+                item = self._serialize_task_row(row, topics_map.get(task_id, []))
+                item["sources"] = sources_map.get(task_id, [])
                 item["current_version"] = int(item.get("current_version") or 1)
                 items.append(item)
 
@@ -188,6 +215,7 @@ class BankTaskCrudMixin:
         async with self._connection() as db:
             db.row_factory = db_driver.Row
             topics_map = await self._fetch_topics_map(db, unique_ids)
+            sources_map = await fetch_sources_map_safe(self, db, unique_ids)
             result: Dict[int, Dict[str, Any]] = {}
             chunk_size = 500
             for start in range(0, len(unique_ids), chunk_size):
@@ -202,6 +230,7 @@ class BankTaskCrudMixin:
                         result[tid] = {
                             "difficulty": row["difficulty"],
                             "topics": topics_map.get(tid, []),
+                            "sources": sources_map.get(tid, []),
                         }
             return result
 
@@ -239,7 +268,13 @@ class BankTaskCrudMixin:
                         rows_by_id[int(row["id"])] = row
             present_ids = [tid for tid in ordered_ids if tid in rows_by_id]
             topics_map = await self._fetch_topics_map(db, present_ids)
-            return [self._serialize_task_row(rows_by_id[tid], topics_map.get(tid, [])) for tid in present_ids]
+            sources_map = await fetch_sources_map_safe(self, db, present_ids)
+            items = []
+            for tid in present_ids:
+                item = self._serialize_task_row(rows_by_id[tid], topics_map.get(tid, []))
+                item["sources"] = sources_map.get(tid, [])
+                items.append(item)
+            return items
 
     async def get_task_by_id(self, task_id: int, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         async with self._connection() as db:
@@ -254,8 +289,10 @@ class BankTaskCrudMixin:
                     return None
 
             topics_map = await self._fetch_topics_map(db, [task_id])
+            sources_map = await fetch_sources_map_safe(self, db, [task_id])
             usage_counts = await self._fetch_active_usage_counts(db, [task_id])
             item = self._serialize_task_row(row, topics_map.get(task_id, []))
+            item["sources"] = sources_map.get(task_id, [])
             item["active_usage_count"] = usage_counts.get(task_id, 0)
             item["current_version"] = int(item.get("current_version") or 1)
             await self._attach_twin_info(db, [item])
@@ -271,6 +308,7 @@ class BankTaskCrudMixin:
         accepted_answers: Optional[List[str]] = None,
         text_scale: str = "md",
         topics: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]] = None,
         subquestions: Optional[List[Dict[str, Any]]] = None,
         image_filename: Optional[str] = None,
@@ -291,6 +329,7 @@ class BankTaskCrudMixin:
                 accepted_answers=accepted_answers,
                 text_scale=text_scale,
                 topics=topics,
+                sources=sources,
                 options=options,
                 subquestions=subquestions,
                 image_filename=image_filename,
@@ -315,6 +354,7 @@ class BankTaskCrudMixin:
         accepted_answers: Optional[List[str]] = None,
         text_scale: str = "md",
         topics: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]] = None,
         subquestions: Optional[List[Dict[str, Any]]] = None,
         image_filename: Optional[str] = None,
@@ -348,11 +388,13 @@ class BankTaskCrudMixin:
         )
         task_id = int(cursor.lastrowid)
         await self._set_task_topics(db, task_id, topics or [])
+        await self._set_task_sources(db, task_id, sources or [])
 
         row = await self._fetch_task_row(db, task_id)
         if row:
             topic_list = await self._fetch_topics_for_task(db, task_id)
-            snapshot = self._build_snapshot(row, topic_list)
+            source_list = await fetch_sources_for_task_safe(self, db, task_id)
+            snapshot = with_snapshot_sources(self._build_snapshot(row, topic_list), source_list)
             await self._record_version_event(
                 db,
                 task_id=task_id,
@@ -400,6 +442,7 @@ class BankTaskCrudMixin:
                     accepted_answers=payload.get("accepted_answers"),
                     text_scale=payload.get("text_scale") or "md",
                     topics=payload.get("topics") or [],
+                    sources=payload.get("sources") or [],
                     options=payload.get("options"),
                     subquestions=payload.get("subquestions"),
                     image_filename=payload.get("image_filename"),
@@ -445,6 +488,7 @@ class BankTaskCrudMixin:
         text_scale: Optional[str] = None,
         difficulty: Optional[str] = None,
         topics: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]] = None,
         subquestions: Optional[List[Dict[str, Any]]] = None,
         image_filename: Optional[str] = None,
@@ -465,7 +509,8 @@ class BankTaskCrudMixin:
             raise BankTaskVersionConflictError(f"VERSION_CONFLICT:{current_version}")
 
         existing_topics = await self._fetch_topics_for_task(db, task_id)
-        before_snapshot = self._build_snapshot(existing, existing_topics)
+        existing_sources = await fetch_sources_for_task_safe(self, db, task_id)
+        before_snapshot = with_snapshot_sources(self._build_snapshot(existing, existing_topics), existing_sources)
 
         next_text = existing.get("text") if text is None else text
         next_answer = existing.get("answer") if answer is None else answer
@@ -494,6 +539,7 @@ class BankTaskCrudMixin:
             existing.get("solution_filename") if solution_filename is None else solution_filename
         )
         next_topics = existing_topics if topics is None else self._normalize_topics(topics)
+        next_sources = existing_sources if sources is None else self._normalize_topics(sources)
 
         after_snapshot_candidate = {
             "text": next_text or "",
@@ -506,13 +552,16 @@ class BankTaskCrudMixin:
             "subquestions": self._parse_json_field(next_subquestions_raw),
             "difficulty": next_difficulty or "B",
             "topics": next_topics,
+            "sources": next_sources,
             "image_filename": next_image_filename,
             "solution_filename": next_solution_filename,
         }
 
         changed_fields = self._changed_fields(before_snapshot, after_snapshot_candidate)
         if not changed_fields:
-            return self._serialize_task_row(existing, existing_topics)
+            res = self._serialize_task_row(existing, existing_topics)
+            res["sources"] = existing_sources
+            return res
 
         updates: List[str] = []
         params: List[Any] = []
@@ -560,13 +609,16 @@ class BankTaskCrudMixin:
 
         if topics is not None:
             await self._set_task_topics(db, task_id, next_topics)
+        if sources is not None:
+            await self._set_task_sources(db, task_id, next_sources)
 
         updated_row = await self._fetch_task_row(db, task_id)
         if not updated_row:
             return None
 
         updated_topics = await self._fetch_topics_for_task(db, task_id)
-        after_snapshot = self._build_snapshot(updated_row, updated_topics)
+        updated_sources = await fetch_sources_for_task_safe(self, db, task_id)
+        after_snapshot = with_snapshot_sources(self._build_snapshot(updated_row, updated_topics), updated_sources)
         await self._record_version_event(
             db,
             task_id=task_id,
@@ -578,7 +630,9 @@ class BankTaskCrudMixin:
             reason=reason,
             initial=False,
         )
-        return self._serialize_task_row(updated_row, updated_topics)
+        res = self._serialize_task_row(updated_row, updated_topics)
+        res["sources"] = updated_sources
+        return res
 
     async def update_task(
         self,
@@ -591,6 +645,7 @@ class BankTaskCrudMixin:
         text_scale: Optional[str] = None,
         difficulty: Optional[str] = None,
         topics: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
         options: Optional[List[Dict[str, Any]]] = None,
         subquestions: Optional[List[Dict[str, Any]]] = None,
         image_filename: Optional[str] = None,
@@ -612,6 +667,7 @@ class BankTaskCrudMixin:
                 text_scale=text_scale,
                 difficulty=difficulty,
                 topics=topics,
+                sources=sources,
                 options=options,
                 subquestions=subquestions,
                 image_filename=image_filename,
@@ -650,7 +706,8 @@ class BankTaskCrudMixin:
             updated = await self._fetch_task_row(db, task_id)
             if updated:
                 updated_topics = await self._fetch_topics_for_task(db, task_id)
-                updated_snapshot = self._build_snapshot(updated, updated_topics)
+                updated_sources = await fetch_sources_for_task_safe(self, db, task_id)
+                updated_snapshot = with_snapshot_sources(self._build_snapshot(updated, updated_topics), updated_sources)
                 await self._record_version_event(
                     db,
                     task_id=task_id,
@@ -688,7 +745,8 @@ class BankTaskCrudMixin:
             updated = await self._fetch_task_row(db, task_id)
             if updated:
                 updated_topics = await self._fetch_topics_for_task(db, task_id)
-                updated_snapshot = self._build_snapshot(updated, updated_topics)
+                updated_sources = await fetch_sources_for_task_safe(self, db, task_id)
+                updated_snapshot = with_snapshot_sources(self._build_snapshot(updated, updated_topics), updated_sources)
                 await self._record_version_event(
                     db,
                     task_id=task_id,
@@ -792,6 +850,15 @@ class BankTaskCrudMixin:
                     )
                     """
                 )
+                await db.execute(
+                    """
+                    DELETE FROM bank_sources
+                    WHERE id NOT IN (
+                        SELECT DISTINCT source_id
+                        FROM bank_task_source_map
+                    )
+                    """
+                )
         except _HardDeleteAborted:
             return False
         return True
@@ -873,18 +940,34 @@ class BankTaskCrudMixin:
                 )
                 """
             )
+            await db.execute(
+                """
+                DELETE FROM bank_sources
+                WHERE id NOT IN (
+                    SELECT DISTINCT source_id
+                    FROM bank_task_source_map
+                )
+                """
+            )
 
         return deleted_count
 
-    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
+    async def _list_taxonomy(
+        self,
+        kind: str,
+        *,
+        query: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[str]:
+        item_table, map_table, fk_col = _TAXONOMY_TABLES[kind]
         async with self._connection() as db:
             normalized_query = self._normalize_topic(query or "")
             limit_clause = "\n                    LIMIT ?" if limit is not None else ""
             active_clause = f"""EXISTS (
                         SELECT 1
-                        FROM bank_task_topic_map m
+                        FROM {map_table} m
                         JOIN bank_tasks bt ON bt.id = m.bank_task_id
-                        WHERE m.topic_id = t.id
+                        WHERE m.{fk_col} = t.id
                           AND bt.deleted_at IS NULL
                           AND {NOT_TWIN_SQL}
                     )"""
@@ -892,7 +975,7 @@ class BankTaskCrudMixin:
                 like_value = self._contains_like_pattern(normalized_query)
                 sql = f"""
                     SELECT t.name
-                    FROM bank_topics t
+                    FROM {item_table} t
                     WHERE t.name_norm LIKE ? ESCAPE '\\'
                       AND {active_clause}
                     ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
@@ -901,7 +984,7 @@ class BankTaskCrudMixin:
             else:
                 sql = f"""
                     SELECT t.name
-                    FROM bank_topics t
+                    FROM {item_table} t
                     WHERE {active_clause}
                     ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
                 """
@@ -911,6 +994,12 @@ class BankTaskCrudMixin:
             async with db.execute(sql, params) as cursor:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
+
+    async def list_topics(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
+        return await self._list_taxonomy("topic", query=query, limit=limit)
+
+    async def list_sources(self, query: Optional[str] = None, limit: Optional[int] = None) -> List[str]:
+        return await self._list_taxonomy("source", query=query, limit=limit)
 
     async def get_task_usage(self, task_id: int, include_deleted: bool = False) -> Dict[str, Any]:
         async with self._connection() as db:

@@ -108,6 +108,7 @@ def _public_task(task: Dict[str, Any], *, with_answers: bool = False) -> Dict[st
         "answer_mode": task.get("answer_mode") or "choices",
         "difficulty": task.get("difficulty") or "B",
         "topics": list(task.get("topics") or []),
+        "sources": list(task.get("sources") or []),
         "image_filename": task.get("image_filename") or None,
         "options": options,
         "subquestions": subquestions,
@@ -158,6 +159,8 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         difficulty: Optional[Literal["A", "B", "C"]] = Query(None),
         topics: Optional[str] = Query(None, max_length=20000, description="Comma-separated topics"),
         exclude_topics: Optional[str] = Query(None, max_length=20000, description="Comma-separated excluded topics"),
+        sources: Optional[str] = Query(None, max_length=20000, description="Comma-separated sources"),
+        has_sources: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         question_type: Optional[QUESTION_TYPES] = Query(None),
         limit: int = Query(100, ge=1, le=100),
@@ -165,15 +168,18 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         topic_names = [name.strip() for name in (topics or "").split(",") if name.strip()]
         excluded_topic_names = [name.strip() for name in (exclude_topics or "").split(",") if name.strip()]
+        source_names = [name.strip() for name in (sources or "").split(",") if name.strip()]
         result = await db.bank_tasks.list_tasks(
             include_deleted=False,
             search=search,
             difficulty=difficulty,
             topics=topic_names,
             exclude_topics=excluded_topic_names,
+            sources=source_names,
             limit=limit,
             offset=offset,
             question_type=question_type,
+            has_sources=has_sources,
             topic_match=topic_match,
             sort="newest",
             twins="exclude",
@@ -209,6 +215,16 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         q: Optional[str] = Query(None, max_length=80),
     ):
         return {"items": await db.bank_tasks.list_topics(query=q, limit=None)}
+
+    @app.get("/api/constructor/sources")
+    @limiter.limit("60/minute")
+    async def list_constructor_sources(
+        request: Request,
+        current_user: dict = Depends(require_internal_identity),
+        db: Database = Depends(get_db),
+        q: Optional[str] = Query(None, max_length=80),
+    ):
+        return {"items": await db.bank_tasks.list_sources(query=q, limit=None)}
 
     @app.get("/api/constructor/collections")
     @limiter.limit("60/minute")

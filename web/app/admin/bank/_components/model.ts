@@ -49,6 +49,7 @@ export type BankFormState = {
   correctSub1: "A" | "B" | "C" | "D";
   correctSub2: "A" | "B" | "C" | "D";
   topics: string[];
+  sources: string[];
 };
 
 export type PendingDedupState = {
@@ -106,6 +107,7 @@ export const createEmptyForm = (): BankFormState => ({
   correctSub1: "A",
   correctSub2: "A",
   topics: [],
+  sources: [],
 });
 
 export const parseTaskToForm = (task: BankTask): BankFormState => {
@@ -121,6 +123,7 @@ export const parseTaskToForm = (task: BankTask): BankFormState => {
   form.currentVersion = typeof task.current_version === "number" ? task.current_version : null;
   form.existingImageFilename = task.image_filename || null;
   form.topics = Array.isArray(task.topics) ? task.topics : [];
+  form.sources = Array.isArray(task.sources) ? task.sources : [];
 
   const options = Array.isArray(task.options) ? task.options : [];
   form.optionA = options.find((o) => o.label === "A")?.text || "";
@@ -206,6 +209,7 @@ export const buildJsonEditValue = (snapshot: any, task: BankTask): string => {
     text_scale: normalizeTaskTextScale(snapshot?.text_scale ?? task.text_scale),
     difficulty: snapshot?.difficulty ?? task.difficulty ?? "B",
     topics: Array.isArray(snapshot?.topics) ? snapshot.topics : [],
+    sources: Array.isArray(snapshot?.sources) ? snapshot.sources : Array.isArray(task.sources) ? task.sources : [],
     options: Array.isArray(snapshot?.options) ? snapshot.options : [],
     subquestions: Array.isArray(snapshot?.subquestions) ? snapshot.subquestions : [],
     image_filename: snapshot?.image_filename ?? null,

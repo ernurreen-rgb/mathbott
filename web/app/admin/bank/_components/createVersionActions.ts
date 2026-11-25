@@ -143,6 +143,9 @@ export function createVersionActions({
       formData.append("text_scale", normalizeTaskTextScale(typeof parsed.text_scale === "string" ? parsed.text_scale : null));
       formData.append("difficulty", normalizeJsonEditDifficulty(parsed.difficulty));
       formData.append("topics", JSON.stringify(normalizeJsonEditStringArray(parsed.topics)));
+      if (parsed.sources !== undefined) {
+        formData.append("sources", JSON.stringify(normalizeJsonEditStringArray(parsed.sources)));
+      }
       if (isMcqQuestionType(questionType) || questionType === "select") {
         formData.append("options", JSON.stringify(normalizeJsonEditArray(parsed.options)));
       } else {

@@ -11,7 +11,7 @@ import { normalizeAcceptedAnswers } from "@/components/admin/AcceptedAnswersEdit
 import { hasContentAccess, hasReviewAccess, hasSuperAccess } from "@/lib/admin-access";
 import { useAdminPageAccess } from "@/lib/use-admin-page-access";
 import { getMcqEditorLabels, isMcqQuestionType, serializeMcqAnswerLabels } from "@/lib/question-options";
-import { createAdminBankTask, createAdminBankTwin, deleteAdminBankTask, getAdminBankCatalog, getAdminBankTask, getAdminBankTasks, getAdminBankTopics, permanentlyDeleteAdminBankTask, restoreAdminBankTask, updateAdminBankTask } from "@/lib/api";
+import { createAdminBankTask, createAdminBankTwin, deleteAdminBankTask, getAdminBankCatalog, getAdminBankSources, getAdminBankTask, getAdminBankTasks, getAdminBankTopics, permanentlyDeleteAdminBankTask, restoreAdminBankTask, updateAdminBankTask } from "@/lib/api";
 import type { BankCatalogResponse, BankTask, BankTaskUsageItem, BankTaskVersionItem } from "@/types";
 import BankLibrary, { type BankLibraryTab } from "./BankLibrary";
 import BankTaskForm from "./BankTaskForm";
@@ -79,6 +79,8 @@ export default function BankWorkspace() {
   const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
   const [formTopicInput, setFormTopicInput] = useState("");
   const [formTopicSuggestions, setFormTopicSuggestions] = useState<string[]>([]);
+  const [formSourceInput, setFormSourceInput] = useState("");
+  const [formSourceSuggestions, setFormSourceSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [versionConflict, setVersionConflict] = useState(false);
   const [reloadingForm, setReloadingForm] = useState(false);
@@ -109,7 +111,7 @@ export default function BankWorkspace() {
   const [usageError, setUsageError] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const formPreviewTask = useMemo(() => ({ ...buildBankFormPreviewTask(form), id: editingTaskId ?? -1 }), [editingTaskId, form]);
-  const previewTask = workspaceTask ? { ...workspaceTask, ...formPreviewTask, topics: form.topics, difficulty: form.difficulty } : null;
+  const previewTask = workspaceTask ? { ...workspaceTask, ...formPreviewTask, topics: form.topics, sources: form.sources, difficulty: form.difficulty } : null;
   const setOffset = useCallback((value: SetStateAction<number>) => setFilters((previous) => ({ ...previous, offset: typeof value === "function" ? value(previous.offset) : value })), [setFilters]);
 
   useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(filters.search.trim()), 250); return () => clearTimeout(timer); }, [filters.search]);
@@ -130,6 +132,26 @@ export default function BankWorkspace() {
     }, 180);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [email, authorized, formTopicInput, form.topics]);
+  useEffect(() => {
+    if (!email || !authorized || !showForm) { setFormSourceSuggestions([]); return; }
+    const query = formSourceInput.trim();
+    const baseSources = Array.from(new Set([...(catalog?.sources?.map((s) => s.name) || []), "Рустюмова", "ҰБТ есебі"]))
+      .filter((name) => !form.sources.some((selected) => selected.toLowerCase() === name.toLowerCase()));
+    if (!query) {
+      setFormSourceSuggestions(baseSources);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { data } = await getAdminBankSources(email, query);
+      if (cancelled) return;
+      const fetched = data?.items || [];
+      const merged = Array.from(new Set([...fetched, ...baseSources.filter((name) => name.toLowerCase().includes(query.toLowerCase()))]))
+        .filter((name) => !form.sources.some((selected) => selected.toLowerCase() === name.toLowerCase()));
+      setFormSourceSuggestions(merged);
+    }, 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [email, authorized, showForm, catalog?.sources, formSourceInput, form.sources]);
   useEffect(() => {
     if (!isDirty) return;
     const warn = (event: BeforeUnloadEvent) => { if (!leaveApproved.current) { event.preventDefault(); event.returnValue = ""; } };
@@ -157,9 +179,12 @@ export default function BankWorkspace() {
     if (!email || !authorized || !preferences.ready || tab === "answers" || filters.search.trim() !== debouncedSearch) return;
     setLoading(true); setListError(null);
     const { data, error: err } = await getAdminBankTasks(email, {
-      search: debouncedSearch, difficulty: filters.difficulty, topics: filters.topics, limit: filters.limit, offset: filters.offset,
+      search: debouncedSearch, difficulty: filters.difficulty, topics: filters.topics, sources: filters.sources,
+      limit: filters.limit, offset: filters.offset,
       trash: tab === "trash", questionType: filters.questionType, usage: filters.usage, twins: filters.twins,
-      hasTopics: filters.hasTopics ? filters.hasTopics === "yes" : undefined, topicMatch: filters.topicMatch, sort: filters.sort,
+      hasTopics: filters.hasTopics ? filters.hasTopics === "yes" : undefined,
+      hasSources: filters.hasSources ? filters.hasSources === "yes" : undefined,
+      topicMatch: filters.topicMatch, sort: filters.sort,
     });
     if (request !== listRequest.current) return;
     if (err) { setListError(err); setTasks([]); setTotal(0); }
@@ -184,12 +209,12 @@ export default function BankWorkspace() {
     const next = parseTaskToForm(task);
     setWorkspaceTask(task); setEditingTaskId(task.id); setForm(next); setBaseline(signature(next)); setTwinSource(null);
     setWorkspaceMode((task.deleted_at && mode === "edit") || (task.twin_source_id && mode === "twins") ? "view" : mode); setShowForm(true);
-    setFormTopicInput(""); setFormTopicSuggestions([]); setPendingDedup(null); setVersionConflict(false); setWorkspaceError(null); setError(null);
+    setFormTopicInput(""); setFormTopicSuggestions([]); setFormSourceInput(""); setFormSourceSuggestions([]); setPendingDedup(null); setVersionConflict(false); setWorkspaceError(null); setError(null);
   };
   const resetAndHideForm = (updateUrl = true) => {
     formGenerationRef.current += 1; setShowForm(false); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(null);
     const next = createEmptyForm(); setForm(next); setBaseline(signature(next)); setWorkspaceMode("view");
-    setFormTopicInput(""); setFormTopicSuggestions([]); setPendingDedup(null); setVersionConflict(false);
+    setFormTopicInput(""); setFormTopicSuggestions([]); setFormSourceInput(""); setFormSourceSuggestions([]); setPendingDedup(null); setVersionConflict(false);
     setReloadingForm(false); setWorkspaceLoading(false); setWorkspaceError(null); setSaving(false); setError(null);
     restoreScroll.current = true;
     if (updateUrl) workspaceUrl(null, "view", true);
@@ -218,7 +243,7 @@ export default function BankWorkspace() {
     formGenerationRef.current += 1;
     const next = createEmptyForm(); setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(null);
     setShowForm(true); setWorkspaceMode("edit"); setWorkspaceLoading(false); setWorkspaceError(null); setVersionConflict(false); setPendingDedup(null);
-    setError(null); setFormTopicInput(""); setFormTopicSuggestions([]);
+    setError(null); setFormTopicInput(""); setFormTopicSuggestions([]); setFormSourceInput("");
     if (updateUrl) workspaceUrl("new", "edit");
     window.scrollTo({ top: 0, behavior: "instant" });
   };
@@ -230,7 +255,7 @@ export default function BankWorkspace() {
     const next = { ...parseTaskToForm(source), currentVersion: null };
     setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(source);
     setShowForm(true); setWorkspaceMode("edit"); setWorkspaceLoading(false); setWorkspaceError(null); setVersionConflict(false); setPendingDedup(null);
-    setError(null); setFormTopicInput(""); setFormTopicSuggestions([]);
+    setError(null); setFormTopicInput(""); setFormTopicSuggestions([]); setFormSourceInput("");
     if (updateUrl) workspaceUrl("new", "edit", false, source.id);
     window.scrollTo({ top: 0, behavior: "instant" });
   };
@@ -292,6 +317,12 @@ export default function BankWorkspace() {
     if (form.topics.length >= 10 || topic.length > 64) { setError("Ең көбі 10 тақырып, әр тақырып 64 таңбадан аспауы керек."); return; }
     setForm((previous) => ({ ...previous, topics: [...previous.topics, topic] })); setFormTopicInput(""); setFormTopicSuggestions([]);
   };
+  const addFormSource = (raw: string) => {
+    const source = raw.trim();
+    if (!source || form.sources.some((value) => value.toLowerCase() === source.toLowerCase())) return;
+    if (form.sources.length >= 10 || source.length > 64) { setError("Ең көбі 10 дереккөз, әр атау 64 таңбадан аспауы керек."); return; }
+    setForm((previous) => ({ ...previous, sources: [...previous.sources, source] })); setFormSourceInput("");
+  };
   const { handleImportFileChange, handleExportJson, runBankImportConfirm } = createImportActions({
     email, setImporting, setImportResult, setError, setImportPreviewState, setOffset, fetchTasks: refreshAll,
     importPreviewState, setConfirmingImport, setExporting,
@@ -315,7 +346,7 @@ export default function BankWorkspace() {
       }
       const body = new FormData();
       for (const [key, value] of Object.entries({ text: form.text, question_type: form.question_type, answer_mode: form.answer_mode, text_scale: form.text_scale, answer, difficulty: form.difficulty })) body.append(key, value);
-      body.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(form.acceptedAnswers))); body.append("topics", JSON.stringify(form.topics));
+      body.append("accepted_answers", JSON.stringify(normalizeAcceptedAnswers(form.acceptedAnswers))); body.append("topics", JSON.stringify(form.topics)); body.append("sources", JSON.stringify(form.sources));
       // Explicit empty arrays clear fields when a task changes type.
       body.append("options", JSON.stringify(options || [])); body.append("subquestions", JSON.stringify(subquestions || []));
       if (form.imageFile) body.append("image", form.imageFile);
@@ -385,7 +416,7 @@ export default function BankWorkspace() {
         onRestore={(id) => void handleRestoreTask(id)} onDeletePermanently={(id) => void handlePermanentDeleteTask(id)} answersPanel={<UnrecognizedAnswersPanel email={email!} />} />
         : <section className={styles.taskShell} aria-label="Есеппен жұмыс">
           <button type="button" className={styles.back} onClick={() => { if (!busy && canLeave()) resetAndHideForm(); }} disabled={busy}><Icon name="arrowLeft" /> Есептер тізіміне</button>
-          <header className={styles.taskHeader}><div><h1>{twinSource ? `№${twinSource.id} есептің жаңа егізі` : editingTaskId ? `Банк №${editingTaskId}` : "Жаңа есеп"}</h1><p>{form.topics.length ? form.topics.join(" / ") : "Тақырып берілмеген"}{editingTaskId ? ` · v${form.currentVersion ?? "—"}` : ""}</p></div>
+          <header className={styles.taskHeader}><div><h1>{twinSource ? `№${twinSource.id} есептің жаңа егізі` : editingTaskId ? `Банк №${editingTaskId}` : "Жаңа есеп"}</h1><p>{[...form.sources, ...form.topics].length ? [...form.sources, ...form.topics].join(" / ") : "Тақырып берілмеген"}{editingTaskId ? ` · v${form.currentVersion ?? "—"}` : ""}</p></div>
             <div className={styles.actions}><span className={styles.level}>{form.difficulty}</span><span className={styles.subtitle}>{questionTypeLabel(form.question_type)}</span>
               {workspaceTask && <details className={styles.menu}><summary className={styles.button}>Әрекеттер <Icon name="chevronDown" /></summary><div className={styles.menuPanel}>
                 <button type="button" className={styles.quiet} disabled={busy} onClick={() => void openHistory(workspaceTask)}><Icon name="clock" /> Тарих</button>
@@ -404,6 +435,8 @@ export default function BankWorkspace() {
             {workspaceMode === "edit" && <BankTaskForm tab="active" showForm editingTaskId={editingTaskId} form={form} setForm={setForm}
               handleSubmitForm={async (event) => { event.preventDefault(); await submitBankForm(); }} removeFormTopic={(topic) => setForm((previous) => ({ ...previous, topics: previous.topics.filter((value) => value !== topic) }))}
               formTopicInput={formTopicInput} setFormTopicInput={setFormTopicInput} addFormTopic={addFormTopic} formTopicSuggestions={formTopicSuggestions}
+              removeFormSource={(source) => setForm((previous) => ({ ...previous, sources: previous.sources.filter((value) => value !== source) }))}
+              formSourceInput={formSourceInput} setFormSourceInput={setFormSourceInput} addFormSource={addFormSource} formSourceSuggestions={formSourceSuggestions}
               formPreviewTask={formPreviewTask} formImagePreview={formImagePreview} saving={saving} versionConflict={versionConflict} reloading={reloadingForm}
               reloadTask={reloadConflictedForm} resetAndHideForm={cancelEditing} className={styles.form} hidePreview lockQuestionType={!!twinSource} />}
             {workspaceMode === "twins" && workspaceTask && !workspaceTask.twin_source_id && email && <BankTwinsPanel source={workspaceTask} email={email} busy={busy}

@@ -15,25 +15,29 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         search: Optional[str] = Query(None),
         difficulty: Optional[str] = Query(None),
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
+        sources: Optional[str] = Query(None, description="Comma-separated sources"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
         question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select", "context"]] = Query(None),
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
+        has_sources: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         sort: Literal["newest", "oldest", "updated"] = Query("newest"),
         twins: Literal["exclude", "only", "include"] = Query("exclude"),
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
+        sources_list = [_normalize_topic_name(s) for s in (sources or "").split(",") if _normalize_topic_name(s)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
         return await db.bank_tasks.list_tasks(
             include_deleted=False,
             search=search,
             difficulty=difficulty_value,
             topics=topics_list,
+            sources=sources_list,
             limit=limit,
             offset=offset,
-            question_type=question_type, usage=usage, has_topics=has_topics,
+            question_type=question_type, usage=usage, has_topics=has_topics, has_sources=has_sources,
             topic_match=topic_match, sort=sort, twins=twins,
         )
 
@@ -44,15 +48,18 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         search: Optional[str] = Query(None),
         difficulty: Optional[str] = Query(None),
         topics: Optional[str] = Query(None, description="Comma-separated topics"),
+        sources: Optional[str] = Query(None, description="Comma-separated sources"),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
         question_type: Optional[Literal["input", "tf", "mcq", "mcq6", "select", "context"]] = Query(None),
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
+        has_sources: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         sort: Literal["newest", "oldest", "updated"] = Query("newest"),
     ):
         topics_list = [_normalize_topic_name(t) for t in (topics or "").split(",") if _normalize_topic_name(t)]
+        sources_list = [_normalize_topic_name(s) for s in (sources or "").split(",") if _normalize_topic_name(s)]
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty else None
         # Trash lists every deleted task, twins included, so each one can be restored.
         return await db.bank_tasks.list_tasks(
@@ -60,9 +67,10 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             search=search,
             difficulty=difficulty_value,
             topics=topics_list,
+            sources=sources_list,
             limit=limit,
             offset=offset,
-            question_type=question_type, usage=usage, has_topics=has_topics,
+            question_type=question_type, usage=usage, has_topics=has_topics, has_sources=has_sources,
             topic_match=topic_match, sort=sort, twins="include",
         )
 
@@ -607,6 +615,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale: str = Form("md"),
         difficulty: str = Form("B"),
         topics: Optional[str] = Form(None),
+        sources: Optional[str] = Form(None),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
         dedup_confirmed: Optional[str] = Form(None),
@@ -625,13 +634,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         accepted_answers_value = _normalize_accepted_answers_or_raise(accepted_answers)
         answer = _normalize_trial_like_answer_or_raise(question_type, answer, options_list)
 
-        parsed_topics = []
-        if topics is not None and topics.strip():
-            try:
-                parsed_topics = json.loads(topics)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid topics JSON: {str(e)}")
-        validated_topics = _validate_bank_topics(parsed_topics)
+        validated_topics = _parse_bank_labels_json(
+            topics, field_name="topics", validator=_validate_bank_topics, default_when_missing=[]
+        ) or []
+        validated_sources = _parse_bank_labels_json(
+            sources, field_name="sources", validator=_validate_bank_sources, default_when_missing=[]
+        ) or []
 
         dedup_flag = _parse_bool_flag(dedup_confirmed)
         similar_tasks = await db.bank_tasks.find_similar_tasks(
@@ -655,6 +663,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             text_scale=text_scale_value,
             difficulty=difficulty_value,
             topics=validated_topics,
+            sources=validated_sources,
             options=options_list,
             subquestions=subquestions_list,
             image_filename=image_filename,
@@ -675,6 +684,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale: Optional[str] = Form(None),
         difficulty: Optional[str] = Form(None),
         topics: Optional[str] = Form(None),
+        sources: Optional[str] = Form(None),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
         dedup_confirmed: Optional[str] = Form(None),
@@ -722,16 +732,12 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale_value = _normalize_text_scale(text_scale) if text_scale is not None else None
         difficulty_value = _validate_bank_difficulty(difficulty) if difficulty is not None else None
 
-        topics_value: Optional[List[str]] = None
-        if topics is not None:
-            if topics.strip():
-                try:
-                    parsed_topics = json.loads(topics)
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f"Invalid topics JSON: {str(e)}")
-            else:
-                parsed_topics = []
-            topics_value = _validate_bank_topics(parsed_topics)
+        topics_value = _parse_bank_labels_json(
+            topics, field_name="topics", validator=_validate_bank_topics, default_when_missing=None
+        )
+        sources_value = _parse_bank_labels_json(
+            sources, field_name="sources", validator=_validate_bank_sources, default_when_missing=None
+        )
 
         dedup_flag = _parse_bool_flag(dedup_confirmed)
         effective_text = text if text is not None else (existing.get("text") or "")
@@ -771,6 +777,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text_scale=text_scale_value,
                 difficulty=difficulty_value,
                 topics=topics_value,
+                sources=sources_value,
                 options=options_list,
                 subquestions=subquestions_list,
                 image_filename=image_filename,
@@ -860,6 +867,16 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         limit: Optional[int] = Query(None, ge=1),
     ):
         items = await db.bank_tasks.list_topics(query=q, limit=limit)
+        return {"items": items}
+
+    @app.get("/api/admin/bank/sources")
+    async def get_bank_sources(
+        admin_user: dict = Depends(require_admin_any_admin),
+        db: Database = Depends(get_db),
+        q: Optional[str] = Query(None),
+        limit: Optional[int] = Query(None, ge=1),
+    ):
+        items = await db.bank_tasks.list_sources(query=q, limit=limit)
         return {"items": items}
 
     # Trial test templates removed in bank-only mode.

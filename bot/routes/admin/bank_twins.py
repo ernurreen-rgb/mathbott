@@ -81,6 +81,7 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
                     text_scale=source.get("text_scale") or "md",
                     difficulty=source.get("difficulty") or "B",
                     topics=source.get("topics") or [],
+                    sources=source.get("sources") or [],
                     image_filename=None,
                     keep_source_image=False,
                     created_by=admin_user["id"],
@@ -161,6 +162,7 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
         text_scale: str = Form("md"),
         difficulty: str = Form("B"),
         topics: Optional[str] = Form(None),
+        sources: Optional[str] = Form(None),
         options: Optional[str] = Form(None),
         subquestions: Optional[str] = Form(None),
         keep_source_image: Optional[str] = Form(None),
@@ -182,13 +184,12 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
         if not str(answer or "").strip():
             raise HTTPException(status_code=400, detail="Егіз есептің жауабын толтырыңыз.")
 
-        parsed_topics = []
-        if topics is not None and topics.strip():
-            try:
-                parsed_topics = json.loads(topics)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid topics JSON: {str(e)}")
-        validated_topics = _validate_bank_topics(parsed_topics)
+        validated_topics = _parse_bank_labels_json(
+            topics, field_name="topics", validator=_validate_bank_topics, default_when_missing=[]
+        ) or []
+        validated_sources = _parse_bank_labels_json(
+            sources, field_name="sources", validator=_validate_bank_sources, default_when_missing=[]
+        ) or []
 
         # Twins are deliberately near-identical to their source, so no duplicate check runs here.
         image_filename = await save_image_upload(image) if image else None
@@ -203,6 +204,7 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
                 text_scale=text_scale_value,
                 difficulty=difficulty_value,
                 topics=validated_topics,
+                sources=validated_sources,
                 options=options_list,
                 subquestions=subquestions_list,
                 image_filename=image_filename,

@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from database import Database
 from utils.validation import MAX_MCQ_CORRECT_OPTIONS, normalize_accepted_answers, parse_mcq_answer_labels, serialize_mcq_answer_labels
 from utils.file_storage import normalize_stored_image_filename
-from .content_validation import BANK_SIMILARITY_LIMIT_DEFAULT, BANK_SIMILARITY_THRESHOLD_DEFAULT, ImportTaskValidationError, MCQ_OPTION_LABELS, MCQ_QUESTION_TYPES, _get_allowed_mcq_answer_labels, _http_detail_to_message, _normalize_answer_mode_or_raise, _normalize_text_scale, _validate_bank_difficulty, _validate_bank_topics, _validate_trial_like_payload
+from .content_validation import BANK_SIMILARITY_LIMIT_DEFAULT, BANK_SIMILARITY_THRESHOLD_DEFAULT, ImportTaskValidationError, MCQ_OPTION_LABELS, MCQ_QUESTION_TYPES, _get_allowed_mcq_answer_labels, _http_detail_to_message, _normalize_answer_mode_or_raise, _normalize_text_scale, _validate_bank_difficulty, _validate_bank_sources, _validate_bank_topics, _validate_trial_like_payload
 
 
 async def _collect_import_dedup_conflicts(
@@ -247,6 +247,16 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
     except HTTPException as exc:
         raise ImportTaskValidationError("topics", _http_detail_to_message(exc.detail))
 
+    raw_sources = raw_task.get("sources", [])
+    if raw_sources is None:
+        raw_sources = []
+    if not isinstance(raw_sources, list):
+        raise ImportTaskValidationError("sources", "sources must be an array or null")
+    try:
+        sources = _validate_bank_sources(raw_sources)
+    except HTTPException as exc:
+        raise ImportTaskValidationError("sources", _http_detail_to_message(exc.detail))
+
     raw_image_filename = raw_task.get("image_filename")
     if raw_image_filename is not None and not isinstance(raw_image_filename, str):
         raise ImportTaskValidationError("image_filename", "image_filename must be a string or null")
@@ -294,6 +304,7 @@ def _normalize_import_bank_task(raw_task: Any) -> Dict[str, Any]:
         "text_scale": text_scale,
         "difficulty": difficulty,
         "topics": topics,
+        "sources": sources,
         "options": options,
         "subquestions": subquestions,
         "image_filename": image_filename,

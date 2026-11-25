@@ -11,10 +11,12 @@ export interface BankCatalogResponse {
   trash_total: number;
   unused_total: number;
   no_topics_total: number;
+  no_sources_total?: number;
   twins_total?: number;
   topics: Array<{ id: number; name: string; task_count: number }>;
   topics_total: number;
   has_more_topics: boolean;
+  sources?: Array<{ id: number; name: string; task_count: number }>;
 }
 
 export type TaskTextScale = "sm" | "md" | "lg" | (string & {});
@@ -34,6 +36,7 @@ export interface BankTask {
   solution_filename?: string | null;
   difficulty: BankDifficulty;
   topics: string[];
+  sources?: string[];
   created_by?: number | null;
   created_at: string;
   updated_at: string;

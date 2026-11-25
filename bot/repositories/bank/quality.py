@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from difflib import SequenceMatcher
 import storage as db_driver
 
+from .helpers import fetch_sources_map_safe
 from .twins import NOT_TWIN_SQL
 
 
@@ -178,12 +179,14 @@ class BankTaskQualityMixin:
 
             task_ids = [int(row["id"]) for row in rows]
             topics_map = await self._fetch_topics_map(db, task_ids)
+            sources_map = await fetch_sources_map_safe(self, db, task_ids)
             usage_counts = await self._fetch_active_usage_counts(db, task_ids)
 
             items: List[Dict[str, Any]] = []
             for row in rows:
                 task_id = int(row["id"])
                 item = self._serialize_task_row(row, topics_map.get(task_id, []))
+                item["sources"] = sources_map.get(task_id, [])
                 item["active_usage_count"] = usage_counts.get(task_id, 0)
                 item["current_version"] = int(item.get("current_version") or 1)
                 items.append(item)
@@ -306,6 +309,7 @@ class BankTaskQualityMixin:
 
             task_ids = [int(row["id"]) for row in rows]
             topics_map = await self._fetch_topics_map(db, task_ids)
+            sources_map = await fetch_sources_map_safe(self, db, task_ids)
             usage_counts = await self._fetch_active_usage_counts(db, task_ids)
 
         candidates_by_id: Dict[int, Dict[str, Any]] = {}
@@ -321,6 +325,7 @@ class BankTaskQualityMixin:
                 "updated_at": row["updated_at"],
                 "current_version": int(row["current_version"] or 1),
                 "topics": topics_map.get(task_id, []),
+                "sources": sources_map.get(task_id, []),
                 "active_usage_count": int(usage_counts.get(task_id, 0)),
                 "similarity_blob": self._build_similarity_blob(row["text"], row["options"]),
             }

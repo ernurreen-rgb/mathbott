@@ -73,32 +73,58 @@ def _normalize_topic_name(raw_topic: str) -> str:
     return " ".join((raw_topic or "").strip().split())
 
 
-def _validate_bank_topics(topics: Optional[List[str]]) -> List[str]:
-    if topics is None:
+def _normalize_label_list(values: Optional[List[str]], *, field_label: str, singular: str, max_items: int) -> List[str]:
+    if values is None:
         return []
-    if not isinstance(topics, list):
-        raise HTTPException(status_code=400, detail="topics must be an array")
+    if not isinstance(values, list):
+        raise HTTPException(status_code=400, detail=f"{field_label} must be an array")
 
-    cleaned_topics: List[str] = []
+    cleaned: List[str] = []
     seen: set[str] = set()
-    for raw_topic in topics:
-        if not isinstance(raw_topic, str):
-            raise HTTPException(status_code=400, detail="Each topic must be a string")
-        topic = _normalize_topic_name(raw_topic)
-        if not topic:
+    for raw_item in values:
+        if not isinstance(raw_item, str):
+            raise HTTPException(status_code=400, detail=f"Each {singular} must be a string")
+        item = _normalize_topic_name(raw_item)
+        if not item:
             continue
-        if len(topic) > 64:
-            raise HTTPException(status_code=400, detail="Topic length must be <= 64")
-        topic_norm = topic.lower()
-        if topic_norm in seen:
+        if len(item) > 64:
+            raise HTTPException(status_code=400, detail=f"{singular.capitalize()} length must be <= 64")
+        item_norm = item.lower()
+        if item_norm in seen:
             continue
-        seen.add(topic_norm)
-        cleaned_topics.append(topic)
+        seen.add(item_norm)
+        cleaned.append(item)
 
-    if len(cleaned_topics) > 10:
-        raise HTTPException(status_code=400, detail="Maximum 10 topics allowed")
+    if len(cleaned) > max_items:
+        raise HTTPException(status_code=400, detail=f"Maximum {max_items} {field_label} allowed")
 
-    return cleaned_topics
+    return cleaned
+
+
+def _validate_bank_topics(topics: Optional[List[str]]) -> List[str]:
+    return _normalize_label_list(topics, field_label="topics", singular="topic", max_items=10)
+
+
+def _validate_bank_sources(sources: Optional[List[str]]) -> List[str]:
+    return _normalize_label_list(sources, field_label="sources", singular="source", max_items=10)
+
+
+def _parse_bank_labels_json(
+    raw_value: Optional[str],
+    *,
+    field_name: str,
+    validator,
+    default_when_missing: Optional[List[str]] = None,
+) -> Optional[List[str]]:
+    if raw_value is None:
+        return default_when_missing
+    if not raw_value.strip():
+        return []
+    try:
+        parsed = json.loads(raw_value)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name} JSON: {str(e)}")
+    return validator(parsed)
 
 
 def _validate_bank_difficulty(difficulty: str) -> str:
