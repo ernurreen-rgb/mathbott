@@ -14,7 +14,6 @@ import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
-import aiohttp
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from settings import get_settings
@@ -196,6 +195,9 @@ async def _chat(system: str, user: str) -> str:
         "response_format": {"type": "json_object"},
     }
     headers = {"Authorization": f"Bearer {settings.ai_twin_api_key}"}
+    # Imported here: aiohttp costs ~0.1 s on every API cold start, and only admins draft twins.
+    import aiohttp
+
     try:
         timeout = aiohttp.ClientTimeout(total=settings.ai_twin_timeout_seconds)
         async with aiohttp.ClientSession(timeout=timeout) as session:

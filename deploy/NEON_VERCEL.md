@@ -238,6 +238,37 @@ the API (so `api_ms - app_ms` is the hop between the two functions), and
 `proxy_ms` all of the proxy's time. `duration_ms - proxy_ms` is what the device's
 network added. `api-cold`/`proxy-cold` in `details` mark a function's cold start,
 and `was_hidden` a page that was hidden meanwhile (a locked phone pauses requests).
+A cold API's first response also says where its start went (`bot/utils/boot_timing.py`):
+`api_process_ms` (the process before our code ran), `api_import_ms` (importing the
+code), `api_startup_ms` (FastAPI startup) and `api_wait_ms` (until the request was
+handled); `db_connect_ms` is the time a request spent opening database connections,
+and `db_prewarm` marks one that took the connection opened at startup.
+
+### Cold starts
+
+From 22 to 25 November 2026, 81% of the slow requests were API cold starts (3-5 s:
+about a second of imports, about a second for the first database connection). Three
+things shorten them:
+
+- On Vercel (`VERCEL=1`, or `DATABASE_PREWARM=1`; `0` turns it off) `main.py` starts
+  `storage.start_prewarm()` before importing the rest of the code: a thread opens the
+  first database connection, waking Neon, while Python imports FastAPI and the routes.
+- `aiohttp` (push reminders, AI twins), `uvicorn` (local runs only) and `sentry_sdk`
+  (when Sentry is off) load only when used.
+- The root layout's inline script (`web/lib/warm-up.ts`) asks `/api/health` as soon as
+  a page's HTML arrives, at most once per tab every two minutes, so the API and the
+  database start waking before the page's JavaScript has even loaded.
+
+```sql
+-- Cold starts and where their time went.
+SELECT substr(received_at, 1, 10) AS day, COUNT(*) AS cold_requests,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) AS device_p50,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY (details->>'api_import_ms')::int) AS import_p50,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY (details->>'db_connect_ms')::int) AS connect_p50,
+       COUNT(*) FILTER (WHERE details->>'db_prewarm' = 'true') AS prewarmed
+FROM client_request_timings WHERE details->>'api_cold' = 'true' AND was_hidden = 0
+GROUP BY 1 ORDER BY 1;
+```
 
 ```sql
 -- Where the time went, per kind of report (hidden pages left out).

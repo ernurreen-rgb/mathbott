@@ -4,18 +4,22 @@ A Vercel Cron call (GET /api/push/reminders) runs `send_streak_reminders` once a
 evening. Every device whose student has solved nothing today gets one notification: the streak
 at risk when there is one, otherwise an invitation to start a new one.
 """
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import time
 from datetime import date, timedelta
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
 from urllib.parse import urlsplit
-
-import aiohttp
 
 from settings import get_settings
 from utils.timezone import today_almaty
+
+if TYPE_CHECKING:
+    # Imported where reminders are sent: aiohttp costs ~0.1 s on every API cold start.
+    import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +60,8 @@ class _NoRedirectSession:
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self) -> "_NoRedirectSession":
+        import aiohttp
+
         self._session = aiohttp.ClientSession()
         await self._session.__aenter__()
         return self
@@ -196,6 +202,7 @@ async def send_push(
     ttl: int,
 ) -> str:
     """Send one notification; returns "sent", "gone" (forget the device) or "failed"."""
+    import aiohttp
     from pywebpush import WebPushException, webpush_async
 
     endpoint = subscription.get("endpoint") or ""

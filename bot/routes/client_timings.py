@@ -34,6 +34,13 @@ class TimingDetails(BaseModel):
     protocol: Optional[str] = Field(default=None, max_length=16)
     proxy_cold: Optional[bool] = None
     api_cold: Optional[bool] = None
+    # A cold API's phases (utils/boot_timing.py) and the request's database connections.
+    api_process_ms: Optional[int] = Field(default=None, **_MS)
+    api_import_ms: Optional[int] = Field(default=None, **_MS)
+    api_startup_ms: Optional[int] = Field(default=None, **_MS)
+    api_wait_ms: Optional[int] = Field(default=None, **_MS)
+    db_connect_ms: Optional[int] = Field(default=None, **_MS)
+    db_prewarm: Optional[bool] = None
     rtt_ms: Optional[int] = Field(default=None, **_MS)
     downlink_mbps: Optional[float] = Field(default=None, ge=0, le=10_000)
     save_data: Optional[bool] = None

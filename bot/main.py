@@ -2,9 +2,18 @@
 Mathbot - FastAPI backend
 Entry point для запуска приложения
 """
+# First: notes when the code started, for the cold-start phases in Server-Timing.
+from utils import boot_timing
+import os
+
+if os.environ.get("DATABASE_PREWARM", "1" if os.environ.get("VERCEL") == "1" else "0") == "1":
+    # On a cold start, connect to the database while the rest of the code imports (storage.py).
+    import storage
+
+    storage.start_prewarm(os.environ.get("DATABASE_URL", ""))
+
 import logging
 import asyncio
-import uvicorn
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -29,6 +38,7 @@ BANK_TRASH_RETENTION_DAYS = get_settings().bank_trash_retention_days
 async def lifespan(app: FastAPI):
     """Startup and shutdown: init DB, background tasks, then cleanup on exit."""
     # === startup ===
+    boot_timing.mark("startup")
     validate_configuration()
     db = app.state.db
     await db.init()
@@ -65,6 +75,7 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning(f"Failed to create admin user {admin_email}: {e}")
 
+    boot_timing.mark("ready")
     yield
 
     # === shutdown ===
@@ -82,6 +93,7 @@ app = create_app(lifespan=lifespan)
 
 # Зарегистрировать все роуты
 register_routes(app, app.state.db, app.state.limiter)
+boot_timing.mark("imported")
 
 
 async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monitor: OpsMonitor | None = None):
@@ -121,7 +133,10 @@ async def run_db_maintenance(db, bank_trash_retention_days: int = 30, ops_monito
 
 
 async def run_api():
-    """Run FastAPI server"""
+    """Run FastAPI server (locally; Vercel serves `app` itself)."""
+    # Imported here: uvicorn and its file watcher cost ~0.15 s on every API cold start.
+    import uvicorn
+
     port = get_settings().port
     # Compression is handled by FastAPI's GZipMiddleware (properly handles Content-Length)
     config = uvicorn.Config(

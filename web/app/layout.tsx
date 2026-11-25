@@ -4,6 +4,8 @@ import "mathlive/static.css";
 import { Providers } from "./providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getServerT } from "@/lib/i18n/server";
+import { apiPath } from "@/lib/api/api-path";
+import { warmUpScript } from "@/lib/warm-up";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getServerT();
@@ -41,6 +43,7 @@ export default async function RootLayout({
               "try{if(localStorage.getItem('mathbot_desktop_nav_collapsed')==='true'){document.body.classList.add('desktop-nav-collapsed');}}catch(e){}",
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: warmUpScript(apiPath("health")) }} />
         <ErrorBoundary>
           <Providers locale={locale}>
             {children}

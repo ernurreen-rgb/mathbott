@@ -53,6 +53,13 @@ export type TimingDetails = {
   protocol?: string;
   proxy_cold?: boolean;
   api_cold?: boolean;
+  /** A cold API's phases (bot/utils/boot_timing.py) and its database connections. */
+  api_process_ms?: number;
+  api_import_ms?: number;
+  api_startup_ms?: number;
+  api_wait_ms?: number;
+  db_connect_ms?: number;
+  db_prewarm?: boolean;
   rtt_ms?: number;
   downlink_mbps?: number;
   save_data?: boolean;
@@ -120,6 +127,16 @@ export function templatePage(pathname: string): string {
   return `/${templateSegments(pathname.split("/"))}`.slice(0, 160);
 }
 
+// Server-Timing metrics kept in a report's details, by their name in the header.
+const DETAIL_DURATIONS = {
+  "api-process": "api_process_ms",
+  "api-import": "api_import_ms",
+  "api-startup": "api_startup_ms",
+  "api-wait": "api_wait_ms",
+  "db-connect": "db_connect_ms",
+} as const;
+type DetailDuration = (typeof DETAIL_DURATIONS)[keyof typeof DETAIL_DURATIONS];
+
 /** The proxy's and API's parts from "app;dur=12.3, api-cold, api;dur=40, proxy;dur=45, proxy-cold". */
 export function parseServerTiming(header: string | null): {
   proxy_ms: number | null;
@@ -127,9 +144,11 @@ export function parseServerTiming(header: string | null): {
   app_ms: number | null;
   proxy_cold: boolean;
   api_cold: boolean;
+  db_prewarm: boolean;
+  durations: Partial<Record<DetailDuration, number>>;
 } {
   const result = { proxy_ms: null as number | null, api_ms: null as number | null, app_ms: null as number | null,
-    proxy_cold: false, api_cold: false };
+    proxy_cold: false, api_cold: false, db_prewarm: false, durations: {} as Partial<Record<DetailDuration, number>> };
   for (const metric of (header || "").split(",")) {
     const [rawName, ...params] = metric.trim().split(";");
     const name = rawName.trim();
@@ -141,6 +160,10 @@ export function parseServerTiming(header: string | null): {
     else if (name === "app") result.app_ms = value;
     else if (name === "proxy-cold") result.proxy_cold = true;
     else if (name === "api-cold") result.api_cold = true;
+    else if (name === "db-prewarm") result.db_prewarm = true;
+    else if (name in DETAIL_DURATIONS && value !== null) {
+      result.durations[DETAIL_DURATIONS[name as keyof typeof DETAIL_DURATIONS]] = value;
+    }
   }
   return result;
 }
@@ -193,9 +216,10 @@ export function describeRequest(
   const server = parseServerTiming(observation.serverTiming);
   const { ttfb_ms, ...phases } = connectionPhases(entry);
   const network = device.network || {};
-  const details: TimingDetails = { ...phases };
+  const details: TimingDetails = { ...phases, ...server.durations };
   if (server.proxy_cold) details.proxy_cold = true;
   if (server.api_cold) details.api_cold = true;
+  if (server.db_prewarm) details.db_prewarm = true;
   if (typeof network.rtt === "number") details.rtt_ms = ms(network.rtt);
   if (typeof network.downlink === "number") details.downlink_mbps = network.downlink;
   if (typeof network.saveData === "boolean") details.save_data = network.saveData;

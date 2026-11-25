@@ -42,11 +42,27 @@ describe("what a report may say about a request", () => {
 
   it("reads the proxy's and the API's parts from Server-Timing", () => {
     expect(parseServerTiming("app;dur=12.3, api-cold, api;dur=40.4, proxy;dur=45.6, proxy-cold")).toEqual({
-      app_ms: 12, api_ms: 40, proxy_ms: 46, api_cold: true, proxy_cold: true,
+      app_ms: 12, api_ms: 40, proxy_ms: 46, api_cold: true, proxy_cold: true, db_prewarm: false, durations: {},
     });
     expect(parseServerTiming("app;dur=7, api;dur=20, proxy;dur=25")).toMatchObject({ proxy_cold: false, api_cold: false });
-    expect(parseServerTiming(null)).toEqual({ app_ms: null, api_ms: null, proxy_ms: null, api_cold: false, proxy_cold: false });
+    expect(parseServerTiming(null)).toEqual({
+      app_ms: null, api_ms: null, proxy_ms: null, api_cold: false, proxy_cold: false, db_prewarm: false, durations: {},
+    });
     expect(parseServerTiming("proxy;dur=abc, junk")).toMatchObject({ proxy_ms: null });
+  });
+
+  it("keeps a cold API's phases and its database connections", () => {
+    const header = "app;dur=950.2, api-cold, api-process;dur=410.6, api-import;dur=1012.3, api-startup;dur=3.1, " +
+      "api-wait;dur=0.4, db-connect;dur=80.7, db-prewarm, api;dur=2490, proxy;dur=2500";
+    expect(parseServerTiming(header)).toMatchObject({
+      api_cold: true, db_prewarm: true,
+      durations: { api_process_ms: 411, api_import_ms: 1012, api_startup_ms: 3, api_wait_ms: 0, db_connect_ms: 81 },
+    });
+    const report = describeRequest(observation({ durationMs: 3900, serverTiming: header }), "slow", null, {});
+    expect(report.details).toEqual({
+      api_cold: true, db_prewarm: true, api_process_ms: 411, api_import_ms: 1012, api_startup_ms: 3, api_wait_ms: 0,
+      db_connect_ms: 81,
+    });
   });
 });
 

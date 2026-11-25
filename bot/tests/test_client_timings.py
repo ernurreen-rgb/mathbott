@@ -1,17 +1,13 @@
-"""Request timings from students' devices: POST /api/client-timings and the Server-Timing header.
+"""Request timings from students' devices: POST /api/client-timings (Server-Timing: test_cold_start.py).
 
 Run from bot/: python -m pytest tests/test_client_timings.py
 Needs TEST_DATABASE_URL (see tests/postgres_test_db.py).
 """
-import unittest
-
 import httpx
 from fastapi import FastAPI
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-import middleware.request_context_middleware as request_context
-from middleware.request_context_middleware import RequestContextMiddleware
 from postgres_test_db import PostgresTestCase
 from routes.client_timings import setup_client_timings_routes
 
@@ -120,21 +116,3 @@ class ClientTimingTests(PostgresTestCase):
         self.assertEqual(response.json(), {"recorded": 0})
         self.assertEqual(await self.db.client_timings.cleanup_old(30), 0)
 
-
-class ServerTimingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_responses_say_how_long_the_api_took_and_which_one_waited_for_a_cold_start(self):
-        app = FastAPI()
-        app.add_middleware(RequestContextMiddleware)
-
-        @app.get("/api/ping")
-        async def ping():
-            return {"ok": True}
-
-        original = request_context._served_a_request
-        request_context._served_a_request = False
-        self.addCleanup(setattr, request_context, "_served_a_request", original)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://timing.test") as client:
-            first = (await client.get("/api/ping")).headers["server-timing"]
-            second = (await client.get("/api/ping")).headers["server-timing"]
-        self.assertRegex(first, r"^app;dur=\d+(\.\d+)?, api-cold$")
-        self.assertRegex(second, r"^app;dur=\d+(\.\d+)?$")

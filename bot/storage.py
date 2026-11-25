@@ -10,11 +10,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import threading
+import time
 from collections.abc import Sequence
+from contextvars import ContextVar
 from decimal import Decimal
 from functools import lru_cache
 from threading import Lock
-from typing import Dict, FrozenSet, Optional
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 WRITE_LOCK_ID = 724831921
 _RESERVED_LOCK_IDS = {WRITE_LOCK_ID, 724831922}
@@ -22,6 +25,14 @@ POSTGRES_URL_PREFIXES = ("postgres://", "postgresql://")
 
 _ID_TABLES_CACHE: Dict[str, FrozenSet[str]] = {}
 _ID_TABLES_LOCK = Lock()
+_ID_TABLES_SQL = (
+    "SELECT table_name FROM information_schema.columns "
+    "WHERE table_schema = current_schema() AND column_name = 'id'"
+)
+
+# Connections opened while a request runs, as (seconds, came from the prewarm), for its
+# Server-Timing header (middleware/request_context_middleware.py). None outside a request.
+connect_timings: ContextVar[Optional[List[Tuple[float, bool]]]] = ContextVar("db_connect_timings", default=None)
 
 
 def advisory_lock_id_for_key(lock_key: Optional[str]) -> int:
@@ -75,6 +86,100 @@ def require_postgres_url(target: str) -> str:
 def postgres_options(target: str) -> str:
     from psycopg.conninfo import conninfo_to_dict
     return (conninfo_to_dict(target).get("options", "") + " -c timezone=UTC").strip()
+
+
+def _connect_sync(target: str, timeout: float):
+    import psycopg
+    # Default to autocommit=True so read-only SELECTs never open idle transactions
+    # or incur a network ROLLBACK when released back to the connection pool.
+    return psycopg.connect(
+        target, connect_timeout=int(timeout), prepare_threshold=None,
+        options=postgres_options(target), autocommit=True,
+    )
+
+
+def _fetch_id_tables_sync(conn) -> FrozenSet[str]:
+    with conn.cursor() as cursor:
+        cursor.execute(_ID_TABLES_SQL)
+        return frozenset(row[0] for row in cursor.fetchall())
+
+
+# --- Connecting before the first request ------------------------------------------------------
+# On a cold start the first request waited about a second for its connection: TLS, Neon waking
+# its compute, and the id-tables query above. start_prewarm() does all of it in a thread while
+# the API is still importing its code (about a second too), and the first connection the API
+# opens takes the result instead of starting over.
+PREWARM_MAX_AGE_SECONDS = 60.0
+_prewarm: Optional[dict] = None
+_prewarm_lock = Lock()
+
+
+def start_prewarm(target: str, *, timeout: float = 30) -> bool:
+    """Open one connection in the background; once per process. False when nothing was started."""
+    global _prewarm
+    try:
+        url = require_postgres_url(target)
+    except ValueError:
+        return False
+    with _prewarm_lock:
+        if _prewarm is not None:
+            return False
+        state = {"target": url, "done": threading.Event(), "conn": None, "ready_at": None, "taken": False}
+        _prewarm = state
+
+    def run() -> None:
+        conn = None
+        try:
+            conn = _connect_sync(url, timeout)
+            tables = _fetch_id_tables_sync(conn)
+            with _ID_TABLES_LOCK:
+                _ID_TABLES_CACHE.setdefault(url, tables)
+            state["conn"], state["ready_at"] = conn, time.monotonic()
+        except Exception:
+            # The first request connects as it always did.
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        finally:
+            state["done"].set()
+
+    threading.Thread(target=run, name="db-prewarm", daemon=True).start()
+    return True
+
+
+async def _take_prewarmed(target: str):
+    """The prewarmed connection for the first connection to `target`, waiting for it if needed."""
+    with _prewarm_lock:
+        state = _prewarm
+        if state is None or state["taken"] or state["target"] != target:
+            return None
+        state["taken"] = True
+    if not state["done"].is_set():
+        # It is already on its way: waiting is quicker than starting another one.
+        await asyncio.to_thread(state["done"].wait, 35)
+    conn, state["conn"] = state["conn"], None
+    if conn is None:
+        return None
+    if time.monotonic() - (state["ready_at"] or 0) > PREWARM_MAX_AGE_SECONDS or conn.closed or conn.broken:
+        try:
+            await asyncio.to_thread(conn.close)
+        except Exception:
+            pass
+        return None
+    return conn
+
+
+def reset_prewarm_for_tests() -> None:
+    global _prewarm
+    with _prewarm_lock:
+        state, _prewarm = _prewarm, None
+    if state is not None:
+        state["done"].wait(35)
+        conn = state.get("conn")
+        if conn is not None:
+            conn.close()
 
 
 def _sql_tokens(sql: str):
@@ -188,14 +293,11 @@ class PostgresConnection:
 
     async def _open(self):
         if self._conn is None:
-            import psycopg
-            # Default to autocommit=True so read-only SELECTs never open idle transactions
-            # or incur a network ROLLBACK when released back to the connection pool.
-            conn = await asyncio.to_thread(
-                psycopg.connect, self._target, connect_timeout=int(self._timeout),
-                prepare_threshold=None, options=postgres_options(self._target),
-                autocommit=True,
-            )
+            started = time.perf_counter()
+            conn = await _take_prewarmed(self._target)
+            prewarmed = conn is not None
+            if conn is None:
+                conn = await asyncio.to_thread(_connect_sync, self._target, self._timeout)
             self._conn = conn
             with _ID_TABLES_LOCK:
                 cached_tables = _ID_TABLES_CACHE.get(self._target)
@@ -203,14 +305,7 @@ class PostgresConnection:
                 self._id_tables = set(cached_tables)
             else:
                 try:
-                    def tables():
-                        with conn.cursor() as cursor:
-                            cursor.execute(
-                                "SELECT table_name FROM information_schema.columns "
-                                "WHERE table_schema = current_schema() AND column_name = 'id'"
-                            )
-                            return frozenset(row[0] for row in cursor.fetchall())
-                    fetched = await asyncio.to_thread(tables)
+                    fetched = await asyncio.to_thread(_fetch_id_tables_sync, conn)
                     with _ID_TABLES_LOCK:
                         _ID_TABLES_CACHE[self._target] = fetched
                     self._id_tables = set(fetched)
@@ -221,6 +316,9 @@ class PostgresConnection:
                     except Exception:
                         pass
                     raise
+            timings = connect_timings.get()
+            if timings is not None:
+                timings.append((time.perf_counter() - started, prewarmed))
         return self
 
     def __await__(self):
