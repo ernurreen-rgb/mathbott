@@ -285,12 +285,11 @@ describe("PPTX deck", () => {
       "ppt/media/image1.png", "ppt/media/image2.jpeg", "ppt/media/image3.png",
     ]);
     const first = files.get("ppt/slides/slide2.xml") as string;
-    expect(first).toContain("Есеп №1:");
+    expect(first).toContain("Есеп №1 (B):");
     expect(first).toContain('<mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">');
     expect(first).toContain('<a14:m><m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">');
     expect(first).toContain("<mc:Fallback>");
     expect(first).toContain("log₂ 56"); // the fallback text
-    expect(first).not.toMatch(/\(B\)/); // the answer is only on the answer slides
     expect(files.get("ppt/slides/slide4.xml")).toContain("<p:pic>");
     const answers = files.get("ppt/slides/slide34.xml") as string;
     expect(answers).toContain("Жауаптар");
@@ -299,16 +298,32 @@ describe("PPTX deck", () => {
     expect(files.get("ppt/presentation.xml")).toContain('<p:sldId id="290" r:id="rId37"/>');
   });
 
-  it("uses Russian labels and a plain title slide without images", async () => {
-    const { bytes } = await buildTaskDeck({ title: "Логарифмы", author: "Учитель", language: "ru", tasks: [task(1), task(2, { question_type: "tf", answer: "true", options: [] })] });
+  it("uses Russian labels, includes task difficulty in headers, and never leaks answers on task slides", async () => {
+    const { bytes } = await buildTaskDeck({
+      title: "Логарифмы",
+      author: "Учитель",
+      language: "ru",
+      tasks: [
+        task(1, { difficulty: "A", answer: "C" }),
+        task(2, { difficulty: "C", question_type: "tf", answer: "true", options: [] }),
+        task(3, { difficulty: "B", question_type: "input", answer: "987654", options: [] }),
+      ],
+    });
     const files = unzipSync(bytes);
     expect(Object.keys(files)[0]).toBe("[Content_Types].xml");
     const title = strFromU8(files["ppt/slides/slide1.xml"]);
     expect(title).toContain("Логарифмы");
-    expect(title).toContain("2 задачи");
+    expect(title).toContain("3 задачи");
+    expect(strFromU8(files["ppt/slides/slide2.xml"])).toContain("Задача №1 (A):");
+    expect(strFromU8(files["ppt/slides/slide3.xml"])).toContain("Задача №2 (C):");
     expect(strFromU8(files["ppt/slides/slide3.xml"])).toContain("□ Верно");
-    expect(strFromU8(files["ppt/slides/slide4.xml"])).toContain("Ответы");
-    expect(strFromU8(files["ppt/slides/slide4.xml"])).toContain(">Верно</a:t>");
+    const inputSlide = strFromU8(files["ppt/slides/slide4.xml"]);
+    expect(inputSlide).toContain("Задача №3 (B):");
+    expect(inputSlide).not.toContain("987654"); // the answer stays only on the answer slide
+    const answerSlide = strFromU8(files["ppt/slides/slide5.xml"]);
+    expect(answerSlide).toContain("Ответы");
+    expect(answerSlide).toContain(">Верно</a:t>");
+    expect(answerSlide).toContain("987654");
   });
 
   it("writes an option without words as one display equation", () => {

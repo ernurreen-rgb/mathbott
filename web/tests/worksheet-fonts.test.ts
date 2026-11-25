@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customCollectionTitle, reorderItems } from "@/lib/constructor-export";
+import { customCollectionTitle, reorderItems, worksheetTasks } from "@/lib/constructor-export";
 import { validateWorksheetFontCSS } from "@/lib/worksheet-fonts";
 
 const EMBEDDED_KATEX =
@@ -66,5 +66,26 @@ describe("reorderItems", () => {
     expect(reorderItems([1, 2, 3], 1, 1)).toEqual([1, 2, 3]);
     expect(reorderItems([1, 2, 3], -1, 1)).toEqual([1, 2, 3]);
     expect(reorderItems([1, 2, 3], 1, 5)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("worksheetTasks", () => {
+  it("carries each task's difficulty into PDF worksheet items", () => {
+    const mapped = worksheetTasks([
+      {
+        id: 10,
+        text: "x + 1 = 2",
+        text_scale: "md",
+        question_type: "input",
+        answer_mode: "written",
+        difficulty: "C",
+        topics: ["Алгебра"],
+        image_filename: null,
+        options: [],
+        subquestions: [],
+      },
+    ]);
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0].difficulty).toBe("C");
   });
 });

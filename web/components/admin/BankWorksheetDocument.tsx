@@ -57,9 +57,10 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
     )}
     {tasks.map((task, index) => {
       const comparison = parseComparisonTask(task.text);
+      const difficulty = task.difficulty?.trim().toUpperCase();
       return <article key={task.id} data-pdf-task data-task-id={task.id} style={{ padding: '12px 0 18px' }}>
       <div data-pdf-part style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-        <strong style={{ flexShrink: 0 }}>{index + 1}.</strong>
+        <strong style={{ flexShrink: 0 }}>{index + 1}.{difficulty ? ` (${difficulty})` : ''}</strong>
         <div style={{ minWidth: 0, flex: 1 }}>
           {comparison ? <div>
             {comparison.condition && <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 8 }}><MathRender latex={comparison.condition} /></div>}

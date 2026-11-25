@@ -650,7 +650,11 @@ class DeckBuilder {
 
   taskSlide(task: ConstructorTask, number: number) {
     const slide = this.taskSlideFrame();
-    this.header(slide, `${this.labels.task} №${number}:`);
+    const difficulty = task.difficulty?.trim().toUpperCase();
+    const heading = difficulty
+      ? `${this.labels.task} №${number} (${difficulty}):`
+      : `${this.labels.task} №${number}:`;
+    this.header(slide, heading);
     const image = this.input.taskImages?.get(task.id);
     const textBox: Box = image ? { ...BODY, w: Math.round(BODY.w * 0.58) } : BODY;
     const paragraphs = taskParagraphs(task, this.input.language, this.accent);

@@ -6,6 +6,7 @@ export const WORKSHEET_BRAND = 'Ернұр ағайдан есептер';
 // A worksheet contains student-facing content only. Keep this model independent
 // of bank screens so a future bank UI can use the same exporter.
 export type WorksheetTask = Pick<BankTask, 'id' | 'text' | 'question_type' | 'answer_mode' | 'image_filename'> & {
+  difficulty?: BankTask['difficulty'];
   options: { label: string; text: string }[];
   subquestions: { text: string }[];
 };

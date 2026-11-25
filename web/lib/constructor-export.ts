@@ -180,6 +180,7 @@ export function worksheetTasks(tasks: ConstructorTask[]): WorksheetTask[] {
     text: task.text,
     question_type: task.question_type,
     answer_mode: task.answer_mode,
+    difficulty: task.difficulty,
     image_filename: task.image_filename,
     options: task.options.map(({ label, text }) => ({ label, text })),
     subquestions: task.subquestions.map(({ text }) => ({ text })),
