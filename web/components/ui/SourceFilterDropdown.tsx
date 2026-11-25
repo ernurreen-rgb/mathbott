@@ -6,10 +6,10 @@ import Icon from "@/components/ui/Icon";
 type Props = {
   sources: string[];
   selectedSources: string[];
-  includeSourceless: boolean;
+  includeSourceless?: boolean;
   onChange: (next: { sources: string[]; includeSourceless: boolean }) => void;
   allLabel: string;
-  noneLabel: string;
+  noneLabel?: string;
   ariaLabel: string;
   clearAriaLabel: string;
   clearLabel: string;
@@ -24,7 +24,7 @@ type Props = {
 export default function SourceFilterDropdown({
   sources,
   selectedSources,
-  includeSourceless,
+  includeSourceless = false,
   onChange,
   allLabel,
   noneLabel,
@@ -43,8 +43,10 @@ export default function SourceFilterDropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxId = useId();
 
+  const showSourceless = Boolean(noneLabel);
+  const effectiveSourceless = showSourceless && includeSourceless;
   const selectedSet = useMemo(() => new Set(selectedSources), [selectedSources]);
-  const selectedTotal = selectedSources.length + (includeSourceless ? 1 : 0);
+  const selectedTotal = selectedSources.length + (effectiveSourceless ? 1 : 0);
   const hasSelection = selectedTotal > 0;
   const filteredSources = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,14 +80,14 @@ export default function SourceFilterDropdown({
     const exists = selectedSet.has(name);
     onChange({
       sources: exists ? selectedSources.filter((item) => item !== name) : [...selectedSources, name],
-      includeSourceless,
+      includeSourceless: effectiveSourceless,
     });
   };
 
   const singleLabel =
-    selectedSources.length === 1 && !includeSourceless
+    selectedSources.length === 1 && !effectiveSourceless
       ? selectedSources[0]
-      : selectedSources.length === 0 && includeSourceless
+      : selectedSources.length === 0 && effectiveSourceless && noneLabel
         ? noneLabel
         : "";
   const triggerLabel = !hasSelection ? allLabel : singleLabel || selectedCountLabel(selectedTotal);
@@ -210,27 +212,29 @@ export default function SourceFilterDropdown({
               })
             )}
 
-            <li role="presentation" className="mt-1 border-t border-slate-100 pt-1">
-              <button
-                type="button"
-                role="option"
-                aria-selected={includeSourceless}
-                onClick={() => onChange({ sources: selectedSources, includeSourceless: !includeSourceless })}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-50 ${
-                  includeSourceless ? "font-semibold text-purple-800" : "text-slate-800"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                    includeSourceless ? "border-purple-600 bg-purple-600 text-white" : "border-slate-300 bg-white"
+            {showSourceless && (
+              <li role="presentation" className="mt-1 border-t border-slate-100 pt-1">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={effectiveSourceless}
+                  onClick={() => onChange({ sources: selectedSources, includeSourceless: !effectiveSourceless })}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-50 ${
+                    effectiveSourceless ? "font-semibold text-purple-800" : "text-slate-800"
                   }`}
                 >
-                  {includeSourceless && <Icon name="check" className="h-3 w-3" />}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{noneLabel}</span>
-              </button>
-            </li>
+                  <span
+                    aria-hidden="true"
+                    className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                      effectiveSourceless ? "border-purple-600 bg-purple-600 text-white" : "border-slate-300 bg-white"
+                    }`}
+                  >
+                    {effectiveSourceless && <Icon name="check" className="h-3 w-3" />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{noneLabel}</span>
+                </button>
+              </li>
+            )}
           </ul>
 
           {hasSelection && (

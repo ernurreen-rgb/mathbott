@@ -43,7 +43,6 @@ export default function TaskBrowser({
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [excludedTopics, setExcludedTopics] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [includeSourceless, setIncludeSourceless] = useState(false);
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
@@ -136,12 +135,11 @@ export default function TaskBrowser({
       topics: selectedTopics.length > 0 ? selectedTopics : undefined,
       excludeTopics: excludedTopics.length > 0 ? excludedTopics : undefined,
       sources: selectedSources.length > 0 ? selectedSources : undefined,
-      hasSources: includeSourceless ? false : undefined,
       topicMatch: selectedTopics.length > 1 ? ("all" as const) : undefined,
       difficulty: difficulty || undefined,
       questionType: questionType || undefined,
     }),
-    [search, selectedTopics, excludedTopics, selectedSources, includeSourceless, difficulty, questionType],
+    [search, selectedTopics, excludedTopics, selectedSources, difficulty, questionType],
   );
 
   const load = async (offset: number) => {
@@ -197,13 +195,10 @@ export default function TaskBrowser({
           <SourceFilterDropdown
             sources={sources}
             selectedSources={selectedSources}
-            includeSourceless={includeSourceless}
-            onChange={({ sources: nextSources, includeSourceless: nextSourceless }) => {
+            onChange={({ sources: nextSources }) => {
               setSelectedSources(nextSources);
-              setIncludeSourceless(nextSourceless);
             }}
             allLabel={t("constructor.allSources")}
-            noneLabel={t("constructor.noSource")}
             ariaLabel={t("constructor.source")}
             clearAriaLabel={t("constructor.clearSource")}
             clearLabel={t("constructor.clear")}
@@ -239,7 +234,7 @@ export default function TaskBrowser({
             ))}
           </div>
         </div>
-        {(selectedTopics.length > 0 || excludedTopics.length > 0 || selectedSources.length > 0 || includeSourceless) && (
+        {(selectedTopics.length > 0 || excludedTopics.length > 0 || selectedSources.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             {selectedSources.map((name) => (
               <span
@@ -257,22 +252,6 @@ export default function TaskBrowser({
                 </button>
               </span>
             ))}
-            {includeSourceless && (
-              <span
-                key="src-chip-none"
-                className="inline-flex items-center gap-1 rounded-full bg-amber-100 py-1 pl-2.5 pr-1.5 text-xs font-semibold text-amber-900"
-              >
-                <span>{t("constructor.noSource")}</span>
-                <button
-                  type="button"
-                  onClick={() => setIncludeSourceless(false)}
-                  aria-label={t("constructor.removeSourceAria", { source: t("constructor.noSource") })}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200 hover:text-amber-950"
-                >
-                  <Icon name="close" className="h-3 w-3" />
-                </button>
-              </span>
-            )}
             {selectedTopics.map((name) => (
               <span
                 key={`inc-${name}`}

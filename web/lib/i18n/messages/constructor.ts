@@ -61,7 +61,6 @@ export const constructorMessages = {
   "constructor.clear": ["Тазалау", "Сбросить"],
   "constructor.source": ["Дереккөз", "Источник"],
   "constructor.allSources": ["Барлық дереккөздер", "Все источники"],
-  "constructor.noSource": ["Дереккөзсіз", "Без источника"],
   "constructor.clearSource": ["Дереккөзді тазалау", "Сбросить источник"],
   "constructor.findSource": ["Дереккөзді іздеу", "Найти источник"],
   "constructor.sourceNotFound": ["Дереккөз табылмады", "Источник не найден"],
