@@ -20,6 +20,7 @@ type Props = {
   tasks: BankTask[]; total: number; loading: boolean;
   onOpen: (task: BankTask) => void; onCreate: () => void;
   onImport: () => void; onExport: () => void; importing: boolean; exporting: boolean;
+  onOpenTopicTree: () => void;
   canReview: boolean; canDeletePermanently: boolean;
   onRestore: (id: number) => void; onDeletePermanently: (id: number) => void;
   answersPanel: ReactNode;
@@ -54,6 +55,7 @@ export default function BankLibrary(props: Props) {
       <div className={styles.actions}>
         <details className={styles.menu}><summary className={styles.button}><Icon name="settings" /> Басқа әрекеттер</summary>
           <div className={styles.menuPanel}>
+            <button type="button" className={styles.quiet} onClick={props.onOpenTopicTree}><Icon name="layers" /> Тақырыптар ағашы</button>
             <button type="button" className={styles.quiet} onClick={props.onImport} disabled={props.importing}><Icon name="upload" /> {props.importing ? "Тексерілуде..." : "JSON импорт"}</button>
             <button type="button" className={styles.quiet} onClick={props.onExport} disabled={props.exporting}><Icon name="download" /> {props.exporting ? "Экспортталуда..." : "JSON экспорт"}</button>
             <Link href="/admin/bank/quality" className={styles.quiet}><Icon name="chart" /> Сапа дашборды</Link>
@@ -110,10 +112,13 @@ export default function BankLibrary(props: Props) {
             </button>
           </nav>
           <nav aria-label="Есеп тақырыптары" className={styles.navGroup}>
-            <p className={styles.navLabel}>Тақырыптар</p>
+            <div className={styles.navLabelRow}>
+              <p className={styles.navLabel}>Тақырыптар</p>
+              <button type="button" className={styles.navLabelAction} onClick={props.onOpenTopicTree}>Ағаш</button>
+            </div>
             <input type="search" aria-label="Каталогтан тақырып іздеу" placeholder="Тақырып іздеу" value={props.topicSearch} onChange={(e) => props.onTopicSearchChange(e.target.value)} className={styles.topicSearch} />
             <div className={styles.topicList} aria-busy={props.catalogLoading}>
-              {catalog?.topics.map((topic) => <button key={topic.id} type="button" className={styles.navItem} aria-pressed={tab === "active" && filters.topics.length === 1 && filters.topics[0] === topic.name} onClick={() => { patch({ topics: [topic.name], hasTopics: "" }); props.onTabChange("active"); setSidebarOpen(false); }}><span>{topic.name}</span><span className={styles.count}>{topic.task_count}</span></button>)}
+              {catalog?.topics.map((topic) => <button key={topic.id} type="button" className={styles.navItem} title={topic.parent_name ? `${topic.parent_name} › ${topic.name}` : topic.name} aria-pressed={tab === "active" && filters.topics.length === 1 && filters.topics[0] === topic.name} onClick={() => { patch({ topics: [topic.name], hasTopics: "" }); props.onTabChange("active"); setSidebarOpen(false); }}><span>{topic.name}</span><span className={styles.count}>{topic.task_count}</span></button>)}
               {!props.catalogLoading && catalog && !catalog.topics.length && <p className={styles.sidebarHint}>Тақырып табылмады.</p>}
             </div>
             {catalog?.has_more_topics && <p className={styles.sidebarHint}>Алғашқы {catalog.topics.length} тақырып. Қалғанын іздеумен табыңыз.</p>}

@@ -1264,6 +1264,170 @@ class Sprint3RegressionTests(unittest.TestCase):
         self.assertTrue(_is_quantitative_comparison_task({"text": "Задача", "sources": ["Количественные характеристики"]}))
         self.assertFalse(_is_quantitative_comparison_task({"text": "2x + 3 = 7", "topics": ["Алгебра"]}))
 
+    def test_topic_hierarchy_fallback_and_cycle_guards(self):
+        from repositories.bank.crud import BankTaskCrudMixin, BankTopicHierarchyError
+        from repositories.bank.helpers import BankTaskHelpersMixin
+        from routes.admin.bank import register_bank_routes
+        from routes.constructor import setup_constructor_routes
+        from slowapi import Limiter
+        from slowapi.util import get_remote_address
+
+        topics_store = {
+            1: {"id": 1, "name": "Тригонометрия", "parent_id": None},
+            2: {"id": 2, "name": "Тригонометриялық теңдеулер", "parent_id": 1},
+            3: {"id": 3, "name": "Қосымша бұрыш енгізу", "parent_id": 2},
+        }
+        missing_parent_col = {"active": False}
+
+        class _Cursor:
+            def __init__(self, row=None, rows=None):
+                self._row = row
+                self._rows = rows or []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            def __await__(self):
+                async def _done():
+                    return self
+
+                return _done().__await__()
+
+            async def fetchone(self):
+                return self._row
+
+            async def fetchall(self):
+                return self._rows
+
+        class _Db:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                if missing_parent_col["active"] and "parent_id" in sql:
+                    raise Exception("column t.parent_id does not exist")
+                if "SELECT t.name, p.name AS parent_name" in sql:
+                    rows = []
+                    for row in topics_store.values():
+                        parent_name = topics_store[row["parent_id"]]["name"] if row["parent_id"] else None
+                        rows.append((row["name"], parent_name))
+                    return _Cursor(rows=rows)
+                if "SELECT t.name\n" in sql or "SELECT t.name " in sql:
+                    return _Cursor(rows=[(row["name"],) for row in topics_store.values()])
+                if "SELECT id, name FROM bank_topics WHERE id = ?" in sql:
+                    row = topics_store.get(int(params[0]))
+                    return _Cursor(row=dict(row) if row else None)
+                if "SELECT id, name, parent_id FROM bank_topics WHERE id = ?" in sql:
+                    row = topics_store.get(int(params[0]))
+                    return _Cursor(row=dict(row) if row else None)
+                if "UPDATE bank_topics SET parent_id = ? WHERE id = ?" in sql:
+                    topics_store[int(params[1])]["parent_id"] = params[0]
+                    return _Cursor()
+                return _Cursor()
+
+        class _Ctx:
+            async def __aenter__(self):
+                return _Db()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _Repo(BankTaskHelpersMixin, BankTaskCrudMixin):
+            def _connection(self):
+                return _Ctx()
+
+            def _write_transaction(self, lock_key=None):
+                return _Ctx()
+
+        repo = _Repo()
+        tree = asyncio.run(repo.list_topics_with_parents(exclude_quantitative_comparison=True))
+        self.assertEqual(
+            {row["name"]: row["parent"] for row in tree},
+            {
+                "Тригонометрия": None,
+                "Тригонометриялық теңдеулер": "Тригонометрия",
+                "Қосымша бұрыш енгізу": "Тригонометриялық теңдеулер",
+            },
+        )
+
+        # Pre-migration fallback returns flat nodes with parent=None instead of crashing.
+        missing_parent_col["active"] = True
+        fallback_tree = asyncio.run(repo.list_topics_with_parents(exclude_quantitative_comparison=True))
+        self.assertEqual(len(fallback_tree), 3)
+        self.assertTrue(all(row["parent"] is None for row in fallback_tree))
+        with self.assertRaises(BankTopicHierarchyError):
+            asyncio.run(repo.set_topic_parent(2, 1))
+        missing_parent_col["active"] = False
+
+        # Self-parent and indirect cycle (1 -> 3 -> 2 -> 1) are rejected.
+        with self.assertRaises(BankTopicHierarchyError):
+            asyncio.run(repo.set_topic_parent(1, 1))
+        with self.assertRaises(BankTopicHierarchyError):
+            asyncio.run(repo.set_topic_parent(1, 3))
+        with self.assertRaises(BankTopicHierarchyError):
+            asyncio.run(repo.set_topic_parent(2, 999))
+
+        # Valid reparenting and clearing to root succeed.
+        moved = asyncio.run(repo.set_topic_parent(3, 1))
+        self.assertEqual(moved["parent_id"], 1)
+        self.assertEqual(moved["parent_name"], "Тригонометрия")
+        cleared = asyncio.run(repo.set_topic_parent(3, None))
+        self.assertIsNone(cleared["parent_id"])
+        self.assertIsNone(cleared["parent_name"])
+        self.assertIsNone(asyncio.run(repo.set_topic_parent(404, None)))
+
+        # Constructor and admin endpoints expose tree and enforce validation.
+        fake_db = MagicMock()
+        fake_db.bank_tasks = repo
+        fake_db.users = MagicMock()
+        fake_db.users.get_user_by_email = AsyncMock(
+            return_value={"id": 1, "email": "admin@example.test", "is_admin": True, "admin_role": "super_admin"}
+        )
+
+        app = FastAPI()
+        app.state.db = fake_db
+        limiter = Limiter(key_func=get_remote_address)
+        setup_constructor_routes(app, fake_db, limiter)
+        register_bank_routes(app, fake_db, limiter)
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False):
+            client = TestClient(app)
+            resp = client.get("/api/constructor/topics", params={"email": "admin@example.test"})
+            self.assertEqual(resp.status_code, 200)
+            body = resp.json()
+            self.assertEqual(
+                set(body["items"]),
+                {"Тригонометрия", "Тригонометриялық теңдеулер", "Қосымша бұрыш енгізу"},
+            )
+            self.assertEqual(len(body["tree"]), 3)
+
+            bad_cycle = client.put(
+                "/api/admin/bank/topics/1/parent",
+                json={"email": "admin@example.test", "parent_id": 2},
+            )
+            self.assertEqual(bad_cycle.status_code, 400)
+
+            bad_bool = client.put(
+                "/api/admin/bank/topics/2/parent",
+                json={"email": "admin@example.test", "parent_id": True},
+            )
+            self.assertEqual(bad_bool.status_code, 400)
+
+            not_found = client.put(
+                "/api/admin/bank/topics/999/parent",
+                json={"email": "admin@example.test", "parent_id": None},
+            )
+            self.assertEqual(not_found.status_code, 404)
+
+            ok = client.put(
+                "/api/admin/bank/topics/3/parent",
+                json={"email": "admin@example.test", "parent_id": 1},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertEqual(ok.json()["parent_name"], "Тригонометрия")
+
 
 if __name__ == "__main__":
     unittest.main()

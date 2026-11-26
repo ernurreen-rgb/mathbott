@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { filterTopics, toggleExcludedTopic, toggleIncludedTopic, toggleTopicSelection } from "@/lib/topic-filter";
+import {
+  buildTopicTree,
+  countSelectedDescendants,
+  filterTopics,
+  filterTopicTree,
+  flattenVisibleTopicTree,
+  toggleExcludedTopic,
+  toggleIncludedTopic,
+  toggleTopicSelection,
+} from "@/lib/topic-filter";
 
 const SAMPLE_TOPICS = [
   "Айналу денелері",
@@ -84,5 +93,78 @@ describe("toggleIncludedTopic / toggleExcludedTopic", () => {
     // Clicking exclude again removes the exclusion.
     state = toggleExcludedTopic(state, "Параметрлі теңдеу");
     expect(state).toEqual({ included: ["Виет теоремасы"], excluded: [] });
+  });
+});
+
+describe("buildTopicTree / flattenVisibleTopicTree / filterTopicTree", () => {
+  const SAMPLE_TREE = [
+    { name: "Геометрия", parent: null },
+    { name: "Планиметрия", parent: "Геометрия" },
+    { name: "Тригонометрия", parent: null },
+    { name: "Тригонометриялық теңдеулер", parent: "Тригонометрия" },
+    { name: "Тригонометриялық теңсіздіктер", parent: "Тригонометрия" },
+    { name: "Үшбұрыштар", parent: "Планиметрия" },
+  ];
+
+  it("shows only top-level sections when collapsed and expands branches selectively", () => {
+    const tree = buildTopicTree(SAMPLE_TREE);
+    expect(tree.hasHierarchy).toBe(true);
+    expect(tree.roots.map((n) => n.name)).toEqual(["Геометрия", "Тригонометрия"]);
+    expect(tree.byName.get("Геометрия")?.descendantCount).toBe(2);
+    expect(tree.byName.get("Үшбұрыштар")?.path).toEqual(["Геометрия", "Планиметрия"]);
+
+    expect(flattenVisibleTopicTree(tree.roots, new Set()).map((n) => n.name)).toEqual([
+      "Геометрия",
+      "Тригонометрия",
+    ]);
+
+    expect(flattenVisibleTopicTree(tree.roots, new Set(["Тригонометрия"])).map((n) => n.name)).toEqual([
+      "Геометрия",
+      "Тригонометрия",
+      "Тригонометриялық теңдеулер",
+      "Тригонометриялық теңсіздіктер",
+    ]);
+
+    expect(flattenVisibleTopicTree(tree.roots, new Set(["Геометрия", "Планиметрия"])).map((n) => [n.name, n.depth])).toEqual([
+      ["Геометрия", 0],
+      ["Планиметрия", 1],
+      ["Үшбұрыштар", 2],
+      ["Тригонометрия", 0],
+    ]);
+  });
+
+  it("searches across nested subtopics and preserves ancestor breadcrumb paths", () => {
+    const tree = buildTopicTree(SAMPLE_TREE);
+    const matches = filterTopicTree(tree.roots, "үшбұрыш");
+    expect(matches.map((n) => ({ name: n.name, path: n.path }))).toEqual([
+      { name: "Үшбұрыштар", path: ["Геометрия", "Планиметрия"] },
+    ]);
+
+    // Multi-word search spanning parent section + subtopic works too.
+    const crossMatches = filterTopicTree(tree.roots, "геометрия үшбұрыш");
+    expect(crossMatches.map((n) => n.name)).toEqual(["Үшбұрыштар"]);
+  });
+
+  it("safely promotes orphans and cyclic nodes to roots without crashing", () => {
+    const tree = buildTopicTree([
+      { name: "A", parent: "B" },
+      { name: "B", parent: "A" },
+      { name: "Orphan", parent: "NonExistent" },
+      { name: "Self", parent: "Self" },
+    ]);
+    expect(tree.hasHierarchy).toBe(false);
+    expect(tree.roots.map((n) => n.name)).toEqual(["A", "B", "Orphan", "Self"]);
+  });
+
+  it("counts included and excluded descendants accurately", () => {
+    const tree = buildTopicTree(SAMPLE_TREE);
+    const trig = tree.byName.get("Тригонометрия")!;
+    expect(
+      countSelectedDescendants(
+        trig,
+        new Set(["Тригонометрия", "Тригонометриялық теңдеулер"]),
+        new Set(["Тригонометриялық теңсіздіктер"]),
+      ),
+    ).toEqual({ included: 1, excluded: 1 });
   });
 });

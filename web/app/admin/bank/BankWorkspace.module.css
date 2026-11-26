@@ -28,6 +28,10 @@
 .sidebarToggle { display: none; }
 .navGroup + .navGroup { margin-top: 27px; }
 .navLabel { margin: 0 10px 8px; color: #717b8c; font-size: 11px; font-weight: 600; letter-spacing: .075em; text-transform: uppercase; }
+.navLabelRow { display: flex; align-items: center; justify-content: space-between; margin: 0 10px 8px; gap: 8px; }
+.navLabelRow .navLabel { margin: 0; }
+.navLabelAction { padding: 2px 7px; border-radius: 5px; background: #ede6fb; color: #6932c2; font-size: 11px; font-weight: 600; cursor: pointer; }
+.navLabelAction:hover { background: #e1d4fa; }
 .navItem { display: flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%; padding: 9px 10px; border-radius: 7px; background: transparent; color: #626d7e; text-align: left; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .navItem > span:first-child { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .navItem:hover { background: #eef0f7; color: #343c4c; }

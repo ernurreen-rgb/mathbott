@@ -10,6 +10,17 @@ from .helpers import _TAXONOMY_TABLES, fetch_sources_for_task_safe, fetch_source
 from .twins import IS_TWIN_SQL, NOT_DRAFT_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
+
+class BankTopicHierarchyError(ValueError):
+    """Raised when a topic parent assignment is invalid (missing parent or cycle)."""
+
+
+def _is_missing_parent_column_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "parent_id" in message and (
+        "does not exist" in message or "undefinedcolumn" in message or "no such column" in message
+    )
+
 # Quantitative comparison tasks ("Количественные характеристики" / "Сандық сипаттамаларын")
 # stay in the bank for modules, trial tests and admin, but are hidden from the task constructor.
 NOT_QUANTITATIVE_COMPARISON_SQL = """(
@@ -1055,6 +1066,125 @@ class BankTaskCrudMixin:
             limit=limit,
             exclude_quantitative_comparison=exclude_quantitative_comparison,
         )
+
+    async def list_topics_with_parents(
+        self,
+        query: Optional[str] = None,
+        limit: Optional[int] = None,
+        *,
+        exclude_quantitative_comparison: bool = False,
+    ) -> List[Dict[str, Optional[str]]]:
+        """Active topics with their optional parent topic name. Falls back cleanly before migration 0025."""
+        normalized_query = self._normalize_topic(query or "")
+        limit_clause = "\n                    LIMIT ?" if limit is not None else ""
+        extra_task_clause = (
+            f"\n                          AND {NOT_QUANTITATIVE_COMPARISON_SQL}"
+            if exclude_quantitative_comparison
+            else ""
+        )
+        active_clause = f"""EXISTS (
+                        SELECT 1
+                        FROM bank_task_topic_map m
+                        JOIN bank_tasks bt ON bt.id = m.bank_task_id
+                        WHERE m.topic_id = t.id
+                          AND bt.deleted_at IS NULL
+                          AND {NOT_TWIN_SQL}{extra_task_clause}
+                    )"""
+        if normalized_query:
+            sql = f"""
+                SELECT t.name, p.name AS parent_name
+                FROM bank_topics t
+                LEFT JOIN bank_topics p ON p.id = t.parent_id
+                WHERE t.name_norm LIKE ? ESCAPE '\\'
+                  AND {active_clause}
+                ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
+            """
+            params: List[Any] = [self._contains_like_pattern(normalized_query)]
+        else:
+            sql = f"""
+                SELECT t.name, p.name AS parent_name
+                FROM bank_topics t
+                LEFT JOIN bank_topics p ON p.id = t.parent_id
+                WHERE {active_clause}
+                ORDER BY LOWER(t.name COLLATE "pg_c_utf8") ASC{limit_clause}
+            """
+            params = []
+        if limit is not None:
+            params.append(limit)
+        try:
+            async with self._connection() as db:
+                async with db.execute(sql, params) as cursor:
+                    rows = await cursor.fetchall()
+                    return [{"name": row[0], "parent": row[1]} for row in rows]
+        except Exception as exc:
+            if not _is_missing_parent_column_error(exc):
+                raise
+            names = await self.list_topics(
+                query=query,
+                limit=limit,
+                exclude_quantitative_comparison=exclude_quantitative_comparison,
+            )
+            return [{"name": name, "parent": None} for name in names]
+
+    async def set_topic_parent(
+        self,
+        topic_id: int,
+        parent_id: Optional[int],
+    ) -> Optional[Dict[str, Any]]:
+        """Assign or clear a topic's parent while rejecting self-links and cycles."""
+        try:
+            async with self._write_transaction(lock_key="bank_tasks") as db:
+                db.row_factory = db_driver.Row
+                async with db.execute("SELECT id, name FROM bank_topics WHERE id = ?", (topic_id,)) as cursor:
+                    topic_row = await cursor.fetchone()
+                if not topic_row:
+                    return None
+
+                parent_name: Optional[str] = None
+                resolved_parent_id: Optional[int] = None
+                if parent_id is not None:
+                    resolved_parent_id = int(parent_id)
+                    if resolved_parent_id == int(topic_id):
+                        raise BankTopicHierarchyError("Topic cannot be its own parent")
+
+                    visited = {int(topic_id)}
+                    cursor_id: Optional[int] = resolved_parent_id
+                    hops = 0
+                    while cursor_id is not None:
+                        if cursor_id in visited:
+                            raise BankTopicHierarchyError("Topic hierarchy cycle is not allowed")
+                        visited.add(cursor_id)
+                        hops += 1
+                        if hops > 64:
+                            raise BankTopicHierarchyError("Topic hierarchy depth limit exceeded")
+                        async with db.execute(
+                            "SELECT id, name, parent_id FROM bank_topics WHERE id = ?",
+                            (cursor_id,),
+                        ) as cursor:
+                            ancestor_row = await cursor.fetchone()
+                        if not ancestor_row:
+                            if cursor_id == resolved_parent_id:
+                                raise BankTopicHierarchyError("Parent topic not found")
+                            break
+                        if cursor_id == resolved_parent_id:
+                            parent_name = ancestor_row["name"]
+                        next_parent = ancestor_row["parent_id"]
+                        cursor_id = int(next_parent) if next_parent is not None else None
+
+                await db.execute(
+                    "UPDATE bank_topics SET parent_id = ? WHERE id = ?",
+                    (resolved_parent_id, topic_id),
+                )
+                return {
+                    "id": int(topic_row["id"]),
+                    "name": topic_row["name"],
+                    "parent_id": resolved_parent_id,
+                    "parent_name": parent_name,
+                }
+        except Exception as exc:
+            if _is_missing_parent_column_error(exc):
+                raise BankTopicHierarchyError("Topic hierarchy migration has not been applied yet") from exc
+            raise
 
     async def list_sources(
         self,

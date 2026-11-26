@@ -1,5 +1,5 @@
 import { apiPath, clearApiGetCache, fetchWithErrorHandling, FileDownloadResult } from "./client";
-import type { AiTwinCheck, AiTwinDraftsResponse, AiTwinStatus, BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTwinsFilter, QuestionType } from "@/types";
+import type { AiTwinCheck, AiTwinDraftsResponse, AiTwinStatus, BankCatalogResponse, BankTaskSort, BankTaskTwinsResponse, BankTaskUsageFilter, BankTopicParentUpdateResponse, BankTwinsFilter, QuestionType } from "@/types";
 import { BankDifficulty, BankTask, BankTaskListResponse, BankTaskVersionListResponse, BankTaskVersionDetail, BankTaskUsageResponse, BankTaskSimilarCandidate, SimilarConflictPayload, BankImportValidationErrorPayload, BankImportResponse, BankImportMode, BankImportPreviewResponse, BankQualitySummaryResponse, BankQualityListParams, BankDuplicateListParams, BankDuplicateListResponse, BankAuditListParams, BankAuditListResponse, BankUnrecognizedAnswersResponse, BankAcceptAnswerResponse } from "@/types";
 
 
@@ -538,6 +538,24 @@ async function getAdminBankTaxonomy(
 
 export function getAdminBankTopics(email: string, q?: string, limit?: number) {
   return getAdminBankTaxonomy("topics", email, q, limit);
+}
+
+export async function updateAdminBankTopicParent(
+  topicId: number,
+  parentId: number | null,
+  email: string
+): Promise<{ data: BankTopicParentUpdateResponse | null; error: string | null }> {
+  clearApiGetCache();
+  const result = await fetchWithErrorHandling<BankTopicParentUpdateResponse>(
+    apiPath(`admin/bank/topics/${topicId}/parent`),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, parent_id: parentId }),
+    }
+  );
+  clearApiGetCache();
+  return result;
 }
 
 export function getAdminBankSources(email: string, q?: string, limit?: number) {

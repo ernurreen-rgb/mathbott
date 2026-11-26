@@ -336,3 +336,37 @@ class TaskConstructorTests(PostgresTestCase):
         bank_all = await self.db.bank_tasks.list_tasks(include_deleted=False, limit=100)
         bank_ids = {int(item["id"]) for item in bank_all["items"]}
         self.assertTrue(hidden_ids.issubset(bank_ids))
+
+    async def test_topic_hierarchy_tree_and_exact_parent_filter(self):
+        teacher = {"email": "teacher@example.test"}
+        extra = await self.db.bank_tasks.create_tasks_bulk_atomic(
+            tasks=[
+                _task(30, topics=["Тригонометрия"]),
+                _task(31, topics=["Тригонометриялық теңдеулер"]),
+                _task(32, topics=["Тригонометрия", "Тригонометриялық теңдеулер"]),
+            ],
+            created_by=self.owner["id"],
+            actor_email="teacher@example.test",
+        )
+        parent_only_id, child_only_id, both_id = (int(task["id"]) for task in extra)
+
+        catalog = await self.db.bank_tasks.get_catalog()
+        topic_ids = {item["name"]: item["id"] for item in catalog["topics"]}
+        updated = await self.db.bank_tasks.set_topic_parent(
+            topic_ids["Тригонометриялық теңдеулер"],
+            topic_ids["Тригонометрия"],
+        )
+        self.assertEqual(updated["parent_name"], "Тригонометрия")
+
+        async with self.client() as client:
+            topics_payload = (await client.get("/api/constructor/topics", params=teacher)).json()
+            tree_map = {node["name"]: node["parent"] for node in topics_payload["tree"]}
+            self.assertIsNone(tree_map["Тригонометрия"])
+            self.assertEqual(tree_map["Тригонометриялық теңдеулер"], "Тригонометрия")
+
+            # Filtering by parent topic returns ONLY tasks that explicitly have the parent tag.
+            by_parent = (
+                await client.get("/api/constructor/tasks", params={**teacher, "topics": "Тригонометрия"})
+            ).json()
+            self.assertEqual({item["id"] for item in by_parent["items"]}, {parent_only_id, both_id})
+            self.assertNotIn(child_only_id, {item["id"] for item in by_parent["items"]})

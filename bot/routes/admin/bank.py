@@ -3,6 +3,7 @@ Admin bank routes.
 """
 from .common import *  # noqa: F401,F403
 from fastapi import Response
+from repositories.bank.crud import BankTopicHierarchyError
 from utils.validation import MAX_ACCEPTED_ANSWERS
 from typing import Literal
 
@@ -868,6 +869,42 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
     ):
         items = await db.bank_tasks.list_topics(query=q, limit=limit)
         return {"items": items}
+
+    @app.put("/api/admin/bank/topics/{topic_id}/parent")
+    async def update_bank_topic_parent(
+        topic_id: int,
+        payload: dict = Body(...),
+        db: Database = Depends(get_db),
+    ):
+        email = payload.get("email")
+        if not isinstance(email, str) or not email.strip():
+            raise HTTPException(status_code=400, detail="email is required")
+        await require_admin(email=email, db=db)
+
+        if topic_id < 1:
+            raise HTTPException(status_code=400, detail="topic_id must be >= 1")
+
+        raw_parent_id = payload.get("parent_id")
+        parent_id: Optional[int]
+        if raw_parent_id is None or raw_parent_id == "":
+            parent_id = None
+        else:
+            if isinstance(raw_parent_id, bool):
+                raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
+            try:
+                parent_id = int(raw_parent_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
+            if parent_id < 1:
+                raise HTTPException(status_code=400, detail="parent_id must be >= 1")
+
+        try:
+            updated = await db.bank_tasks.set_topic_parent(topic_id=topic_id, parent_id=parent_id)
+        except BankTopicHierarchyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if not updated:
+            raise HTTPException(status_code=404, detail="Topic not found")
+        return updated
 
     @app.get("/api/admin/bank/sources")
     async def get_bank_sources(

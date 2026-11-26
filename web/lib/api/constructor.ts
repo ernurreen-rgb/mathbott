@@ -3,6 +3,7 @@ import type {
   ConstructorQuestionType,
   ConstructorTask,
   ConstructorTaskPage,
+  ConstructorTopicsResponse,
   TaskCollection,
   TaskCollectionImageKind,
   TaskCollectionList,
@@ -57,8 +58,8 @@ export function getConstructorTaskTwins(taskId: number, email: string): Promise<
   return request<{ items: ConstructorTask[] }>(withEmail(`constructor/tasks/${taskId}/twins`, email));
 }
 
-export function getConstructorTopics(email: string): Promise<FetchResult<{ items: string[] }>> {
-  return request<{ items: string[] }>(withEmail("constructor/topics", email));
+export function getConstructorTopics(email: string): Promise<FetchResult<ConstructorTopicsResponse>> {
+  return request<ConstructorTopicsResponse>(withEmail("constructor/topics", email));
 }
 
 export function getConstructorSources(email: string): Promise<FetchResult<{ items: string[] }>> {

@@ -3,20 +3,41 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n/provider";
-import { filterTopics, toggleExcludedTopic, toggleIncludedTopic } from "@/lib/topic-filter";
+import {
+  buildTopicTree,
+  countSelectedDescendants,
+  filterTopics,
+  filterTopicTree,
+  flattenVisibleTopicTree,
+  toggleExcludedTopic,
+  toggleIncludedTopic,
+  type TopicHierarchyItem,
+  type TopicTreeNode,
+} from "@/lib/topic-filter";
+
+interface ComboboxOption {
+  value: string;
+  label: string;
+  node?: TopicTreeNode;
+  isSearchMatch?: boolean;
+}
 
 /**
  * Searchable multi-select topic dropdown supporting both inclusion ("must have tag")
  * and exclusion ("must NOT have tag") inside one control.
+ * When topic hierarchy metadata is available, shows only top-level sections initially
+ * with collapsible nested subtopics, while search flattens across all levels with breadcrumbs.
  */
 export default function TopicCombobox({
   topics,
+  topicTree,
   included,
   excluded,
   onChange,
   maxSelected = Number.POSITIVE_INFINITY,
 }: {
   topics: string[];
+  topicTree?: TopicHierarchyItem[];
   included: string[];
   excluded: string[];
   onChange: (next: { included: string[]; excluded: string[] }) => void;
@@ -26,6 +47,7 @@ export default function TopicCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -35,29 +57,61 @@ export default function TopicCombobox({
 
   const includedSet = useMemo(() => new Set(included), [included]);
   const excludedSet = useMemo(() => new Set(excluded), [excluded]);
-  const filteredTopics = useMemo(() => filterTopics(topics, query), [topics, query]);
+
+  const tree = useMemo(() => {
+    const source: TopicHierarchyItem[] =
+      topicTree && topicTree.length > 0
+        ? topicTree
+        : topics.map((name) => ({ name, parent: null }));
+    return buildTopicTree(source);
+  }, [topics, topicTree]);
+
   const hasQuery = query.trim().length > 0;
   const hasAnySelection = included.length > 0 || excluded.length > 0;
 
-  // When search is empty, prepend "All topics", then pinned included + excluded tags, then the rest.
-  const options = useMemo<Array<{ value: string; label: string }>>(() => {
+  const options = useMemo<ComboboxOption[]>(() => {
     if (hasQuery) {
-      return filteredTopics.map((name) => ({ value: name, label: name }));
+      if (tree.hasHierarchy) {
+        return filterTopicTree(tree.roots, query).map((node) => ({
+          value: node.name,
+          label: node.name,
+          node,
+          isSearchMatch: true,
+        }));
+      }
+      return filterTopics(topics, query).map((name) => ({ value: name, label: name }));
     }
+
+    if (tree.hasHierarchy) {
+      const visibleNodes = flattenVisibleTopicTree(tree.roots, expanded);
+      return [
+        { value: "", label: t("constructor.allTopics") },
+        ...visibleNodes.map((node) => ({ value: node.name, label: node.name, node })),
+      ];
+    }
+
+    // Flat fallback when no parent/child hierarchy exists yet.
     const pinnedIncluded = included.map((name) => ({ value: name, label: name }));
     const pinnedExcluded = excluded
       .filter((name) => !includedSet.has(name))
       .map((name) => ({ value: name, label: name }));
-    const rest = filteredTopics
+    const rest = topics
       .filter((name) => !includedSet.has(name) && !excludedSet.has(name))
       .map((name) => ({ value: name, label: name }));
     return [{ value: "", label: t("constructor.allTopics") }, ...pinnedIncluded, ...pinnedExcluded, ...rest];
-  }, [filteredTopics, hasQuery, included, excluded, includedSet, excludedSet, t]);
+  }, [tree, topics, query, hasQuery, expanded, included, excluded, includedSet, excludedSet, t]);
 
   useEffect(() => {
     if (!open) return;
     setActiveIndex(0);
   }, [open, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (activeIndex >= options.length && options.length > 0) {
+      setActiveIndex(options.length - 1);
+    }
+  }, [open, activeIndex, options.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,6 +148,16 @@ export default function TopicCombobox({
     if (restoreFocus) {
       triggerRef.current?.focus();
     }
+  };
+
+  const toggleExpand = (topicName: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(topicName)) next.delete(topicName);
+      else next.add(topicName);
+      return next;
+    });
+    searchInputRef.current?.focus();
   };
 
   const handleToggleInclude = (optionValue: string) => {
@@ -138,6 +202,26 @@ export default function TopicCombobox({
       event.preventDefault();
       if (options.length > 0) {
         setActiveIndex((prev) => (prev - 1 + options.length) % options.length);
+      }
+    } else if (event.key === "ArrowRight" && !hasQuery && tree.hasHierarchy) {
+      const picked = options[activeIndex];
+      if (picked?.node && picked.node.children.length > 0 && !expanded.has(picked.node.name)) {
+        event.preventDefault();
+        toggleExpand(picked.node.name);
+      }
+    } else if (event.key === "ArrowLeft" && !hasQuery && tree.hasHierarchy) {
+      const picked = options[activeIndex];
+      if (picked?.node) {
+        if (picked.node.children.length > 0 && expanded.has(picked.node.name)) {
+          event.preventDefault();
+          toggleExpand(picked.node.name);
+        } else if (picked.node.parent) {
+          const parentIdx = options.findIndex((item) => item.value === picked.node?.parent);
+          if (parentIdx >= 0) {
+            event.preventDefault();
+            setActiveIndex(parentIdx);
+          }
+        }
       }
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -225,7 +309,7 @@ export default function TopicCombobox({
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:right-auto sm:min-w-[320px] sm:max-w-[400px]">
+        <div className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:right-auto sm:min-w-[360px] sm:max-w-[440px]">
           <div className="border-b border-slate-100 p-2">
             <div className="relative">
               <Icon
@@ -270,7 +354,7 @@ export default function TopicCombobox({
             role="listbox"
             aria-multiselectable="true"
             aria-label={t("constructor.topic")}
-            className="max-h-64 overflow-y-auto py-1"
+            className="max-h-80 overflow-y-auto py-1"
           >
             {options.length === 0 ? (
               <li className="px-3 py-2.5 text-center text-sm text-slate-400">
@@ -284,6 +368,23 @@ export default function TopicCombobox({
                 const isActive = index === activeIndex;
                 const includeDisabled = !isAll && !isIncluded && atIncludeLimit;
                 const excludeDisabled = !isAll && !isExcluded && atExcludeLimit;
+                const node = option.node;
+                const showTreeControls = !isAll && !option.isSearchMatch && tree.hasHierarchy && !!node;
+                const hasChildren = showTreeControls && node.children.length > 0;
+                const isExpanded = hasChildren && expanded.has(node.name);
+                const depth = showTreeControls ? node.depth : 0;
+                const nestedSelection =
+                  hasChildren && !isExpanded
+                    ? countSelectedDescendants(node, includedSet, excludedSet)
+                    : { included: 0, excluded: 0 };
+                const indentPadding = !showTreeControls
+                  ? "pl-3"
+                  : depth === 0
+                    ? "pl-1.5"
+                    : depth === 1
+                      ? "pl-6"
+                      : "pl-10";
+
                 return (
                   <li key={option.value || "__all__"} role="presentation">
                     <div
@@ -294,7 +395,7 @@ export default function TopicCombobox({
                       role="option"
                       aria-selected={isIncluded || isExcluded}
                       onMouseEnter={() => setActiveIndex(index)}
-                      className={`flex items-center gap-1 pr-2 transition-colors ${
+                      className={`flex items-center gap-1 pr-2 transition-colors ${indentPadding} ${
                         isExcluded
                           ? "bg-red-50/70"
                           : isActive
@@ -302,18 +403,51 @@ export default function TopicCombobox({
                             : "hover:bg-slate-50"
                       }`}
                     >
+                      {showTreeControls &&
+                        (hasChildren ? (
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            aria-expanded={isExpanded}
+                            aria-label={t(
+                              isExpanded ? "constructor.collapseSubtopicsAria" : "constructor.expandSubtopicsAria",
+                              { topic: node.name },
+                            )}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleExpand(node.name);
+                            }}
+                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700"
+                          >
+                            <Icon
+                              name="chevronRight"
+                              className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-90 text-purple-600" : ""}`}
+                            />
+                          </button>
+                        ) : (
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block w-6 shrink-0 ${
+                              depth > 0 ? "mr-0.5 h-4 border-l border-slate-200" : ""
+                            }`}
+                          />
+                        ))}
+
                       <button
                         type="button"
                         tabIndex={-1}
                         disabled={includeDisabled}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => handleToggleInclude(option.value)}
-                        className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 pr-1 text-left text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
+                        className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 pr-1 text-left text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
                           isExcluded
                             ? "font-medium text-red-700 line-through"
                             : isIncluded
                               ? "font-semibold text-purple-800"
-                              : "text-slate-800"
+                              : depth === 0 && hasChildren
+                                ? "font-medium text-slate-900"
+                                : "text-slate-800"
                         }`}
                       >
                         {!isAll && (
@@ -328,7 +462,34 @@ export default function TopicCombobox({
                             {isIncluded && <Icon name="check" className="h-3 w-3" />}
                           </span>
                         )}
-                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{option.label}</span>
+                          {option.isSearchMatch && node && node.path.length > 0 && (
+                            <span className="block truncate text-[11px] font-normal text-slate-400 no-underline">
+                              {node.path.join(" › ")}
+                            </span>
+                          )}
+                        </span>
+                        {hasChildren && (
+                          <span className="flex shrink-0 items-center gap-1">
+                            {nestedSelection.included > 0 && (
+                              <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-700">
+                                +{nestedSelection.included}
+                              </span>
+                            )}
+                            {nestedSelection.excluded > 0 && (
+                              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                                −{nestedSelection.excluded}
+                              </span>
+                            )}
+                            <span
+                              title={t("constructor.subtopicsCountAria", { count: node.descendantCount })}
+                              className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500 tabular-nums"
+                            >
+                              {node.descendantCount}
+                            </span>
+                          </span>
+                        )}
                         {isAll && isIncluded && <Icon name="check" className="h-4 w-4 shrink-0 text-purple-600" />}
                       </button>
 

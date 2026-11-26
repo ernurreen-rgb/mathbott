@@ -233,7 +233,10 @@ def setup_constructor_routes(app: FastAPI, db: Database, limiter: Limiter):
         db: Database = Depends(get_db),
         q: Optional[str] = Query(None, max_length=80),
     ):
-        return {"items": await db.bank_tasks.list_topics(query=q, limit=None, exclude_quantitative_comparison=True)}
+        nodes = await db.bank_tasks.list_topics_with_parents(
+            query=q, limit=None, exclude_quantitative_comparison=True
+        )
+        return {"items": [node["name"] for node in nodes], "tree": nodes}
 
     @app.get("/api/constructor/sources")
     @limiter.limit("60/minute")

@@ -6,6 +6,21 @@ export type BankDifficulty = "A" | "B" | "C";
 
 export type BankTaskSort = "newest" | "oldest" | "updated";
 export type BankTaskUsageFilter = "all" | "used" | "unused";
+export interface BankCatalogTopic {
+  id: number;
+  name: string;
+  task_count: number;
+  parent_id?: number | null;
+  parent_name?: string | null;
+}
+
+export interface BankTopicParentUpdateResponse {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  parent_name: string | null;
+}
+
 export interface BankCatalogResponse {
   active_total: number;
   trash_total: number;
@@ -13,7 +28,7 @@ export interface BankCatalogResponse {
   no_topics_total: number;
   no_sources_total?: number;
   twins_total?: number;
-  topics: Array<{ id: number; name: string; task_count: number }>;
+  topics: BankCatalogTopic[];
   topics_total: number;
   has_more_topics: boolean;
   sources?: Array<{ id: number; name: string; task_count: number }>;

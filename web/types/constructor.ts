@@ -52,4 +52,14 @@ export interface TaskCollectionList {
   max_tasks: number;
 }
 
+export interface ConstructorTopicNode {
+  name: string;
+  parent: string | null;
+}
+
+export interface ConstructorTopicsResponse {
+  items: string[];
+  tree?: ConstructorTopicNode[];
+}
+
 export type TaskCollectionImageKind = "title" | "background";

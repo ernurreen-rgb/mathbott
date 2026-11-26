@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 
 import storage as db_driver
 
+from .crud import _is_missing_parent_column_error
 from .helpers import _TAXONOMY_TABLES
 from .twins import IS_TWIN_SQL, NOT_TWIN_SQL
 
@@ -30,6 +31,32 @@ class BankTaskCatalogMixin:
             total = int((await cursor.fetchone())["total"])
         limit_clause = " LIMIT ?" if limit is not None else ""
         exec_params = [*params, limit] if limit is not None else list(params)
+        if kind == "topic":
+            try:
+                async with db.execute(f"""
+                    SELECT t.id, t.name, t.parent_id, p.name AS parent_name, COUNT(DISTINCT bt.id) AS task_count
+                    FROM {item_table} t
+                    LEFT JOIN {item_table} p ON p.id = t.parent_id
+                    JOIN {map_table} m ON m.{fk_col} = t.id
+                    JOIN bank_tasks bt ON bt.id = m.bank_task_id AND bt.deleted_at IS NULL AND {NOT_TWIN_SQL}
+                    WHERE 1 = 1 {condition}
+                    GROUP BY t.id, t.name, t.name_norm, t.parent_id, p.name
+                    ORDER BY t.name_norm ASC, t.id ASC{limit_clause}
+                """, exec_params) as cursor:
+                    items = [
+                        {
+                            "id": int(row["id"]),
+                            "name": row["name"],
+                            "task_count": int(row["task_count"]),
+                            "parent_id": int(row["parent_id"]) if row["parent_id"] is not None else None,
+                            "parent_name": row["parent_name"],
+                        }
+                        for row in await cursor.fetchall()
+                    ]
+                return items, total
+            except Exception as exc:
+                if not _is_missing_parent_column_error(exc):
+                    raise
         async with db.execute(f"""
             SELECT t.id, t.name, COUNT(DISTINCT bt.id) AS task_count
             FROM {item_table} t
@@ -39,8 +66,20 @@ class BankTaskCatalogMixin:
             GROUP BY t.id, t.name, t.name_norm
             ORDER BY t.name_norm ASC, t.id ASC{limit_clause}
         """, exec_params) as cursor:
-            items = [{"id": int(row["id"]), "name": row["name"], "task_count": int(row["task_count"])}
-                     for row in await cursor.fetchall()]
+            if kind == "topic":
+                items = [
+                    {
+                        "id": int(row["id"]),
+                        "name": row["name"],
+                        "task_count": int(row["task_count"]),
+                        "parent_id": None,
+                        "parent_name": None,
+                    }
+                    for row in await cursor.fetchall()
+                ]
+            else:
+                items = [{"id": int(row["id"]), "name": row["name"], "task_count": int(row["task_count"])}
+                         for row in await cursor.fetchall()]
         return items, total
 
     async def get_catalog(self, query: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:

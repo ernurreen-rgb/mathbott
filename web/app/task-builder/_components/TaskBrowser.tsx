@@ -6,7 +6,7 @@ import { getConstructorSources, getConstructorTasks, getConstructorTaskTwins, ge
 import { useI18n } from "@/lib/i18n/provider";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { toggleIncludedTopic } from "@/lib/topic-filter";
-import type { ConstructorQuestionType, ConstructorTask } from "@/types/constructor";
+import type { ConstructorQuestionType, ConstructorTask, ConstructorTopicNode } from "@/types/constructor";
 import SourceFilterDropdown from "@/components/ui/SourceFilterDropdown";
 import TaskPreview from "./TaskPreview";
 import TopicCombobox from "./TopicCombobox";
@@ -48,6 +48,7 @@ export default function TaskBrowser({
   const [difficulty, setDifficulty] = useState<"" | (typeof LEVELS)[number]>("");
   const [questionType, setQuestionType] = useState<"" | ConstructorQuestionType>("");
   const [topics, setTopics] = useState<string[]>([]);
+  const [topicTree, setTopicTree] = useState<ConstructorTopicNode[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [items, setItems] = useState<ConstructorTask[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -123,7 +124,10 @@ export default function TaskBrowser({
     let active = true;
     void Promise.all([getConstructorTopics(email), getConstructorSources(email)]).then(([topicsRes, sourcesRes]) => {
       if (!active) return;
-      if (topicsRes.data) setTopics(topicsRes.data.items);
+      if (topicsRes.data) {
+        setTopics(topicsRes.data.items);
+        setTopicTree(topicsRes.data.tree ?? []);
+      }
       if (sourcesRes.data) setSources(sourcesRes.data.items);
     });
     return () => {
@@ -188,6 +192,7 @@ export default function TaskBrowser({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <TopicCombobox
             topics={topics}
+            topicTree={topicTree}
             included={selectedTopics}
             excluded={excludedTopics}
             onChange={({ included, excluded }) => {

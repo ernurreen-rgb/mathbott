@@ -22,6 +22,7 @@ import HistoryDialog from "./HistoryDialog";
 import ImportPreviewDialog from "./ImportPreviewDialog";
 import JsonEditDialog from "./JsonEditDialog";
 import SnapshotDialog from "./SnapshotDialog";
+import TopicHierarchyDialog from "./TopicHierarchyDialog";
 import UsageDialog from "./UsageDialog";
 import { createImportActions } from "./createImportActions";
 import { createVersionActions } from "./createVersionActions";
@@ -109,6 +110,7 @@ export default function BankWorkspace() {
   const [usageItems, setUsageItems] = useState<BankTaskUsageItem[]>([]);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [topicTreeOpen, setTopicTreeOpen] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const formPreviewTask = useMemo(() => ({ ...buildBankFormPreviewTask(form), id: editingTaskId ?? -1 }), [editingTaskId, form]);
   const previewTask = workspaceTask ? { ...workspaceTask, ...formPreviewTask, topics: form.topics, sources: form.sources, difficulty: form.difficulty } : null;
@@ -412,6 +414,7 @@ export default function BankWorkspace() {
         savedViews={preferences.views} onSaveView={preferences.saveView} onRemoveView={preferences.removeView}
         tasks={tasks} total={total} loading={loading || filters.search.trim() !== debouncedSearch}
         onOpen={(task) => void openTask(task)} onCreate={() => openNewTask()} onImport={() => importFileInputRef.current?.click()} onExport={() => void handleExportJson()}
+        onOpenTopicTree={() => setTopicTreeOpen(true)}
         importing={importing || confirmingImport} exporting={exporting} canReview={hasReviewAccess(access?.role)} canDeletePermanently={hasSuperAccess(access?.role)}
         onRestore={(id) => void handleRestoreTask(id)} onDeletePermanently={(id) => void handlePermanentDeleteTask(id)} answersPanel={<UnrecognizedAnswersPanel email={email!} />} />
         : <section className={styles.taskShell} aria-label="Есеппен жұмыс">
@@ -452,6 +455,7 @@ export default function BankWorkspace() {
     <SnapshotDialog snapshotView={snapshotView} setSnapshotView={setSnapshotView} />
     <JsonEditDialog jsonEdit={jsonEdit} setJsonEdit={setJsonEdit} saveJsonEdit={saveJsonEdit} />
     <UsageDialog usageTask={usageTask} setUsageTask={setUsageTask} usageLoading={usageLoading} usageError={usageError} usageItems={usageItems} />
+    {email && <TopicHierarchyDialog open={topicTreeOpen} email={email} onClose={() => setTopicTreeOpen(false)} onUpdated={() => void fetchCatalog()} />}
     <MobileNav currentPage="admin" />
   </div>;
 }
