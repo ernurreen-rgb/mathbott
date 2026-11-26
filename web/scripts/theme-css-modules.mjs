@@ -162,7 +162,8 @@ const outputPath = path.join(web, OUTPUT);
 if (check) {
   let current = "";
   try { current = readFileSync(outputPath, "utf8"); } catch { /* missing */ }
-  if (current !== output) { leftovers += 1; console.error(`${OUTPUT} is out of date`); }
+  // Git may check the file out with CRLF line ends.
+  if (current.replace(/\r\n/g, "\n") !== output) { leftovers += 1; console.error(`${OUTPUT} is out of date`); }
   process.exit(leftovers ? 1 : 0);
 }
 writeFileSync(outputPath, output);
