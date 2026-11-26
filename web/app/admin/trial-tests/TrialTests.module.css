@@ -6,48 +6,48 @@
 .folderName { display: flex; align-items: center; gap: 14px; min-width: 0; font-size: 14px; font-weight: 500; }
 .folderName > svg { flex-shrink: 0; }
 .folderName > h3 { overflow-wrap: anywhere; }
-.search { min-width: 0; width: 220px; min-height: 34px; padding: 6px 10px; border: 1px solid #d6d9de; border-radius: 5px; color: #454c57; background: #fff; font-size: 13px; }
-.description { max-width: 760px; margin: -12px 0 24px; color: #777e89; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
-.previewLayout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; min-width: 0; border-top: 1px solid #e1e4e8; padding-top: 18px; }
+.search { min-width: 0; width: 220px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--qm-dk-line-d6d9de, #d6d9de); border-radius: 5px; color: var(--qm-dk-fg-454c57, #454c57); background: var(--qm-dk-bg-fff, #fff); font-size: 13px; }
+.description { max-width: 760px; margin: -12px 0 24px; color: var(--qm-dk-fg-777e89, #777e89); font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.previewLayout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; min-width: 0; border-top: 1px solid var(--qm-dk-line-e1e4e8, #e1e4e8); padding-top: 18px; }
 .previewLayout > * { min-width: 0; }
 .slotGrid { position: relative; display: flex; gap: 7px; overflow-x: auto; padding: 3px 3px 8px; scroll-behavior: smooth; }
-.slot { position: relative; display: grid; place-items: center; flex: 0 0 38px; min-height: 38px; border: 1px solid #e1e4e8; border-radius: 4px; background: #fff; color: #969da8; font-size: 13px; }
-.slotFilled { color: #303640; background: #f4f5f7; border-color: #d5d9df; }
+.slot { position: relative; display: grid; place-items: center; flex: 0 0 38px; min-height: 38px; border: 1px solid var(--qm-dk-line-e1e4e8, #e1e4e8); border-radius: 4px; background: var(--qm-dk-bg-fff, #fff); color: var(--qm-dk-fg-969da8, #969da8); font-size: 13px; }
+.slotFilled { color: var(--qm-dk-fg-303640, #303640); background: var(--qm-dk-bg-f4f5f7, #f4f5f7); border-color: var(--qm-dk-line-d5d9df, #d5d9df); }
 .slotCurrent { color: white; background: #252a34; border-color: #252a34; }
 .slotAnswered::after { content: ""; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: #138461; }
-.slotCurrent.slotAnswered::after { background: #a7f3d0; }
-.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; color: #777e89; }
+.slotCurrent.slotAnswered::after { background: var(--qm-dk-bg-a7f3d0, #a7f3d0); }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; color: var(--qm-dk-fg-777e89, #777e89); }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
-.legend i { width: 9px; height: 9px; border: 1px solid #d5d9df; border-radius: 2px; }
-.legendFilled { background: #d5d9df; }
+.legend i { width: 9px; height: 9px; border: 1px solid var(--qm-dk-line-d5d9df, #d5d9df); border-radius: 2px; }
+.legendFilled { background: var(--qm-dk-bg-d5d9df, #d5d9df); }
 .preview { min-width: 0; }
 .previewHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
-.previewHeading h3 { font-size: 15px; font-weight: 600; color: #303640; }
+.previewHeading h3 { font-size: 15px; font-weight: 600; color: var(--qm-dk-fg-303640, #303640); }
 .statement { line-height: 1.8; overflow-wrap: anywhere; }
 .answerControls { max-width: 720px; margin-top: 24px; }
-.previewFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #e8eaed; padding-top: 18px; margin-top: 28px; }
+.previewFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--qm-dk-line-e8eaed, #e8eaed); padding-top: 18px; margin-top: 28px; }
 .bankFilters { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 10px; align-items: end; margin-bottom: 18px; }
-.bankSelection { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-block: 1px solid #e1e4e8; padding: 12px 0; margin-bottom: 10px; }
+.bankSelection { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-block: 1px solid var(--qm-dk-line-e1e4e8, #e1e4e8); padding: 12px 0; margin-bottom: 10px; }
 .bankList { display: grid; }
 .bankRow {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
-  border-bottom: 1px solid #e8eaed;
+  border-bottom: 1px solid var(--qm-dk-line-e8eaed, #e8eaed);
   padding: 14px 12px;
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.bankRow:hover:not(.bankRowAssigned) { background: #f4f6f8; }
-.bankRowSelected { background: #eef3f9; }
-.bankRowSelected:hover:not(.bankRowAssigned) { background: #e2ebf5; }
+.bankRow:hover:not(.bankRowAssigned) { background: var(--qm-dk-bg-f4f6f8, #f4f6f8); }
+.bankRowSelected { background: var(--qm-dk-bg-eef3f9, #eef3f9); }
+.bankRowSelected:hover:not(.bankRowAssigned) { background: var(--qm-dk-bg-e2ebf5, #e2ebf5); }
 .bankRowAssigned { cursor: not-allowed; opacity: 0.6; }
-.bankRow input { margin-top: 5px; accent-color: #303640; cursor: pointer; }
+.bankRow input { margin-top: 5px; accent-color: var(--qm-dk-fg-303640, #303640); cursor: pointer; }
 .bankRowAssigned input { cursor: not-allowed; }
-.bankMeta { font-size: 12px; line-height: 1.7; color: #777e89; margin-bottom: 8px; }
-.bankActions { position: sticky; bottom: -24px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 16px 0; border-top: 1px solid #e1e4e8; background: #fff; }
+.bankMeta { font-size: 12px; line-height: 1.7; color: var(--qm-dk-fg-777e89, #777e89); margin-bottom: 8px; }
+.bankActions { position: sticky; bottom: -24px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 16px 0; border-top: 1px solid var(--qm-dk-line-e1e4e8, #e1e4e8); background: var(--qm-dk-bg-fff, #fff); }
 @media (prefers-reduced-motion: reduce) { .slotGrid { scroll-behavior: auto; } }
 @media (max-width: 600px) {
   .folderRow > a { flex-basis: 100%; }

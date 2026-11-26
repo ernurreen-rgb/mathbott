@@ -77,7 +77,7 @@ function TaskEditor({ test }: { test: TrialTest }) {
               );
             })()}
           </div>
-          {getPlacementImageFilename(currentPlacement) && <Image src={apiPath(`images/${getPlacementImageFilename(currentPlacement)}`)} alt="Тапсырма суреті" width={1280} height={720} unoptimized className="mt-4 max-h-64 w-auto max-w-full rounded border border-slate-200" />}
+          {getPlacementImageFilename(currentPlacement) && <Image src={apiPath(`images/${getPlacementImageFilename(currentPlacement)}`)} alt="Тапсырма суреті" width={1280} height={720} unoptimized className="qm-image-backdrop mt-4 max-h-64 w-auto max-w-full rounded border border-slate-200" />}
           <div className={local.answerControls}><CurrentSlotControls currentPlacement={currentPlacement} previewAnswers={editor.previewAnswers} currentSlotIndex={currentSlotIndex} setPreviewAnswer={editor.setPreviewAnswer} /></div>
         </> : <div className={styles.empty}><h3>Бос ұяшық</h3><p>Банктен таңдаңыз немесе осы орынға жаңа тапсырма қосыңыз.</p><button type="button" className={`${styles.secondaryButton} mt-4`} onClick={() => editor.openInlineCreateForCurrentSlot()}>Жаңа тапсырма құру</button></div>}
         <div className={local.previewFooter}><button type="button" className={styles.secondaryButton} disabled={currentSlotIndex === 1} onClick={() => editor.setCurrentSlotIndex((slot) => slot - 1)}><Icon name="arrowLeft" />Алдыңғы</button><span className={styles.count}>{currentSlotIndex} / {slotCount}</span><button type="button" className={styles.secondaryButton} disabled={currentSlotIndex === slotCount} onClick={() => editor.setCurrentSlotIndex((slot) => slot + 1)}>Келесі<Icon name="arrowRight" /></button></div>

@@ -11,11 +11,12 @@ export const VIZ = {
   primarySoft: "#b9a2ee",
   secondary: "#eb6834",
   tertiary: "#1baf7a",
-  track: "#eef0f5",
-  grid: "#e8eaf0",
-  axis: "#cfd4de",
-  ink: "#222735",
-  muted: "#687181",
+  // The neutrals follow the theme (the dark values are in app/globals.css); hues stay.
+  track: "var(--qm-viz-track, #eef0f5)",
+  grid: "var(--qm-viz-grid, #e8eaf0)",
+  axis: "var(--qm-viz-axis, #cfd4de)",
+  ink: "var(--qm-viz-ink, #222735)",
+  muted: "var(--qm-viz-muted, #687181)",
   heat: ["#ece5fb", "#d9cbf6", "#c3adf0", "#a98be8", "#8f69de", "#7140cc", "#5b30ab", "#462487"],
 } as const;
 
@@ -29,5 +30,6 @@ export function heatColor(value: number, max: number): string {
 /** Text on a heat cell: white once the fill is dark enough to carry it. */
 export function heatInk(value: number, max: number): string {
   if (!value || max <= 0) return VIZ.muted;
-  return value / max > 0.5 ? "#ffffff" : VIZ.ink;
+  // The pale heat steps stay pale in the dark theme too, so their text stays dark.
+  return value / max > 0.5 ? "#ffffff" : "#222735";
 }

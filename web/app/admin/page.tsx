@@ -154,7 +154,7 @@ export default function AdminPage() {
       <main className="md:ml-64 flex-1 flex flex-col justify-between px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 relative z-10 min-h-0">
         <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col min-h-0">
           <div className="mb-3 lg:mb-4 shrink-0">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-1">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent mb-1">
               Әкімші панелі
             </h1>
             <p className="text-xs sm:text-sm lg:text-base text-gray-700">Платформаны басқару</p>

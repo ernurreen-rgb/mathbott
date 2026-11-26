@@ -203,7 +203,7 @@ export default function AdminRolesPage() {
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent">
                   Рөлдерді басқару
                 </h1>
                 <p className="text-gray-700 mt-1">Әкімші рөлдерін тағайындау және өзгерту</p>

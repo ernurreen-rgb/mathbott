@@ -145,7 +145,7 @@ export default function SectionGuidesPage() {
       <main className="md:ml-64 flex justify-center px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="w-full max-w-5xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-4">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent mb-4">
               <Icon name="book" /> Бөлімдер бойынша анықтамалықтар
             </h1>
             {error && (

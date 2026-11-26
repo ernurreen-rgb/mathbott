@@ -29,7 +29,7 @@ export default function TaskImageCrop({ tempImagePreview, taskData, removeImage,
           {isEditing ? (
             <div
               ref={imageWrapperRef}
-              className={`relative inline-block rounded-lg border border-gray-200 overflow-hidden ${!inlineCropActive ? "cursor-pointer" : ""}`}
+              className={`relative inline-block rounded-lg border border-gray-200 overflow-hidden dark:bg-static-white ${!inlineCropActive ? "cursor-pointer" : ""}`}
               onClick={(e) => {
                 if (inlineCropActive) e.stopPropagation();
                 else {
@@ -59,7 +59,7 @@ export default function TaskImageCrop({ tempImagePreview, taskData, removeImage,
                     }}
                   />
                   <div
-                    className="absolute border-2 border-white pointer-events-none box-border"
+                    className="absolute border-2 border-static-white pointer-events-none box-border"
                     style={{
                       left: `${cropPercent.left}%`,
                       top: `${cropPercent.top}%`,
@@ -120,7 +120,7 @@ export default function TaskImageCrop({ tempImagePreview, taskData, removeImage,
               width={1280}
               height={720}
               unoptimized
-              className="max-h-64 w-auto rounded-lg border border-gray-200"
+              className="qm-image-backdrop max-h-64 w-auto rounded-lg border border-gray-200"
             />
           )}
         </div>

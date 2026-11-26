@@ -94,8 +94,8 @@ export default function SourceFilterDropdown({
 
   const isAdmin = variant === "admin";
   const shellClass = isAdmin
-    ? `relative flex min-h-[36px] items-center rounded-[7px] border bg-white text-[12px] text-[#596375] ${
-        open ? "border-[#8453dc] ring-2 ring-[#ede6fb]" : "border-[#dfe3eb]"
+    ? `relative flex min-h-[36px] items-center rounded-[7px] border bg-white text-[12px] text-[#596375] dark:text-fg-muted ${
+        open ? "border-[#8453dc] ring-2 ring-[#ede6fb] dark:ring-brand-soft" : "border-[#dfe3eb] dark:border-line"
       }`
     : `relative flex w-full items-center rounded-xl border bg-white text-sm text-slate-800 transition-colors ${
         open
