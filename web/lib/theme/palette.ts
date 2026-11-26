@@ -1,5 +1,5 @@
 // The colour system of the light and dark themes. tailwind.config.ts builds its colours and the
-// CSS variables of both themes from this file; tests/theme-palette.test.ts checks the contrast.
+// CSS variables of both themes from this file; tests/theme.test.ts checks the contrast.
 //
 // Two layers:
 // 1. Semantic tokens (surface, fg, line, brand, success, ...): CSS variables `--qm-<name>` that
@@ -13,8 +13,10 @@
 //    colours (bg 400 and up, text 50 to 400) keep their values in both themes, so a purple button
 //    stays purple and a white label stays white.
 //
-// A nested `data-theme="light"` element (a printable worksheet preview, a white image backdrop)
-// gets the light values back, because both blocks declare every variable.
+// For colours that must not follow the theme there are `static-white` (white glass and labels on
+// purple or on photos) and `static-ink`. A nested `data-theme="light"` element (the printable
+// worksheet, the constructor's slide preview) gets the light values back, because both blocks
+// declare every variable. `dark:` variants cover the rest.
 
 import colors from "tailwindcss/colors";
 
