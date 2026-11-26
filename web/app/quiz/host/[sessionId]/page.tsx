@@ -580,7 +580,7 @@ export default function HostQuizPage({ params }: PageProps) {
                       </div>
                     </div>
                   )}
-                  <div className="w-full h-56 rounded-t-3xl bg-gradient-to-t from-amber-400 to-amber-300 border-t-4 border-yellow-500 flex flex-col items-center justify-center text-amber-950 font-black text-4xl shadow-xl">
+                  <div className="w-full h-56 rounded-t-3xl bg-gradient-to-t from-amber-400 to-amber-300 dark:from-amber-300 border-t-4 border-yellow-500 flex flex-col items-center justify-center text-amber-950 font-black text-4xl shadow-xl">
                     <span><Icon name="medal" /></span>
                     <span className="text-2xl">1</span>
                   </div>

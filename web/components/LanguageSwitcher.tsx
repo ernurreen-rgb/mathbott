@@ -11,8 +11,8 @@ interface LanguageSwitcherProps {
 
 export default function LanguageSwitcher({ className = "", tone = "light" }: LanguageSwitcherProps) {
   const { locale, setLocale, t } = useI18n();
-  const track = tone === "glass" ? "bg-white/20 ring-1 ring-white/30" : "bg-slate-100 ring-1 ring-slate-200";
-  const idle = tone === "glass" ? "text-white/90 hover:bg-white/15" : "text-slate-600 hover:bg-white";
+  const track = tone === "glass" ? "bg-static-white/20 ring-1 ring-static-white/30" : "bg-slate-100 ring-1 ring-slate-200";
+  const idle = tone === "glass" ? "text-white/90 hover:bg-static-white/15" : "text-slate-600 hover:bg-white";
   const active = "bg-white text-purple-700 shadow-sm dark:bg-surface-stronger";
 
   return (

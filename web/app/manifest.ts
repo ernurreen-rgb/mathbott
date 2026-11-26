@@ -15,6 +15,9 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     start_url: "/modules",
     scope: "/",
     display: "standalone",
+    // A manifest has one colour per field, not one per colour scheme. Once a page is open, the
+    // theme-color metas of the root layout (light, dark and the student's own choice) win over
+    // theme_color; only the launch splash keeps these light values.
     background_color: "#f8fafc",
     theme_color: "#7c3aed",
     categories: ["education"],

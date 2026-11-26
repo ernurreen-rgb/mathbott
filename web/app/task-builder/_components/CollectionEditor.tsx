@@ -536,7 +536,7 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             step === "pick" ? "bg-purple-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "pick" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "pick" ? "bg-static-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
             1
           </span>
           {t("constructor.stepPick")}
@@ -551,12 +551,12 @@ export default function CollectionEditor({ collectionId, email, author }: { coll
             step === "files" ? "bg-purple-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "files" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${step === "files" ? "bg-static-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
             2
           </span>
           {t("constructor.stepFiles")}
           {tasks.length > 0 && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${step === "files" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"}`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${step === "files" ? "bg-static-white/20 text-white" : "bg-purple-100 text-purple-700"}`}>
               {tasks.length}
             </span>
           )}

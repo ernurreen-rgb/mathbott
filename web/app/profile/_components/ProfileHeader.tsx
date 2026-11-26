@@ -25,7 +25,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-white/30">
+            <div className="w-20 h-20 bg-static-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-static-white/30">
               {userData?.nickname?.[0]?.toUpperCase() || userData?.email?.[0]?.toUpperCase() || <><Icon name="user" /></>}
             </div>
             <div className="flex-1">
@@ -37,7 +37,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                     onChange={(e) => setNickname(e.target.value)}
                     placeholder={t("profile.nicknamePlaceholder")}
                     maxLength={50}
-                    className="w-full px-4 py-2 bg-white/90 text-gray-800 rounded-lg border-2 border-white/50 focus:ring-2 focus:ring-white focus:border-white transition-all outline-none text-xl font-bold"
+                    className="w-full px-4 py-2 bg-white/90 text-gray-800 rounded-lg border-2 border-static-white/50 focus:ring-2 focus:ring-static-white focus:border-static-white transition-all outline-none text-xl font-bold"
                     autoFocus
                   />
                   <div className="flex items-center gap-2">
@@ -45,7 +45,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                       type="submit"
                       aria-label={t("profile.saveNickname")}
                       disabled={saving || !nickname.trim() || nickname.trim() === (userData?.nickname || "")}
-                      className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                      className="px-4 py-2 bg-static-white/20 hover:bg-static-white/30 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                     >
                       {saving ? "..." : <><Icon name="check" /></>}
                     </button>
@@ -57,7 +57,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                         setNickname(userData?.nickname || "");
                         setMessage(null);
                       }}
-                      className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all font-semibold"
+                      className="px-4 py-2 bg-static-white/20 hover:bg-static-white/30 text-white rounded-lg transition-all font-semibold"
                     >
                       <Icon name="close" />
                     </button>
@@ -74,7 +74,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                       setNickname(userData?.nickname || "");
                       setMessage(null);
                     }}
-                    className="inline-flex items-center justify-center w-9 h-9 bg-white/20 hover:bg-white/30 rounded-lg transition-all backdrop-blur-sm"
+                    className="inline-flex items-center justify-center w-9 h-9 bg-static-white/20 hover:bg-static-white/30 rounded-lg transition-all backdrop-blur-sm"
                     title={t("profile.changeNickname")}
                     aria-label={t("profile.changeNickname")}
                   >

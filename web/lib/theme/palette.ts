@@ -234,7 +234,8 @@ export function themedUtilityColors() {
   return {
     backgroundColor: bg,
     gradientColorStops: bg,
-    ringOffsetColor: bg,
+    // The gap between a focus ring and its element matches the card behind it (white by default).
+    ringOffsetColor: { ...bg, DEFAULT: `rgb(var(--qm-bg-white, 255 255 255))` },
     boxShadowColor: bg,
     fill: bg,
     textColor: fg,

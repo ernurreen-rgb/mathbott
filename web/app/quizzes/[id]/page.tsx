@@ -860,7 +860,7 @@ export default function QuizDetailPage({ params }: PageProps) {
                     setResultsModalOpen(false);
                     setSelectedSessionResults(null);
                   }}
-                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-full bg-static-white/20 hover:bg-static-white/30 text-white flex items-center justify-center transition-colors"
                 >
                   <Icon name="close" className="w-5 h-5" />
                 </button>

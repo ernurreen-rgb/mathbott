@@ -62,7 +62,8 @@ export default function BackgroundPicker({
   return (
     <div className="min-w-0">
       <p className="text-sm font-semibold text-slate-800">{label}</p>
-      <div className="relative mt-2 aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {/* A preview of a slide, which is white in the exported file: light in both themes. */}
+      <div data-theme="light" className="relative mt-2 aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white">
         {filename ? (
           // A 16:9 preview of the uploaded slide picture.
           // eslint-disable-next-line @next/next/no-img-element

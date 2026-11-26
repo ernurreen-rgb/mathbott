@@ -4,7 +4,7 @@ import { useI18n } from "@/lib/i18n/provider";
 
 const KEEP = "keep";
 const NONE = "none";
-const FIELD = "h-10 rounded-xl border border-white/15 bg-white/10 px-3 text-sm text-white placeholder:text-slate-400 focus:border-purple-300 focus:outline-none";
+const FIELD = "h-10 rounded-xl border border-static-white/15 bg-static-white/10 px-3 text-sm text-white placeholder:text-slate-400 focus:border-purple-300 focus:outline-none";
 
 export interface QuizBulkBarProps {
   count: number;
@@ -40,7 +40,7 @@ export default function QuizBulkBar({ count, pageCount, pageSelected, topics, bu
         <div className="flex min-h-[2.5rem] items-center gap-2 pr-10 sm:mr-auto sm:pr-0">
           <span role="status" className="px-1 text-sm font-bold tabular-nums">{t("catalog.selected", { count })}</span>
           {pageCount > 0 && (
-            <button type="button" onClick={onTogglePage} className="rounded-lg px-2 py-1 text-left text-sm font-semibold text-purple-200 hover:bg-white/10">
+            <button type="button" onClick={onTogglePage} className="rounded-lg px-2 py-1 text-left text-sm font-semibold text-purple-200 hover:bg-static-white/10">
               {pageSelected ? t("catalog.unselectPage") : t("catalog.selectPage", { count: pageCount })}
             </button>
           )}
@@ -69,7 +69,7 @@ export default function QuizBulkBar({ count, pageCount, pageSelected, topics, bu
           <Icon name={busy ? "loader" : "check"} className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
           {t("catalog.apply")}
         </button>
-        <button type="button" onClick={onCancel} aria-label={t("catalog.closeSelection")} className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white sm:static">
+        <button type="button" onClick={onCancel} aria-label={t("catalog.closeSelection")} className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 hover:bg-static-white/10 hover:text-white sm:static">
           <Icon name="close" className="h-4 w-4" />
         </button>
       </form>

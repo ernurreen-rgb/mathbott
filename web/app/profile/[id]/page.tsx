@@ -138,7 +138,7 @@ export default function PublicProfilePage() {
           <div className="absolute inset-0 bg-black/10"></div>
           <div className="relative z-10">
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-white/30">
+              <div className="w-20 h-20 bg-static-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-static-white/30">
                 {userData?.nickname?.[0]?.toUpperCase() || <><Icon name="user" /></>}
               </div>
               <div className="flex-1">

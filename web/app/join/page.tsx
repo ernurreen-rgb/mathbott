@@ -233,7 +233,7 @@ function JoinForm() {
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="w-5 h-5 border-2 border-static-white border-t-transparent rounded-full animate-spin" />
                   {t("join.joining")}
                 </span>
               ) : step === "identity" ? (
