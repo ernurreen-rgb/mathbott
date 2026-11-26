@@ -5,6 +5,7 @@ import ProfileHeader from "./_components/ProfileHeader";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
 import StreakReminderCard from "./_components/StreakReminderCard";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { useI18n } from "@/lib/i18n/provider";
 import { tr } from "@/lib/i18n/translate";
 
@@ -192,6 +193,20 @@ export default function ProfilePage() {
                   <p className="text-sm text-gray-600">{t("language.hint")}</p>
                 </div>
                 <LanguageSwitcher className="w-full sm:w-auto" />
+              </section>
+
+              <section
+                aria-labelledby="theme-title"
+                className="glass flex flex-wrap items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl"
+              >
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
+                  <Icon name="moon" className="h-6 w-6" />
+                </span>
+                <div className="min-w-0 flex-1 basis-48">
+                  <h2 id="theme-title" className="text-lg font-bold text-gray-900">{t("theme.title")}</h2>
+                  <p className="text-sm text-gray-600">{t("theme.hint")}</p>
+                </div>
+                <ThemeSwitcher className="w-full sm:w-auto" />
               </section>
 
               <Link
