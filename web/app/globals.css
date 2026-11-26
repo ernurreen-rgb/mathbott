@@ -14,21 +14,31 @@
   }
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Theme colours are CSS variables from lib/theme/palette.ts, which tailwind.config.ts emits for
+ * :root / [data-theme="light"] and [data-theme="dark"]. The inline script in app/layout.tsx sets
+ * data-theme on <html> before the first paint (lib/theme/preference.ts).
+ */
+:root,
+[data-theme="light"] {
+  --qm-body-fg: 23 23 23;
+  --qm-math-focus: 147 51 234;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] {
+  --qm-body-fg: var(--qm-fg);
+  --qm-math-focus: 192 132 252;
+  /* Chart neutrals of the admin statistics (app/admin/statistics/_components/palette.ts). */
+  --qm-viz-track: rgb(var(--qm-surface-muted));
+  --qm-viz-grid: rgb(var(--qm-line));
+  --qm-viz-axis: rgb(var(--qm-line-strong));
+  --qm-viz-ink: rgb(var(--qm-fg));
+  --qm-viz-muted: rgb(var(--qm-fg-subtle));
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: rgb(var(--qm-body-fg));
+  background: rgb(var(--qm-page));
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
 }
 
@@ -37,20 +47,20 @@ math-field.math-field-input {
   width: 100%;
   min-height: 42px;
   padding: 8px 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid rgb(var(--qm-line-strong));
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: rgb(var(--qm-surface));
 }
 
 math-field.math-field-input:focus-within {
-  border-color: #9333ea;
-  box-shadow: 0 0 0 1px #9333ea;
+  border-color: rgb(var(--qm-math-focus));
+  box-shadow: 0 0 0 1px rgb(var(--qm-math-focus));
 }
 
 math-field.student-math-answer-input {
   min-height: 56px;
   padding: 12px 14px;
-  border-color: #ddd6fe;
+  border-color: rgb(var(--qm-line-violet-200));
   border-radius: 0.75rem;
   font-size: 1.25rem;
 }
@@ -58,13 +68,35 @@ math-field.student-math-answer-input {
 math-field.student-math-answer-input--compact {
   min-height: 44px;
   padding: 8px;
-  border-color: #ddd6fe;
+  border-color: rgb(var(--qm-line-violet-200));
   text-align: center;
 }
 
 math-field.student-math-answer-input[read-only] {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: rgb(var(--qm-surface-muted));
+  color: rgb(var(--qm-fg-subtle));
+}
+
+/* The answer field's text, caret, selection and placeholder in the dark theme (MathLive variables). */
+[data-theme="dark"] math-field {
+  color: rgb(var(--qm-fg));
+  --caret-color: #e9d5ff;
+  --selection-background-color: rgb(124 58 237 / 0.45);
+  --selection-color: rgb(var(--qm-fg));
+  --contains-highlight-background-color: rgb(124 58 237 / 0.2);
+  --placeholder-color: rgb(var(--qm-fg-faint));
+  --smart-fence-color: rgb(var(--qm-fg-subtle));
+  --primary-color: #c4b5fd;
+}
+
+/*
+ * Task pictures are drawn for white paper (white or transparent backgrounds, dark lines), so the
+ * dark theme shows them on a white card rather than inverting them.
+ */
+[data-theme="dark"] .qm-image-backdrop {
+  background-color: #ffffff;
+  padding: 0.375rem;
+  color-scheme: light;
 }
 
 /* Students get no MathLive menu (functions, LaTeX tools); see MathFieldInput. */
@@ -78,7 +110,7 @@ math-field[data-math-keyboard-preset="student"]::part(menu-toggle) {
   }
   
   .glass {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgb(var(--qm-surface) / 0.7);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }

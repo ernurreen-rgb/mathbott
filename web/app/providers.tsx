@@ -8,18 +8,22 @@ import QuizGuestSync from "@/components/quiz/QuizGuestSync";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Locale } from "@/lib/i18n/config";
+import { ThemeProvider } from "@/lib/theme/provider";
 
-export function Providers({ locale, children }: { locale: Locale; children: React.ReactNode }) {
+export function Providers({ locale, signedIn, children }: { locale: Locale; signedIn: boolean; children: React.ReactNode }) {
   return (
     <SessionProvider>
-      <I18nProvider initialLocale={locale}>
-        <QuizGuestSync />
-        <ServiceWorkerRegister />
-        <DesktopNavProvider>
-          <PresenceProvider>{children}</PresenceProvider>
-        </DesktopNavProvider>
-        <Toaster />
-      </I18nProvider>
+      <ThemeProvider initialSignedIn={signedIn}>
+        <I18nProvider initialLocale={locale}>
+          <QuizGuestSync />
+          <ServiceWorkerRegister />
+          <DesktopNavProvider>
+            <PresenceProvider>{children}</PresenceProvider>
+          </DesktopNavProvider>
+          {/* react-hot-toast styles its cards inline (white); the dark theme needs !important. */}
+          <Toaster toastOptions={{ className: "dark:!bg-surface-muted dark:!text-fg" }} />
+        </I18nProvider>
+      </ThemeProvider>
     </SessionProvider>
   );
 }

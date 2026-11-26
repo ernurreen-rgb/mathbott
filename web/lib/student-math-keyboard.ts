@@ -160,6 +160,45 @@ const keyboardStyle = `
     font-weight: 600;
     white-space: nowrap;
   }
+
+  /* Dark theme (data-theme on <html>, lib/theme): the same keys on the dark surfaces. */
+  [data-theme="dark"] .ML__keyboard {
+    --keyboard-background: #15121d;
+    --keyboard-border: #332d44;
+    --box-placeholder-color: #c4b5fd;
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__rows {
+    --k-bg: #2c2739;
+    --k-bg-hover: #373047;
+    --k-fg: #f4f2f9;
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__row > div {
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__row > div.qm-fn {
+    --k-bg: #231f2f;
+    --k-bg-hover: #2e293c;
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__row > div.qm-op {
+    --k-bg: #33274f;
+    --k-bg-hover: #3f305f;
+    --k-fg: #ddd6fe;
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__row > div.qm-act {
+    --k-bg: #1f1b29;
+    --k-bg-hover: #2a2536;
+  }
+
+  [data-theme="dark"] :is(#${STUDENT_KEYBOARD_MAIN_LAYER}, #${STUDENT_KEYBOARD_MORE_LAYER}) .MLK__row > div.qm-switch {
+    --k-bg: #7c3aed;
+    --k-bg-hover: #6d28d9;
+    --k-fg: #ffffff;
+  }
 `;
 
 // `name` is the accessible name of a key (MathLive uses `tooltip` as aria-label); the visible

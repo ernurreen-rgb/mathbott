@@ -1,6 +1,19 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
+
+import { semanticColors, themedUtilityColors, themeVariables } from "./lib/theme/palette";
+
+// Colours switch with data-theme on <html> (see lib/theme/palette.ts and lib/theme/preference.ts).
+// `dark:` variants are for the few places the palette aliases cannot express.
+const themeTokens = plugin(({ addBase }) => {
+  addBase({
+    ':root, [data-theme="light"]': { colorScheme: "light", ...themeVariables("light") },
+    '[data-theme="dark"]': { colorScheme: "dark", ...themeVariables("dark") },
+  });
+});
 
 const config: Config = {
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,9 +21,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      ...themedUtilityColors(),
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        ...semanticColors(),
         primary: {
           50: '#f0f9ff',
           100: '#e0f2fe',
@@ -35,8 +48,8 @@ const config: Config = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'gradient-math': 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
-        'gradient-vibrant': 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+        'gradient-math': 'linear-gradient(180deg, rgb(var(--qm-page-from)) 0%, rgb(var(--qm-page-to)) 100%)',
+        'gradient-vibrant': 'linear-gradient(180deg, rgb(var(--qm-page-from)) 0%, rgb(var(--qm-page-to)) 100%)',
         'gradient-sunset': 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
         'gradient-ocean': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         'gradient-forest': 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
@@ -74,7 +87,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [themeTokens],
 };
 export default config;
 

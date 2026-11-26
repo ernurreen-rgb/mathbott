@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import "mathlive/static.css";
 import { Providers } from "./providers";
@@ -6,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getServerT } from "@/lib/i18n/server";
 import { apiPath } from "@/lib/api/api-path";
 import { warmUpScript } from "@/lib/warm-up";
+import { THEME_COLOR, hasSessionCookie, themeInitScript } from "@/lib/theme/preference";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getServerT();
@@ -24,8 +26,13 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+// The theme script adds its own theme-color meta first when a student picked light or dark.
 export const viewport: Viewport = {
-  themeColor: "#7c3aed",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLOR.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLOR.dark },
+  ],
+  colorScheme: "light dark",
 };
 
 export default async function RootLayout({
@@ -34,9 +41,12 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { locale } = await getServerT();
+  const signedIn = hasSessionCookie((await cookies()).getAll().map((cookie) => cookie.name));
   return (
-    <html lang={locale}>
+    // The theme script sets data-theme on <html> before React hydrates it.
+    <html lang={locale} suppressHydrationWarning>
       <body suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript(signedIn) }} />
         <script
           dangerouslySetInnerHTML={{
             __html:
@@ -45,7 +55,7 @@ export default async function RootLayout({
         />
         <script dangerouslySetInnerHTML={{ __html: warmUpScript(apiPath("health")) }} />
         <ErrorBoundary>
-          <Providers locale={locale}>
+          <Providers locale={locale} signedIn={signedIn}>
             {children}
           </Providers>
         </ErrorBoundary>
