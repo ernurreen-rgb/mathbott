@@ -41,7 +41,7 @@ export default function TaskPreview({ task, compact = false }: { task: Construct
           src={apiPath(`images/${task.image_filename}`)}
           alt={t("constructor.taskImageAlt", { id: task.id })}
           loading="lazy"
-          className="mt-2 max-h-40 w-auto max-w-full rounded-lg border border-slate-100 object-contain"
+          className="qm-image-backdrop mt-2 max-h-40 w-auto max-w-full rounded-lg border border-slate-100 object-contain"
         />
       )}
       {task.question_type === "select" && task.subquestions.length > 0 && (

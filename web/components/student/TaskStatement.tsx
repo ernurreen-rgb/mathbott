@@ -51,7 +51,7 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
           height={720}
           unoptimized
           onError={() => setImageFailed(true)}
-          className="mx-auto block max-h-64 w-auto max-w-full rounded-lg border border-gray-200 object-contain"
+          className="qm-image-backdrop mx-auto block max-h-64 w-auto max-w-full rounded-lg border border-gray-200 object-contain"
         />
       )}
       {src && imageFailed && (

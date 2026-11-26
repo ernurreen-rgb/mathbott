@@ -40,7 +40,7 @@ export default function WeekActivityPanel({ streakAnimated, userData, weekDays, 
                 >
                   <Icon name="flame" className={`w-3 h-3 ${isActive ? "text-white" : "text-slate-400"}`} />
                 </div>
-                <span className="text-[11px] font-semibold text-black">{day.short}</span>
+                <span className="text-[11px] font-semibold text-black dark:text-fg-secondary">{day.short}</span>
               </div>
             );
           })}

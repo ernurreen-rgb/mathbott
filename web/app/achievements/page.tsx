@@ -88,7 +88,7 @@ export default function AchievementsPage() {
             <Icon name="arrowLeft" />
             <span>{t("common.back")}</span>
           </Link>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">{t("achievements.all")}</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent mb-2">{t("achievements.all")}</h1>
           <p className="text-gray-700 font-semibold text-lg">
             {t("achievements.unlocked")}: <span className="text-purple-600 font-bold">{unlockedCount}</span> / <span className="text-gray-600">{totalCount}</span>
           </p>

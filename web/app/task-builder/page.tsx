@@ -66,7 +66,7 @@ export default function ConstructorPage() {
       <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-start gap-4">
           <div className="mr-auto min-w-0">
-            <h1 className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
+            <h1 className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
               {t("constructor.title")}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">{t("constructor.subtitle")}</p>

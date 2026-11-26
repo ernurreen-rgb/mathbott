@@ -48,7 +48,8 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
       </div>)}
     </div>;
   };
-  return <div style={{ width: 720, background: '#fff', color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: 17, lineHeight: 1.55 }}>
+  // A printed page: always the light theme, also when the app around it is dark.
+  return <div data-theme="light" style={{ width: 720, background: '#fff', color: '#111827', colorScheme: 'light', fontFamily: 'Arial, sans-serif', fontSize: 17, lineHeight: 1.55 }}>
     {showHeader && (
       <header data-pdf-header style={{ paddingBottom: 14, marginBottom: 8, borderBottom: '1px solid #cbd5e1' }}>
         {brandLine && !heading ? (

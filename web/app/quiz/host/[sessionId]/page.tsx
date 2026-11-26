@@ -441,7 +441,7 @@ export default function HostQuizPage({ params }: PageProps) {
                       <span
                         className={`w-9 h-9 rounded-xl font-black text-sm flex items-center justify-center ${
                           idx === 0
-                            ? "bg-amber-400 text-gray-900 shadow-md"
+                            ? "bg-amber-400 text-static-ink shadow-md"
                             : idx === 1
                             ? "bg-slate-300 text-gray-900"
                             : idx === 2

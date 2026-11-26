@@ -508,7 +508,7 @@ export default function PlayQuizPage({ params }: PageProps) {
                   width={1280}
                   height={720}
                   unoptimized
-                  className="max-h-64 w-auto max-w-full rounded-xl border border-gray-200 object-contain"
+                  className="qm-image-backdrop max-h-64 w-auto max-w-full rounded-xl border border-gray-200 object-contain"
                 />
               </div>
             )}

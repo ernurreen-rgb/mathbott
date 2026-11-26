@@ -201,7 +201,7 @@ export default function MiniLessonReviewPage() {
         {result && !result.correct && (
           <div className="space-y-3 rounded-2xl border border-red-200 bg-white/80 p-4 text-red-800">
             {result.solution_filename && <Image src={apiPath(`images/${result.solution_filename}`)} alt={t("mreview.solutionAlt")} width={1280} height={720} unoptimized
-              className="max-h-80 w-auto max-w-full rounded-lg border border-red-200 bg-white object-contain" />}
+              className="qm-image-backdrop max-h-80 w-auto max-w-full rounded-lg border border-red-200 bg-white object-contain" />}
             <p className="text-sm">{result.has_next_twin
               ? t("mreview.seeSolution")
               : t("mreview.addedToWeak")}</p>

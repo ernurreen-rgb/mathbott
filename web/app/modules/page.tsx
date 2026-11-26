@@ -105,7 +105,7 @@ export default function ModulesPage() {
         <div className="w-full max-w-6xl">
           <div className="glass rounded-3xl shadow-2xl p-6 border border-white/30 mb-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="text-4xl font-bold leading-normal py-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent">
                 {t("modules.mapTitle")}
               </h1>
             </div>

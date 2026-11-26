@@ -348,7 +348,7 @@ function QuizzesCatalog() {
 
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-center gap-x-2 gap-y-3">
-          <h1 className="mr-auto bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
+          <h1 className="mr-auto bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text py-1 text-3xl font-bold leading-normal text-transparent sm:text-4xl">
             {t("nav.quizzes")}
           </h1>
           <Link href="/quiz/history" className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200/60 hover:text-slate-900">
