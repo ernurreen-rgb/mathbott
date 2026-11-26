@@ -89,6 +89,17 @@ math-field.student-math-answer-input[read-only] {
   --primary-color: #c4b5fd;
 }
 
+/* MathLive draws its keyboard and menu buttons mid-blue, and #333 on hover. */
+[data-theme="dark"] math-field::part(virtual-keyboard-toggle),
+[data-theme="dark"] math-field::part(menu-toggle) {
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] math-field::part(virtual-keyboard-toggle):hover,
+[data-theme="dark"] math-field::part(menu-toggle):hover {
+  color: rgb(var(--qm-fg));
+}
+
 /*
  * Task pictures are drawn for white paper (white or transparent backgrounds, dark lines), so the
  * dark theme shows them on a white card rather than inverting them.
