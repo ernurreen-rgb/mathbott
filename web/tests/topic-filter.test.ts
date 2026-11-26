@@ -5,6 +5,7 @@ import {
   filterTopics,
   filterTopicTree,
   flattenVisibleTopicTree,
+  getDefaultExpandedTopics,
   toggleExcludedTopic,
   toggleIncludedTopic,
   toggleTopicSelection,
@@ -154,6 +155,23 @@ describe("buildTopicTree / flattenVisibleTopicTree / filterTopicTree", () => {
     ]);
     expect(tree.hasHierarchy).toBe(false);
     expect(tree.roots.map((n) => n.name)).toEqual(["A", "B", "Orphan", "Self"]);
+  });
+
+  it("auto-expands Algebra root by default while keeping its subtopics and Geometry collapsed", () => {
+    const tree = buildTopicTree([
+      { name: "Алгебра", parent: null },
+      { name: "Геометрия", parent: null },
+      { name: "Планиметрия", parent: "Геометрия" },
+      { name: "Тригонометрия", parent: "Алгебра" },
+      { name: "Тригонометриялық теңдеулер", parent: "Тригонометрия" },
+    ]);
+    const defaults = getDefaultExpandedTopics(tree.roots);
+    expect(defaults).toEqual(["Алгебра"]);
+    expect(flattenVisibleTopicTree(tree.roots, new Set(defaults)).map((n) => [n.name, n.depth])).toEqual([
+      ["Алгебра", 0],
+      ["Тригонометрия", 1],
+      ["Геометрия", 0],
+    ]);
   });
 
   it("counts included and excluded descendants accurately", () => {

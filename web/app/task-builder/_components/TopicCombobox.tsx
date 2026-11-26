@@ -9,6 +9,7 @@ import {
   filterTopics,
   filterTopicTree,
   flattenVisibleTopicTree,
+  getDefaultExpandedTopics,
   toggleExcludedTopic,
   toggleIncludedTopic,
   type TopicHierarchyItem,
@@ -65,6 +66,19 @@ export default function TopicCombobox({
         : topics.map((name) => ({ name, parent: null }));
     return buildTopicTree(source);
   }, [topics, topicTree]);
+
+  const defaultExpandedNames = useMemo(() => getDefaultExpandedTopics(tree.roots), [tree.roots]);
+
+  // Ensure default-open root sections (e.g. "Алгебра") are automatically open whenever the menu opens.
+  useEffect(() => {
+    if (!open || defaultExpandedNames.length === 0) return;
+    setExpanded((prev) => {
+      if (defaultExpandedNames.every((name) => prev.has(name))) return prev;
+      const next = new Set(prev);
+      for (const name of defaultExpandedNames) next.add(name);
+      return next;
+    });
+  }, [open, defaultExpandedNames]);
 
   const hasQuery = query.trim().length > 0;
   const hasAnySelection = included.length > 0 || excluded.length > 0;
@@ -354,7 +368,7 @@ export default function TopicCombobox({
             role="listbox"
             aria-multiselectable="true"
             aria-label={t("constructor.topic")}
-            className="max-h-80 overflow-y-auto py-1"
+            className="max-h-[min(26rem,60vh)] overflow-y-auto py-1"
           >
             {options.length === 0 ? (
               <li className="px-3 py-2.5 text-center text-sm text-slate-400">
@@ -382,8 +396,10 @@ export default function TopicCombobox({
                   : depth === 0
                     ? "pl-1.5"
                     : depth === 1
-                      ? "pl-6"
-                      : "pl-10";
+                      ? "pl-5"
+                      : depth === 2
+                        ? "pl-9"
+                        : "pl-12";
 
                 return (
                   <li key={option.value || "__all__"} role="presentation">
@@ -446,8 +462,10 @@ export default function TopicCombobox({
                             : isIncluded
                               ? "font-semibold text-purple-800"
                               : depth === 0 && hasChildren
-                                ? "font-medium text-slate-900"
-                                : "text-slate-800"
+                                ? "font-semibold text-slate-900"
+                                : depth === 1 && hasChildren
+                                  ? "font-medium text-slate-900"
+                                  : "text-slate-800"
                         }`}
                       >
                         {!isAll && (

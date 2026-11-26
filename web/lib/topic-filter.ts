@@ -191,6 +191,16 @@ export function buildTopicTree(items: readonly TopicHierarchyItem[]): TopicTree 
   return { roots, byName, hasHierarchy };
 }
 
+/** Top-level sections that start expanded automatically when opening the topic tree. */
+const DEFAULT_EXPANDED_SECTION_NORMS = new Set(["алгебра"]);
+
+/** Return root topic names that should be expanded automatically by default. */
+export function getDefaultExpandedTopics(roots: readonly TopicTreeNode[]): string[] {
+  return roots
+    .filter((node) => node.children.length > 0 && DEFAULT_EXPANDED_SECTION_NORMS.has(normalizeForSearch(node.name)))
+    .map((node) => node.name);
+}
+
 /** Pre-order list of visible tree nodes given the currently expanded parent topic names. */
 export function flattenVisibleTopicTree(
   roots: readonly TopicTreeNode[],
