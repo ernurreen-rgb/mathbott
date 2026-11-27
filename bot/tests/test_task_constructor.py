@@ -370,3 +370,67 @@ class TaskConstructorTests(PostgresTestCase):
             ).json()
             self.assertEqual({item["id"] for item in by_parent["items"]}, {parent_only_id, both_id})
             self.assertNotIn(child_only_id, {item["id"] for item in by_parent["items"]})
+
+    async def test_creating_or_updating_task_with_subtopic_auto_adds_ancestors(self):
+        teacher = {"email": "teacher@example.test"}
+        seed_tasks = await self.db.bank_tasks.create_tasks_bulk_atomic(
+            tasks=[
+                _task(40, topics=["Алгебра"]),
+                _task(41, topics=["Тригонометрия"]),
+                _task(42, topics=["Тригонометриялық теңдеулер"]),
+            ],
+            created_by=self.owner["id"],
+            actor_email="teacher@example.test",
+        )
+        catalog = await self.db.bank_tasks.get_catalog()
+        topic_ids = {item["name"]: item["id"] for item in catalog["topics"]}
+        await self.db.bank_tasks.set_topic_parent(
+            topic_ids["Тригонометрия"],
+            topic_ids["Алгебра"],
+        )
+        await self.db.bank_tasks.set_topic_parent(
+            topic_ids["Тригонометриялық теңдеулер"],
+            topic_ids["Тригонометрия"],
+        )
+
+        created = await self.db.bank_tasks.create_task(
+            text="Solve sin(x) = 1/2",
+            answer="pi/6",
+            question_type="input",
+            difficulty="B",
+            topics=["Тригонометриялық теңдеулер"],
+            created_by=self.owner["id"],
+        )
+        self.assertEqual(
+            set(created["topics"]),
+            {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер"},
+        )
+
+        # Submitting only L2 again on an already-expanded task is a no-op (no version bump).
+        unchanged = await self.db.bank_tasks.update_task(
+            created["id"],
+            topics=["Тригонометриялық теңдеулер"],
+            actor_user_id=self.owner["id"],
+        )
+        self.assertEqual(unchanged["current_version"], created["current_version"])
+
+        # Updating an older orphan task repairs its missing L1 and L0 ancestors.
+        repaired = await self.db.bank_tasks.update_task(
+            int(seed_tasks[2]["id"]),
+            topics=["Тригонометриялық теңдеулер"],
+            actor_user_id=self.owner["id"],
+        )
+        self.assertEqual(
+            set(repaired["topics"]),
+            {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер"},
+        )
+
+        async with self.client() as client:
+            by_root = (
+                await client.get("/api/constructor/tasks", params={**teacher, "topics": "Алгебра"})
+            ).json()
+            by_section = (
+                await client.get("/api/constructor/tasks", params={**teacher, "topics": "Тригонометрия"})
+            ).json()
+            self.assertIn(created["id"], {item["id"] for item in by_root["items"]})
+            self.assertIn(created["id"], {item["id"] for item in by_section["items"]})

@@ -1428,6 +1428,185 @@ class Sprint3RegressionTests(unittest.TestCase):
             self.assertEqual(ok.status_code, 200)
             self.assertEqual(ok.json()["parent_name"], "Тригонометрия")
 
+    def test_set_task_topics_and_update_auto_expand_topic_ancestors(self):
+        from repositories.bank.crud import BankTaskCrudMixin
+        from repositories.bank.helpers import BankTaskHelpersMixin
+
+        topics_store = {
+            1: {"id": 1, "name": "Алгебра", "name_norm": "алгебра", "parent_id": None},
+            2: {"id": 2, "name": "Тригонометрия", "name_norm": "тригонометрия", "parent_id": 1},
+            3: {
+                "id": 3,
+                "name": "Тригонометриялық теңдеулер",
+                "name_norm": "тригонометриялық теңдеулер",
+                "parent_id": 2,
+            },
+            4: {"id": 4, "name": "Тексеру_ҰБТ_2026", "name_norm": "тексеру_ұбт_2026", "parent_id": None},
+            10: {"id": 10, "name": "CycleA", "name_norm": "cyclea", "parent_id": 11},
+            11: {"id": 11, "name": "CycleB", "name_norm": "cycleb", "parent_id": 10},
+        }
+        next_topic_id = {"value": 100}
+        task_topic_map: dict[int, set[int]] = {}
+        missing_parent_col = {"active": False}
+
+        class _Cursor:
+            def __init__(self, rows=None, row=None):
+                self._rows = rows or []
+                self._row = row
+
+            def __await__(self):
+                async def _done():
+                    return self
+
+                return _done().__await__()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchall(self):
+                return list(self._rows)
+
+            async def fetchone(self):
+                return self._row
+
+        class _Db:
+            def __init__(self):
+                self.row_factory = None
+                self.set_label_deletes = 0
+
+            def execute(self, sql, params=()):
+                if "parent_id" in sql and missing_parent_col["active"]:
+                    raise Exception('column "parent_id" does not exist')
+                if "SELECT id, name, name_norm, parent_id" in sql and "WHERE name_norm IN" in sql:
+                    norms = set(params)
+                    rows = [
+                        (r["id"], r["name"], r["name_norm"], r["parent_id"])
+                        for r in topics_store.values()
+                        if r["name_norm"] in norms
+                    ]
+                    return _Cursor(rows=rows)
+                if "SELECT id, name, parent_id" in sql and "WHERE id IN" in sql:
+                    ids = {int(x) for x in params}
+                    rows = [
+                        (r["id"], r["name"], r["parent_id"])
+                        for r in topics_store.values()
+                        if r["id"] in ids
+                    ]
+                    return _Cursor(rows=rows)
+                if "DELETE FROM bank_task_topic_map WHERE bank_task_id = ?" in sql:
+                    self.set_label_deletes += 1
+                    task_topic_map[int(params[0])] = set()
+                    return _Cursor()
+                if "INSERT INTO bank_topics (name, name_norm)" in sql:
+                    name, norm = params[0], params[1]
+                    if not any(r["name_norm"] == norm for r in topics_store.values()):
+                        tid = next_topic_id["value"]
+                        next_topic_id["value"] += 1
+                        topics_store[tid] = {"id": tid, "name": name, "name_norm": norm, "parent_id": None}
+                    return _Cursor()
+                if "SELECT id FROM bank_topics WHERE name_norm = ?" in sql:
+                    norm = params[0]
+                    found = next((r["id"] for r in topics_store.values() if r["name_norm"] == norm), None)
+                    return _Cursor(row=(found,) if found is not None else None)
+                if "INSERT INTO bank_task_topic_map (bank_task_id, topic_id)" in sql:
+                    task_topic_map.setdefault(int(params[0]), set()).add(int(params[1]))
+                    return _Cursor()
+                return _Cursor()
+
+        class _Repo(BankTaskHelpersMixin, BankTaskCrudMixin):
+            pass
+
+        repo = _Repo()
+        db = _Db()
+
+        # 1. Saving only L2 automatically adds L1 and L0 with canonical casing + preserves unrelated roots.
+        asyncio.run(repo._set_task_topics(db, 1, ["  тригонометриялық теңдеулер  ", "Тексеру_ҰБТ_2026"]))
+        saved_names = {topics_store[tid]["name"] for tid in task_topic_map[1]}
+        self.assertEqual(
+            saved_names,
+            {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер", "Тексеру_ҰБТ_2026"},
+        )
+
+        # 2. Brand-new topic is preserved alongside expanded ancestors of existing L2.
+        asyncio.run(repo._set_task_topics(db, 2, ["Тригонометриялық теңдеулер", "Жаңа тақырып"]))
+        saved_names_2 = {topics_store[tid]["name"] for tid in task_topic_map[2]}
+        self.assertEqual(
+            saved_names_2,
+            {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер", "Жаңа тақырып"},
+        )
+
+        # 3. Cycle in parent_id terminates safely without infinite loop.
+        expanded_cycle = asyncio.run(repo._expand_topic_ancestors(db, ["CycleA"]))
+        self.assertEqual(set(expanded_cycle), {"CycleA", "CycleB"})
+
+        # 4. Pre-migration fallback when parent_id column is absent.
+        missing_parent_col["active"] = True
+        fallback = asyncio.run(repo._expand_topic_ancestors(db, ["Тригонометриялық теңдеулер"]))
+        self.assertEqual(fallback, ["Тригонометриялық теңдеулер"])
+        missing_parent_col["active"] = False
+
+        # 5. _update_task_on_conn treats submitting only L2 on an already-expanded task as a no-op,
+        #    and repairs an older task missing L1/L0.
+        version_events = []
+
+        class _UpdateRepo(BankTaskHelpersMixin, BankTaskCrudMixin):
+            async def _fetch_task_row(self, _db, task_id):
+                return {
+                    "id": task_id,
+                    "text": "sin x = 1",
+                    "answer": "pi/2",
+                    "question_type": "input",
+                    "answer_mode": "input",
+                    "accepted_answers": "[]",
+                    "text_scale": "md",
+                    "options": None,
+                    "subquestions": None,
+                    "difficulty": "B",
+                    "image_filename": None,
+                    "solution_filename": None,
+                    "current_version": 1,
+                    "deleted_at": None,
+                }
+
+            async def _fetch_topics_for_task(self, _db, task_id):
+                return sorted(
+                    (topics_store[tid]["name"] for tid in task_topic_map.get(task_id, set())),
+                    key=lambda s: s.lower(),
+                )
+
+            async def _fetch_sources_for_task(self, _db, task_id):
+                return []
+
+            async def _record_version_event(self, _db, **kwargs):
+                version_events.append(kwargs)
+                return 2
+
+        urepo = _UpdateRepo()
+        task_topic_map[10] = {1, 2, 3}
+        deletes_before = db.set_label_deletes
+        res_noop = asyncio.run(
+            urepo._update_task_on_conn(db, task_id=10, topics=["Тригонометриялық теңдеулер"])
+        )
+        self.assertEqual(db.set_label_deletes, deletes_before)
+        self.assertEqual(len(version_events), 0)
+        self.assertEqual(set(res_noop["topics"]), {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер"})
+
+        # Older task missing L1/L0 gets repaired on update and records version snapshot with full chain.
+        task_topic_map[11] = {3}
+        res_repaired = asyncio.run(
+            urepo._update_task_on_conn(db, task_id=11, topics=["Тригонометриялық теңдеулер"])
+        )
+        self.assertEqual(db.set_label_deletes, deletes_before + 1)
+        self.assertEqual(len(version_events), 1)
+        self.assertEqual(version_events[0]["changed_fields"], ["topics"])
+        self.assertEqual(
+            set(res_repaired["topics"]),
+            {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

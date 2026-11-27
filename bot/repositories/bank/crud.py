@@ -6,20 +6,19 @@ import json
 import storage as db_driver
 from utils.validation import normalize_accepted_answers, normalize_answer_mode
 
-from .helpers import _TAXONOMY_TABLES, fetch_sources_for_task_safe, fetch_sources_map_safe, with_snapshot_sources
+from .helpers import (
+    _TAXONOMY_TABLES,
+    _is_missing_parent_column_error,
+    fetch_sources_for_task_safe,
+    fetch_sources_map_safe,
+    with_snapshot_sources,
+)
 from .twins import IS_TWIN_SQL, NOT_DRAFT_TWIN_SQL, NOT_TWIN_SQL
 from .versions import BankTaskVersionConflictError
 
 
 class BankTopicHierarchyError(ValueError):
     """Raised when a topic parent assignment is invalid (missing parent or cycle)."""
-
-
-def _is_missing_parent_column_error(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return "parent_id" in message and (
-        "does not exist" in message or "undefinedcolumn" in message or "no such column" in message
-    )
 
 # Quantitative comparison tasks ("Количественные характеристики" / "Сандық сипаттамаларын")
 # stay in the bank for modules, trial tests and admin, but are hidden from the task constructor.
@@ -594,7 +593,16 @@ class BankTaskCrudMixin:
         next_solution_filename = (
             existing.get("solution_filename") if solution_filename is None else solution_filename
         )
-        next_topics = existing_topics if topics is None else self._normalize_topics(topics)
+        if topics is None:
+            next_topics = existing_topics
+        else:
+            expanded_topics = await self._expand_topic_ancestors(db, topics)
+            if {self._normalize_topic(t) for t in expanded_topics} == {
+                self._normalize_topic(t) for t in existing_topics
+            }:
+                next_topics = existing_topics
+            else:
+                next_topics = expanded_topics
         next_sources = existing_sources if sources is None else self._normalize_topics(sources)
 
         after_snapshot_candidate = {
@@ -663,8 +671,8 @@ class BankTaskCrudMixin:
                 params,
             )
 
-        if topics is not None:
-            await self._set_task_topics(db, task_id, next_topics)
+        if topics is not None and "topics" in changed_fields:
+            await self._set_task_labels(db, task_id, next_topics, "topic")
         if sources is not None:
             await self._set_task_sources(db, task_id, next_sources)
 

@@ -13,6 +13,19 @@ _TAXONOMY_TABLES = {
 }
 
 
+def _is_missing_parent_column_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "parent_id" in message and (
+        "does not exist" in message or "undefinedcolumn" in message or "no such column" in message
+    )
+
+
+def _row_value(row: Any, index: int, key: str) -> Any:
+    if isinstance(row, dict):
+        return row.get(key)
+    return row[index]
+
+
 async def fetch_sources_map_safe(repo: Any, db: db_driver.Connection, task_ids: List[int]) -> Dict[int, List[str]]:
     """Fetch sources when BankTaskHelpersMixin is mixed in; tolerate slim mixin test doubles."""
     fetcher = getattr(repo, "_fetch_sources_map", None)
@@ -221,8 +234,95 @@ class BankTaskHelpersMixin:
         for label in self._normalize_topics(labels):
             await self._ensure_task_label(db, task_id, label, kind)
 
+    async def _expand_topic_ancestors(
+        self,
+        db: db_driver.Connection,
+        topics: Optional[List[str]],
+    ) -> List[str]:
+        """Append missing parent/root topics via bank_topics.parent_id.
+
+        Uses canonical DB names for existing topics, walks parent_id up to 64
+        hops with cycle protection, and falls back to normalized inputs if the
+        parent_id column is not yet present.
+        """
+        normalized = self._normalize_topics(topics)
+        if not normalized:
+            return []
+
+        name_norms = [self._normalize_topic(label) for label in normalized]
+        placeholders = ",".join(["?"] * len(name_norms))
+        try:
+            async with db.execute(
+                f"""
+                SELECT id, name, name_norm, parent_id
+                FROM bank_topics
+                WHERE name_norm IN ({placeholders})
+                """,
+                name_norms,
+            ) as cursor:
+                initial_rows = await cursor.fetchall()
+        except Exception as exc:
+            if _is_missing_parent_column_error(exc):
+                return normalized
+            raise
+
+        if not initial_rows:
+            return normalized
+
+        canonical_by_norm: Dict[str, str] = {}
+        visited_ids: set[int] = set()
+        pending_parent_ids: set[int] = set()
+        for row in initial_rows:
+            row_id = int(_row_value(row, 0, "id"))
+            row_name = _row_value(row, 1, "name")
+            row_norm = _row_value(row, 2, "name_norm")
+            row_parent_id = _row_value(row, 3, "parent_id")
+            visited_ids.add(row_id)
+            if row_norm and row_name:
+                canonical_by_norm[row_norm] = row_name
+            if row_parent_id is not None:
+                pending_parent_ids.add(int(row_parent_id))
+
+        pending_parent_ids.difference_update(visited_ids)
+        ancestor_names: List[str] = []
+        hops = 0
+        while pending_parent_ids and hops < 64:
+            hops += 1
+            batch_ids = sorted(pending_parent_ids)
+            pending_parent_ids = set()
+            id_placeholders = ",".join(["?"] * len(batch_ids))
+            async with db.execute(
+                f"""
+                SELECT id, name, parent_id
+                FROM bank_topics
+                WHERE id IN ({id_placeholders})
+                """,
+                batch_ids,
+            ) as cursor:
+                parent_rows = await cursor.fetchall()
+            for row in parent_rows:
+                pid = int(_row_value(row, 0, "id"))
+                if pid in visited_ids:
+                    continue
+                visited_ids.add(pid)
+                parent_name = _row_value(row, 1, "name")
+                if parent_name:
+                    ancestor_names.append(parent_name)
+                next_parent_id = _row_value(row, 2, "parent_id")
+                if next_parent_id is not None:
+                    next_pid = int(next_parent_id)
+                    if next_pid not in visited_ids:
+                        pending_parent_ids.add(next_pid)
+
+        resolved_inputs = [
+            canonical_by_norm.get(self._normalize_topic(label), label)
+            for label in normalized
+        ]
+        return self._normalize_topics([*resolved_inputs, *ancestor_names])
+
     async def _set_task_topics(self, db: db_driver.Connection, task_id: int, topics: List[str]) -> None:
-        await self._set_task_labels(db, task_id, topics, "topic")
+        expanded = await self._expand_topic_ancestors(db, topics)
+        await self._set_task_labels(db, task_id, expanded, "topic")
 
     async def _set_task_sources(self, db: db_driver.Connection, task_id: int, sources: List[str]) -> None:
         await self._set_task_labels(db, task_id, sources, "source")
