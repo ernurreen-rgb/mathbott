@@ -4,35 +4,43 @@ import ComparisonTableView from "@/components/student/ComparisonTableView";
 import MathRender from "@/components/ui/MathRender";
 import { apiPath } from "@/lib/api/client";
 import { formatComparisonSummary, hasEmptyMcqOptionTexts, parseComparisonTask } from "@/lib/comparison-task";
+import { splitLeadingTitle } from "@/lib/context-title";
 import { useI18n } from "@/lib/i18n/provider";
 import type { ConstructorTask } from "@/types/constructor";
 
 /** A bank task as the constructor lists it: the statement, its picture and its options. */
 export default function TaskPreview({ task, compact = false }: { task: ConstructorTask; compact?: boolean }) {
   const { t } = useI18n();
-  const comparison = parseComparisonTask(task.text);
+  const { title, body } = splitLeadingTitle(task.text);
+  const comparison = parseComparisonTask(body);
   if (compact) {
-    const compactText = comparison ? formatComparisonSummary(task.text) : task.text;
+    const compactText = comparison ? formatComparisonSummary(body) : body;
     return (
       <div className="line-clamp-2 text-sm">
+        {title && <strong className="text-slate-900">{title} </strong>}
         {compactText.trim()
           ? <MathRender latex={compactText} className="text-slate-900" />
-          : <span className="italic text-slate-500">{t("constructor.imageTask")}</span>}
+          : title ? null : <span className="italic text-slate-500">{t("constructor.imageTask")}</span>}
       </div>
     );
   }
 
   const statement = comparison
     ? <ComparisonTableView parts={comparison} compact />
-    : task.text.trim()
-      ? <MathRender latex={task.text} className="text-slate-900" />
-      : <span className="italic text-slate-500">{t("constructor.imageTask")}</span>;
+    : body.trim()
+      ? <MathRender latex={body} className="text-slate-900" />
+      : title ? null : <span className="italic text-slate-500">{t("constructor.imageTask")}</span>;
 
   const showOptions = task.answer_mode !== "written" && (task.question_type === "mcq" || task.question_type === "mcq6" || task.question_type === "context" || task.question_type === "select");
   const labelOnly = showOptions && hasEmptyMcqOptionTexts(task.options);
   const options = labelOnly ? task.options : task.options.filter((option) => option.text.trim());
   return (
     <div className="min-w-0 text-[15px] leading-relaxed">
+      {title && (
+        <div data-task-title className="mb-1 text-center font-bold text-slate-900">
+          <MathRender latex={title} />
+        </div>
+      )}
       {statement}
       {task.image_filename && (
         // The bank picture at its own proportions; a fixed box would crop diagrams.

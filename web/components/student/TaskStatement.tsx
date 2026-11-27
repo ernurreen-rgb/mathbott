@@ -5,6 +5,7 @@ import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
 import ComparisonTableView from "@/components/student/ComparisonTableView";
 import { parseComparisonTask } from "@/lib/comparison-task";
+import { splitLeadingTitle } from "@/lib/context-title";
 import { apiPath } from "@/lib/api/client";
 import {
   TaskFontViewport,
@@ -28,18 +29,24 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
     setImageFailed(false);
   }, [src]);
   const normalizedScale = normalizeTaskTextScale(task.text_scale);
-  const comparisonParts = parseComparisonTask(task.text);
+  const { title, body } = splitLeadingTitle(task.text);
+  const comparisonParts = parseComparisonTask(body);
   return (
     <div className="w-full space-y-4 min-w-0">
       <div
         className={`min-w-0 break-words font-semibold leading-[1.65] text-gray-900 ${viewport ? "" : getTaskTextScaleClass(normalizedScale)}`}
         style={getTaskTextScaleStyle(normalizedScale, viewport)}
       >
+        {title && (
+          <div data-task-title className="mb-2 text-center text-[1.08em] font-bold">
+            <MathRender latex={title} />
+          </div>
+        )}
         {comparisonParts ? (
           <ComparisonTableView parts={comparisonParts} />
-        ) : task.text ? (
-          <MathRender latex={task.text} />
-        ) : (
+        ) : body ? (
+          <MathRender latex={body} />
+        ) : title ? null : (
           <span className="text-gray-400">{t("task.textPlaceholder")}</span>
         )}
       </div>

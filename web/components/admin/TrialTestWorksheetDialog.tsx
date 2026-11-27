@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { createPortal } from 'react-dom';
 import MathRender from '@/components/ui/MathRender';
 import { getAdminTrialTestTasks } from '@/lib/api/admin-trial-tests';
+import { splitLeadingTitle } from '@/lib/context-title';
 import {
   hasWorksheetTaskContent,
   MAX_WORKSHEET_TASKS,
@@ -13,6 +14,17 @@ import {
 } from '@/lib/bank-worksheet';
 import type { BankPlacementTask, TrialTest } from '@/types';
 import BankWorksheetDocument from './BankWorksheetDocument';
+
+/** A task line in the picker: a context's title in bold, then its statement. */
+function TitledPreview({ text }: { text: string }) {
+  const { title, body } = splitLeadingTitle(text);
+  return (
+    <>
+      {title && <strong>{title} </strong>}
+      {body.trim() && <MathRender latex={body} />}
+    </>
+  );
+}
 
 export default function TrialTestWorksheetDialog({
   test,
@@ -201,7 +213,7 @@ export default function TrialTestWorksheetDialog({
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-3 text-sm">
                       {task.text.trim() ? (
-                        <MathRender latex={task.text} />
+                        <TitledPreview text={task.text} />
                       ) : (
                         <span className="italic text-gray-500">Суретті тапсырма</span>
                       )}

@@ -5,6 +5,7 @@ import { apiPath } from '@/lib/api/client';
 import { getTaskAnswerMode } from '@/lib/answer-mode';
 import { WORKSHEET_BRAND, type WorksheetTask } from '@/lib/bank-worksheet';
 import { hasEmptyMcqOptionTexts, parseComparisonTask } from '@/lib/comparison-task';
+import { splitLeadingTitle } from '@/lib/context-title';
 import type { AnswerPiece, ConstructorLanguage } from '@/lib/constructor-answers';
 
 export interface WorksheetAnswer {
@@ -63,12 +64,14 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
       </header>
     )}
     {tasks.map((task, index) => {
-      const comparison = parseComparisonTask(task.text);
+      const { title, body } = splitLeadingTitle(task.text);
+      const comparison = parseComparisonTask(body);
       const difficulty = task.difficulty?.trim().toUpperCase();
       return <article key={task.id} data-pdf-task data-task-id={task.id} style={{ padding: '12px 0 18px' }}>
       <div data-pdf-part style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
         <strong style={{ flexShrink: 0 }}>{index + 1}.{difficulty ? ` (${difficulty})` : ''}</strong>
         <div data-pdf-statement style={{ minWidth: 0, flex: 1 }}>
+          {title && <div data-task-title style={{ textAlign: 'center', fontWeight: 700, marginBottom: 6 }}><MathRender latex={title} /></div>}
           {comparison ? <div>
             {comparison.condition && <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 8 }}><MathRender latex={comparison.condition} /></div>}
             <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden' }}>
@@ -81,7 +84,7 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
                 <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MathRender latex={comparison.columnB} /></div>
               </div>
             </div>
-          </div> : <MathRender latex={task.text} />}
+          </div> : <MathRender latex={body} />}
         </div>
       </div>
       {task.image_filename && <div data-pdf-part style={{ padding: '12px 0 4px 28px' }}>

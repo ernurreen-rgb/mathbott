@@ -8,6 +8,7 @@
  * plain-text version for apps without equations, so nothing is ever lost.
  */
 import { hasEmptyMcqOptionTexts, parseComparisonTask } from "@/lib/comparison-task";
+import { splitLeadingTitle } from "@/lib/context-title";
 import { splitMathRenderContent } from "@/lib/math-content";
 import { normalizeLatexForMathDisplay } from "@/lib/math-normalize";
 import { taskAnswerPieces, type AnswerPiece, type ConstructorLanguage } from "@/lib/constructor-answers";
@@ -87,6 +88,8 @@ interface Paragraph {
   /** Line spacing in percent × 1000 (120000 = 120 %). */
   lineSpacing: number;
   spaceAfter: number;
+  /** Overrides the text box's alignment for this paragraph ("ctr" for a context's title). */
+  align?: string;
 }
 
 /**
@@ -305,7 +308,7 @@ function paragraphXml(paragraph: Paragraph, style: TextStyle, equations: boolean
     if (equations) return `<a14:m>${formula.omml.replace("<m:oMath>", `<m:oMath xmlns:m="${NS.m}">`)}</a14:m>`;
     return textRun(formula.text, style, { font: "Cambria Math" });
   }).join("");
-  return `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="${paragraph.lineSpacing}"/></a:lnSpc>`
+  return `<a:p><a:pPr algn="${paragraph.align ?? align}"><a:lnSpc><a:spcPct val="${paragraph.lineSpacing}"/></a:lnSpc>`
     + `<a:spcAft><a:spcPts val="${paragraph.spaceAfter}"/></a:spcAft></a:pPr>${body}`
     + `<a:endParaRPr lang="${style.language}" sz="${style.size}" dirty="0"/></a:p>`;
 }
@@ -537,6 +540,14 @@ function optionParagraphs(task: ConstructorTask): Paragraph[] {
 }
 
 function statementParagraphs(text: string, accent: string): Paragraph[] {
+  const { title, body } = splitLeadingTitle(text);
+  const heading: Paragraph[] = title
+    ? [{ inlines: [{ kind: "text", text: title, bold: true }], lineSpacing: 120000, spaceAfter: 600, align: "ctr" }]
+    : [];
+  return [...heading, ...bodyParagraphs(body, accent)];
+}
+
+function bodyParagraphs(text: string, accent: string): Paragraph[] {
   const comparison = parseComparisonTask(text);
   if (!comparison) {
     return contentInlines(text).map((inlines) => ({ inlines, lineSpacing: 120000, spaceAfter: 900 }));
