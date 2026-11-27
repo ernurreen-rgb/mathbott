@@ -1,45 +1,48 @@
 const isProduction = process.env.NODE_ENV === "production";
 
-// Extra connect-src origins (backend HTTPS/WSS, etc.) are environment-specific
-// and must not be hard-coded. Provide them as a space-separated list via
-// CSP_CONNECT_SRC at build time.
-const defaultConnectSrc =
-  "https://qazmath.vercel.app wss://qazmath.vercel.app";
-const extraConnectSrc = (process.env.CSP_CONNECT_SRC || defaultConnectSrc).trim();
+const { createHash } = require("node:crypto");
+const { readFileSync } = require("node:fs");
+const path = require("node:path");
+const { buildContentSecurityPolicy } = require("./lib/csp");
 
-const connectSrc = [
-  "'self'",
-  extraConnectSrc,
-  "https://*.sentry.io",
-  "https://*.ingest.sentry.io",
-]
-  .filter(Boolean)
-  .join(" ");
+const CSP_HEADER = "Content-Security-Policy";
 
-// 'unsafe-eval' is only needed by the Next.js dev server (React Refresh / HMR).
-// Production bundles do not require it, so keep it out of the production CSP.
-const scriptSrc = isProduction
-  ? "script-src 'self' 'unsafe-inline'"
-  : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+/**
+ * 'sha256-...' sources for the inline scripts of a file in public/, so the CSP
+ * follows the file instead of a hash copied by hand. The HTML parser turns
+ * CRLF into LF before the browser hashes a script, so this does the same.
+ */
+function inlineScriptHashes(publicFile) {
+  const html = readFileSync(path.join(__dirname, "public", publicFile), "utf8");
+  return [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .filter(([, attributes = ""]) => !/\ssrc\s*=/i.test(attributes))
+    .map(([, , body]) => body.replace(/\r\n?/g, "\n"))
+    .map((body) => `'sha256-${createHash("sha256").update(body, "utf8").digest("base64")}'`);
+}
 
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "form-action 'self'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  scriptSrc,
-  `connect-src ${connectSrc}`,
-].join("; ");
+// Pages get a per-request nonce CSP from middleware.ts. Everything that
+// middleware skips gets a static CSP here (no inline scripts at all), so no
+// response carries two CSP headers. Keep in sync with the middleware matcher;
+// tests/csp.test.ts checks that every path gets exactly one CSP.
+const STATIC_CSP_SOURCES = [
+  "/api/:path*",
+  "/_next/static/:path*",
+  "/_next/image",
+  "/favicon.ico",
+  "/icons/:path*",
+  "/.well-known/:path*",
+  // The CSP of the worker script also governs the worker's own fetches.
+  "/sw.js",
+  "/manifest.webmanifest",
+];
+const staticContentSecurityPolicy = buildContentSecurityPolicy();
+// The offline page is cached by the service worker and must work with no
+// network, so its small inline script is allowed by hash.
+const offlineContentSecurityPolicy = buildContentSecurityPolicy({
+  scriptHashes: inlineScriptHashes("offline.html"),
+});
 
 const securityHeaders = [
-  {
-    key: "Content-Security-Policy",
-    value: contentSecurityPolicy,
-  },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -73,6 +76,14 @@ const nextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      ...STATIC_CSP_SOURCES.map((source) => ({
+        source,
+        headers: [{ key: CSP_HEADER, value: staticContentSecurityPolicy }],
+      })),
+      {
+        source: "/offline.html",
+        headers: [{ key: CSP_HEADER, value: offlineContentSecurityPolicy }],
+      },
       {
         // Browsers must always revalidate the service worker script so
         // updates are picked up on the next load.
@@ -89,6 +100,10 @@ if (isProduction) {
   module.exports = withSentryConfig(nextConfig, {
     silent: true,
     webpack: {
+      // middleware.ts only sets the CSP nonce: tracing it would add a Sentry
+      // transaction per page request. Its errors still reach Sentry through
+      // onRequestError in instrumentation.ts.
+      autoInstrumentMiddleware: false,
       treeshake: {
         removeDebugLogging: true,
       },

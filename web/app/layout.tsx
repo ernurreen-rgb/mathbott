@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import "./globals.css";
 import "./theme-modules.css";
 import "mathlive/static.css";
@@ -43,18 +43,21 @@ export default async function RootLayout({
 }>) {
   const { locale } = await getServerT();
   const signedIn = hasSessionCookie((await cookies()).getAll().map((cookie) => cookie.name));
+  // Set by middleware.ts; the CSP only runs inline scripts that carry it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // Browsers hide the nonce attribute after parsing, so hydration sees "": suppressHydrationWarning.
+  const inlineScript = (html: string) => (
+    <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: html }} />
+  );
   return (
     // The theme script sets data-theme on <html> before React hydrates it.
     <html lang={locale} suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript(signedIn) }} />
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "try{if(localStorage.getItem('mathbot_desktop_nav_collapsed')==='true'){document.body.classList.add('desktop-nav-collapsed');}}catch(e){}",
-          }}
-        />
-        <script dangerouslySetInnerHTML={{ __html: warmUpScript(apiPath("health")) }} />
+        {inlineScript(themeInitScript(signedIn))}
+        {inlineScript(
+          "try{if(localStorage.getItem('mathbot_desktop_nav_collapsed')==='true'){document.body.classList.add('desktop-nav-collapsed');}}catch(e){}",
+        )}
+        {inlineScript(warmUpScript(apiPath("health")))}
         <ErrorBoundary>
           <Providers locale={locale} signedIn={signedIn}>
             {children}
