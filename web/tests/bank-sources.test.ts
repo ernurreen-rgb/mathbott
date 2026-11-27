@@ -16,6 +16,7 @@ describe("bank task sources", () => {
     const empty = emptyLibraryFilters();
     expect(empty.sources).toEqual([]);
     expect(empty.hasSources).toBe("");
+    expect(empty.hasImage).toBe("");
 
     const upgraded = readLibraryFilters({
       search: "eq",
@@ -23,13 +24,17 @@ describe("bank task sources", () => {
     });
     expect(upgraded.sources).toEqual([]);
     expect(upgraded.hasSources).toBe("");
+    expect(upgraded.hasImage).toBe("");
 
     const populated = readLibraryFilters({
       sources: ["Рустюмова", "ҰБТ есебі", "Рустюмова", ""],
       hasSources: "no",
+      hasImage: "yes",
     });
     expect(populated.sources).toEqual(["Рустюмова", "ҰБТ есебі"]);
     expect(populated.hasSources).toBe("no");
+    expect(populated.hasImage).toBe("yes");
+    expect(readLibraryFilters({ hasImage: "invalid" }).hasImage).toBe("");
   });
 
   it("maps sources between BankTask, form state, and JSON edit payload", () => {
@@ -71,9 +76,10 @@ describe("bank task sources", () => {
       await getConstructorSources("u@example.com");
       expect(String(fetchMock.mock.calls[1]?.[0] || "")).toContain("constructor/sources");
 
-      await getAdminBankTasks("a@example.com", { sources: ["ҰБТ есебі"], hasSources: false });
+      await getAdminBankTasks("a@example.com", { sources: ["ҰБТ есебі"], hasSources: false, hasImage: true });
       const adminUrl = String(fetchMock.mock.calls[2]?.[0] || "");
       expect(adminUrl).toContain("has_sources=false");
+      expect(adminUrl).toContain("has_image=true");
       expect(adminUrl).toContain("admin/bank/tasks");
 
       await getAdminBankSources("a@example.com", "руст");

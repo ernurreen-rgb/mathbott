@@ -90,6 +90,7 @@ export async function getAdminBankTasks(
     usage?: BankTaskUsageFilter;
     hasTopics?: boolean;
     hasSources?: boolean;
+    hasImage?: boolean;
     topicMatch?: "any" | "all";
     sort?: BankTaskSort;
     twins?: BankTwinsFilter;
@@ -116,6 +117,7 @@ export async function getAdminBankTasks(
   if (params?.usage && params.usage !== "all") query.set("usage", params.usage);
   if (params?.hasTopics !== undefined) query.set("has_topics", String(params.hasTopics));
   if (params?.hasSources !== undefined) query.set("has_sources", String(params.hasSources));
+  if (params?.hasImage !== undefined) query.set("has_image", String(params.hasImage));
   if (params?.topicMatch) query.set("topic_match", params.topicMatch);
   if (params?.sort) query.set("sort", params.sort);
   if (params?.twins && params.twins !== "exclude" && !trash) query.set("twins", params.twins);

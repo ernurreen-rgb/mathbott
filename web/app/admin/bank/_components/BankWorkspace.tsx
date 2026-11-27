@@ -186,6 +186,7 @@ export default function BankWorkspace() {
       trash: tab === "trash", questionType: filters.questionType, usage: filters.usage, twins: filters.twins,
       hasTopics: filters.hasTopics ? filters.hasTopics === "yes" : undefined,
       hasSources: filters.hasSources ? filters.hasSources === "yes" : undefined,
+      hasImage: filters.hasImage ? filters.hasImage === "yes" : undefined,
       topicMatch: filters.topicMatch, sort: filters.sort,
     });
     if (request !== listRequest.current) return;

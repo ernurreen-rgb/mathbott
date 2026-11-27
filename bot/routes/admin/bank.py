@@ -23,6 +23,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
         has_sources: Optional[bool] = Query(None),
+        has_image: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         sort: Literal["newest", "oldest", "updated"] = Query("newest"),
         twins: Literal["exclude", "only", "include"] = Query("exclude"),
@@ -39,7 +40,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             limit=limit,
             offset=offset,
             question_type=question_type, usage=usage, has_topics=has_topics, has_sources=has_sources,
-            topic_match=topic_match, sort=sort, twins=twins,
+            has_image=has_image, topic_match=topic_match, sort=sort, twins=twins,
         )
 
     @app.get("/api/admin/bank/tasks/trash")
@@ -56,6 +57,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
         usage: Literal["all", "used", "unused"] = Query("all"),
         has_topics: Optional[bool] = Query(None),
         has_sources: Optional[bool] = Query(None),
+        has_image: Optional[bool] = Query(None),
         topic_match: Literal["any", "all"] = Query("any"),
         sort: Literal["newest", "oldest", "updated"] = Query("newest"),
     ):
@@ -72,7 +74,7 @@ def register_bank_routes(app: FastAPI, db: Database, limiter: Limiter):
             limit=limit,
             offset=offset,
             question_type=question_type, usage=usage, has_topics=has_topics, has_sources=has_sources,
-            topic_match=topic_match, sort=sort, twins="include",
+            has_image=has_image, topic_match=topic_match, sort=sort, twins="include",
         )
 
     @app.get("/api/admin/bank/catalog")

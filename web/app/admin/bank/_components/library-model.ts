@@ -7,6 +7,7 @@ export type BankLibraryFilters = {
   usage: BankTaskUsageFilter;
   hasTopics: "" | "yes" | "no";
   hasSources: "" | "yes" | "no";
+  hasImage: "" | "yes" | "no";
   topics: string[];
   sources: string[];
   topicMatch: "any" | "all";
@@ -18,7 +19,7 @@ export type BankLibraryFilters = {
 };
 export type BankSavedView = { id: string; name: string; filters: BankLibraryFilters };
 export const emptyLibraryFilters = (): BankLibraryFilters => ({
-  search: "", difficulty: "", questionType: "", usage: "all", hasTopics: "", hasSources: "", topics: [], sources: [],
+  search: "", difficulty: "", questionType: "", usage: "all", hasTopics: "", hasSources: "", hasImage: "", topics: [], sources: [],
   topicMatch: "any", sort: "newest", twins: "exclude", limit: 50, offset: 0,
 });
 export const questionTypeLabel = (type: string) => ({ input: "Жазбаша", tf: "Шын / Жалған", mcq: "4 нұсқа", mcq6: "6 нұсқа", context: "Контекст", select: "Сәйкестендіру" })[type] || type;
@@ -34,6 +35,7 @@ export function readLibraryFilters(value: unknown): BankLibraryFilters {
     usage: ["used", "unused"].includes(String(raw.usage)) ? raw.usage as BankTaskUsageFilter : "all",
     hasTopics: raw.hasTopics === "yes" || raw.hasTopics === "no" ? raw.hasTopics : "",
     hasSources: raw.hasSources === "yes" || raw.hasSources === "no" ? raw.hasSources : "",
+    hasImage: raw.hasImage === "yes" || raw.hasImage === "no" ? raw.hasImage : "",
     topics: Array.isArray(raw.topics) ? Array.from(new Set(raw.topics.filter((t): t is string => typeof t === "string" && !!t.trim() && t.length <= 64))).slice(0, 20) : [],
     sources: Array.isArray(raw.sources) ? Array.from(new Set(raw.sources.filter((s): s is string => typeof s === "string" && !!s.trim() && s.length <= 64))).slice(0, 10) : [],
     topicMatch: raw.topicMatch === "all" ? "all" : "any",

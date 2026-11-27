@@ -64,6 +64,7 @@ class BankTaskCrudMixin:
         usage: str = "all",
         has_topics: Optional[bool] = None,
         has_sources: Optional[bool] = None,
+        has_image: Optional[bool] = None,
         topic_match: str = "any",
         sort: str = "newest",
         twins: str = "exclude",
@@ -109,6 +110,13 @@ class BankTaskCrudMixin:
             if has_topics is not None:
                 topic_clause = "EXISTS (SELECT 1 FROM bank_task_topic_map m WHERE m.bank_task_id = bt.id)"
                 where.append(topic_clause if has_topics else f"NOT {topic_clause}")
+
+            if has_image is not None:
+                where.append(
+                    "(bt.image_filename IS NOT NULL AND BTRIM(bt.image_filename) <> '')"
+                    if has_image
+                    else "(bt.image_filename IS NULL OR BTRIM(bt.image_filename) = '')"
+                )
 
             normalized_sources = [self._normalize_topic(s) for s in self._normalize_topics(sources)]
             source_exists_clause = "EXISTS (SELECT 1 FROM bank_task_source_map sm WHERE sm.bank_task_id = bt.id)"

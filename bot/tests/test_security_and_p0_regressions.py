@@ -1607,6 +1607,93 @@ class Sprint3RegressionTests(unittest.TestCase):
             {"Алгебра", "Тригонометрия", "Тригонометриялық теңдеулер"},
         )
 
+    def test_bank_list_tasks_has_image_filter_sql_and_route(self):
+        from repositories.bank.crud import BankTaskCrudMixin
+        from repositories.bank.helpers import BankTaskHelpersMixin
+        from routes.admin.bank import register_bank_routes
+        from slowapi import Limiter
+        from slowapi.util import get_remote_address
+
+        executed_sql = []
+
+        class _Cursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchone(self):
+                return (0,)
+
+            async def fetchall(self):
+                return []
+
+        class _Db:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                executed_sql.append(sql)
+                return _Cursor()
+
+        class _Ctx:
+            async def __aenter__(self):
+                return _Db()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _Repo(BankTaskHelpersMixin, BankTaskCrudMixin):
+            def _connection(self):
+                return _Ctx()
+
+            async def _fetch_active_usage_counts(self, db, task_ids):
+                return {}
+
+            async def _attach_twin_info(self, db, items):
+                return None
+
+        repo = _Repo()
+
+        executed_sql.clear()
+        asyncio.run(repo.list_tasks(has_image=None))
+        self.assertFalse(any("image_filename" in sql for sql in executed_sql))
+
+        executed_sql.clear()
+        asyncio.run(repo.list_tasks(has_image=True))
+        self.assertTrue(any("bt.image_filename IS NOT NULL AND BTRIM(bt.image_filename) <> ''" in sql for sql in executed_sql))
+
+        executed_sql.clear()
+        asyncio.run(repo.list_tasks(has_image=False))
+        self.assertTrue(any("bt.image_filename IS NULL OR BTRIM(bt.image_filename) = ''" in sql for sql in executed_sql))
+
+        # Route passes has_image query param cleanly on both active and trash bank endpoints.
+        fake_db = MagicMock()
+        fake_db.bank_tasks = MagicMock()
+        fake_db.bank_tasks.list_tasks = AsyncMock(
+            return_value={"items": [], "total": 0, "limit": 20, "offset": 0, "has_more": False}
+        )
+        fake_db.users = MagicMock()
+        fake_db.users.get_user_by_email = AsyncMock(
+            return_value={"id": 1, "email": "admin@example.test", "is_admin": True, "admin_role": "super_admin"}
+        )
+
+        app = FastAPI()
+        app.state.db = fake_db
+        register_bank_routes(app, fake_db, Limiter(key_func=get_remote_address))
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False):
+            client = TestClient(app)
+            resp = client.get("/api/admin/bank/tasks", params={"email": "admin@example.test", "has_image": "true"})
+            self.assertEqual(resp.status_code, 200)
+            self.assertIs(fake_db.bank_tasks.list_tasks.await_args.kwargs["has_image"], True)
+
+            resp_trash = client.get(
+                "/api/admin/bank/tasks/trash", params={"email": "admin@example.test", "has_image": "false"}
+            )
+            self.assertEqual(resp_trash.status_code, 200)
+            self.assertIs(fake_db.bank_tasks.list_tasks.await_args.kwargs["has_image"], False)
+
 
 if __name__ == "__main__":
     unittest.main()
