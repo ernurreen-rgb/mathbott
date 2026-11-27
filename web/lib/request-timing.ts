@@ -4,8 +4,10 @@
 // answers in milliseconds, the delay is somewhere between the device and the server, and only the
 // device can tell where. So every API request is timed here, and the device reports:
 //   - "slow": SLOW_REQUEST_MS or longer to the response,
-//   - "failed": no response (network error, or given up after SLOW_REQUEST_MS), or a 5xx,
+//   - "failed": no response (network error, or the page timed it out), or a 5xx,
 //   - "sample": SAMPLE_RATE of all other requests, for what a normal request costs.
+// A request the page cancelled itself (a newer save replaced it, the student left) is not a
+// failure: it counts as "slow" when it had waited SLOW_REQUEST_MS or longer, otherwise not at all.
 // Each report has the connection phases (Resource Timing), the proxy's and API's own time
 // (Server-Timing), the network type and whether the page was hidden meanwhile (a locked phone).
 // Reports never hold emails, query strings or answers: paths are templates like "lessons/:id".
@@ -37,6 +39,8 @@ export type Observation = {
   durationMs: number;
   status: number | null;
   error: "network" | "aborted" | null;
+  /** An aborted request the page gave up on because it took too long (abortAfterTimeout). */
+  timedOut?: boolean;
   serverTiming: string | null;
   wasHidden: boolean;
   page: string;
@@ -172,8 +176,11 @@ export function parseServerTiming(header: string | null): {
 export function classifyRequest(observation: Observation, random: () => number): TimingKind | null {
   const { error, status, durationMs } = observation;
   if (error === "network") return "failed";
-  // A caller that cancels quickly (the student left the page) is not a problem; one that gave up waiting is.
-  if (error === "aborted") return durationMs >= SLOW_REQUEST_MS ? "failed" : null;
+  if (error === "aborted") {
+    if (observation.timedOut) return "failed";
+    // Cancelled on purpose: only the wait before it says something about the network.
+    return durationMs >= SLOW_REQUEST_MS ? "slow" : null;
+  }
   if (status !== null && status >= 500) return "failed";
   if (durationMs >= SLOW_REQUEST_MS) return "slow";
   if (NOT_SAMPLED.has(templateApiPath(observation.url))) return null;
@@ -395,8 +402,17 @@ function browserReporter(): TimingReporter | null {
   return reporter;
 }
 
-function isAbort(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
+// Signals aborted by abortAfterTimeout(): the request failed rather than being cancelled.
+const timedOutSignals = new WeakSet<AbortSignal>();
+
+/** Aborts a request because it took too long; the timings then report it as failed. */
+export function abortAfterTimeout(controller: AbortController): void {
+  timedOutSignals.add(controller.signal);
+  controller.abort();
+}
+
+function errorName(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null ? (error as { name?: string }).name : undefined;
 }
 
 /** fetch() that times the request for the reports above; the site's API calls go through it. */
@@ -406,7 +422,12 @@ export async function timedFetch(url: string, init?: RequestInit): Promise<Respo
   const startedAt = performance.now();
   const startedWall = Date.now();
   const hiddenAtStart = document.visibilityState === "hidden";
-  const observe = (status: number | null, error: Observation["error"], serverTiming: string | null) => {
+  const observe = (
+    status: number | null,
+    error: Observation["error"],
+    serverTiming: string | null,
+    timedOut = false,
+  ) => {
     try {
       timing.note({
         url: new URL(url, window.location.href).href,
@@ -416,6 +437,7 @@ export async function timedFetch(url: string, init?: RequestInit): Promise<Respo
         durationMs: performance.now() - startedAt,
         status,
         error,
+        timedOut,
         serverTiming,
         wasHidden: hiddenAtStart || lastHiddenAt >= startedAt || document.visibilityState === "hidden",
         page: window.location.pathname,
@@ -429,7 +451,10 @@ export async function timedFetch(url: string, init?: RequestInit): Promise<Respo
     observe(response.status, null, response.headers.get("server-timing"));
     return response;
   } catch (error) {
-    observe(null, isAbort(error) ? "aborted" : "network", null);
+    // AbortSignal.timeout() rejects with a TimeoutError, a plain abort() with an AbortError.
+    const name = errorName(error);
+    const timedOut = name === "TimeoutError" || (!!init?.signal && timedOutSignals.has(init.signal));
+    observe(null, name === "AbortError" || name === "TimeoutError" ? "aborted" : "network", null, timedOut);
     throw error;
   }
 }

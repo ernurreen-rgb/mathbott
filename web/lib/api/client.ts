@@ -1,6 +1,6 @@
 import { API_URL } from "../constants";
 import { tr } from "../i18n/translate";
-import { timedFetch } from "../request-timing";
+import { abortAfterTimeout, timedFetch } from "../request-timing";
 
 const DEBUG_API = process.env.NEXT_PUBLIC_DEBUG_API === "true";
 export const debugLog = (...args: any[]) => {
@@ -70,7 +70,7 @@ export async function fetchWithErrorHandling<T>(
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      controller.abort();
+      abortAfterTimeout(controller);
     }, timeoutMs);
 
     try {

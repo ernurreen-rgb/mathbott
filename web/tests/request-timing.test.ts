@@ -78,9 +78,11 @@ describe("which requests are reported", () => {
     expect(classifyRequest(observation({ durationMs: 200 }), () => 0.05)).toBe("sample");
   });
 
-  it("ignores a request the page cancelled quickly, not one it gave up waiting for", () => {
+  it("counts a request the page cancelled as slow when it had waited long, and a timed-out one as failed", () => {
     expect(classifyRequest(observation({ error: "aborted", status: null, durationMs: 400 }), always)).toBeNull();
-    expect(classifyRequest(observation({ error: "aborted", status: null, durationMs: 20_000 }), never)).toBe("failed");
+    expect(classifyRequest(observation({ error: "aborted", status: null, durationMs: 4100 }), never)).toBe("slow");
+    expect(classifyRequest(observation({ error: "aborted", status: null, durationMs: 20_000, timedOut: true }), never))
+      .toBe("failed");
   });
 
   it("does not sample the background heartbeat, but reports it when slow", () => {

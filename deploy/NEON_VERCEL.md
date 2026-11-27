@@ -228,7 +228,11 @@ The servers only see their own part of a request. To find where a slow lesson
 loses time, the site times every API request on the student's device
 (`web/lib/request-timing.ts`) and reports to `POST /api/client-timings` the ones
 that took 3 s or more (`slow`), failed or answered 5xx (`failed`), and 10% of the
-rest (`sample`, the baseline). Rows go to `client_request_timings` and are kept
+rest (`sample`, the baseline). A request the page timed out (`abortAfterTimeout`, or
+`AbortSignal.timeout`) is `failed` with `error = 'aborted'`; one the page cancelled itself
+(a newer trial-test draft save replaced it, the student left) is not a failure: it is `slow`
+with `error = 'aborted'` when it had waited 3 s or more, and not reported otherwise. Before
+27 November 2026 those cancellations were reported as `failed` too. Rows go to `client_request_timings` and are kept
 for `CLIENT_TIMING_RETENTION_DAYS` (30) days. Paths and pages are templates
 (`lessons/:id`); no emails, query strings or answers are stored.
 

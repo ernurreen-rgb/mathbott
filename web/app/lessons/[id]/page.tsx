@@ -22,7 +22,7 @@ import { TaskReportDialog, useTaskReport } from "@/components/student/TaskReport
 import { isLessonSoundEnabled, playLessonCue, primeLessonSound, setLessonSoundEnabled } from "@/lib/lesson-sound";
 import { pickNextTaskId, pickStepAfterReview } from "@/lib/lesson-flow";
 import { useI18n } from "@/lib/i18n/provider";
-import { timedFetch } from "@/lib/request-timing";
+import { abortAfterTimeout, timedFetch } from "@/lib/request-timing";
 import LessonTaskFooter, { type LessonVerdict } from "./_components/LessonTaskFooter";
 import MiniLessonSummary from "./_components/MiniLessonSummary";
 
@@ -428,7 +428,7 @@ export default function LessonPage() {
       return next;
     });
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20_000);
+    const timeoutId = setTimeout(() => abortAfterTimeout(controller), 20_000);
     try {
       clearApiGetCache();
       const res = await timedFetch(apiPath("task/check"), {
