@@ -81,7 +81,7 @@ def register_bank_twin_routes(app: FastAPI, db: Database, limiter: Limiter):
                     text_scale=source.get("text_scale") or "md",
                     difficulty=source.get("difficulty") or "B",
                     topics=source.get("topics") or [],
-                    sources=source.get("sources") or [],
+                    sources=["AI"],
                     image_filename=None,
                     keep_source_image=False,
                     created_by=admin_user["id"],

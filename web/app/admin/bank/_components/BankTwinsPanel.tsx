@@ -119,6 +119,7 @@ export default function BankTwinsPanel({ source, email, busy, onCreate, onOpen, 
         return <li key={twin.id} className={`${styles.twinItem} ${draft ? styles.twinDraft : ""}`}>
           <div className={styles.twinItemHeader}>
             <span>{index + 1}-егіз · Банк №{twin.id} · v{twin.current_version ?? 1}
+              {(twin.sources || []).map((src) => <span key={`src-${src}`} className={styles.sourceBadge}>{src}</span>)}
               {draft && <span className={styles.draftBadge}>Жоба · ЖИ</span>}
               {!draft && twin.twin_origin === "ai" && <span className={styles.twinBadge}>ЖИ · мақұлданған</span>}
             </span>

@@ -1694,6 +1694,152 @@ class Sprint3RegressionTests(unittest.TestCase):
             self.assertEqual(resp_trash.status_code, 200)
             self.assertIs(fake_db.bank_tasks.list_tasks.await_args.kwargs["has_image"], False)
 
+    def test_create_twin_keeps_parent_sources_untouched_and_assigns_twin_own_sources(self):
+        from repositories.bank.helpers import BankTaskHelpersMixin
+        from repositories.bank.twins import BankTaskTwinsMixin
+
+        inserted = []
+        parent_source_mutations = []
+
+        class _Cursor:
+            def __init__(self, row=None):
+                self._row = row
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            def __await__(self):
+                async def _done():
+                    return self
+
+                return _done().__await__()
+
+            async def fetchone(self):
+                return self._row
+
+        class _Db:
+            row_factory = None
+
+            def execute(self, sql, params=()):
+                if "SELECT 1 FROM bank_task_twins" in sql:
+                    return _Cursor(row=None)
+                if "COALESCE(MAX(sort_order)" in sql:
+                    return _Cursor(row=(0,))
+                return _Cursor()
+
+        class _Ctx:
+            async def __aenter__(self):
+                return _Db()
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _Repo(BankTaskHelpersMixin, BankTaskTwinsMixin):
+            def _write_transaction(self, lock_key=None):
+                return _Ctx()
+
+            async def _fetch_task_row(self, _db, task_id):
+                return {
+                    "id": task_id,
+                    "text": "2+2=?",
+                    "answer": "4",
+                    "question_type": "input",
+                    "options": None,
+                    "subquestions": None,
+                    "image_filename": None,
+                    "deleted_at": None,
+                }
+
+            async def _insert_bank_task(self, _db, **kwargs):
+                inserted.append(kwargs)
+                return 100 + len(inserted)
+
+            async def _ensure_task_source(self, _db, task_id, source):
+                parent_source_mutations.append((task_id, source))
+
+            async def _record_admin_audit_event(self, _db, **kwargs):
+                return None
+
+            async def get_task_by_id(self, task_id, include_deleted=False):
+                return {"id": task_id, "sources": inserted[-1]["sources"]}
+
+        repo = _Repo()
+        # AI twin of a Рустюмова task gets ONLY ['AI'] and never adds 'AI' to the parent.
+        ai_twin = asyncio.run(
+            repo.create_twin(
+                10,
+                text="3+3=?",
+                answer="6",
+                question_type="input",
+                answer_mode="written",
+                accepted_answers=[],
+                text_scale="md",
+                difficulty="A",
+                topics=["Арифметика"],
+                sources=["AI"],
+                options=None,
+                subquestions=None,
+                image_filename=None,
+                keep_source_image=False,
+                created_by=1,
+                actor_email="admin@example.test",
+                status="draft",
+                origin="ai",
+                ai_model="gpt-test",
+            )
+        )
+        self.assertEqual(ai_twin["sources"], ["AI"])
+        self.assertEqual(parent_source_mutations, [])
+
+        # Manual twin defaults to ['AI'] when empty, and respects explicit custom sources without touching parent.
+        manual_default = asyncio.run(
+            repo.create_twin(
+                10,
+                text="4+4=?",
+                answer="8",
+                question_type="input",
+                answer_mode="written",
+                accepted_answers=[],
+                text_scale="md",
+                difficulty="A",
+                topics=["Арифметика"],
+                sources=[],
+                options=None,
+                subquestions=None,
+                image_filename=None,
+                keep_source_image=False,
+                created_by=1,
+                actor_email="admin@example.test",
+            )
+        )
+        self.assertEqual(manual_default["sources"], ["AI"])
+
+        manual_custom = asyncio.run(
+            repo.create_twin(
+                10,
+                text="5+5=?",
+                answer="10",
+                question_type="input",
+                answer_mode="written",
+                accepted_answers=[],
+                text_scale="md",
+                difficulty="A",
+                topics=["Арифметика"],
+                sources=["Educon"],
+                options=None,
+                subquestions=None,
+                image_filename=None,
+                keep_source_image=False,
+                created_by=1,
+                actor_email="admin@example.test",
+            )
+        )
+        self.assertEqual(manual_custom["sources"], ["Educon"])
+        self.assertEqual(parent_source_mutations, [])
+
 
 if __name__ == "__main__":
     unittest.main()

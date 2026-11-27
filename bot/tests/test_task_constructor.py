@@ -36,7 +36,7 @@ class TaskConstructorTests(PostgresTestCase):
         self.other = await self.db.users.create_user_by_email("student@example.test")
         created = await self.db.bank_tasks.create_tasks_bulk_atomic(
             tasks=[_task(i) for i in range(1, 5)] + [
-                _task(5, topics=["Егіз тақырып"]),
+                _task(5, topics=["Егіз тақырып"], sources=["AI"]),
                 _task(6, topics=["Жойылған тақырып"]),
                 _task(7, question_type="input", answer_mode="written", answer="15", options=None,
                       accepted_answers=["15,0"]),
@@ -117,6 +117,7 @@ class TaskConstructorTests(PostgresTestCase):
             # Nested twins endpoint returns active approved twins without answers, and rejects twin/deleted ids.
             twins_resp = (await client.get(f"/api/constructor/tasks/{self.ids[0]}/twins", params=teacher)).json()
             self.assertEqual([item["id"] for item in twins_resp["items"]], [self.ids[4]])
+            self.assertEqual(twins_resp["items"][0]["sources"], ["AI"])
             self.assertNotIn("answer", twins_resp["items"][0])
             self.assertEqual(
                 (await client.get(f"/api/constructor/tasks/{self.ids[4]}/twins", params=teacher)).status_code, 404

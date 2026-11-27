@@ -142,7 +142,7 @@
 .twinField { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; color: var(--qm-dk-fg-5f6878, #5f6878); font-size: 13px; }
 .twinDraft { border-style: dashed; border-color: var(--qm-dk-line-cdb8f2, #cdb8f2); background: var(--qm-dk-bg-fcfaff, #fcfaff); }
 .draftBadge { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: 5px; background: var(--qm-dk-bg-fff4dc, #fff4dc); color: var(--qm-dk-fg-8a5a00, #8a5a00); font-weight: 600; }
-.twinItemHeader .twinBadge { margin-left: 8px; }
+.twinItemHeader .twinBadge, .twinItemHeader .sourceBadge { margin-left: 8px; }
 .checkMatch, .checkMismatch, .checkNeutral { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; font-size: 13px; line-height: 1.6; }
 .checkMatch { color: var(--qm-dk-fg-2f6b47, #2f6b47); }
 .checkMismatch { color: var(--qm-dk-fg-9c3030, #9c3030); }

@@ -499,6 +499,14 @@ export default function TaskBrowser({
                               <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                 <span className="font-mono">#{twin.id}</span>
                                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{twin.difficulty}</span>
+                                {(twin.sources || []).map((name) => (
+                                  <span
+                                    key={`twin-src-${name}`}
+                                    className="rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800"
+                                  >
+                                    {name}
+                                  </span>
+                                ))}
                                 <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-700">
                                   {t("constructor.twinLabel", { n: twinIndex + 1 })}
                                 </span>

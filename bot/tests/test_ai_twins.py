@@ -35,7 +35,8 @@ class AiTwinTests(PostgresTestCase):
         self.student = await self.db.users.get_user_by_email(STUDENT)
         bank = self.db.bank_tasks
         self.source = await bank.create_task(text="Есептеңіз: $27+15$", answer="42", question_type="input",
-                                              answer_mode="written", difficulty="A", topics=["Қосу"])
+                                              answer_mode="written", difficulty="A", topics=["Қосу"],
+                                              sources=["Рустюмова"])
         self.choice = await bank.create_task(text="$8\\cdot 7$ неге тең?", answer="B", question_type="mcq", difficulty="A",
                                               options=[{"label": label, "text": text} for label, text in zip("ABCD", ["54", "56", "64", "48"])])
         self.pictured = await bank.create_task(text="Суреттегі бұрышты табыңыз", answer="30", question_type="input",
@@ -84,8 +85,8 @@ class AiTwinTests(PostgresTestCase):
                          {("draft", "ai", "test-model")})
         source = await self.db.bank_tasks.get_task_by_id(self.source["id"])
         self.assertEqual((source["twin_count"], source["twin_draft_count"]), (0, 2))
-        self.assertIn("AI", source["sources"])
-        self.assertIn("AI", listed[0]["sources"])
+        self.assertEqual(source["sources"], ["Рустюмова"])
+        self.assertEqual(listed[0]["sources"], ["AI"])
 
         review = await self.db.module_review.get_review(self.student["id"], 1)
         self.assertEqual(review["current"]["kind"], "original")  # drafts are never served

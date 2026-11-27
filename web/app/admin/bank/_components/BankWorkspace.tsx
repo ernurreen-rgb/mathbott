@@ -255,7 +255,8 @@ export default function BankWorkspace() {
     if (!workspaceRef.current.open) listScroll.current = window.scrollY;
     formGenerationRef.current += 1;
     // The twin starts as a copy: the editor changes numbers and the answer, never the question type.
-    const next = { ...parseTaskToForm(source), currentVersion: null };
+    // Twins carry their own source (default "AI") rather than inheriting the original's book/exam source.
+    const next = { ...parseTaskToForm(source), sources: ["AI"], currentVersion: null };
     setForm(next); setBaseline(signature(next)); setWorkspaceTask(null); setEditingTaskId(null); setTwinSource(source);
     setShowForm(true); setWorkspaceMode("edit"); setWorkspaceLoading(false); setWorkspaceError(null); setVersionConflict(false); setPendingDedup(null);
     setError(null); setFormTopicInput(""); setFormTopicSuggestions([]); setFormSourceInput("");
