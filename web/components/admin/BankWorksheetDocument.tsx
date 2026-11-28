@@ -71,9 +71,9 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
       <div data-pdf-part style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
         <strong style={{ flexShrink: 0 }}>{index + 1}.{difficulty ? ` (${difficulty})` : ''}</strong>
         <div data-pdf-statement style={{ minWidth: 0, flex: 1 }}>
-          {title && <div data-task-title style={{ textAlign: 'center', fontWeight: 700, marginBottom: 6 }}><MathRender latex={title} /></div>}
+          {title && <div data-task-title style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 700, marginBottom: 6 }}><MathRender latex={title} /></div>}
           {comparison ? <div>
-            {comparison.condition && <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 8 }}><MathRender latex={comparison.condition} /></div>}
+            {comparison.condition && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 600, marginBottom: 8 }}><MathRender latex={comparison.condition} /></div>}
             <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 700, textAlign: 'center', fontSize: 14 }}>
                 <div style={{ padding: '4px 8px', borderRight: '1px solid #cbd5e1' }}>A</div>

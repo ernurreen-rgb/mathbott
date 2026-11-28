@@ -38,7 +38,7 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
         style={getTaskTextScaleStyle(normalizedScale, viewport)}
       >
         {title && (
-          <div data-task-title className="mb-2 text-center text-[1.08em] font-bold">
+          <div data-task-title className="mb-2 flex flex-col items-center justify-center text-center text-[1.08em] font-bold">
             <MathRender latex={title} />
           </div>
         )}

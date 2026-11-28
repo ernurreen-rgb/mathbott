@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "vitest";
 
 import {
@@ -6,6 +8,9 @@ import {
   hasEmptyMcqOptionTexts,
   parseComparisonTask,
 } from "../lib/comparison-task";
+
+const readComponent = (relativePath: string): string =>
+  readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("parseComparisonTask", () => {
   it("parses shared condition and A/B columns", () => {
@@ -83,6 +88,30 @@ describe("hasEmptyMcqOptionTexts", () => {
         { label: "B", text: "" },
       ]),
       false
+    );
+  });
+});
+
+describe("Comparison condition and title centering", () => {
+  it("wraps ComparisonTableView condition in a flex-centered container so <math-div> centers", () => {
+    const src = readComponent("../components/student/ComparisonTableView.tsx");
+    assert.match(
+      src,
+      /flex flex-col items-center justify-center text-center[^`]*`[^`]*>\s*<MathRender latex=\{parts\.condition\}/
+    );
+  });
+
+  it("wraps TaskStatement title and BankWorksheetDocument condition/title in flex-centered containers", () => {
+    const taskStatementSrc = readComponent("../components/student/TaskStatement.tsx");
+    assert.match(
+      taskStatementSrc,
+      /data-task-title className="[^"]*flex flex-col items-center justify-center text-center[^"]*">\s*<MathRender latex=\{title\}/
+    );
+
+    const worksheetSrc = readComponent("../components/admin/BankWorksheetDocument.tsx");
+    assert.match(
+      worksheetSrc,
+      /comparison\.condition && <div style=\{\{[^}]*display:\s*'flex'[^}]*flexDirection:\s*'column'[^}]*alignItems:\s*'center'[^}]*justifyContent:\s*'center'[^}]*textAlign:\s*'center'[^}]*\}\}><MathRender latex=\{comparison\.condition\}/
     );
   });
 });

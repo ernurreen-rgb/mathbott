@@ -18,7 +18,7 @@ export default function ComparisonTableView({
     <div className={`w-full space-y-2.5 ${className}`.trim()}>
       {parts.condition ? (
         <div
-          className={`text-center font-semibold text-gray-900 break-words ${
+          className={`min-w-0 flex flex-col items-center justify-center text-center font-semibold text-gray-900 break-words ${
             compact ? "text-sm leading-snug" : "leading-relaxed"
           }`}
         >
