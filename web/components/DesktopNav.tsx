@@ -163,7 +163,8 @@ export default function DesktopNav(_props: DesktopNavProps) {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href === "/profile" && pathname?.startsWith("/profile")) ||
+            // /settings opens from the profile and has no nav item of its own.
+            (item.href === "/profile" && (pathname?.startsWith("/profile") || pathname?.startsWith("/settings"))) ||
             (item.id === "admin" && pathname?.startsWith("/admin")) ||
             (item.href === "/trial-test" && pathname?.startsWith("/trial-test")) ||
             (item.id === "constructor" && pathname?.startsWith("/task-builder"));

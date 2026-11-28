@@ -2,10 +2,15 @@ import type { SVGProps } from "react";
 
 type Glyph = { path: string; detail?: string; fill?: string };
 
+// Eight teeth from r = 7 to r = 9.5 around the centre of the grid.
+const gearOutline =
+  "M10.54 5.15L10.68 2.59L13.32 2.59L13.46 5.15A7 7 0 0 1 15.81 6.13L17.72 4.41L19.59 6.28L17.87 8.19A7 7 0 0 1 18.85 10.54L21.41 10.68L21.41 13.32L18.85 13.46A7 7 0 0 1 17.87 15.81L19.59 17.72L17.72 19.59L15.81 17.87A7 7 0 0 1 13.46 18.85L13.32 21.41L10.68 21.41L10.54 18.85A7 7 0 0 1 8.19 17.87L6.28 19.59L4.41 17.72L6.13 15.81A7 7 0 0 1 5.15 13.46L2.59 13.32L2.59 10.68L5.15 10.54A7 7 0 0 1 6.13 8.19L4.41 6.28L6.28 4.41L8.19 6.13A7 7 0 0 1 10.54 5.15Z";
+
 // QazMath icons share a 24px grid, rounded terminals and an optical 1.75px stroke.
 // The second layer adds depth without relying on colour to convey meaning.
 const glyphs = {
   settings: { path: "M4 7h16M4 17h16M8 4v6M16 14v6", detail: "M6 7h4M14 17h4" },
+  gear: { path: gearOutline, detail: "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z", fill: gearOutline },
   upload: { path: "M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" },
   download: { path: "M12 3v13m-5-5 5 5 5-5M4 16v5h16v-5" },
   bookmark: { path: "M6 3h12v18l-6-4-6 4Z", fill: "M6 3h12v18l-6-4-6 4Z" },

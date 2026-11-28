@@ -85,6 +85,8 @@ export default function MobileNav({ currentPage }: MobileNavProps) {
         {navItems.map((item) => {
           const isActive = currentPage === item.id || 
             pathname === item.href ||
+            // /settings opens from the profile and has no nav item of its own.
+            (item.id === "profile" && pathname?.startsWith("/settings")) ||
             (item.id === "admin" && pathname?.startsWith("/admin")) ||
             (item.href === "/trial-test" && pathname?.startsWith("/trial-test")) ||
             (item.id === "constructor" && pathname?.startsWith("/task-builder"));

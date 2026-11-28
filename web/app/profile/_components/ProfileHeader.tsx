@@ -1,6 +1,7 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 
+import Link from "next/link";
 import { UserData } from "@/types";
 import type { Dispatch, SetStateAction } from "react";
 import { useI18n } from "@/lib/i18n/provider";
@@ -21,14 +22,23 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
   const { t } = useI18n();
   return (
     <>
-      <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 rounded-3xl shadow-2xl p-8 mb-6 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 rounded-3xl shadow-2xl p-6 sm:p-8 mb-6 text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-black/10"></div>
+        <Link
+          href="/settings"
+          title={t("settings.title")}
+          aria-label={t("settings.title")}
+          className="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-static-white/20 text-white backdrop-blur-sm transition-all hover:bg-static-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-static-white"
+        >
+          <Icon name="gear" className="h-5 w-5" />
+        </Link>
         <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-20 h-20 bg-static-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-static-white/30">
+          {/* pr-6 keeps the name and the nickname field clear of the settings button in the corner. */}
+          <div className="flex items-center gap-4 mb-4 pr-6">
+            <div className="w-20 h-20 shrink-0 bg-static-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold border-4 border-static-white/30">
               {userData?.nickname?.[0]?.toUpperCase() || userData?.email?.[0]?.toUpperCase() || <><Icon name="user" /></>}
             </div>
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               {isEditingNickname ? (
                 <form onSubmit={handleSaveNickname} className="space-y-3">
                   <input
@@ -65,7 +75,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                 </form>
               ) : (
                 <div className="flex flex-col gap-2">
-                  <h2 className="text-3xl font-bold mb-1">
+                  <h2 className="text-2xl sm:text-3xl font-bold mb-1 break-words">
                     {userData?.nickname || userData?.email || t("profile.user")}
                   </h2>
                   <button
@@ -93,7 +103,7 @@ export default function ProfileHeader({ userData, isEditingNickname, handleSaveN
                   {message.text}
                 </div>
               )}
-              <p className="text-blue-100 text-sm mt-1">{userData?.email}</p>
+              <p className="text-blue-100 text-sm mt-1 break-words">{userData?.email}</p>
             </div>
           </div>
         </div>

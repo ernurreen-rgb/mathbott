@@ -28,7 +28,7 @@ function offerFor(state: ReminderState): Offer | null {
  * The daily streak reminder, offered on the mini-lesson summary, the moment a student has just kept
  * the streak going. "Кейін" puts it off for a few days (lib/reminder-prompt.ts). What the device
  * could do and what the student chose are recorded, to see how many students can get reminders at all.
- * The profile switch stays available either way.
+ * The switch on /settings stays available either way.
  */
 export default function StreakReminderPrompt({ email }: { email: string }) {
   const { state, busy, error, enable } = useStreakReminder(email);

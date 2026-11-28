@@ -203,6 +203,7 @@ _STATIC_VISIT_LABELS: Dict[str, str] = {
     "/task-builder/new": "Жаңа жинақ",
     "/profile": "Профиль",
     "/profile/export": "Деректер экспорты",
+    "/settings": "Баптаулар",
     "/achievements": "Жетістіктер",
 }
 

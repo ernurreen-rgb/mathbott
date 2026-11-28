@@ -179,8 +179,8 @@ to run for 60 seconds (`maxDuration`), matching the API function in `bot/vercel.
 
 ## Streak reminders
 
-Students can turn on a daily Web Push reminder (profile switch, or the prompt on
-the mini-lesson summary). Every evening the `/api/push/reminders` cron sends one
+Students can turn on a daily Web Push reminder (the switch on the settings page,
+`/settings`, or the prompt on the mini-lesson summary). Every evening the `/api/push/reminders` cron sends one
 notification to each device whose student has solved nothing today, by the same
 UTC date the streak uses: the streak at risk when there is one, otherwise an
 invitation to start a new one. Devices the push service reports as gone are

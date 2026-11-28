@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # A student rarely has more than a phone and a computer; this only stops a runaway client.
 MAX_DEVICES_PER_USER = 10
 
-# The profile shows these errors under the reminder switch, in the student's interface language.
+# The settings page shows these errors under the reminder switch, in the student's interface language.
 _MESSAGES = {
     "unavailable": ("Еске салу әзірге қолжетімсіз", "Напоминания пока недоступны"),
     "too_many_devices": ("Құрылғылар саны тым көп", "Слишком много устройств"),
@@ -69,7 +69,7 @@ class PushKeys(BaseModel):
 class PushSubscriptionRequest(BaseModel):
     endpoint: str = Field(min_length=1, max_length=1000)
     keys: PushKeys
-    # Turning reminders on shows a test notification; a silent re-sync from the profile does not.
+    # Turning reminders on shows a test notification; a silent re-sync from the settings page does not.
     confirm: bool = True
 
     @field_validator("endpoint")

@@ -164,6 +164,7 @@ const STATIC_VISIT_LABELS: Record<string, string> = {
   "/quiz/history": "Квиз тарихы",
   "/profile": "Профиль",
   "/profile/export": "Деректер экспорты",
+  "/settings": "Баптаулар",
   "/achievements": "Жетістіктер",
 };
 

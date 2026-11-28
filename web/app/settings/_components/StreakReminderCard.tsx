@@ -13,7 +13,7 @@ const DESCRIPTIONS: Record<Exclude<ReminderState, "unsupported">, MessageKey> = 
   install: "profile.reminder.install",
 };
 
-/** Profile switch for the daily streak reminder; hidden where the browser has no Web Push. */
+/** Settings switch for the daily streak reminder; hidden where the browser has no Web Push. */
 export default function StreakReminderCard({ email }: { email: string }) {
   const { state, busy, error, enable, disable } = useStreakReminder(email, { sync: true });
   const { t } = useI18n();

@@ -154,7 +154,7 @@ class PushReminderTests(PostgresTestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.json(), {"subscribed": True, "confirmation": "sent"})
 
-                # A silent re-sync from the profile moves the device to the account signed in now.
+                # A silent re-sync from the settings page moves the device to the account signed in now.
                 quiet = {**_subscription("a"), "confirm": False}
                 response = await client.post("/api/push/subscriptions", params={"email": OTHER}, json=quiet)
                 self.assertEqual(response.json(), {"subscribed": True, "confirmation": None})

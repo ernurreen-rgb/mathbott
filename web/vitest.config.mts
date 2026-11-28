@@ -6,6 +6,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
   },
+  // tsconfig.json leaves JSX to Next ("preserve"); tests that render a page on the server need it compiled.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",

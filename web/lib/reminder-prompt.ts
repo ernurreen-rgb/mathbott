@@ -1,5 +1,5 @@
 // When the mini-lesson summary offers the daily streak reminder. "Кейін" puts the offer off for a few
-// days instead of for good, and after a few refusals it stops; the profile switch always stays.
+// days instead of for good, and after a few refusals it stops; the switch on /settings always stays.
 
 export const REMINDER_PROMPT_KEY = "qm_streak_reminder_prompt";
 export const REMINDER_SNOOZE_DAYS = 3;

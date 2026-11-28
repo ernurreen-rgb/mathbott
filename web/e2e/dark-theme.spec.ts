@@ -153,7 +153,8 @@ test.describe("on a device set to dark", () => {
       ["/trial-test", "trial-tests", page.getByRole("link", { name: /E2E сынақ тесті/ })],
       ["/quizzes", "quizzes", page.getByRole("heading", { level: 1 })],
       ["/achievements", "achievements", page.getByRole("heading", { level: 1 })],
-      ["/profile", "profile", page.getByRole("radiogroup", { name: "Көрініс" })],
+      ["/profile", "profile", page.getByRole("link", { name: "Баптаулар", exact: true })],
+      ["/settings", "settings", page.getByRole("radiogroup", { name: "Көрініс" })],
     ] as const) {
       await page.goto(path);
       await expect(ready).toBeVisible();
@@ -162,7 +163,7 @@ test.describe("on a device set to dark", () => {
       await snapshot(page, testInfo, `dark-system-${name}`);
     }
 
-    // The profile switch shows that the device decides.
+    // The switch on /settings shows that the device decides.
     await expect(page.getByRole("radio", { name: "Жүйелік" })).toHaveAttribute("aria-checked", "true");
     expect(hydrationErrors).toEqual([]);
   });
@@ -225,7 +226,7 @@ test.describe("on a device set to dark", () => {
 test.describe("on a device set to light", () => {
   test.use({ colorScheme: "light" });
 
-  test("a saved dark choice wins while signed in and can be changed on the profile", async ({ studentPage: page }, testInfo) => {
+  test("a saved dark choice wins while signed in and can be changed on the settings page", async ({ studentPage: page }, testInfo) => {
     await page.addInitScript((key) => {
       // Only the first page load: later reloads keep what the switch saved.
       if (!sessionStorage.getItem("e2e-theme-seeded")) {
@@ -236,13 +237,13 @@ test.describe("on a device set to light", () => {
     await watchFirstPaintTheme(page);
     const hydrationErrors = collectHydrationErrors(page);
 
-    await page.goto("/profile");
+    await page.goto("/settings");
     const dark = page.getByRole("radio", { name: "Қараңғы" });
     await expect(dark).toHaveAttribute("aria-checked", "true");
     await expectTheme(page, "dark");
     expect(await firstPaintTheme(page)).toBe("dark");
     await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute("content", "#15121d");
-    await snapshot(page, testInfo, "saved-dark-profile");
+    await snapshot(page, testInfo, "saved-dark-settings");
 
     await page.goto("/modules/1");
     await expect(page.getByRole("heading", { name: "Арифметика" })).toBeVisible();
@@ -251,7 +252,7 @@ test.describe("on a device set to light", () => {
     await snapshot(page, testInfo, "saved-dark-module-map");
 
     // Light, then back to following the device (light here).
-    await page.goto("/profile");
+    await page.goto("/settings");
     await page.getByRole("radio", { name: "Ашық" }).click();
     await expectTheme(page, "light");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_KEY)).toBe("light");

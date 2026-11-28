@@ -2,10 +2,8 @@
 import Icon from "@/components/ui/Icon";
 
 import ProfileHeader from "./_components/ProfileHeader";
+import ProfileLinkCard from "./_components/ProfileLinkCard";
 import WeekActivityPanel from "./_components/WeekActivityPanel";
-import StreakReminderCard from "./_components/StreakReminderCard";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { useI18n } from "@/lib/i18n/provider";
 import { tr } from "@/lib/i18n/translate";
 
@@ -13,7 +11,6 @@ import AuthRedirectScreen from "@/components/AuthRedirectScreen";
 import MobileNav from "@/components/MobileNav";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { signOut } from "next-auth/react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import DesktopNav from "@/components/DesktopNav";
@@ -179,66 +176,26 @@ export default function ProfilePage() {
                 streakDaysSet={streakDaysSet}
               />
 
-              {sessionEmail && <StreakReminderCard email={sessionEmail} />}
-
-              <section
-                aria-labelledby="language-title"
-                className="glass flex flex-wrap items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
-                  <Icon name="globe" className="h-6 w-6" />
-                </span>
-                <div className="min-w-0 flex-1 basis-48">
-                  <h2 id="language-title" className="text-lg font-bold text-gray-900">{t("language.title")}</h2>
-                  <p className="text-sm text-gray-600">{t("language.hint")}</p>
-                </div>
-                <LanguageSwitcher className="w-full sm:w-auto" />
-              </section>
-
-              <section
-                aria-labelledby="theme-title"
-                className="glass flex flex-wrap items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
-                  <Icon name="moon" className="h-6 w-6" />
-                </span>
-                <div className="min-w-0 flex-1 basis-48">
-                  <h2 id="theme-title" className="text-lg font-bold text-gray-900">{t("theme.title")}</h2>
-                  <p className="text-sm text-gray-600">{t("theme.hint")}</p>
-                </div>
-                <ThemeSwitcher className="w-full sm:w-auto" />
-              </section>
-
-              <Link
+              <ProfileLinkCard
                 href="/achievements"
-                className="glass flex items-center gap-4 rounded-3xl border border-white/30 p-5 shadow-xl transition-colors hover:border-purple-300"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
-                  <Icon name="trophy" className="h-6 w-6" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold text-gray-900">{t("profile.achievements")}</span>
-                  <span className="block text-sm text-gray-500">
-                    {totalAchievements > 0
-                      ? t("profile.achievementsUnlocked", { unlocked: unlockedAchievements, total: totalAchievements })
-                      : t("profile.achievementsAll")}
-                  </span>
-                </span>
-                <Icon name="chevronRight" className="h-5 w-5 shrink-0 text-gray-400" />
-              </Link>
+                icon="trophy"
+                iconClassName="bg-amber-100 text-amber-600"
+                title={t("profile.achievements")}
+                hint={
+                  totalAchievements > 0
+                    ? t("profile.achievementsUnlocked", { unlocked: unlockedAchievements, total: totalAchievements })
+                    : t("profile.achievementsAll")
+                }
+              />
 
-              {/* Logout Button */}
-              <div className="glass rounded-2xl shadow-xl p-6 border border-white/30">
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="w-full bg-gradient-to-r from-red-500 via-pink-500 to-red-600 hover:from-red-600 hover:via-pink-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-glow-pink transform hover:scale-[1.02] text-lg"
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <Icon name="logOut" className="w-5 h-5" />
-                    {t("profile.signOut")}
-                  </div>
-                </button>
-              </div>
+              {/* The streak reminder, language, theme and sign-out live on /settings. */}
+              <ProfileLinkCard
+                href="/settings"
+                icon="gear"
+                iconClassName="bg-purple-100 text-purple-600"
+                title={t("settings.title")}
+                hint={t("settings.hint")}
+              />
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-lg p-12 border border-gray-100 text-center space-y-4">
@@ -256,6 +213,7 @@ export default function ProfilePage() {
                 >
                   {t("profile.reload")}
                 </button>
+                {/* Kept here as well as on /settings: a student whose profile fails to load can still sign out. */}
                 <button
                   type="button"
                   onClick={() => signOut({ callbackUrl: "/" })}

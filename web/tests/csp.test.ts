@@ -82,6 +82,7 @@ describe("CSP header routing", () => {
     "/quiz/play/abc",
     "/trial-test/7",
     "/profile",
+    "/settings",
     "/admin/bank",
     "/join",
     "/no-such-page",

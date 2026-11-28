@@ -143,7 +143,7 @@ def _ru_days(count: int) -> str:
 
 
 def _is_russian(language: Optional[str]) -> bool:
-    """The student picked Russian in the profile; anything else (or nothing) is Kazakh, the default."""
+    """The student picked Russian on the settings page; anything else (or nothing) is Kazakh, the default."""
     return language == "ru"
 
 
