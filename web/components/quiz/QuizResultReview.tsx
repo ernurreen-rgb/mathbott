@@ -94,7 +94,7 @@ export default function QuizResultReview({ sessionId, participantId }: { session
           </div>
           {practicing && current ? <section className="space-y-5 rounded-2xl border bg-white p-5 sm:p-8" aria-label={t("review.practiceAria")}>
             <p className="text-sm text-gray-500">{t("quizPlay.questionOf", { n: index + 1, total: mistakes.length })} · {t("review.fixedInPractice", { count: solved.size })}</p>
-            <TaskStatement task={{ text: current.question.question_text, image_filename: current.question.image_filename, text_scale: "md" }} />
+            <TaskStatement task={{ text: current.question.question_text, image_filename: current.question.image_filename, text_scale: "md", question_type: current.question.question_type, options: Array.isArray(current.question.options) ? current.question.options : [] }} />
             {current.question.question_type === "input" ? <StudentMathAnswerInput key={current.question.id} ariaLabel={t("review.practiceAnswerAria")} value={answer}
               onChange={setAnswer} disabled={checking || !!result?.is_correct} /> : (() => {
               const quizOptions = Array.isArray(current.question.options) ? current.question.options : [];
@@ -123,7 +123,7 @@ export default function QuizResultReview({ sessionId, participantId }: { session
             </div>
           </section> : review.items.map((item, itemIndex) => <article key={item.question.id} className="space-y-3 rounded-xl border bg-white p-5">
             <p className={`text-sm font-bold ${item.is_correct ? "text-green-700" : "text-red-700"}`}>{t("review.questionN", { n: itemIndex + 1 })} · {item.is_correct ? t("review.itemCorrect") : t("review.itemWrong")}</p>
-            <TaskStatement task={{ text: item.question.question_text, image_filename: item.question.image_filename, text_scale: "md" }} />
+            <TaskStatement task={{ text: item.question.question_text, image_filename: item.question.image_filename, text_scale: "md", question_type: item.question.question_type, options: Array.isArray(item.question.options) ? item.question.options : [] }} />
             <div className="text-sm text-gray-600">{t("review.yourAnswer")} <MathRender inline latex={answerText(item.question, item.user_answer, t)} /></div>
             {!item.is_correct && <div className="text-sm text-green-800">{t("quizPlay.correctAnswerLabel")} <MathRender inline latex={answerText(item.question, item.question.correct_answer || "", t)} /></div>}
             {item.question.explanation && <div className="border-t pt-3 text-sm"><MathRender latex={item.question.explanation} /></div>}

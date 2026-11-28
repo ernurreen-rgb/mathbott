@@ -84,7 +84,9 @@ export default function BankWorksheetDocument({ title, tasks, brand, language = 
                 <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MathRender latex={comparison.columnB} /></div>
               </div>
             </div>
-          </div> : <MathRender latex={body} />}
+          </div> : hasEmptyMcqOptionTexts(task.options) && (task.question_type === 'mcq' || task.question_type === 'mcq6') ? (
+            <div data-comparison-body style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 600 }}><MathRender latex={body} /></div>
+          ) : <MathRender latex={body} />}
         </div>
       </div>
       {task.image_filename && <div data-pdf-part style={{ padding: '12px 0 4px 28px' }}>

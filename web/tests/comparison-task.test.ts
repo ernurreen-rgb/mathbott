@@ -114,4 +114,19 @@ describe("Comparison condition and title centering", () => {
       /comparison\.condition && <div style=\{\{[^}]*display:\s*'flex'[^}]*flexDirection:\s*'column'[^}]*alignItems:\s*'center'[^}]*justifyContent:\s*'center'[^}]*textAlign:\s*'center'[^}]*\}\}><MathRender latex=\{comparison\.condition\}/
     );
   });
+
+  it("centers standalone body text when MCQ options are empty label-only A/B/C/D", () => {
+    const taskStatementSrc = readComponent("../components/student/TaskStatement.tsx");
+    assert.match(taskStatementSrc, /hasEmptyMcqOptionTexts\(task\.options\)/);
+    assert.match(
+      taskStatementSrc,
+      /data-comparison-body[\s\S]*flex flex-col items-center justify-center text-center/
+    );
+
+    const worksheetSrc = readComponent("../components/admin/BankWorksheetDocument.tsx");
+    assert.match(
+      worksheetSrc,
+      /data-comparison-body[\s\S]*display:\s*'flex'[\s\S]*alignItems:\s*'center'[\s\S]*justifyContent:\s*'center'[\s\S]*textAlign:\s*'center'/
+    );
+  });
 });

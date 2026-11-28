@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import MathRender from "@/components/ui/MathRender";
 import ComparisonTableView from "@/components/student/ComparisonTableView";
-import { parseComparisonTask } from "@/lib/comparison-task";
+import { hasEmptyMcqOptionTexts, parseComparisonTask } from "@/lib/comparison-task";
 import { splitLeadingTitle } from "@/lib/context-title";
 import { apiPath } from "@/lib/api/client";
 import {
@@ -17,7 +17,10 @@ import type { LessonTask } from "@/types";
 import { useI18n } from "@/lib/i18n/provider";
 
 export default function TaskStatement({ task, imageSrc, viewport }: {
-  task: Pick<LessonTask, "text" | "text_scale" | "image_filename">;
+  task: Pick<LessonTask, "text" | "text_scale" | "image_filename"> & {
+    question_type?: string | null;
+    options?: ReadonlyArray<{ text?: string | null }> | null;
+  };
   imageSrc?: string | null;
   viewport?: TaskFontViewport;
 }) {
@@ -31,6 +34,9 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
   const normalizedScale = normalizeTaskTextScale(task.text_scale);
   const { title, body } = splitLeadingTitle(task.text);
   const comparisonParts = parseComparisonTask(body);
+  const isLabelOnlyMcq =
+    (!task.question_type || task.question_type === "mcq" || task.question_type === "mcq6") &&
+    hasEmptyMcqOptionTexts(task.options);
   return (
     <div className="w-full space-y-4 min-w-0">
       <div
@@ -45,7 +51,16 @@ export default function TaskStatement({ task, imageSrc, viewport }: {
         {comparisonParts ? (
           <ComparisonTableView parts={comparisonParts} />
         ) : body ? (
-          <MathRender latex={body} />
+          isLabelOnlyMcq ? (
+            <div
+              data-comparison-body
+              className="min-w-0 flex flex-col items-center justify-center text-center"
+            >
+              <MathRender latex={body} />
+            </div>
+          ) : (
+            <MathRender latex={body} />
+          )
         ) : title ? null : (
           <span className="text-gray-400">{t("task.textPlaceholder")}</span>
         )}
