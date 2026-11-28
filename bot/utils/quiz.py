@@ -19,9 +19,21 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+# The server starts a question's clock when the activation request reaches it, but the player sees
+# the question only once the response is back on the device, which then counts the full limit; the
+# answer travels to the server again. So a tap on the last second shown can arrive just after the
+# limit (timeout submissions land about 0.5 s late, up to 1 s; more on 3G). Answers within this
+# grace still count, and score like an answer at the very end of the limit.
+ANSWER_GRACE_SECONDS = 2.0
+
+
+def answer_in_time(time_limit: int, time_taken: float) -> bool:
+    return time_taken < max(1.0, float(time_limit)) + ANSWER_GRACE_SECONDS
+
+
 def calculate_speed_points(base_points: int, time_limit: int, time_taken: float, current_streak: int) -> int:
     total_time = max(1.0, float(time_limit))
-    if time_taken >= total_time:
+    if not answer_in_time(time_limit, time_taken):
         return 0
     fraction = max(0.0, min(1.0, (total_time - time_taken) / total_time))
     bonus = min(500, max(0, (current_streak - 1) * 100))

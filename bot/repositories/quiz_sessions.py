@@ -9,7 +9,7 @@ from settings import get_settings
 
 from utils.admin_roles import is_content_admin
 from utils.quiz import (QuizError, token_hash, public_participant, public_question,
-                        answer_result, check_question_answer, calculate_speed_points)
+                        answer_result, answer_in_time, check_question_answer, calculate_speed_points)
 
 
 class QuizSessionsMixin:
@@ -509,7 +509,7 @@ class QuizSessionsMixin:
                 if prechecked_correct is not None and question == preloaded_question
                 else check_question_answer(question, user_answer)
             )
-            is_correct = elapsed < question['time_limit_seconds'] and answer_matches
+            is_correct = answer_in_time(question['time_limit_seconds'], elapsed) and answer_matches
             points = calculate_speed_points(question['points'], question['time_limit_seconds'], elapsed, participant['streak'] + 1) if is_correct else 0
             should_finish = total_count > 0 and (participant['current_question_index'] + 1 >= total_count)
             await db.execute('''INSERT INTO quiz_answers
